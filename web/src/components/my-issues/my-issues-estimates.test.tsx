@@ -99,7 +99,10 @@ describe('issue list estimates', () => {
     const css = fs.readFileSync('src/components/my-issues/my-issues-list.module.css', 'utf8')
     expect(tokens).toMatch(/:root\{color-scheme:dark;[^}]*--estimate-group-total:lch\(63\.304% 7 271\.994\)/)
     expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total:lch\(37\.776% 12 281\.999\)/)
-    expect(css).toContain('.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total)')
+    expect(tokens).toMatch(/:root\{color-scheme:dark;[^}]*--estimate-group-total-plain:lch\(63\.304% 1\.425 272\);--estimate-group-total-hover:lch\(100% 0 272\)/)
+    expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total-plain:lch\(37\.776% 1\.25 282\);--estimate-group-total-hover:lch\(9\.444% 0 282\)/)
+    expect(css).toContain('.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total-plain)')
+    expect(css).toContain(':global([data-team-issue-surface="true"]) .groupCountButton,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip){color:var(--estimate-group-total)}')
   })
 
   it('hides chips and totals for teams that do not use estimates', () => {

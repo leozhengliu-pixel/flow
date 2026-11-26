@@ -114,9 +114,12 @@
 
 /* Estimate chip on rows ("△ 5", 12px 450 in the muted colour) and the group total ("Todo 2 △ 8", 13px 450). */
 .estimateChip{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--theme-border-strong);border-radius:48px;background:var(--theme-surface-1);color:var(--issue-muted)}
-.groupCountButton,.groupEstimate:global(.estimate-chip){appearance:none;border:0;background:transparent;padding:0;cursor:pointer}.groupCountButton{color:var(--estimate-group-total);font:450 13px/normal var(--font);font-variant-numeric:tabular-nums}.groupCountButton:hover{color:var(--estimate-group-total-hover)}
-.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}.groupEstimate>:global(.estimate-icon){margin-top:-1px}
-.groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}.groupCountButton:focus-visible,.groupEstimate:global(.estimate-chip):focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
+.groupCountButton,.groupEstimate:global(.estimate-chip){appearance:none;border:0;background:transparent;padding:0;cursor:pointer}.groupCountButton{color:var(--estimate-group-total-plain);font:450 13px/normal var(--font);font-variant-numeric:tabular-nums}.groupCountButton:hover{color:var(--estimate-group-total-hover)}
+.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total-plain);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}.groupEstimate>:global(.estimate-icon){margin-top:-1px}
+.groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}
+/* The reference tints a status-grouped team list's header totals toward the status hue (chroma 7 dark, 12 light); every other list keeps the neutral secondary text. */
+:global([data-team-issue-surface="true"]) .groupCountButton,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip){color:var(--estimate-group-total)}
+:global([data-team-issue-surface="true"]) .groupCountButton:hover,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}.groupCountButton:focus-visible,.groupEstimate:global(.estimate-chip):focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .submenuItem>:global(.estimate-icon){flex:0 0 16px;color:var(--pk-muted)}
 .submenuItem[data-highlighted]>:global(.estimate-icon){color:var(--pk-text-strong)}
 
