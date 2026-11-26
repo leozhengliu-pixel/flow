@@ -1840,8 +1840,10 @@
   .lp-project-table.is-virtual { display: block; min-width: 0; padding-bottom: 8px; }
   .lp-project-table__header { display: none; }
   .lp-project-group { display: block; }
-  .lp-project-group__header,
+  /* Phones keep the group header bars (the reference): 36px, 8px from the edges, 2px from the rows. */
   .lp-project-subgroup__header { display: none; }
+  .lp-project-group__header { display: grid; grid-template-columns: 6px 24px minmax(0, 1fr) auto; margin: 2px 8px; }
+  .lp-project-group:first-of-type .lp-project-group__header { margin-top: 0; }
   .lp-project-table.is-virtual .lp-project-row { display: flex; min-width: 0; }
   .lp-project-row { border-radius: 8px; border-style: none; column-gap: 6px; display: flex; height: 48px; padding: 0; }
   .lp-project-row > *,
@@ -1931,3 +1933,9 @@
 .lp-project-group__header[data-label-header] .lp-project-group__title { line-height: normal; }
 .lp-project-group__header[data-label-header] .lp-project-group__label-dot { margin: 0 7.5px 0 1.5px; }
 .lp-project-group__header[data-label-header] .lp-project-group__count { font-variant-numeric: tabular-nums; font-weight: 450; margin-left: -2px; }
+/* "No label" (no dot or status icon) keeps the reference's 6px before its count. */
+.lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__count { margin-left: -6px; color: var(--group-plain-count); }
+.lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__toggle { color: var(--group-plain-caret); }
+/* Board columns keep the label path on one line: the group name ellipsizes first (2:1), as the reference. */
+.lp-project-board__column > header .lp-project-group__prefix { flex: 0 2 auto; min-width: 24.88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-project-board__column > header .lp-project-group__prefix ~ :is(strong, span) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

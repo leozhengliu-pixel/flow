@@ -91,3 +91,7 @@
 .lp-project-timeline__link.is-draft { stroke: var(--project-timeline-dependency-active); stroke-dasharray: 4 3; }
 .lp-project-timeline__arrow { fill: var(--project-timeline-dependency); }
 .lp-project-timeline__arrow.is-conflict { fill: var(--project-timeline-dependency-conflict); }
+/* Group header bars: the projects list's group header, 36px with 2px above and below, pinned 8px inside the visible pane. */
+.lp-project-timeline__group.is-bar { border-bottom: 0; pointer-events: none; z-index: 6; }
+.lp-project-timeline__group-bar { height: 36px; left: 8px; margin-top: 2px; pointer-events: auto; position: sticky; }
+.lp-project-timeline__group-bar .lp-project-group__header { grid-template-columns: 6px 24px minmax(0, 1fr) auto; margin: 0; }

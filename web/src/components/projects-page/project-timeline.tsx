@@ -72,6 +72,11 @@ export type ProjectTimelineProps = {
   /** A group's title (a label's "Group › Label", translated generated names); its plain name otherwise. */
   renderGroupName?: (group: ProjectDataGroup) => ReactNode
   groupCount?: (group: ProjectDataGroup) => number
+  /**
+   * The group's full-width header bar (the projects list's group header: caret, label path, count, plus), pinned to
+   * the visible pane; its caret collapses the group's rows. Without it groups get the compact title row.
+   */
+  renderGroupHeader?: (group: ProjectDataGroup, state: { collapsed: boolean; onToggle: () => void }) => ReactNode
   /** Injectable for tests. */
   today?: Date
 }
@@ -87,13 +92,17 @@ type Row =
   | { kind: 'group'; key: string; y: number; group: ProjectDataGroup }
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan; milestones: TimelineDatedMilestone[] }
 
-export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, renderGroupName, groupCount, today: todayProp }: ProjectTimelineProps) {
+export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, renderGroupName, renderGroupHeader, groupCount, today: todayProp }: ProjectTimelineProps) {
   const globalDates = useContext(ScaleP19TimelineContext)
   const desktop = useDesktopSettings()
   const { t, locale } = useI18n()
   // On desktop the time axis spans the pane; project labels overlay its left edge.
   const TIMELINE_LABEL_WIDTH = desktop ? 0 : 240
   const ROW_HEIGHT = desktop ? 72 : 36
+  // Header bars are 36px tall with 2px above and below (the design reference's 40px group rows).
+  const GROUP_ROW_HEIGHT = renderGroupHeader ? 40 : GROUP_HEIGHT
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleGroup = (id: string) => setCollapsedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const [localZoom, setLocalZoom] = useState<TimelineZoom>(() => normalizeTimelineZoom(zoomProp))
   const zoom = zoomProp ? normalizeTimelineZoom(zoomProp) : localZoom
   const [drag, setDragState] = useState<Drag>()
@@ -124,8 +133,9 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
       // An explicit "No grouping" is a flat list on desktop; every other grouping keeps its header rows.
       if (!desktop || grouping !== 'No grouping') {
         output.push({ kind: 'group', key: `group:${group.id}`, y, group })
-        y += GROUP_HEIGHT
+        y += GROUP_ROW_HEIGHT
       }
+      if (renderGroupHeader && collapsedGroups.has(group.id)) continue
       for (const project of group.projects) {
         const key = `project:${group.id}:${project.id}`
         byKey.set(key, output.length)
@@ -136,7 +146,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
       }
     }
     return { rows: output, height: y, byKey, projectRows, projectOrder }
-  }, [groups, desktop, grouping, ROW_HEIGHT])
+  }, [groups, desktop, grouping, ROW_HEIGHT, GROUP_ROW_HEIGHT, renderGroupHeader, collapsedGroups])
 
   const dateBounds = useMemo(() => timelineDateBounds((function* () {
     for (const value of globalDates ?? []) {
@@ -446,7 +456,9 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
             {desktop && <div aria-hidden="true" className="lp-project-timeline__names-backdrop"/>}
             <div aria-hidden="true" className="lp-project-timeline__grid" style={{ width: range.width }}>{gridLines.map(segment => <i data-emphasis={segment.emphasis || undefined} key={segment.key} style={{ left: segment.x }}/>)}</div>
             {visibleRows.map(row => row.kind === 'group'
-              ? <div className="lp-project-timeline__group" key={row.key} style={{ top: row.y, height: GROUP_HEIGHT }}>
+              ? renderGroupHeader ? <div className="lp-project-timeline__group is-bar" key={row.key} style={{ top: row.y, height: GROUP_ROW_HEIGHT }}>
+                <div className="lp-project-timeline__group-bar" style={{ width: Math.max(0, viewport.width - 16) }}>{renderGroupHeader(row.group, { collapsed: collapsedGroups.has(row.group.id), onToggle: () => toggleGroup(row.group.id) })}</div>
+              </div> : <div className="lp-project-timeline__group" key={row.key} style={{ top: row.y, height: GROUP_HEIGHT }}>
                 <h2>{renderGroupIcon?.(row.group)}{renderGroupName ? <span className="lp-project-timeline__group-name">{renderGroupName(row.group)}</span> : <span data-i18n-ignore>{row.group.name}</span>}<small>{groupCount ? groupCount(row.group) : row.group.projects.length}</small></h2>
               </div>
               : <TimelineProjectRow
