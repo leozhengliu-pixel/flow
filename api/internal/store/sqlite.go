@@ -87,6 +87,9 @@ type SQLiteStore struct {
 	// (nil backend: none needed); see WithStartupLock.
 	startupLock        func(context.Context) (startupLockBackend, error)
 	startupLockTimeout time.Duration
+	// recordJournalCapture is server.database.recordJournalCapture
+	// (record_capture_mode.go).
+	recordJournalCapture string
 }
 
 // lockWorkspaceWrites serializes the caller with other writers and excludes

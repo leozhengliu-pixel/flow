@@ -100,6 +100,7 @@ metadata_catalog_backfill.go:BackfillMetadataCatalog
 oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
+record_capture.go:captureDeleteKeys
 journal_schema.go:recordJournalTriggerSpecs
 journal_repair.go:pruneOrphanRecordCatalog
 legacy_progress_image.go:build

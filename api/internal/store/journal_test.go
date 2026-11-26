@@ -242,6 +242,13 @@ func TestScaleP09OldWritersFailCoverageAndRevokeAccess(t *testing.T) {
 	if _, err := f.db.DB.ExecContext(t.Context(), rewriteSQL(`UPDATE workspace_memberships SET role='member' WHERE workspace_id=? AND user_id=?`, f.dialect), f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
 	}
+	if f.RecordJournalCapture() == RecordJournalCaptureApplication {
+		// No trigger sees SQL outside the application. The documented
+		// step after such a change schedules the same resync.
+		if count, err := f.ScheduleRecordJournalResync(t.Context(), f.data.Workspace.URLKey); err != nil || count != 1 {
+			t.Fatalf("schedule resync: %d %v", count, err)
+		}
+	}
 	for _, batch := range []string{"queued", "replay"} {
 		t.Run(batch, func(t *testing.T) {
 			if err := f.ValidateAccess(t.Context(), access); !errors.Is(err, ErrAuthForbidden) {
@@ -613,6 +620,9 @@ func TestScaleP09MySQLStaleSessionToken(t *testing.T) {
 		t.Skip("requires the shared CI MySQL database")
 	}
 	f := scaleP09Database(t)
+	if f.RecordJournalCapture() == RecordJournalCaptureApplication && !f.db.captureTriggers.Load() {
+		t.Skip("application capture without triggers sets no session token")
+	}
 	const teamID, projectID = "p09-session-team", "p09-session-project"
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p09.seeded", projectID, nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: teamID, Key: "P9S", Name: "Session policy"})
