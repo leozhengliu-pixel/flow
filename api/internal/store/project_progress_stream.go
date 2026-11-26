@@ -459,9 +459,12 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if err != nil {
 		return true, err
 	}
-	right, _, err := legacyProjectProgressHeader(ctx, owner, row.next)
-	if err != nil {
-		return true, err
+	right := left
+	if metadataLogicalFrameOrigin(row.before) != metadataLogicalFrameOrigin(row.next) {
+		right, _, err = legacyProjectProgressHeader(ctx, owner, row.next)
+		if err != nil {
+			return true, err
+		}
 	}
 	lock := ""
 	if p.tx.dialect != "sqlite" {
@@ -518,7 +521,11 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if err != nil {
 		return true, err
 	}
-	for _, value := range []reflect.Value{left, right} {
+	values := []reflect.Value{left}
+	if right != left {
+		values = append(values, right)
+	}
+	for _, value := range values {
 		encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
 		if err != nil {
 			return true, err
@@ -527,11 +534,11 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 			return true, err
 		}
 	}
-	refs, err := p.references(ctx, p.requested, owner, left.Interface(), right.Interface(), raw)
+	base, err := json.Marshal(left.Interface())
 	if err != nil {
 		return true, err
 	}
-	base, err := json.Marshal(left.Interface())
+	refs, err := p.references(ctx, p.requested, owner, nil, nil, base, raw)
 	if err != nil {
 		return true, err
 	}
@@ -562,9 +569,12 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if sameLoadedBody && refs.equalDisplayData(loaded, base) {
 		return true, nil
 	}
-	ours, err := json.Marshal(right.Interface())
-	if err != nil {
-		return true, err
+	ours := base
+	if right != left {
+		ours, err = json.Marshal(right.Interface())
+		if err != nil {
+			return true, err
+		}
 	}
 	merged, conflict, err := mergeMetadataRecord(base, ours, theirs, loaded)
 	if err != nil {
@@ -654,7 +664,10 @@ func legacyProjectCopyStoredJSON(ctx context.Context, output io.Writer, input io
 // Description is streamed separately, including when search indexing is
 // intentionally uncapped; nested status objects keep Marshal's sorted keys.
 func legacyProjectSearchContent(ctx context.Context, owner *ResourceRead, header []byte, body metadataLogicalNode, output io.Writer) error {
-	var fields map[string]any
+	var fields struct {
+		Name, Summary string
+		Status        any
+	}
 	if err := json.Unmarshal(StripJSONNUL(header), &fields); err != nil {
 		return err
 	}
@@ -688,7 +701,34 @@ func legacyProjectSearchContent(ctx context.Context, owner *ResourceRead, header
 				return err
 			}
 		}
-		if name == "description" {
+		switch name {
+		case "name":
+			if err := emit([]byte(fields.Name)); err != nil {
+				return err
+			}
+		case "summary":
+			if err := emit([]byte(fields.Summary)); err != nil {
+				return err
+			}
+		case "description":
+			if body.cost <= 4<<10 {
+				value, err := body.Value(ctx, 4<<10)
+				if err != nil {
+					return err
+				}
+				raw, err := json.Marshal(value.String())
+				if err != nil {
+					return err
+				}
+				var text string
+				if err := json.Unmarshal(StripJSONNUL(raw), &text); err != nil {
+					return err
+				}
+				if err := emit([]byte(text)); err != nil {
+					return err
+				}
+				continue
+			}
 			spool, err := newMetadataLogicalRecordSpool(ctx)
 			if err != nil {
 				return err
@@ -718,23 +758,14 @@ func legacyProjectSearchContent(ctx context.Context, owner *ResourceRead, header
 			if err != nil {
 				return err
 			}
-			continue
-		}
-		item, present := fields[name]
-		if !present || item == nil {
-			continue
-		}
-		raw, err := json.Marshal(item)
-		if err != nil {
-			return err
-		}
-		var text string
-		if json.Unmarshal(raw, &text) == nil {
-			if err := emit([]byte(text)); err != nil {
+		case "status":
+			raw, err := json.Marshal(fields.Status)
+			if err != nil {
 				return err
 			}
-		} else if err := emit(raw); err != nil {
-			return err
+			if err := emit(raw); err != nil {
+				return err
+			}
 		}
 	}
 	return ctx.Err()
@@ -765,56 +796,61 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if err := owner.reserve(ctx, 512<<10); err != nil {
 		return true, err
 	}
-	left, _, err := legacyProjectProgressHeader(ctx, owner, row.before)
-	if err != nil {
-		return true, err
-	}
 	right, body, err := legacyProjectProgressHeader(ctx, owner, row.next)
 	if err != nil {
 		return true, err
 	}
-	for _, value := range []reflect.Value{left, right} {
-		work, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
-		if err != nil {
-			return true, err
-		}
-		if err := owner.reserve(ctx, uint64(work)*2+4096); err != nil {
-			return true, err
-		}
-	}
-	previous, err := json.Marshal(left.Interface())
+	work, err := metadataAggregatePayloadEncodingWork(ctx, right, 0)
 	if err != nil {
+		return true, err
+	}
+	if err := owner.reserve(ctx, uint64(work)*2+4096); err != nil {
 		return true, err
 	}
 	next, err := json.Marshal(right.Interface())
 	if err != nil {
 		return true, err
 	}
-	refs, err := p.references(ctx, p.actual, owner, right.Interface(), nil, previous, next)
+	count, err := issueHotField(ctx, row.before, "IssueCount")
 	if err != nil {
 		return true, err
 	}
-	if refs.equalDisplayData(previous, next) {
-		return true, nil
-	}
-	spool, err := newMetadataLogicalRecordSpool(ctx)
+	priorCount, err := count.Value(ctx, 4096)
 	if err != nil {
 		return true, err
 	}
-	defer spool.Close()
-	if err := legacyProjectStreamNode(ctx, owner, row.next, spool); err != nil {
+	// A changed integer count survives display canonicalization. Compare
+	// full headers only when this cheap check cannot prove a write is needed.
+	if priorCount.Int() == right.FieldByName("IssueCount").Int() {
+		left, _, err := legacyProjectProgressHeader(ctx, owner, row.before)
+		if err != nil {
+			return true, err
+		}
+		work, err := metadataAggregatePayloadEncodingWork(ctx, left, 0)
+		if err != nil {
+			return true, err
+		}
+		if err := owner.reserve(ctx, uint64(work)*2+4096); err != nil {
+			return true, err
+		}
+		previous, err := json.Marshal(left.Interface())
+		if err != nil {
+			return true, err
+		}
+		refs, err := p.references(ctx, p.actual, owner, nil, nil, previous, next)
+		if err != nil {
+			return true, err
+		}
+		if refs.equalDisplayData(previous, next) {
+			return true, nil
+		}
+	}
+	data, dataBytes, closeData, err := legacyProjectProgressData(ctx, owner, next, body)
+	if err != nil {
 		return true, err
 	}
-	if _, err := spool.Seek(0, io.SeekStart); err != nil {
-		return true, err
-	}
-	var dataBytes, searchBytes legacyProjectByteCounter
-	if err := legacyProjectCopyStoredJSON(ctx, &dataBytes, spool); err != nil {
-		return true, err
-	}
-	if _, err := spool.Seek(0, io.SeekStart); err != nil {
-		return true, err
-	}
+	defer closeData()
+	var searchBytes legacyProjectByteCounter
 	if err := legacyProjectSearchContent(ctx, owner, next, body, &searchBytes); err != nil {
 		return true, err
 	}
@@ -822,7 +858,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	// input. Counting uses fixed buffers and the immutable final body frames.
 	stage, err := beginMetadataSQLWriteStage(ctx, p.tx, metadataSQLStageTarget{
 		workspace: p.workspace, field: "projects", key: row.id, order: order,
-		dataBytes: int(dataBytes), searchBytes: int(searchBytes),
+		dataBytes: dataBytes, searchBytes: int(searchBytes),
 	})
 	if err != nil {
 		return true, err
@@ -834,7 +870,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if err != nil {
 		return true, err
 	}
-	if err := legacyProjectCopyStoredJSON(ctx, writer, spool); err != nil {
+	if _, err := io.CopyBuffer(writer, data, make([]byte, metadataRecordChunkBytes)); err != nil {
 		return true, err
 	}
 	if err := writer.flush(true); err != nil {
@@ -843,9 +879,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if err := stage.writeMetadataRow(ctx); err != nil {
 		return true, err
 	}
-	if err := syncNewCommentMentions(ctx, p.tx, p.workspace, row.id, next, previous); err != nil {
-		return true, err
-	}
+	// legacyProjectBodyPatchOnly proved the comments did not change.
 	if err := writeCustomerFilterRecord(ctx, p.tx, p.workspace, "projects", row.id, next); err != nil {
 		return true, err
 	}
@@ -866,4 +900,60 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 		return true, err
 	}
 	return true, stage.Close(ctx)
+}
+
+// The typed header already holds the final JSON for every field except
+// description. Splice the streamed string into that encoding instead of
+// visiting every history point again to produce the same JSON.
+func legacyProjectProgressData(ctx context.Context, owner *ResourceRead, header []byte, body metadataLogicalNode) (io.Reader, int, func(), error) {
+	const description = `,"description":`
+	header = StripJSONNUL(header)
+	at := bytes.Index(header, []byte(description+`"",`))
+	if at < 0 {
+		return nil, 0, nil, ErrBoundedMetadataCoverage
+	}
+	// The preceding Project fields are strings or slices of strings, so
+	// the first unescaped occurrence is the top-level description.
+	at += len(description)
+	prefix, suffix := header[:at], header[at+2:]
+	var text io.Reader
+	var size int
+	closeBody := func() {}
+	if body.cost <= 4<<10 {
+		value, err := body.Value(ctx, 4<<10)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		raw, err := json.Marshal(value.String())
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		raw = StripJSONNUL(raw)
+		text, size = bytes.NewReader(raw), len(raw)
+	} else {
+		spool, err := newMetadataLogicalRecordSpool(ctx)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		writer := &jsonNULStripWriter{dst: spool}
+		err = legacyProjectStreamNode(ctx, owner, body, writer)
+		if err == nil {
+			err = writer.Finish()
+		}
+		if err != nil {
+			spool.Close()
+			return nil, 0, nil, err
+		}
+		end, err := spool.Seek(0, io.SeekCurrent)
+		if err == nil {
+			_, err = spool.Seek(0, io.SeekStart)
+		}
+		if err != nil {
+			spool.Close()
+			return nil, 0, nil, err
+		}
+		text, size = spool, int(end)
+		closeBody = func() { _ = spool.Close() }
+	}
+	return io.MultiReader(bytes.NewReader(prefix), text, bytes.NewReader(suffix)), len(prefix) + size + len(suffix), closeBody, nil
 }

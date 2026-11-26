@@ -70,9 +70,12 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	metadataWritten := false
+	traceStart(ctx, "issue_create")
 	apply := func(ctx context.Context, stopWorkRetry func()) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		if _, found := s.storedWorkspace(workspace); !found {
 			return fmt.Errorf("workspace not found")
 		}
@@ -229,6 +232,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		}
 		transferred = true
 		stopWorkRetry()
+		traceMark(ctx, "load")
 		id, err := mutate(&data)
 		releaseCallback()
 		data.FormerMembers, data.CollaborationUpdates, data.CollaborationWork = nil, nil, nil
@@ -238,6 +242,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		if err := attempt.lookups.check(); err != nil {
 			return err
 		}
+		traceMark(ctx, "mutate")
 		newCount := 0
 		var created domain.Issue
 		changed := []domain.Issue{}
@@ -303,6 +308,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		}(); err != nil {
 			return err
 		}
+		traceMark(ctx, "records")
 		patches, releasePatches, err := inputs.patch(ctx, before, data)
 		if err != nil {
 			return err
@@ -339,6 +345,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 			return err
 		}
 		defer merged.Release()
+		traceMark(ctx, "metadata")
 		if err := attempt.reserveIssueCreateEvent(ctx, payload, created); err != nil {
 			return err
 		}
@@ -367,6 +374,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		if err := publication.Install(); err != nil {
 			return err
 		}
+		traceMark(ctx, "commit")
 		metadataWritten = tx.metadataWritten
 		return nil
 	}

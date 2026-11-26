@@ -141,15 +141,35 @@ func (s *SQLiteStore) planIssueMetadataFields(ctx context.Context, tx *sqlTx, wo
 // fields. The single legacy rebase runs before progress and either persistence
 // branch receives that modified base.
 func (s *SQLiteStore) persistSelectedIssueMetadata(ctx context.Context, tx *sqlTx, workspace string, selected domain.Bootstrap, before, after []domain.Issue, documents []domain.Document, inputs *issueHotInputs) (*metadataLogicalPublication, error) {
-	nativeBefore, base, next := selected, selected, selected
+	next := selected
 	scoped := false
 	if documents != nil {
-		next.Documents, scoped = documentScopes(base.Documents, documents)
+		next.Documents, scoped = documentScopes(selected.Documents, documents)
 	}
-	projects := issueProgressProjects(next, before, after)
+	projects, err := inputs.progressProjects(ctx, before, after, selected.TeamSettings)
+	if err != nil {
+		return nil, err
+	}
 	if !scoped && len(projects) == 0 {
 		return nil, nil
 	}
+	selected.Projects = nil
+	if len(projects) != 0 {
+		if err := inputs.source.Retain(); err != nil {
+			return nil, err
+		}
+		histories := &issueHotInputs{store: s, source: inputs.source}
+		defer histories.close()
+		keys, err := histories.keys(ctx, projects...)
+		if err != nil {
+			return nil, err
+		}
+		if err := histories.selectSliceByID(ctx, "projects", keys); err != nil {
+			return nil, err
+		}
+		selected.Projects = histories.data.Projects
+	}
+	nativeBefore, base := selected, selected
 	keys := make([]RecordKey, 0, len(projects)+len(next.Documents))
 	for _, id := range projects {
 		keys = append(keys, RecordKey{Kind: "projects", ID: id})

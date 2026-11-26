@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -91,6 +92,7 @@ func TestIssueCreateInProjectWithDecadesOfProgressHistory(t *testing.T) {
 	}
 	// The first issue in a project creates its history; each later one
 	// rebases the project row that now holds it.
+	var longProjectIssue domain.Issue
 	for index := range 6 {
 		project := projects[index%len(projects)]
 		var issue domain.Issue
@@ -101,11 +103,46 @@ func TestIssueCreateInProjectWithDecadesOfProgressHistory(t *testing.T) {
 		if issue.Project == nil || issue.Project.ID != project.ID {
 			t.Fatalf("issue %d is not in its project", index)
 		}
+		if index == 0 {
+			longProjectIssue = issue
+		}
 	}
 	var stored domain.Project
 	call(http.MethodGet, "/api/projects/"+projects[0].ID, nil, http.StatusOK, &stored)
 	if len(stored.ProgressHistory) < 1000 {
 		t.Fatalf("the long project keeps %d progress history points", len(stored.ProgressHistory))
+	}
+
+	// The former selection needed over 100 MiB to read the history even for
+	// a title-only edit. All five persisted histories must survive the edit.
+	issueURL := "/api/issues/" + longProjectIssue.ID
+	var edited domain.Issue
+	func() {
+		defer repo.SetMetadataWorkLimitForTesting(16 << 20)()
+		call(http.MethodPatch, issueURL, map[string]any{"title": "Renamed issue"}, http.StatusOK, &edited)
+	}()
+	if edited.Title != "Renamed issue" || edited.Project == nil || edited.Project.ID != projects[0].ID {
+		t.Fatal("edit changed the issue's project or did not save the title")
+	}
+	var unchanged domain.Project
+	call(http.MethodGet, "/api/projects/"+projects[0].ID, nil, http.StatusOK, &unchanged)
+	for _, pair := range [][2][]domain.ProjectProgressHistoryPoint{
+		{stored.IssueCountHistory, unchanged.IssueCountHistory}, {stored.ScopeHistory, unchanged.ScopeHistory},
+		{stored.CompletedScopeHistory, unchanged.CompletedScopeHistory}, {stored.InProgressScopeHistory, unchanged.InProgressScopeHistory},
+		{stored.ProgressHistory, unchanged.ProgressHistory},
+	} {
+		if !slices.Equal(pair[0], pair[1]) {
+			t.Fatal("title-only edit changed progress history")
+		}
+	}
+	call(http.MethodPatch, issueURL, map[string]any{"projectId": ""}, http.StatusOK, &edited)
+	var moved domain.Project
+	call(http.MethodGet, "/api/projects/"+projects[0].ID, nil, http.StatusOK, &moved)
+	last := len(stored.ScopeHistory) - 1
+	if len(moved.ScopeHistory) != len(stored.ScopeHistory) ||
+		!slices.Equal(moved.ScopeHistory[:last], stored.ScopeHistory[:last]) ||
+		moved.ScopeHistory[last].ScopeCount != stored.ScopeHistory[last].ScopeCount-1 {
+		t.Fatal("removing an issue did not update only the last scope point")
 	}
 
 	// A create the whole budget cannot admit is refused with 503 and no

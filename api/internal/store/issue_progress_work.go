@@ -2,12 +2,84 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
 )
+
+// progressProjects follows issueProgressChanges using only a project ID and
+// the presence of a history point. The first occurrence wins for inline
+// collections with duplicate IDs.
+func (r *issueHotInputs) progressProjects(ctx context.Context, before, after []domain.Issue, settings map[string]domain.TeamSettings) ([]string, error) {
+	// Candidate slices copy issue headers. Include their capacity growth,
+	// the contribution slices used for comparison, and each project's entry.
+	perIssue := uint64(reflect.TypeFor[domain.Issue]().Size())*3 + 512
+	var count uint64
+	for _, issues := range [][]domain.Issue{before, after} {
+		for index := range issues {
+			if project := issues[index].Project; project != nil && project.ID != "" {
+				count++
+			}
+		}
+	}
+	if count == 0 {
+		return nil, ctx.Err()
+	}
+	if count > (metadataWorkBytes-4096)/perIssue {
+		return nil, ErrMetadataWorkBudget
+	}
+	if err := r.reserve(ctx, count*perIssue+4096); err != nil {
+		return nil, err
+	}
+	changes := issueProgressCandidates(before, after)
+	index, _, _ := metadataLogicalField("projects")
+	var projects []string
+	err := r.source.fields[index].Children(ctx, func(_ reflect.Value, project metadataLogicalNode) error {
+		id, err := issueHotField(ctx, project, "ID")
+		if err != nil {
+			return err
+		}
+		for key, change := range changes {
+			match, err := id.StringEqual(ctx, key)
+			if err != nil {
+				return err
+			}
+			if !match {
+				continue
+			}
+			if change.contributionsEqual(settings) {
+				history, err := issueHotField(ctx, project, "ProgressHistory")
+				if err != nil {
+					return err
+				}
+				err = history.Children(ctx, func(reflect.Value, metadataLogicalNode) error { return errMetadataAggregateStop })
+				if errors.Is(err, errMetadataAggregateStop) {
+					delete(changes, key)
+					break
+				}
+				if err != nil {
+					return err
+				}
+			}
+			projects = append(projects, key)
+			delete(changes, key)
+			break
+		}
+		if len(changes) == 0 {
+			return errMetadataAggregateStop
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errMetadataAggregateStop) {
+		return nil, err
+	}
+	slices.Sort(projects)
+	return projects, ctx.Err()
+}
 
 type issueProgressWorkKey struct{}
 

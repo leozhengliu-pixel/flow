@@ -188,16 +188,14 @@ var coldPublishFieldNames = sync.OnceValue(func() []string {
 	return names
 })
 
-// coldPublishBaseFields are the normalizer's base (newMetadataLogicalNormalizer),
-// always recovered. The base's normalization (normalizeStoredMetadata: every
-// collection's empty default) reads workspaceSettings only to normalize
-// workspaceSettings itself (normalize, normalizeParity), and a record's
-// normalization sees no settings: a change of it rebuilds that field alone.
+// coldPublishBaseFields are the normalizer's base (newMetadataLogicalNormalizer).
+// The base uses workspaceSettings only to normalize workspaceSettings itself,
+// so it needs the raw value only when that field is rebuilt.
 // The viewer is read only for
 // initiatives (normalize defaults an initiative's creator to it, and the
 // normalizer's index looks the viewer up among users), a dependency below;
 // workspace and viewerRole are read by no other field's normalization.
-var coldPublishBaseFields = []string{"workspace", "viewer", "viewerRole", "workspaceSettings"}
+var coldPublishBaseFields = []string{"workspace", "viewer", "viewerRole"}
 
 // coldPublishDependencies are the raw fields the normalizer's index reads for
 // a field's records (metadataLogicalNormalizer.record and missing). "projects"
@@ -852,7 +850,7 @@ func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPubl
 		return nil, err
 	}
 	prepared.state, prepared.head, prepared.policy, prepared.cost = after, head, data, cost
-	plan.rows, plan.order, plan.before = nil, nil, nil
+	plan.rows, plan.order, plan.before, plan.shared = nil, nil, nil, nil
 	// Keep only the counts and timings needed for publication reporting.
 	for field := range plan.supplied {
 		plan.supplied[field] = reflect.Value{}
@@ -873,6 +871,7 @@ type coldPublishPlan struct {
 	// uses of every project).
 	part     map[string]bool
 	supplied map[string]reflect.Value
+	shared   map[string]metadataLogicalNode
 	// rows: the decoded changed rows of patched fields, by key.
 	rows map[string]map[string]reflect.Value
 	// order, before: the rows of patched fields in recovery order, after
@@ -1051,6 +1050,23 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 			}
 			plan.supplied["projects"] = projects
 		}
+	}
+	// Core values and users are unchanged by normalization. The status
+	// index already applies the same color, ordinal and empty defaults as
+	// the installed status field. Reuse these exact inputs when unchanged.
+	for _, name := range []string{"workspace", "viewer", "viewerRole", "users", "projectStatuses"} {
+		if plan.part[name] && !plan.rebuild[name] && changes[name] == nil {
+			if plan.shared == nil {
+				plan.shared = map[string]metadataLogicalNode{}
+			}
+			index, _, _ := metadataLogicalField(name)
+			plan.shared[name] = installed.fields[index]
+			delete(plan.part, name)
+		}
+	}
+	if !plan.rebuild["issues"] && len(after.records["issues"]) == 0 && coldPublishRootEmpty(after.occurrences["issues"], "[]") {
+		// Neither issue counts nor label counts need an empty raw input.
+		delete(plan.part, "issues")
 	}
 	for name := range plan.patch {
 		if err := s.readColdPublishRows(ctx, tx, workspace, name, before, after, plan.keys[name], plan); err != nil {
@@ -1414,7 +1430,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 	defer installed.Release()
 	scratch := metadataLogicalSourceScratchContext(ctx, installed)
 	rawStarted := time.Now()
-	raw, err := s.readRawMetadataLogicalSourcePart(scratch, tx, workspace, true, plan.part, plan.supplied)
+	raw, err := s.readRawMetadataLogicalSourcePart(scratch, tx, workspace, true, plan.part, plan.supplied, plan.shared)
 	if err != nil {
 		return nil, err
 	}
@@ -1455,14 +1471,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 			return nil
 		}
 		if !plan.rebuild[name] && !plan.patch[name] {
-			if !slices.Contains(b.source.stores, node.source) {
-				if err := node.source.Retain(); err != nil {
-					return err
-				}
-				b.source.stores = append(b.source.stores, node.source)
-			}
-			b.source.fields[index] = node
-			return nil
+			return b.shareField(index, node)
 		}
 		// Each rewritten field has its own registry (as Fork): copied frames
 		// keep the installed storage's dynamic type and time IDs.

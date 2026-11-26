@@ -59,16 +59,15 @@ func (s *SQLiteStore) readRawMetadataLogicalSourceValidated(ctx context.Context,
 }
 
 func (s *SQLiteStore) readRawMetadataLogicalSourceRoot(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool) (_ *metadataLogicalSource, err error) {
-	return s.readRawMetadataLogicalSourcePart(ctx, tx, workspace, validateRoot, nil, nil)
+	return s.readRawMetadataLogicalSourcePart(ctx, tx, workspace, validateRoot, nil, nil, nil)
 }
 
 // readRawMetadataLogicalSourcePart is readRawMetadataLogicalSourceRoot
 // recovering only the fields named in part (nil: every field): the others
-// hold their zero value, except a field of supplied, which holds that value
-// instead of its recovery. A recovered field is exactly the one a complete
-// recovery produces: each field reads only its own root occurrences and
-// canonical rows (an incremental COLD publication, cold_incremental.go).
-func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool, part map[string]bool, supplied map[string]reflect.Value) (_ *metadataLogicalSource, err error) {
+// hold their zero value, except fields explicitly supplied as values or
+// shared frames. Each recovered field reads only its own root occurrences
+// and canonical rows (an incremental COLD publication, cold_incremental.go).
+func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *sqlTx, workspace string, validateRoot bool, part map[string]bool, supplied map[string]reflect.Value, shared map[string]metadataLogicalNode) (_ *metadataLogicalSource, err error) {
 	ctx = s.metadataLogicalScratchContext(ctx, workspace)
 	read, err := s.metadataRootCursorInSnapshot(ctx, tx, workspace)
 	if err != nil {
@@ -106,53 +105,56 @@ func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *
 			return nil, err
 		}
 	}
-	stage, err := sw26NewMigrationStage(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer stage.Close()
-	for _, query := range []string{
-		`CREATE TABLE canonical(seq INTEGER PRIMARY KEY,field TEXT NOT NULL,key BLOB NOT NULL,physical INTEGER NOT NULL,position INTEGER NOT NULL,size INTEGER NOT NULL,data BLOB)`,
-		`CREATE INDEX canonical_field_order ON canonical(field,position,key,seq)`,
-		`CREATE TABLE values_stage(key BLOB NOT NULL,ordinal INTEGER NOT NULL,offset INTEGER NOT NULL,size INTEGER NOT NULL,cost INTEGER NOT NULL,unavailable INTEGER NOT NULL,blocked INTEGER NOT NULL,PRIMARY KEY(key,ordinal))`,
-	} {
-		if _, err := stage.exec(ctx, 4096, query); err != nil {
-			return nil, err
-		}
-	}
 	builder, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {
 		return nil, err
 	}
-	typed, err := newMetadataLogicalBuilder(ctx)
-	if err != nil {
-		builder.Close()
-		return nil, err
-	}
-	defer typed.Close()
-	success := false
-	defer func() {
-		if !success {
-			builder.Close()
-		}
-	}()
-	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, stage: stage, builder: builder, typed: typed, manifest: map[string]string{}, part: part}
-	defer recovery.releaseWork()
-	defer recovery.releaseRootIndex()
-	if err := recovery.readManifest(); err != nil {
-		return nil, err
-	}
-	if recovery.hasRows {
-		if err := recovery.readCanonical(); err != nil {
+	defer builder.Close()
+	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, builder: builder, manifest: map[string]string{}, part: part}
+	if part == nil || len(part) != 0 {
+		stage, err := sw26NewMigrationStage(ctx)
+		if err != nil {
 			return nil, err
 		}
-		recovery.releaseWork()
+		defer stage.Close()
+		for _, query := range []string{
+			`CREATE TABLE canonical(seq INTEGER PRIMARY KEY,field TEXT NOT NULL,key BLOB NOT NULL,physical INTEGER NOT NULL,position INTEGER NOT NULL,size INTEGER NOT NULL,data BLOB)`,
+			`CREATE INDEX canonical_field_order ON canonical(field,position,key,seq)`,
+			`CREATE TABLE values_stage(key BLOB NOT NULL,ordinal INTEGER NOT NULL,offset INTEGER NOT NULL,size INTEGER NOT NULL,cost INTEGER NOT NULL,unavailable INTEGER NOT NULL,blocked INTEGER NOT NULL,PRIMARY KEY(key,ordinal))`,
+		} {
+			if _, err := stage.exec(ctx, 4096, query); err != nil {
+				return nil, err
+			}
+		}
+		typed, err := newMetadataLogicalBuilder(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer typed.Close()
+		recovery.stage, recovery.typed = stage, typed
+		defer recovery.releaseWork()
+		defer recovery.releaseRootIndex()
+		if err := recovery.readManifest(); err != nil {
+			return nil, err
+		}
+		if recovery.hasRows {
+			if err := recovery.readCanonical(); err != nil {
+				return nil, err
+			}
+			recovery.releaseWork()
+		}
 	}
 	bootstrap := reflect.TypeFor[domain.Bootstrap]()
 	for index := 0; index < bootstrap.NumField(); index++ {
 		field := bootstrap.Field(index)
 		name := jsonFieldName(field)
 		if name == "-" {
+			continue
+		}
+		if node, ok := shared[name]; ok {
+			if err := builder.shareField(index, node); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		if value, ok := supplied[name]; ok {
@@ -167,7 +169,7 @@ func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *
 			}
 			continue
 		}
-		if _, err := stage.exec(ctx, 0, `DELETE FROM values_stage`); err != nil {
+		if _, err := recovery.stage.exec(ctx, 0, `DELETE FROM values_stage`); err != nil {
 			return nil, err
 		}
 		switch {
@@ -183,12 +185,7 @@ func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *
 		}
 		recovery.releaseWork()
 	}
-	source, err := builder.Finish(stamp)
-	if err != nil {
-		return nil, err
-	}
-	success = true
-	return source, nil
+	return builder.Finish(stamp)
 }
 
 // rootOccurrences visits, in root order, the value of every top-level root

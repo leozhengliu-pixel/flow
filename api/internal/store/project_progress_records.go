@@ -257,10 +257,7 @@ func issueProgressContribution(issue domain.Issue, teamSettings map[string]domai
 	return progressContribution{day: utcDay(issue.CreatedAt), state: issue.State.Type, estimate: issueEstimate(issue, unestimatedPoints(teamSettings, issue.Team.ID))}
 }
 
-// issueProgressChanges groups the issues of a write by the projects whose
-// progress it changes: those an issue entered, left or changed its creation
-// day, state or estimate in, and those without a history yet.
-func issueProgressChanges(data domain.Bootstrap, before, after []domain.Issue) map[string]*issueProgressChange {
+func issueProgressCandidates(before, after []domain.Issue) map[string]*issueProgressChange {
 	changes := map[string]*issueProgressChange{}
 	entry := func(id string) *issueProgressChange {
 		if changes[id] == nil {
@@ -278,10 +275,19 @@ func issueProgressChanges(data domain.Bootstrap, before, after []domain.Issue) m
 			entry(issue.Project.ID).after = append(entry(issue.Project.ID).after, issue)
 		}
 	}
+	return changes
+}
+
+type issueProgressChange struct{ before, after []domain.Issue }
+
+func (change *issueProgressChange) contributionsEqual(settings map[string]domain.TeamSettings) bool {
+	if len(change.before) != len(change.after) {
+		return false
+	}
 	contributions := func(issues []domain.Issue) []progressContribution {
 		result := make([]progressContribution, 0, len(issues))
 		for _, issue := range issues {
-			result = append(result, issueProgressContribution(issue, data.TeamSettings))
+			result = append(result, issueProgressContribution(issue, settings))
 		}
 		sort.Slice(result, func(i, j int) bool {
 			a, b := result[i], result[j]
@@ -295,16 +301,22 @@ func issueProgressChanges(data domain.Bootstrap, before, after []domain.Issue) m
 		})
 		return result
 	}
+	return slices.Equal(contributions(change.before), contributions(change.after))
+}
+
+// issueProgressChanges groups the issues of a write by the projects whose
+// progress it changes: those an issue entered, left or changed its creation
+// day, state or estimate in, and those without a history yet.
+func issueProgressChanges(data domain.Bootstrap, before, after []domain.Issue) map[string]*issueProgressChange {
+	changes := issueProgressCandidates(before, after)
 	for projectID, change := range changes {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
-		if index < 0 || len(data.Projects[index].ProgressHistory) > 0 && slices.Equal(contributions(change.before), contributions(change.after)) {
+		if index < 0 || len(data.Projects[index].ProgressHistory) > 0 && change.contributionsEqual(data.TeamSettings) {
 			delete(changes, projectID)
 		}
 	}
 	return changes
 }
-
-type issueProgressChange struct{ before, after []domain.Issue }
 
 // issueProgressProjects lists the projects whose progress an issue write
 // changes (see issueProgressChanges), in id order.

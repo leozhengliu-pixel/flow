@@ -668,31 +668,14 @@ func (s *SQLiteStore) prepareScopedIssueReactionProgress(ctx context.Context, so
 	if err := p.inputs.reserve(ctx, 64<<10); err != nil {
 		return nil, err
 	}
-	projects, err := p.inputs.keys(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, issues := range [][]domain.Issue{before, after} {
-		for _, issue := range issues {
-			if issue.Project != nil {
-				if err := p.inputs.addKey(ctx, projects, issue.Project.ID); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-	if err := p.inputs.selectSlice(ctx, "projects", func(node metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, node, "ID", projects)
-	}, legacyProgressProjectFields...); err != nil {
-		return nil, err
-	}
 	if err := scopedIssueReactionTeams(ctx, p.inputs, before, after); err != nil {
 		return nil, err
 	}
-	// This preserves stale nonempty histories on equal contributions, while
-	// an empty history still enters the literal scoped progress machinery.
-	p.projects = issueProgressProjects(p.inputs.data, before, after)
-	return p, ctx.Err()
+	p.projects, err = p.inputs.progressProjects(ctx, before, after, p.inputs.data.TeamSettings)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func (p *scopedIssueReactionProgress) HasProject(ctx context.Context, id string) (bool, error) {
