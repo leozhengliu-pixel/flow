@@ -1530,7 +1530,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 	}
 	if input.LabelIDs != nil {
 		labels := labelsByIDForResource(data, *input.LabelIDs, "issue")
-		if len(labels) != len(*input.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(data, labels, template.TeamID) {
+		if len(labels) != len(*input.LabelIDs) || !validLabelGroupSelection(data, labels) || !labelsAvailableToTeam(data, labels, template.TeamID) {
 			return errInvalid
 		}
 		template.LabelIDs = slices.Clone(*input.LabelIDs)
@@ -1568,7 +1568,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 				return errInvalid
 			}
 			labels := labelsByIDForResource(data, item.LabelIDs, "issue")
-			if len(labels) != len(item.LabelIDs) || !validLabelGroupSelection(labels) || !labelsAvailableToTeam(data, labels, item.TeamID) {
+			if len(labels) != len(item.LabelIDs) || !validLabelGroupSelection(data, labels) || !labelsAvailableToTeam(data, labels, item.TeamID) {
 				return errInvalid
 			}
 			if item.ID == "" {

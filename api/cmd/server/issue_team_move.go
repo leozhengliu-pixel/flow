@@ -189,7 +189,7 @@ func teamMoveLabels(data *domain.Bootstrap, labels []domain.IssueLabel, teamID s
 	// A mapped label may share a group with one the issue kept: keep the first.
 	groups := map[string]bool{}
 	result = slices.DeleteFunc(result, func(label domain.IssueLabel) bool {
-		if label.GroupID == "" {
+		if label.GroupID == "" || labelGroupMultiSelect(data, label.GroupID) {
 			return false
 		}
 		if groups[label.GroupID] {

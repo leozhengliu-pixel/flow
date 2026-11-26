@@ -2015,7 +2015,7 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 	if input.LabelIDs != nil {
 		values := normalizedStrings(*input.LabelIDs)
 		labels := labelsByIDForResource(data, values, "project")
-		if len(labels) != len(values) || !validLabelGroupSelection(labels) {
+		if len(labels) != len(values) || !validLabelGroupSelection(data, labels) {
 			return errInvalid
 		}
 		template.LabelIDs = values

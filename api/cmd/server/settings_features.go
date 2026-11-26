@@ -692,6 +692,9 @@ type labelGroupInput struct {
 	ArchivedAt   *string `json:"archivedAt,omitempty"`
 	// Scope is a team ID for team-owned groups; empty means workspace.
 	Scope *string `json:"scope,omitempty"`
+	// MultiSelect is the group type: true lets an item carry several of the
+	// group's labels.
+	MultiSelect *bool `json:"multiSelect,omitempty"`
 }
 
 func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
@@ -725,6 +728,9 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Description != nil {
 			created.Description = strings.TrimSpace(*input.Description)
+		}
+		if input.MultiSelect != nil {
+			created.MultiSelect = *input.MultiSelect
 		}
 		data.LabelGroups = append(data.LabelGroups, created)
 		return created.ID, nil
@@ -765,6 +771,9 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Description != nil {
 			data.LabelGroups[index].Description = strings.TrimSpace(*input.Description)
+		}
+		if input.MultiSelect != nil {
+			data.LabelGroups[index].MultiSelect = *input.MultiSelect
 		}
 		if input.ArchivedAt != nil {
 			value := strings.TrimSpace(*input.ArchivedAt)

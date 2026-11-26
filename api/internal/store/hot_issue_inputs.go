@@ -527,7 +527,7 @@ func (r *issueHotInputs) loadReferences(ctx context.Context, data *domain.Bootst
 	}
 	if err := r.selectSlice(ctx, "labelGroups", func(record metadataLogicalNode) (bool, error) {
 		return issueHotMatches(ctx, record, "ID", groups)
-	}, "ID", "ArchivedAt"); err != nil {
+	}, "ID", "ArchivedAt", "MultiSelect"); err != nil {
 		return err
 	}
 	sla, err := r.keys(ctx, "sla")
