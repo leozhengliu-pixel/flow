@@ -150,6 +150,18 @@
             "server": {
               "type": "object",
               "properties": {
+                "database": {
+                  "type": "object",
+                  "properties": {
+                    "recordJournalCapture": {
+                      "enum": [
+                        "auto",
+                        "triggers",
+                        "application"
+                      ]
+                    }
+                  }
+                },
                 "storage": {
                   "type": "object",
                   "properties": {
@@ -390,6 +402,14 @@
         },
         "url": {
           "type": "string"
+        },
+        "recordJournalCapture": {
+          "enum": [
+            "",
+            "auto",
+            "triggers",
+            "application"
+          ]
         }
       }
     },

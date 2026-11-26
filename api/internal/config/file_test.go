@@ -313,6 +313,17 @@ func TestConfigFileUploadMaxBytes(t *testing.T) {
 	}
 }
 
+func TestConfigFileRecordJournalCapture(t *testing.T) {
+	// A file-only setting: it lands in Settings and sets no variable.
+	file := mustParse(t, "server:\n  database:\n    recordJournalCapture: application\n")
+	if file.Settings.RecordJournalCapture != "application" || len(file.Env) != 0 {
+		t.Fatalf("settings = %+v env = %v", file.Settings, file.Env)
+	}
+	if _, err := parse(t, "server:\n  database:\n    recordJournalCapture: sometimes\n"); err == nil || !strings.Contains(err.Error(), "recordJournalCapture") {
+		t.Fatalf("unknown capture accepted: %v", err)
+	}
+}
+
 func TestLoadFileFromArgsAndEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

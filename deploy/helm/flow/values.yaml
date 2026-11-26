@@ -326,6 +326,13 @@ database:
   maxOpenConns: ""
   maxIdleConns: ""
   connMaxLifetime: ""
+  # How MySQL records record journal changes: auto | triggers | application.
+  # A config-file-only setting: the chart renders it into config.yaml as
+  # server.database.recordJournalCapture (a value config.file sets wins; not
+  # with config.fileConfigMap). Empty keeps Flow's default, auto: triggers
+  # where the database account may create them, otherwise capture in the
+  # application (see docs/bounded-metadata-activation.md).
+  recordJournalCapture: ""
 
 redis:
   # disabled | standalone | cluster

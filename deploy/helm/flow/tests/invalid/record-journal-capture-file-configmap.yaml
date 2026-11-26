@@ -1,0 +1,8 @@
+# database.recordJournalCapture is rendered into the chart's config file, which
+# an existing ConfigMap replaces: set the key in that file instead.
+database:
+  driver: mysql
+  recordJournalCapture: application
+config:
+  fileConfigMap:
+    name: flow-settings

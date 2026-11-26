@@ -1,0 +1,4 @@
+# database.recordJournalCapture takes auto, triggers or application.
+database:
+  driver: mysql
+  recordJournalCapture: sometimes

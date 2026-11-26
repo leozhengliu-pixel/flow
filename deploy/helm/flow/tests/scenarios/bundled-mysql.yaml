@@ -1,6 +1,7 @@
 # Single replica on the bundled MySQL, local uploads on a PVC.
 database:
   driver: mysql
+  recordJournalCapture: application
 mysql:
   enabled: true
   auth:
