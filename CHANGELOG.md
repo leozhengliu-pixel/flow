@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Fix bounded workflow runs on issues with large editor state by validating borrowed frames against the issue collection's logical range.
 - Batch reciprocal project links on initiative writes, and reduce catalog, publication and project progress work on bounded metadata writes.
 - Speed up bounded metadata writes for projects, initiatives and issues. Issue edits read a project's progress histories only when they need to update them.
 - Fix MySQL record journal deadlocks when transactions edit metadata in the same workspace or overlap catalog backfill, in both trigger and application capture.
