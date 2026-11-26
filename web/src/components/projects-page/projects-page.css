@@ -802,8 +802,8 @@
 .lp-project-priority.is-urgent { color: #e56a68; }
 .lp-project-priority.is-high { color: var(--theme-text-secondary); }
 .lp-project-priority.is-medium { color: var(--theme-text-secondary); }
-.lp-project-priority.is-low,
-.lp-project-priority.is-none { color: #6b6b70; }
+.lp-project-priority.is-low { color: #6b6b70; }
+.lp-project-priority.is-none { color: var(--board-column-count); }
 .lp-project-avatar { align-items: center; border-radius: 50%; color: white; display: inline-flex; flex: none; font-size: 9px; height: 16px; justify-content: center; object-fit: cover; width: 16px; }
 .lp-project-avatar.is-empty { color: var(--theme-text-secondary); }
 .lp-project-row__date { color: var(--theme-text-secondary); font-size: 12px; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 92px; }
@@ -894,14 +894,14 @@
   z-index: 1;
 }
 .lp-project-board__heading strong {
-  color: var(--theme-text-primary);
+  color: var(--project-board-heading);
   font-size: 13px;
   font-weight: 500;
   line-height: 16px;
   margin-left: 2px;
 }
 .lp-project-board__count {
-  color: #77777c;
+  color: var(--board-column-count);
   font-size: 13px;
   font-weight: 450;
   line-height: 16px;
@@ -918,7 +918,7 @@
   background: transparent;
   border: .5px solid transparent;
   border-radius: 9999px;
-  color: var(--theme-text-primary);
+  color: var(--project-board-heading);
   display: flex;
   height: 24px;
   justify-content: center;
@@ -927,9 +927,6 @@
 }
 .lp-project-board__menu { height: 32px !important; width: 32px !important; }
 .lp-project-board__column > header button:hover { background: var(--theme-control-hover); color: #fff; }
-:root[data-theme="light"] .lp-project-board__heading strong { color: var(--theme-text-primary); }
-:root[data-theme="light"] .lp-project-board__count { color: var(--theme-text-secondary); }
-:root[data-theme="light"] .lp-project-board__column > header button { color: var(--theme-text-primary); }
 :root[data-theme="light"] .lp-project-board__column > header button:hover {
   background: var(--ui-pill-hover-bg);
   color: var(--flow-light-icon);
@@ -940,9 +937,9 @@
 .lp-project-board__subgroup > header { align-items: center; color: #919196; display: flex; font-size: 12px; gap: 7px; height: 28px; padding: 0 6px; }
 .lp-project-board__subgroup > header small { color: #68686d; font-size: 12px; }
 .lp-project-card {
-  background: var(--theme-surface-1);
+  background: var(--board-card-surface);
   border-radius: 8px;
-  box-shadow: 0 0 0 .5px rgb(255 255 255 / 8%), 0 .5px 1px 1px rgb(0 0 0 / 30%);
+  box-shadow: 0 0 0 .5px var(--board-card-outline), 0 .5px 1px 1px var(--shadow-color-card);
   box-sizing: border-box;
   color: inherit;
   display: flex;
@@ -973,7 +970,7 @@
 .lp-project-card__id { color: var(--project-id-fg); flex: none; font-size: 12px; line-height: 18px; }
 .lp-project-card__icon { border: 0; border-radius: 8px; flex: none; height: 28px; padding: 6px; width: 28px; }
 .lp-project-card__identity strong {
-  color: var(--theme-text-primary);
+  color: var(--project-card-title);
   display: block;
   font-size: 13px;
   font-weight: 500;
@@ -984,7 +981,6 @@
   padding-top: 6px;
   white-space: normal;
 }
-:root[data-theme="light"] .lp-project-card__identity strong { color: var(--theme-text-primary); }
 .lp-project-card__properties { align-items: center; display: flex; flex: none; margin-right: -4px; }
 .lp-project-card .lp-project-card__properties button {
   box-sizing: border-box;
@@ -1067,8 +1063,8 @@
 .lp-project-card__milestone-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lp-project-card__milestone-date { flex: none; }
 .lp-project-card__footer { align-items: center; display: flex; min-height: 28px; }
-.lp-project-card__issues {
-  color: #818187;
+.lp-project-card button.lp-project-card__issues {
+  color: var(--board-card-muted);
   font-size: 12px;
   font-weight: 450;
   height: 28px;
@@ -1920,12 +1916,8 @@
 .lp-projects__editor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
 .lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
-.lp-projects__timeline-pill { display: none; }
 @media (min-width: 768px) {
-  .lp-projects__timeline-pill { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: lch(13.861% 1.139 272); color: lch(90.826% 1.425 272); font: 500 12px var(--font); }
-  .lp-projects__timeline-zoom { gap: 6px; }
   .lp-projects__editor-actions .lp-projects__icon-button:not(.is-active) { background: lch(13.861% 1.139 272); }
-  .lp-projects__timeline-pill:hover { background: var(--ui-pill-hover-bg); color: var(--project-toolbar-icon-hover-fg); }
   /* The reference's view card floats 8px inside the frame, and its Copy URL button has no pill background. */
   .lp-projects__top > div:has(> section[data-mode]) { margin: 8px; }
   .lp-projects__header > .lp-projects__copy-url.lp-projects__icon-button { background: transparent; }

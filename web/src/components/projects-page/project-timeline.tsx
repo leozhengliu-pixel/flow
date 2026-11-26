@@ -263,13 +263,6 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
     else node.scrollLeft = left
   }
   // The view toolbar's Today button asks this timeline to centre on today.
-  const scrollToTodayRef = useRef(scrollToToday)
-  useEffect(() => { scrollToTodayRef.current = scrollToToday })
-  useEffect(() => {
-    const onToday = () => scrollToTodayRef.current()
-    window.addEventListener('flow:timeline-today', onToday)
-    return () => window.removeEventListener('flow:timeline-today', onToday)
-  }, [])
 
   const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || (event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) return
