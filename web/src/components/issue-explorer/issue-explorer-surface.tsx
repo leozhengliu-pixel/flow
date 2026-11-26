@@ -321,7 +321,7 @@ function ViewTabsOverflow({ views, activeView, onNavigateView }: { views: { id: 
   const rest = views.filter(view => view.id !== shown.id).length
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild>
-      <button type="button" className={`${styles.tab} ${styles.tabOverflow} ui-pill`} data-active={shown.id === activeView} aria-label={t('{count} more').replace('{count}', String(rest))}>
+      <button type="button" className={`${styles.tab} ${styles.tabOverflow} ui-pill`} data-active={shown.id === activeView} aria-label={t('{count} more').replace('{count}', () => String(rest))}>
         <span>{t(shown.label)}</span>
         <svg aria-hidden="true" width="8" height="9" viewBox="0 0 8 9" fill="none"><path d="M1.25 3.25 4 6l2.75-2.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
