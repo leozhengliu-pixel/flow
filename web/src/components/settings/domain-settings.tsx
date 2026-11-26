@@ -531,7 +531,7 @@ function GroupRowMenu({ group, canConvert, onEdit, onCreateLabel, onArchive, onG
     <DropdownMenuItem onSelect={onEdit}><MenuIcon name="edit"/><span>{t('Edit label name')}</span><MenuShortcut>E</MenuShortcut></DropdownMenuItem>
     <DropdownMenuItem onSelect={onCreateLabel}><MenuIcon name="add"/><span>{t('Add label to group')}</span></DropdownMenuItem>
     {/* Group type: single-select groups allow one of their labels per item, multi-select groups several. */}
-    <DropdownMenuSub><DropdownMenuSubTrigger><MenuIcon name="grouptype"/><span>{t('Group type')}</span></DropdownMenuSubTrigger><DropdownMenuSubContent data-i18n-ignore className="domain-label-group-submenu domain-label-group-type-submenu" sideOffset={4}>
+    <DropdownMenuSub><DropdownMenuSubTrigger><MenuIcon name="grouptype"/><span>{t('Group type')}</span></DropdownMenuSubTrigger><DropdownMenuSubContent data-i18n-ignore className="domain-label-group-submenu domain-label-group-type-submenu" sideOffset={4} alignOffset={-7}>
       {([false, true] as const).map(multiSelect => <DropdownMenuItem key={String(multiSelect)} className="domain-label-group-type-option" aria-checked={Boolean(group.multiSelect) === multiSelect} onSelect={() => { if (Boolean(group.multiSelect) !== multiSelect) onGroupType(multiSelect) }}><span>{t(multiSelect ? 'Multi-select' : 'Single-select')}</span>{Boolean(group.multiSelect) === multiSelect && <MenuCheckGlyph/>}</DropdownMenuItem>)}
     </DropdownMenuSubContent></DropdownMenuSub>
     {canConvert && <DropdownMenuItem onSelect={onConvert}><MenuIcon name="label"/><span>{t('Convert to label')}</span></DropdownMenuItem>}
