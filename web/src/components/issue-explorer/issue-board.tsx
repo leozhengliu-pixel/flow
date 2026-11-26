@@ -5,7 +5,7 @@ import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, Link2, Plus } from 'lucide-react'
+import { Clock3, Link2, Plus } from 'lucide-react'
 import { EstimateChip, EstimateIcon } from '@/components/issue/estimate-icon'
 import { useIssueRowActions, useTeamEstimateSettings } from '@/components/my-issues/use-issue-row-actions'
 import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
@@ -204,7 +204,7 @@ function RowCells({ children }: { children: ReactNode }) {
 function SwimlaneMenu({ collapsed, onSelectAll, onToggle, onExpandAll, onCollapseAll }: { collapsed: boolean; onSelectAll: () => void; onToggle: () => void; onExpandAll: () => void; onCollapseAll: () => void }) {
   const { t } = useI18n()
   return <DropdownMenu.Root>
-    <DropdownMenu.Trigger asChild><button className={styles.rowMenuButton} type="button" aria-label={t('Row options')}><Ellipsis size={14}/></button></DropdownMenu.Trigger>
+    <DropdownMenu.Trigger asChild><button className={styles.rowMenuButton} type="button" aria-label={t('Row options')}><BoardEllipsisIcon/></button></DropdownMenu.Trigger>
     <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Row options')} align="start" sideOffset={4}>
       <FlowMenuItem label="Select all in row" onSelect={onSelectAll}/>
       <FlowMenuSeparator/>
@@ -266,6 +266,7 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], showEmptyGroups = true
 
   const virtualizeColumns = visibleGroups.length > COLUMN_VIRTUALIZATION_THRESHOLD
 
+  const hiddenPanel = <HiddenBoardColumns groups={hiddenGroups} onShowGroup={id => { setRevealed(current => ({ setting: showEmptyGroups, ids: [...current.ids, id] })); onShowGroup?.(id) }}/>
   return <div className={styles.board} role="list" aria-label={t('Issue board')} data-dragging={Boolean(draggingId)} data-virtualized-columns={virtualizeColumns || undefined}>
     {virtualizeColumns ? (
       <Virtuoso
@@ -276,10 +277,11 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], showEmptyGroups = true
         defaultItemHeight={348}
         increaseViewportBy={COLUMN_OVERSCAN}
         itemContent={(_index, group) => renderColumn(group)}
+        // Hidden columns follow the last column inside the scroller, as on a board that is not virtualized.
+        components={{ Footer: () => hiddenPanel }}
         style={{ height: '100%', width: '100%' }}
       />
-    ) : visibleGroups.map(group => renderColumn(group))}
-    <HiddenBoardColumns groups={hiddenGroups} onShowGroup={id => { setRevealed(current => ({ setting: showEmptyGroups, ids: [...current.ids, id] })); onShowGroup?.(id) }}/>
+    ) : <>{visibleGroups.map(group => renderColumn(group))}{hiddenPanel}</>}
   </div>
 }
 
@@ -383,8 +385,8 @@ export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add n
         {group.labelPrefix && <><span data-i18n-ignore className={styles.columnPrefix}>{group.labelPrefix}</span><GroupPathChevron className={styles.columnPathChevron}/></>}
         <strong data-board-column-title data-i18n-ignore>{group.translatableLabel ? t(group.label) : group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
         <div className={styles.columnActions}>
-        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent label={t('Open menu')} align="start" sideOffset={4}><FlowMenuItem label={count>group.issues.length?'Select loaded issues':'Select all in column'} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}/><FlowMenuItem label="Hide column" onSelect={()=>onHideGroup?.(group.id)}/></FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
-        <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
+        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><BoardEllipsisIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent label={t('Open menu')} align="start" sideOffset={4}><FlowMenuItem label={count>group.issues.length?'Select loaded issues':'Select all in column'} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}/><FlowMenuItem label="Hide column" onSelect={()=>onHideGroup?.(group.id)}/></FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
+        <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><BoardPlusIcon/></button>
         </div>
       </header>
     </div>
@@ -434,6 +436,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange, 
   const showEstimate = properties.has('estimate') && issue.estimate != null && issue.estimate >= 0 && (hasEstimateContext ? teamUsesEstimates(estimateSettings) : issue.estimate > 0)
   const hasSubIssues = Boolean(issue.subIssueProgress && issue.subIssues?.length)
   const visible = properties.has('priority') || showEstimate || hasSubIssues || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt) || Boolean(properties.has('customers') && issue.customerCount) || Boolean(properties.has('customerRevenue') && issue.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
+  const labelsPicker = (key: string, content: ReactNode) => <RowCommandPicker key={key} propertyLabel="Labels" kind="labels" multi label={`Change labels. ${labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => onPropertyChange('labels', toggleGroupedLabelIds(labels.map(label => label.id), value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={content}/>
   if (!visible) return null
   return <div className={styles.cardMeta}>
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
@@ -447,7 +450,9 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange, 
     {properties.has('myActivity') && issue.myActivityAt ? <span className={styles.badge}><span>{formatDate(issue.myActivityAt)}</span></span> : null}
     {properties.has('project') && issue.project && <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => onPropertyChange('project', value)} triggerClassName={`${styles.metaTrigger} ${styles.projectBadge}`} trigger={<><ProjectGlyph project={issue.project} size={14}/><span data-i18n-ignore>{issue.project.name}</span></>}/>}
     {properties.has('cycle') && issue.cycleId && <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={(propertyOptions.cycle ?? []).filter(option => !option.teamId || !issue.teamId || option.teamId === issue.teamId)} onSelect={value => onPropertyChange('cycle', value)} triggerClassName={styles.metaTrigger} trigger={<><CycleIcon size={14}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></>}/>}
-    {shownLabels.length > 0 && <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => onPropertyChange('labels', toggleGroupedLabelIds(labels.map(label => label.id), value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<>{shownLabels.map(chip => chip.labels.length > 1 ? <MergedLabelBadge key={chip.key} chip={chip} className={styles.badge} dotsClassName={styles.mergedDots}/> : <Badge key={chip.key} color={chip.labels[0].color}>{chip.labels[0].name}</Badge>)}{hiddenLabelCount > 0 && <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>}</>}/>}
+    {/* One picker trigger per chip (all open the same label picker), so chips wrap one by one like the reference. */}
+    {shownLabels.map(chip => labelsPicker(chip.key, chip.labels.length > 1 ? <MergedLabelBadge chip={chip} className={styles.badge} dotsClassName={styles.mergedDots}/> : <Badge color={chip.labels[0].color}>{chip.labels[0].name}</Badge>))}
+    {hiddenLabelCount > 0 && labelsPicker('more', <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>)}
     {properties.has('dueDate') && issue.dueDate && <DueDatePicker value={issue.dueDate} allowRemove={!issue.recurrence} onChange={value => onPropertyChange('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDate(issue.dueDate)}`} triggerClassName={styles.metaTrigger} trigger={<><CalendarIcon size={13}/><span>{formatDate(issue.dueDate)}</span></>}/>}
     {properties.has('customers') && issue.customerCount ? <CustomersRowChip variant="square" customers={issue.customers ?? []} customerCount={issue.customerCount} importantCustomerIds={issue.importantCustomerIds ?? []} settings={issue.customerRevenueSettings}/> : null}
     {properties.has('customerRevenue') && issue.customers?.length ? <CustomerRevenueRowChip variant="square" customers={issue.customers} settings={issue.customerRevenueSettings}/> : null}
