@@ -22,7 +22,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":      "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":        "9b712dcb9ab06d588f07a4f17f2a475088882bc7e82ff467dc1be62b690767c0",
+		"issue_query.go":        "096e3b3f52c3c4b0dd5ac409c65a0988a53c15f7e954688b687b6918b7d47cbc",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
 		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",

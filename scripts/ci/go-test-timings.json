@@ -2050,6 +2050,7 @@
     "TestScaleP21SW240ReadLeafRoutesDifferential": 201.88,
     "TestScaleP21SW244ColdTemplateLargeDifferential": 19.14,
     "TestScaleP21SW244IssueWriteAllocations": 69.98,
+    "TestScaleP21SW244IssueWriteDifferential": 1800,
     "TestScaleP21SW24ApplicationConsentSourceDifferential": 5.23,
     "TestScaleP21SW24ApplicationDefaultSourceDifferential": 5.72,
     "TestScaleP21SW24ClassicHTTPConfiguration": 13.49,
