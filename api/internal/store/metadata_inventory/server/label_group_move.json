@@ -7,8 +7,7 @@
       "status": "unmigrated",
       "accessors": [
         "Bootstrap",
-        "MutateWorkspaceWithAggregate",
-        "WorkspaceMetadata"
+        "MutateWorkspaceWithAggregate"
       ],
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",

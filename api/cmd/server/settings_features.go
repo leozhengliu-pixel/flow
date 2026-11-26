@@ -626,40 +626,24 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 		if labelResourceType(source) != "issue" {
 			return "", errInvalid
 		}
-		usedByTeam := map[string]bool{}
-		for _, issue := range data.Issues {
-			if slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
-				usedByTeam[issue.Team.ID] = true
-			}
+		// The copies are ungrouped; see moveLabelsToTeams.
+		move, err := moveLabelsToTeams(data, []domain.IssueLabel{source}, nil)
+		if err != nil {
+			return "", err
 		}
-		if len(usedByTeam) == 0 {
-			return "", errInvalid
+		moved = []domain.IssueLabel{}
+		for _, teamID := range move.receiving {
+			moved = append(moved, move.copies[teamID][id])
 		}
-		for teamIndex, team := range data.Teams {
-			if !usedByTeam[team.ID] {
-				continue
-			}
-			teamLabel := source
-			teamLabel.ID = fmt.Sprintf("label_%s_%d", idgen.Stamp(), teamIndex)
-			teamLabel.Scope = team.ID
-			teamLabel.GroupID = ""
-			moved = append(moved, teamLabel)
-			data.Labels = append(data.Labels, teamLabel)
-			for issueIndex := range data.Issues {
-				if data.Issues[issueIndex].Team.ID != team.ID {
-					continue
-				}
-				for labelIndex := range data.Issues[issueIndex].Labels {
-					if data.Issues[issueIndex].Labels[labelIndex].ID == id {
-						data.Issues[issueIndex].Labels[labelIndex] = teamLabel
-					}
-				}
-			}
-		}
-		data.Labels = slices.Delete(data.Labels, index, index+1)
+		appendAudit(data, "moved_to_teams", "label", id, map[string]any{"name": source.Name, "teamIds": move.receiving})
 		return id, nil
 	})
-	respondMutation(w, err, http.StatusOK, moved)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	s.pruneMovedLabelSuggestions(r, map[string]struct{}{id: {}})
+	writeJSON(w, http.StatusOK, moved)
 }
 
 func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
