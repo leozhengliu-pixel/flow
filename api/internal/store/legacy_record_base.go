@@ -897,7 +897,9 @@ func (b *legacyRecordBase) issueBatch(ctx context.Context, source *metadataLogic
 		if err := rows.Scan(&header.id, &header.node.offset, &header.node.size, &cost); err != nil {
 			return nil, err
 		}
-		if cost < 0 || cost > metadataWorkBytes || header.node.offset < 0 || header.node.size < 16 || header.node.offset > field.source.bytes-header.node.size {
+		// The collection's logical range includes frames borrowed from other spools.
+		if cost < 0 || cost > metadataWorkBytes || header.node.size < 16 ||
+			header.node.offset < field.offset || header.node.offset-field.offset > field.size-header.node.size {
 			return nil, ErrMetadataRecordQuery
 		}
 		header.node.source, header.node.typ, header.node.cost = field.source, reflect.TypeFor[domain.Issue](), uint64(cost)
