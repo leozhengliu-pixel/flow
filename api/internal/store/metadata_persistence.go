@@ -28,7 +28,7 @@ func writeWorkspaceMetadata(ctx context.Context, tx *sqlTx, key, id string, raw 
 		return nil
 	}
 	tx.metadataWritten = true
-	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,updated_at=excluded.updated_at`, key, id, raw, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,updated_at=excluded.updated_at`, key, id, raw, formatStoredTime(time.Now()))
 	return err
 }
 
@@ -45,6 +45,6 @@ func writeAccountMetadata(ctx context.Context, tx *sqlTx, key string, viewer []b
 	if err == nil && key == previousKey && bytes.Equal(viewer, previous) {
 		return nil
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, key, viewer, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, key, viewer, formatStoredTime(time.Now()))
 	return err
 }

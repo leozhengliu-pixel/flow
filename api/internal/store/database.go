@@ -511,6 +511,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureOffloadedContent", s.ensureOffloadedContent},
 		{"ensureWorkspaceDeletionReceipts", s.ensureWorkspaceDeletionReceipts},
 		{"ensureWorkspaceKeyRenames", s.ensureWorkspaceKeyRenames},
+		{"migrateStoredTimes", s.migrateStoredTimes},
 		{"loadOrSeed", func(ctx context.Context) error {
 			if bounded && prepare {
 				pending, err := s.dataMigrationsPending(ctx)

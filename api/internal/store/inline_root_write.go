@@ -455,7 +455,7 @@ func (s *SQLiteStore) writeStreamedMetadataRootPatch(ctx context.Context, tx *sq
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`,
-		workspaceID, raw, time.Now().UTC().Format(time.RFC3339Nano), workspace)
+		workspaceID, raw, formatStoredTime(time.Now()), workspace)
 	return err
 }
 

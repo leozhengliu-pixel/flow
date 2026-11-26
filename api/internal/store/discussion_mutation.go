@@ -184,7 +184,7 @@ func persistDiscussion(ctx context.Context, tx *sqlTx, workspace, issue, comment
 
 func (s *SQLiteStore) activeDiscussionNotifications(ctx context.Context, tx *sqlTx, workspace, issue string) (map[string][]domain.Notification, error) {
 	result := map[string][]domain.Notification{}
-	rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id=? AND status='unread' AND `+s.jsonText("data", "updatedAt")+`>=? ORDER BY created_at,id`, workspace, issue, time.Now().UTC().Add(-6*time.Hour).Format(time.RFC3339Nano))
+	rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id=? AND status='unread' AND `+s.timestampTextKey(s.jsonText("data", "updatedAt"))+`>=? ORDER BY created_at,id`, workspace, issue, formatStoredTime(time.Now().Add(-6*time.Hour)))
 	if err != nil {
 		return result, err
 	}

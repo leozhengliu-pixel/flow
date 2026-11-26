@@ -240,11 +240,11 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	// Includes the data migrations run after load (incl. the coding environments move,
+	// Includes the fixed-width timestamp migration and the data migrations run after load (incl. the coding environments move,
 	// track K, the inherited document scope, the cycle capacity overrides, the cycle settings defaults (1013), the member directory, the workspace
 	// initials colour, the integration OAuth tokens move (1025), the audit log table move (1030) and the repair of rows left under previous
 	// workspace keys (1040) and the creator owner grant on documents stored without one (1041)).
-	want := 48
+	want := 49
 	if recordJournalMode("sqlite") != "off" {
 		want++ // SQLite trigger repairs only run with journal triggers.
 	}

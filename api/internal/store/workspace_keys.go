@@ -163,11 +163,11 @@ func (s *SQLiteStore) sw26ApplyRenamePairs(ctx context.Context, stage *sw26Migra
 			if current == item.key {
 				continue
 			}
-			at := item.at
-			if _, err := time.Parse(time.RFC3339Nano, at); err != nil {
-				at = time.Now().UTC().Format(time.RFC3339Nano)
+			at, err := time.Parse(time.RFC3339Nano, item.at)
+			if err != nil {
+				at = time.Now()
 			}
-			result, err := s.db.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, item.id, item.key, current, at)
+			result, err := s.db.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, item.id, item.key, current, formatStoredTime(at))
 			if err != nil {
 				return recorded, err
 			}
@@ -246,7 +246,8 @@ func (s *SQLiteStore) sw26StageRenameEventPage(ctx context.Context, stage *sw26M
 		if id == "" || key == "" || len(id) > 191 || len(key) > 191 {
 			continue
 		}
-		if _, err := stage.exec(ctx, int64(len(id)+len(key)+len(item.created.String)), `INSERT INTO pairs(id,key,at) VALUES(?,?,?) ON CONFLICT(id,key) DO UPDATE SET at=CASE WHEN excluded.at>pairs.at THEN excluded.at ELSE pairs.at END`, id, key, item.created.String); err != nil {
+		at := normalizeStoredTime(item.created.String)
+		if _, err := stage.exec(ctx, int64(len(id)+len(key)+len(at)), `INSERT INTO pairs(id,key,at) VALUES(?,?,?) ON CONFLICT(id,key) DO UPDATE SET at=CASE WHEN excluded.at>pairs.at THEN excluded.at ELSE pairs.at END`, id, key, at); err != nil {
 			return 0, last, err
 		}
 	}

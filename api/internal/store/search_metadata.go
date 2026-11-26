@@ -261,6 +261,8 @@ func (s *SQLiteStore) searchMetadataCollection(ctx context.Context, policy domai
 	orderExpr := "COALESCE(" + orderValue + ",'')"
 	if q.Scope.Sort == "title" {
 		orderExpr = "LOWER(" + orderExpr + ")"
+	} else {
+		orderExpr = "COALESCE(" + s.timestampTextKey(orderValue) + ",'')"
 	}
 	lastValue, lastID := "", ""
 	accepted := 0
@@ -758,7 +760,18 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 		column := s.jsonText("data", field)
 		dateField := field == "createdAt" || field == "updatedAt"
 		if dateField {
-			column = "NULLIF(NULLIF(" + column + ",''),'0001-01-01T00:00:00Z')"
+			column = "NULLIF(NULLIF(" + s.timestampTextKey(column) + ",''),'" + formatStoredTime(time.Time{}) + "')"
+			node.Values = slices.Clone(node.Values)
+			for i, value := range node.Values {
+				at, err := time.Parse(time.RFC3339Nano, value)
+				if err != nil {
+					at, err = time.Parse("2006-01-02", value)
+				}
+				if err != nil {
+					return "", nil, ErrIssueQuery
+				}
+				node.Values[i] = formatStoredTime(at)
+			}
 		}
 		op := strings.ToLower(node.Operator)
 		if op == "" {

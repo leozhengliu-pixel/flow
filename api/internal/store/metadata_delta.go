@@ -401,7 +401,7 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 		return true, nil
 	}
 	tx.metadataWritten = true
-	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`, after.Workspace.ID, raw, time.Now().UTC().Format(time.RFC3339Nano), workspace)
+	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`, after.Workspace.ID, raw, formatStoredTime(time.Now()), workspace)
 	return true, err
 }
 

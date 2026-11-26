@@ -100,12 +100,12 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 	for key, data := range s.workspaces {
 		insert := func(user domain.User) error {
 			_, err := tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
-				user.ID, normalizeEmail(user.Email), user.Name, user.DisplayName, user.AvatarURL, string(hash), now.Format(time.RFC3339Nano), boolInt(user.Active), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+				user.ID, normalizeEmail(user.Email), user.Name, user.DisplayName, user.AvatarURL, string(hash), formatStoredTime(now), boolInt(user.Active), formatStoredTime(now), formatStoredTime(now))
 			if err != nil {
 				return err
 			}
 			_, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
-				data.Workspace.ID, user.ID, "admin", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+				data.Workspace.ID, user.ID, "admin", "active", formatStoredTime(now), formatStoredTime(now))
 			if err != nil {
 				return err
 			}
@@ -114,7 +114,7 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 				teamRole = "owner"
 			}
 			for _, team := range data.Teams {
-				_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, data.Workspace.ID, team.ID, user.ID, teamRole, now.Format(time.RFC3339Nano))
+				_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, data.Workspace.ID, team.ID, user.ID, teamRole, formatStoredTime(now))
 				if err != nil {
 					return err
 				}
@@ -180,7 +180,7 @@ func (s *SQLiteStore) Register(ctx context.Context, name, email, password string
 	now := time.Now().UTC()
 	user := domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, Active: true}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
-		user.ID, user.Email, user.Name, user.DisplayName, string(hash), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		user.ID, user.Email, user.Name, user.DisplayName, string(hash), 1, formatStoredTime(now), formatStoredTime(now))
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return domain.User{}, "", ErrAuthConflict
@@ -221,12 +221,12 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 			return domain.AuthSession{}, "", ErrAuthInvalid
 		}
 		user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, AvatarURL: strings.TrimSpace(avatarURL), Active: true, EmailVerified: true}
-		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", formatStoredTime(now), 1, formatStoredTime(now), formatStoredTime(now))
 	} else if err == nil {
 		if !user.Active {
 			return domain.AuthSession{}, "", ErrAuthInvalid
 		}
-		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, strings.TrimSpace(avatarURL), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), user.ID)
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,email_verified_at=?,updated_at=? WHERE id=?`, name, name, strings.TrimSpace(avatarURL), formatStoredTime(now), formatStoredTime(now), user.ID)
 		user.Name, user.DisplayName, user.AvatarURL, user.EmailVerified = name, name, strings.TrimSpace(avatarURL), true
 	}
 	if err != nil {
@@ -241,9 +241,9 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 		workspace := s.workspaces[workspaceKey]
 		s.mu.RUnlock()
 		if workspace.Workspace.ID != "" && !errors.Is(s.refuseErasedMember(ctx, s.db, workspace.Workspace.ID, user.ID), ErrErasedFromWorkspace) {
-			_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, user.ID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+			_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, user.ID, "member", "active", formatStoredTime(now), formatStoredTime(now))
 			if err == nil && len(workspace.Teams) > 0 {
-				_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, user.ID, "member", now.Format(time.RFC3339Nano))
+				_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, user.ID, "member", formatStoredTime(now))
 			}
 			if err == nil {
 				s.syncMemberDirectoryLogged(ctx, workspaceKey, user.ID)
@@ -320,21 +320,21 @@ func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provi
 			if avatarURL == "" {
 				avatarURL = user.AvatarURL
 			}
-			_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, name, name, avatarURL, time.Now().UTC().Format(time.RFC3339Nano), user.ID)
+			_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, name, name, avatarURL, formatStoredTime(time.Now()), user.ID)
 			if err != nil {
 				return domain.AuthSession{}, "", err
 			}
 			user.Name, user.DisplayName, user.AvatarURL = name, name, avatarURL
 		}
 		if email != "" && user.Email == "" {
-			now := time.Now().UTC().Format(time.RFC3339Nano)
+			now := formatStoredTime(time.Now())
 			_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,email_verified_at=?,updated_at=? WHERE id=? AND (email IS NULL OR email='')`, email, now, now, user.ID)
 			if err == nil {
 				user.Email, user.EmailVerified = email, true
 			}
 		}
 		if err == nil {
-			_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=?,last_login_at=? WHERE id=?`, username, claimsJSON, time.Now().UTC().Format(time.RFC3339Nano), identityID)
+			_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=?,last_login_at=? WHERE id=?`, username, claimsJSON, formatStoredTime(time.Now()), identityID)
 		}
 		if err != nil {
 			return domain.AuthSession{}, "", err
@@ -366,7 +366,7 @@ func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provi
 			}
 			user = existing
 			if !user.EmailVerified {
-				now := time.Now().UTC().Format(time.RFC3339Nano)
+				now := formatStoredTime(time.Now())
 				if _, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID); err != nil {
 					return domain.AuthSession{}, "", err
 				}
@@ -386,7 +386,7 @@ func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provi
 				name = strings.Split(email, "@")[0]
 			}
 			user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, AvatarURL: avatarURL, Active: true, EmailVerified: true}
-			_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+			_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", formatStoredTime(now), 1, formatStoredTime(now), formatStoredTime(now))
 			if err != nil {
 				return domain.AuthSession{}, "", err
 			}
@@ -400,7 +400,7 @@ func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provi
 		}
 		now := time.Now().UTC()
 		user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Active: true}
-		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, nil, user.Name, user.DisplayName, avatarURL, "", nil, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, nil, user.Name, user.DisplayName, avatarURL, "", nil, 1, formatStoredTime(now), formatStoredTime(now))
 		if err != nil {
 			return domain.AuthSession{}, "", err
 		}
@@ -409,7 +409,7 @@ func (s *SQLiteStore) LoginExternalIdentityWithPolicy(ctx context.Context, provi
 		}
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), user.ID, provider, issuer, subject, externalIdentityKey(provider, issuer, subject), username, claimsJSON, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), user.ID, provider, issuer, subject, externalIdentityKey(provider, issuer, subject), username, claimsJSON, formatStoredTime(now), formatStoredTime(now))
 	if err != nil {
 		return domain.AuthSession{}, "", err
 	}
@@ -448,7 +448,7 @@ func (s *SQLiteStore) LinkExternalIdentity(ctx context.Context, userID, provider
 	if err := s.db.QueryRowContext(ctx, `SELECT active FROM auth_users WHERE id=?`, userID).Scan(&active); err != nil || active == 0 {
 		return ErrAuthInvalid
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	key := externalIdentityKey(provider, issuer, subject)
 	var owner string
 	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE identity_key=?`, key).Scan(&owner)
@@ -485,9 +485,9 @@ func (s *SQLiteStore) provisionExternalMemberships(ctx context.Context, userID s
 	if errors.Is(s.refuseErasedMember(ctx, s.db, workspace.Workspace.ID, userID), ErrErasedFromWorkspace) {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, userID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, userID, "member", "active", formatStoredTime(now), formatStoredTime(now))
 	if err == nil && len(workspace.Teams) > 0 {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, userID, "member", now.Format(time.RFC3339Nano))
+		_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, userID, "member", formatStoredTime(now))
 	}
 	if err == nil {
 		s.syncMemberDirectoryLogged(ctx, workspaceKey, userID)
@@ -507,7 +507,7 @@ func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (doma
 		return domain.AuthSession{}, "", err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, formatStoredTime(expires), formatStoredTime(now), formatStoredTime(now))
 	if err != nil {
 		return domain.AuthSession{}, "", err
 	}
@@ -602,7 +602,7 @@ func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, us
 	if err := checkTextFields(textField{"displayName", displayName, domain.UserNameMaxLength}, textField{"username", username, domain.UserNameMaxLength}, textField{"avatarUrl", strings.TrimSpace(avatarURL), domain.AvatarURLMaxLength}); err != nil {
 		return domain.User{}, err
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	avatarURL = strings.TrimSpace(avatarURL)
 	// The current values again leave the row (and its updated_at) as it is.
 	if current, err := s.authUserByID(ctx, userID); err == nil && current.Name == username && current.DisplayName == displayName && current.AvatarURL == avatarURL {
@@ -622,7 +622,7 @@ func (s *SQLiteStore) UpdateMemberIdentity(ctx context.Context, userID, displayN
 	if err := checkTextFields(textField{"displayName", displayName, domain.UserNameMaxLength}, textField{"username", username, domain.UserNameMaxLength}, textField{"email", email, domain.EmailMaxLength}); err != nil {
 		return domain.User{}, err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE auth_users SET display_name=?,name=?,email=?,updated_at=? WHERE id=?`, displayName, username, email, time.Now().UTC().Format(time.RFC3339Nano), userID)
+	result, err := s.db.ExecContext(ctx, `UPDATE auth_users SET display_name=?,name=?,email=?,updated_at=? WHERE id=?`, displayName, username, email, formatStoredTime(time.Now()), userID)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -647,12 +647,12 @@ func (s *SQLiteStore) ChangePassword(ctx context.Context, userID, currentPasswor
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(nextHash), time.Now().UTC().Format(time.RFC3339Nano), userID)
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(nextHash), formatStoredTime(time.Now()), userID)
 	return err
 }
 
 func (s *SQLiteStore) ListSessions(ctx context.Context, userID, currentToken string) ([]domain.AccountSession, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT token_hash,expires_at,created_at,last_seen_at FROM auth_sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen_at DESC`, userID, time.Now().UTC().Format(time.RFC3339Nano))
+	rows, err := s.db.QueryContext(ctx, `SELECT token_hash,expires_at,created_at,last_seen_at FROM auth_sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen_at DESC`, userID, formatStoredTime(time.Now()))
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +746,7 @@ func (s *SQLiteStore) EnsureWorkspaceMembership(ctx context.Context, workspaceID
 	if err := s.refuseErasedMember(ctx, s.db, workspaceID, userID); err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET status='active',last_seen_at=excluded.last_seen_at`, workspaceID, userID, "member", "active", now, now)
 	if err == nil {
 		s.syncMemberDirectoryByID(ctx, workspaceID, userID)
@@ -767,7 +767,7 @@ func (s *SQLiteStore) VerifyEmail(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=?`, now, now, userID)
 	return err
 }
@@ -800,7 +800,7 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(hash), time.Now().UTC().Format(time.RFC3339Nano), userID)
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(hash), formatStoredTime(time.Now()), userID)
 	if err == nil {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, userID)
 		err = s.revokeChatIdentities(ctx, userID)
@@ -849,7 +849,7 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 		return domain.AuthSession{}, "", ErrAuthInvalid
 	}
 	if !user.EmailVerified {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
+		now := formatStoredTime(time.Now())
 		_, _ = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID)
 		user.EmailVerified = true
 	}
@@ -999,7 +999,7 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 	if s.db.QueryRowContext(ctx, `SELECT last_workspace_key FROM auth_account_state WHERE user_id=?`, userID).Scan(&current) == nil && current == workspaceKey {
 		return nil
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)
 	return err
 }
@@ -1360,7 +1360,7 @@ func (s *SQLiteStore) Invite(ctx context.Context, workspaceID, inviterID, email,
 	now := time.Now().UTC()
 	item := domain.Invitation{ID: idgen.New("invite_"), WorkspaceID: workspaceID, Email: email, Role: role, TeamIDs: teamIDs, Status: "pending", InviterID: inviterID, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now, Token: token}
 	teamRaw, _ := json.Marshal(teamIDs)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, email, role, teamRaw, tokenHash(token), inviterID, item.Status, item.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, email, role, teamRaw, tokenHash(token), inviterID, item.Status, formatStoredTime(item.ExpiresAt), formatStoredTime(now))
 	return item, err
 }
 
@@ -1403,7 +1403,7 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 		return InvitationAcceptance{}, err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status='active'`, workspaceID, userID, role, "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status='active'`, workspaceID, userID, role, "active", formatStoredTime(now), formatStoredTime(now))
 	if err != nil {
 		return InvitationAcceptance{}, err
 	}
@@ -1415,7 +1415,7 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 		if role == "owner" {
 			teamRole = "owner"
 		}
-		inserted, err := tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at,origin) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, teamRole, now.Format(time.RFC3339Nano), domain.TeamMemberOriginInvitation)
+		inserted, err := tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at,origin) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspaceID, teamID, userID, teamRole, formatStoredTime(now), domain.TeamMemberOriginInvitation)
 		if err != nil {
 			return InvitationAcceptance{}, err
 		}
@@ -1432,7 +1432,7 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 		}
 		changes = append(changes, inherited...)
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE workspace_invitations SET status='accepted',accepted_at=? WHERE id=?`, now.Format(time.RFC3339Nano), id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE workspace_invitations SET status='accepted',accepted_at=? WHERE id=?`, formatStoredTime(now), id); err != nil {
 		return InvitationAcceptance{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -1748,7 +1748,7 @@ func (s *SQLiteStore) createAuthToken(ctx context.Context, userID, kind string, 
 		return "", err
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_tokens(token_hash,user_id,kind,expires_at,created_at) VALUES(?,?,?,?,?)`, tokenHash(token), userID, kind, now.Add(duration).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_tokens(token_hash,user_id,kind,expires_at,created_at) VALUES(?,?,?,?,?)`, tokenHash(token), userID, kind, formatStoredTime(now.Add(duration)), formatStoredTime(now))
 	return token, err
 }
 
@@ -1766,7 +1766,7 @@ func (s *SQLiteStore) consumeAuthToken(ctx context.Context, token, kind string) 
 	if time.Now().After(expires) {
 		return "", ErrAuthExpired
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE auth_tokens SET used_at=? WHERE token_hash=?`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token))
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_tokens SET used_at=? WHERE token_hash=?`, formatStoredTime(time.Now()), tokenHash(token))
 	return userID, err
 }
 

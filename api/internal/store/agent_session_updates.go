@@ -13,7 +13,7 @@ import (
 
 // agentSessionNeverDue parks a session the agent created itself: the worker
 // only delivers it once a person prompts it (which clears next_attempt).
-const agentSessionNeverDue = "9999-12-31T00:00:00Z"
+const agentSessionNeverDue = "9999-12-31T00:00:00.000000000Z"
 
 // agentActivityFromAgent reports activity types only the session's agent emits.
 func agentActivityFromAgent(kind string) bool {
@@ -107,7 +107,7 @@ func (s *SQLiteStore) CreateAgentInitiatedTask(ctx context.Context, task domain.
 	if resource == "" {
 		resource = task.ResourceID
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt,stale_at) VALUES(?,?,?,?,?,1,?,?,?,?)`, task.ID, task.WorkspaceKey, resource, task.AppUserID, task.Status, raw, now.Format(time.RFC3339Nano), agentSessionNeverDue, agentTaskStaleAt(task))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt,stale_at) VALUES(?,?,?,?,?,1,?,?,?,?)`, task.ID, task.WorkspaceKey, resource, task.AppUserID, task.Status, raw, formatStoredTime(now), agentSessionNeverDue, agentTaskStaleAt(task))
 	if err != nil {
 		return task, err
 	}

@@ -270,7 +270,7 @@ func (s *SQLiteStore) insertCodingSession(ctx context.Context, session domain.Co
 	// The anchor is never delivered to the application worker: the coding
 	// session drives it (next_attempt parks it like an agent-initiated session).
 	if _, err := tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt,stale_at) VALUES(?,?,?,?,?,1,?,?,?,?) ON CONFLICT(id) DO NOTHING`,
-		anchor.ID, anchor.WorkspaceKey, resource, anchor.AppUserID, anchor.Status, anchorRaw, created.Format(time.RFC3339Nano), agentSessionNeverDue, agentTaskStaleAt(anchor)); err != nil {
+		anchor.ID, anchor.WorkspaceKey, resource, anchor.AppUserID, anchor.Status, anchorRaw, formatStoredTime(created), agentSessionNeverDue, agentTaskStaleAt(anchor)); err != nil {
 		return false, err
 	}
 	// A reused anchor (an existing delegation task, track L) was not
@@ -358,7 +358,7 @@ func reopenCodingAnchor(ctx context.Context, tx *sqlTx, task *domain.AgentTask, 
 	} else if count != 1 {
 		return ErrCodingVersionConflict
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, task.ID, audit.ID, auditRaw, audit.CreatedAt.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, task.ID, audit.ID, auditRaw, formatStoredTime(audit.CreatedAt))
 	return err
 }
 

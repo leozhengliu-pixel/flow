@@ -276,7 +276,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 		if err != nil {
 			return current, err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_authorization_codes(code_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(code), raw, grant.ExpiresAt.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_authorization_codes(code_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(code), raw, formatStoredTime(grant.ExpiresAt), formatStoredTime(time.Now())); err != nil {
 			return current, err
 		}
 		eventType := "oauth_authorization.created"

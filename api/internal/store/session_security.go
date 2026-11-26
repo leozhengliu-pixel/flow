@@ -29,7 +29,7 @@ type SessionAuthentication struct {
 func (s *SQLiteStore) SetSessionAuthentication(ctx context.Context, token, provider, issuer string, mfa bool) error {
 	var verified any
 	if mfa {
-		verified = time.Now().UTC().Format(time.RFC3339Nano)
+		verified = formatStoredTime(time.Now())
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_session_security(token_hash,provider,issuer,mfa_verified_at) VALUES(?,?,?,?) ON CONFLICT(token_hash) DO UPDATE SET provider=excluded.provider,issuer=excluded.issuer,mfa_verified_at=excluded.mfa_verified_at`, tokenHash(token), provider, issuer, verified)
 	return err
@@ -77,7 +77,7 @@ func (s *SQLiteStore) BackdateSessionForTesting(ctx context.Context, token strin
 	if err != nil {
 		return err
 	}
-	if _, err = s.db.ExecContext(ctx, `UPDATE auth_sessions SET created_at=? WHERE token_hash=?`, parsed.Add(-age).Format(time.RFC3339Nano), hash); err != nil {
+	if _, err = s.db.ExecContext(ctx, `UPDATE auth_sessions SET created_at=? WHERE token_hash=?`, formatStoredTime(parsed.Add(-age)), hash); err != nil {
 		return err
 	}
 	var verified sql.NullString
@@ -90,6 +90,6 @@ func (s *SQLiteStore) BackdateSessionForTesting(ctx context.Context, token strin
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE auth_session_security SET mfa_verified_at=? WHERE token_hash=?`, parsed.Add(-age).Format(time.RFC3339Nano), hash)
+	_, err = s.db.ExecContext(ctx, `UPDATE auth_session_security SET mfa_verified_at=? WHERE token_hash=?`, formatStoredTime(parsed.Add(-age)), hash)
 	return err
 }

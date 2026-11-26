@@ -99,7 +99,7 @@ func (s *SQLiteStore) UpsertPersonalConnection(ctx context.Context, connection d
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO personal_connections(id,user_id,provider,account,scopes,status,status_reason,token_expires_at,away_from,away_until,sync_next_at,sync_failures,linked_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'','',0,0,?,?)
 		ON CONFLICT(id) DO UPDATE SET account=excluded.account,scopes=excluded.scopes,status=excluded.status,status_reason=excluded.status_reason,token_expires_at=excluded.token_expires_at,away_from='',away_until='',sync_next_at=0,sync_failures=0,linked_at=excluded.linked_at,updated_at=excluded.updated_at`,
-		connection.ID, connection.UserID, connection.Provider, connection.Account, strings.Join(connection.Scopes, " "), connection.Status, connection.StatusReason, formatOptionalTime(connection.TokenExpiresAt), connection.LinkedAt.UTC().Format(time.RFC3339Nano), connection.UpdatedAt.Format(time.RFC3339Nano))
+		connection.ID, connection.UserID, connection.Provider, connection.Account, strings.Join(connection.Scopes, " "), connection.Status, connection.StatusReason, formatOptionalTime(connection.TokenExpiresAt), formatStoredTime(connection.LinkedAt), formatStoredTime(connection.UpdatedAt))
 	connection.AwayFrom, connection.AwayUntil = nil, nil
 	return connection, err
 }
@@ -163,7 +163,7 @@ func (s *SQLiteStore) ActiveAwayWindows(ctx context.Context, userIDs []string, n
 // SetPersonalConnectionStatus marks a connection active or as needing a
 // reconnect (revoked or expired grant), with a reason.
 func (s *SQLiteStore) SetPersonalConnectionStatus(ctx context.Context, id, status, reason string, expiresAt *time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE personal_connections SET status=?,status_reason=?,token_expires_at=?,updated_at=? WHERE id=?`, status, reason, formatOptionalTime(expiresAt), time.Now().UTC().Format(time.RFC3339Nano), id)
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_connections SET status=?,status_reason=?,token_expires_at=?,updated_at=? WHERE id=?`, status, reason, formatOptionalTime(expiresAt), formatStoredTime(time.Now()), id)
 	return err
 }
 
@@ -236,7 +236,7 @@ func (s *SQLiteStore) RecordPersonalConnectionSyncSuccess(ctx context.Context, c
 	if failures == 0 && samePersonalTime(current.AwayFrom, from) && samePersonalTime(current.AwayUntil, until) {
 		return false, nil
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE personal_connections SET away_from=?,away_until=?,sync_failures=0,updated_at=? WHERE id=?`, formatOptionalTime(from), formatOptionalTime(until), time.Now().UTC().Format(time.RFC3339Nano), current.ID)
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_connections SET away_from=?,away_until=?,sync_failures=0,updated_at=? WHERE id=?`, formatOptionalTime(from), formatOptionalTime(until), formatStoredTime(time.Now()), current.ID)
 	return err == nil, err
 }
 

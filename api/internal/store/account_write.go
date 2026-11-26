@@ -18,7 +18,7 @@ func recordJournalWriteAccount(ctx context.Context, tx *sqlTx, key string, viewe
 	if tx.writeErr != nil {
 		return true, tx.writeErr
 	}
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	bound := tx.Tx.StmtContext(ctx, statement)
 	observeSQLStatement(ctx, recordJournalAccountWrite)
 	result, err := bound.ExecContext(ctx, key, viewer, stamp)
