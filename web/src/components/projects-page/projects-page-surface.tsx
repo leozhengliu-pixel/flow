@@ -48,6 +48,12 @@ export type ProjectsPageSurfaceProps = {
   activeViewId: string
   creatingView?: boolean
   children?: ReactNode
+  /**
+   * The children end with the windowed project pager. Marks the content section for the pager layout
+   * instead of a `:has()` rule: as a `:has()` subject the section had every insertion below it restyle
+   * its whole subtree (the timeline and list rows included).
+   */
+  paged?: boolean
   viewEditor?: (actions: ReactNode) => ReactNode
   viewActions?: ReactNode
   filterBar?: ReactNode
@@ -95,6 +101,7 @@ export function ProjectsPageSurface({
   activeViewId,
   creatingView = false,
   children,
+  paged = false,
   viewEditor,
   viewActions,
   filterBar,
@@ -242,7 +249,7 @@ export function ProjectsPageSurface({
     {!creatingView && viewEditor?.(<div className="lp-projects__editor-row"><span/><div className="lp-projects__editor-actions">{editorActions}</div></div>)}
     <div className="lp-projects__editor-surface">{surfaceMenu('editor')}</div>
     {filterBar}
-    <section className="lp-projects__content">{children}</section>
+    <section className="lp-projects__content" data-paged={paged || undefined}>{children}</section>
   </div>
 }
 

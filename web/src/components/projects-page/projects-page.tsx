@@ -625,6 +625,7 @@ export function ProjectsPage({
 
   return <ProjectsPageSurface
     activeViewId={creatingView ? 'new' : savedView?.id ?? 'all'}
+    paged={projectWindow.enabled}
     creatingView={creatingView}
     displaySettings={view.state.display}
     displayDefault={view.displayDefault}
