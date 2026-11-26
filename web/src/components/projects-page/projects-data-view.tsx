@@ -353,10 +353,10 @@ export function ProjectsDataView({
       data={listEntries}
       computeItemKey={(_index, entry) => entry.key}
       increaseViewportBy={{ top: 192, bottom: 480 }}
-      itemContent={(_index, entry) => {
+      itemContent={(index, entry) => {
         if (entry.kind === 'project') return renderProject(entry.project)
         if (entry.kind === 'subgroup') return <div className="lp-project-subgroup"><div className="lp-project-subgroup__header"><ProjectGroupStatus color={entry.group.color} labelColor={entry.group.labelColor} bare={entry.group.bare} compact name={entry.group.name} propertyOptions={propertyOptions}/><ProjectGroupName name={entry.group.name} prefix={entry.group.labelPrefix} propertyOptions={propertyOptions}/><small>{projectCount(entry.group)}</small></div></div>
-        return <ProjectGroupHeader
+        return <div className="lp-project-group__slot" data-first={index === 0 ? '' : undefined}><ProjectGroupHeader
           collapsed={entry.collapsed}
           color={entry.group.color}
           bare={entry.group.bare}
@@ -367,7 +367,7 @@ export function ProjectsDataView({
           onCreate={() => onCreateProject?.(projectCreateStatus(entry.group.name, grouping === 'Status', propertyOptions))}
           onToggle={() => setCollapsed(current => current.includes(entry.group.id) ? current.filter(id => id !== entry.group.id) : [...current, entry.group.id])}
           propertyOptions={propertyOptions}
-        />
+        /></div>
       }}
       endReached={() => { if (hasMore && !loadingMore) onLoadMore?.() }}
     />

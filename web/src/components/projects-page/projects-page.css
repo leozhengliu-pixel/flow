@@ -560,6 +560,10 @@
   min-width: 1020px;
 }
 .lp-project-table.is-virtual .lp-project-subgroup__header { grid-column: 3 / -1; }
+/* Virtual rows are measured without margins: the 2px above and below a group header sit in its slot. */
+.lp-project-group__slot { padding-block: 2px; }
+.lp-project-group__slot[data-first] { padding-top: 0; }
+.lp-project-group__slot > .lp-project-group__header { margin-block: 0; }
 .lp-projects__data:has(.lp-project-table.is-virtual) { overflow-x: auto; overflow-y: hidden; }
 
 .lp-project-table__header,
@@ -616,12 +620,13 @@
   background: var(--lp-project-group-base);
   display: grid;
   height: 36px;
-  margin: 0 8px;
+  margin: 2px 8px;
   overflow: hidden;
   position: relative;
   border-radius: 8px;
   padding-right: 8px;
 }
+.lp-project-group:first-of-type > .lp-project-group__header { margin-top: 0; }
 .lp-project-group__header[data-group-status="started"] { background: linear-gradient(90deg, var(--project-group-gradient-started-dark) 0%, var(--lp-project-group-base) 100%), var(--lp-project-group-base); }
 .lp-project-group__header[data-group-status="backlog"] { background: linear-gradient(90deg, var(--project-group-gradient-backlog-dark) 0%, var(--lp-project-group-base) 100%), var(--lp-project-group-base); }
 :root[data-theme="light"] .lp-project-group__header { --lp-project-group-base: var(--project-group-gradient-base-light); }
