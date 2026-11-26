@@ -679,6 +679,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/label-groups", s.createLabelGroup)
 	mux.HandleFunc("PATCH /api/label-groups/{id}", s.updateLabelGroup)
 	mux.HandleFunc("DELETE /api/label-groups/{id}", s.deleteLabelGroup)
+	mux.HandleFunc("POST /api/label-groups/{id}/move-to-teams", s.moveWorkspaceLabelGroupToTeams)
 	mux.HandleFunc("POST /api/project-statuses", s.createProjectStatus)
 	mux.HandleFunc("PATCH /api/project-statuses/{id}", s.updateProjectStatus)
 	mux.HandleFunc("DELETE /api/project-statuses/{id}", s.deleteProjectStatus)

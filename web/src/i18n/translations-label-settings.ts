@@ -15,6 +15,7 @@ export const labelSettingsZhCN: Record<string, string> = {
   "Created by {name}": "由 {name} 创建",
   "Archived on {date}": "归档于 {date}",
   "Edit label name…": "编辑标签名称…",
+  "Move to teams": "移动到团队",
   "Show team labels": "显示团队标签",
   "Show archived": "显示已归档",
   "Used by {count} team": "被 {count} 个团队使用",

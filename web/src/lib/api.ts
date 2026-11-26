@@ -3814,6 +3814,11 @@ export function mergeLabels(
   return request("/api/labels/merge", jsonRequest("POST", { toLabelId, fromLabelIds }));
 }
 
+/** Moves a workspace label group and its labels to each team that uses them; returns the teams' copies of the group. */
+export function moveWorkspaceLabelGroupToTeams(groupId: string): Promise<LabelGroup[]> {
+  return request(`/api/label-groups/${groupId}/move-to-teams`, jsonRequest("POST", {}));
+}
+
 export function moveWorkspaceLabelToTeams(
   labelId: string,
 ): Promise<IssueLabel[]> {

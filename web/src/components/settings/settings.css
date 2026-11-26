@@ -300,3 +300,5 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 .domain-label-row-menu.is-group-menu{width:177px;min-width:177px;border-width:.5px}
 html:root[data-theme="light"] body .menu-content.domain-label-row-menu.is-group-menu .menu-item,html:root[data-theme="light"] body .menu-content.domain-label-group-submenu .menu-item{margin:0;padding:0 18px 0 14px;border-radius:0;font-weight:400}
 html:root[data-theme="light"] body .menu-content.domain-label-row-menu.is-group-menu .menu-item:is([data-highlighted],[data-state=open]),html:root[data-theme="light"] body .menu-content.domain-label-group-submenu .menu-item:is([data-highlighted],[data-state=open]){background:transparent}
+/* With "View labeled issues" the reference menu widens to fit it: 178px rows. */
+.domain-label-row-menu.is-group-menu:has(a[href]){width:179px;min-width:179px}

@@ -801,6 +801,7 @@ var scaleP21ReviewedRoutes = []string{
 	"POST /api/label-groups\ts.createLabelGroup",
 	"POST /api/labels\ts.createWorkspaceLabel",
 	"POST /api/labels/merge\ts.mergeLabels",
+	"POST /api/label-groups/{id}/move-to-teams\ts.moveWorkspaceLabelGroupToTeams",
 	"POST /api/labels/{id}/move-to-teams\ts.moveWorkspaceLabelToTeams",
 	"POST /api/loops\ts.createLoop",
 	"POST /api/loops/attachments\ts.uploadLoopAttachment",
