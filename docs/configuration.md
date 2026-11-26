@@ -619,6 +619,20 @@ override them. The settings above keep their variables.
 | Key under `server:` | Type | Default |
 | --- | --- | --- |
 | `storage.uploadMaxBytes` | number: 1048576 to 10737418240 | `104857600` (100 MiB) |
+| `database.recordJournalCapture` | text: auto, triggers, application | `auto` |
+
+#### Record journal capture (MySQL)
+
+`server.database.recordJournalCapture` decides how MySQL records the changes
+behind bounded metadata and Sync V2. `auto` keeps database triggers where the
+database account may create them, and otherwise records the changes in the
+application, in the same transaction as each write, without any trigger DDL.
+`triggers` always uses triggers (without trigger authority a default start
+keeps legacy reads). `application` never creates triggers. PostgreSQL and
+SQLite always use triggers. With the Helm chart, set
+`database.recordJournalCapture`. See the
+[activation runbook](bounded-metadata-activation.md#mysql-without-trigger-authority)
+for switching an existing database and for the way back.
 
 #### Upload size limit
 

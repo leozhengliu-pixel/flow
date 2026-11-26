@@ -53,14 +53,8 @@ startup uses legacy reads and checks again on restart. The optional
 Run it before starting bounded replicas, or while the fleet is on legacy
 reads, because the command also revisits completed collections.
 
-On external MySQL, a default startup that lacks permission to install
-journal triggers logs `MySQL record journal trigger permission denied. Using legacy metadata and sync`
-once. The replica serves legacy metadata and realtime, and Sync V2 returns
-404 so clients can fall back. This covers a missing `TRIGGER` grant and
-MySQL error 1419 when binary logging requires additional authority.
-Startup retries trigger installation and completes journal and catalog
-repair after the DBA authorizes trigger creation. An explicit
-`FLOW_RECORD_JOURNAL=on` still requires trigger installation to succeed.
+On external MySQL without trigger authority, see
+[MySQL without trigger authority](#mysql-without-trigger-authority).
 
 During a rolling upgrade, leave remaining replicas running until their
 replacements are ready. The journal triggers capture their writes, and
@@ -77,6 +71,58 @@ The sync manifest and indexed reads remain opt-in, as in the accepted load
 profile. The browser local-store allowlist stays opt-in for the staged
 rollout. The shared Redis result tier remains opt-in because it was slower
 in mixed-load measurements. Shadow modes require explicit settings.
+
+### MySQL without trigger authority
+
+On external MySQL, a database account without the `TRIGGER` grant, or
+without `SUPER` while binary logging is on and
+`log_bin_trust_function_creators=0` (MySQL error 1419), cannot install the
+journal triggers. With the default `server.database.recordJournalCapture:
+auto`, such a start records journal changes in the application instead:
+every write to a canonical table records its record versions, deletion
+tombstones, authorization epoch changes and event markers in the same
+transaction, so a rolled-back write leaves nothing and committed writes are
+read in cursor order. Bounded metadata and Sync V2 then run as with
+triggers, and the account issues no trigger DDL. Startup logs
+`record journal captures changes in the application` at info level. The
+database remembers the choice, so later automatic starts keep it.
+
+Application capture needs every writer to run this release or later.
+Change canonical tables only through Flow: after editing them with SQL
+outside the application, run `server record-journal-capture resync` so
+every workspace is repaired and clients resynchronize. A write Flow cannot
+analyse also schedules that repair automatically, in its own transaction.
+
+Explicit `server.database.recordJournalCapture: triggers` keeps the
+previous behavior: without trigger authority the start logs
+`MySQL record journal trigger permission denied. Using legacy metadata and sync`,
+serves legacy metadata and realtime, and Sync V2 returns 404. Such a start
+also disables the journal, so the next capturing start walks every
+workspace again and no legacy write is lost.
+
+Switching an installation that already uses triggers:
+
+1. Set `recordJournalCapture: application` (or keep `auto` for an account
+   without trigger authority) and roll the replicas as usual. Each start
+   switches under the startup lock. Triggers stay installed and keep
+   capturing the replicas not yet replaced; the new replicas identify their
+   transactions to them, so nothing is captured twice as a gap.
+2. Once every replica captures in the application,
+   `server record-journal-capture status` reports `"capture": "application"`.
+   An account with the `TRIGGER` grant may then run
+   `server record-journal-capture drop-triggers` to remove the triggers. It
+   is idempotent. Without that grant, triggers stay and are harmless; a DBA
+   can drop the `flow_rj_*` triggers later and then run the command so
+   replicas stop setting the session token after their next restart.
+
+The way back: set `recordJournalCapture: triggers` and restart with an
+account that may create triggers (or have the DBA grant the authority).
+Startup reinstalls the triggers under the startup lock. A replica that
+still captures in the application without triggers recorded writes rows
+the triggers count as an untracked writer; readers report a resync and the
+journal repair republishes those workspaces, so no change is lost. Each
+command reads the same configuration as the server
+(`server record-journal-capture status --config config.yaml`).
 
 ## Verify
 

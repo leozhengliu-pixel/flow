@@ -816,6 +816,21 @@ jobs:
           FLOW_TEST_MYSQL_ADMIN_URL: mysql://root:root@127.0.0.1:3306/flow
         run: go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgradeWithRestrictedMySQL$' -count=1 -timeout 15m
 
+      # Before triggers are permitted, the flow account cannot create them:
+      # the journal tests run on application capture, in a database of their
+      # own (the database keeps its capture choice).
+      - name: Application journal capture without MySQL trigger authority
+        if: matrix.dialect == 'mysql' && matrix.package == './internal/store' && matrix.shard == 1
+        working-directory: api
+        env:
+          FLOW_TEST_MYSQL_ADMIN_URL: mysql://root:root@127.0.0.1:3306/flow
+          FLOW_TEST_DATABASE_DRIVER: mysql
+          FLOW_TEST_DATABASE_URL: mysql://flow:flow@127.0.0.1:3306/flow_capture
+        run: |
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e \
+            "CREATE DATABASE flow_capture; GRANT ALL ON flow_capture.* TO 'flow'@'%';"
+          go test ./internal/store -run '^(TestRecordCapture|TestScaleP09)' -count=1 -timeout 20m
+
       - name: Permit triggers in the isolated MySQL service
         if: matrix.dialect == 'mysql'
         run: >-

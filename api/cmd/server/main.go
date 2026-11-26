@@ -172,6 +172,11 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "metadata-prepare" {
 		os.Exit(runMetadataPrepareCommand(os.Args[2:]))
 	}
+	// MySQL record journal capture maintenance (status, resync, trigger
+	// removal after a switch to application capture).
+	if len(os.Args) >= 2 && os.Args[1] == "record-journal-capture" {
+		os.Exit(runRecordJournalCaptureCommand(os.Args[2:]))
+	}
 	// The YAML configuration file (--config or FLOW_CONFIG_FILE) is read
 	// first: its server settings become environment values the environment
 	// does not set, so logging and every later reader see them.
