@@ -86,21 +86,12 @@ func testIssueActivityPATCHBurstAndGrace(t *testing.T) {
 		t.Helper()
 		requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, input, http.StatusOK)
 	}
+	pinCreatedIssueAges(t, repo, data.Workspace.URLKey, true, issue.ID)
 	patch(map[string]any{"priority": 4})
 	if got := history(); len(got) != 0 {
 		t.Fatalf("creator grace produced history: %+v", got)
 	}
-	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "issue.updated", issue.ID, nil, func(current *domain.Bootstrap) error {
-		target, err := issueByID(current, issue.ID)
-		if err != nil {
-			return err
-		}
-		target.CreatedAt = time.Now().UTC().Add(-time.Hour)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	pinCreatedIssueAges(t, repo, data.Workspace.URLKey, false, issue.ID)
 	patch(map[string]any{"stateId": done.ID})
 	first := history()[0]
 	hooksBefore := len(hooks)

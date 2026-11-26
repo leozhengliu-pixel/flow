@@ -140,6 +140,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	// Project and milestone deletion detach the project's issues.
 	doomed := call(http.MethodPost, "/api/projects", map[string]any{"name": "Doomed", "teamIds": []string{team.ID}}, http.StatusCreated)
 	inDoomed := newIssue("In doomed project", map[string]any{"projectId": id(doomed)})
+	pinCreatedIssueAges(t, repository, workspace, false, inDoomed)
 	call(http.MethodDelete, "/api/projects/"+id(doomed), nil, http.StatusNoContent)
 	check(issueByID(inDoomed).Project == nil, "project deletion left the issue in the project")
 	milestone := call(http.MethodPost, "/api/projects/"+project.ID+"/milestones", map[string]any{"name": "Beta"}, http.StatusCreated)
@@ -168,6 +169,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	current, _ := cycles()
 	check(current.ID != "", "enabling cycles created no current cycle")
 	inCycle := newIssue("In cycle", map[string]any{"cycleId": current.ID, "stateId": startedState})
+	pinCreatedIssueAges(t, repository, workspace, false, inCycle)
 	expireCurrentCycle(t, repository, workspace, team.ID)
 	api.maintainCycleSchedule(context.Background(), workspace)
 	active, upcoming := cycles()
@@ -208,6 +210,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	// Recurring issues: once the due date passed the next instance is created
 	// from the sequence.
 	recurring := newIssue("Weekly sync", nil)
+	pinCreatedIssueAges(t, repository, workspace, false, recurring)
 	past := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
 	call(http.MethodPatch, "/api/issues/"+recurring, map[string]any{"recurrence": "daily", "dueDate": past}, http.StatusOK)
 	occurrences, err := api.generateWorkspaceRecurringIssues(context.Background(), workspace, time.Now().UTC())
@@ -248,7 +251,9 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	// automations; Slack deliveries record a notification once.
 	call(http.MethodPatch, "/api/teams/"+team.ID+"/settings", map[string]any{"prAutomations": map[string]string{"merged": doneState}}, http.StatusOK)
 	requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/github?workspace=test-workspace", map[string]any{"name": "acme", "config": map[string]string{"organization": "acme", "webhookSecret": "secret"}}, http.StatusOK)
-	linked := issueByID(newIssue("Linked by PR", nil))
+	linkedID := newIssue("Linked by PR", nil)
+	pinCreatedIssueAges(t, repository, workspace, false, linkedID)
+	linked := issueByID(linkedID)
 	github := func(delivery, action string, merged bool) {
 		t.Helper()
 		state := "open"

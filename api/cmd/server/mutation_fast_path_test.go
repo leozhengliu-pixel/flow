@@ -159,6 +159,7 @@ func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
 	requestJSON[any](t, handler, http.MethodPatch, releasePath, map[string]any{"issueIds": []string{"issue_missing"}}, http.StatusBadRequest)
 	call(http.MethodPatch, releasePath, map[string]any{"stage": "In Progress"}, http.StatusOK)
 	call(http.MethodPost, releasePath+"/notes", map[string]any{"title": "Notes", "body": "Body"}, http.StatusCreated)
+	pinCreatedIssueAges(t, repository, fixture.Workspace.URLKey, false, id(issue), id(other))
 	call(http.MethodPatch, releasePath, map[string]any{"stage": "Released"}, http.StatusOK)
 	second := call(http.MethodPost, "/api/releases", map[string]any{"name": "1.1", "pipelineId": id(pipeline)}, http.StatusCreated)
 	call(http.MethodDelete, "/api/releases/"+id(second), nil, http.StatusNoContent)

@@ -112,6 +112,9 @@ func sw602Writes(r *sw602Run) {
 		r.write("project-update", workspace, "PATCH", "/api/projects/"+rtID(project), map[string]any{"description": "first project"}, 200)
 		issue := r.write("issue-create", workspace, "POST", "/api/issues", map[string]any{"title": "SW602 issue", "teamId": team, "labelIds": []string{rtID(label)}, "projectId": rtID(project)}, 201)
 		r.name(workspace+"-issue", rtID(issue))
+		if id := rtID(issue); id != "" {
+			pinCreatedIssueAges(r.t, r.st.repo, workspace, false, id)
+		}
 		r.write("issue-update", workspace, "PATCH", "/api/issues/"+rtID(issue), map[string]any{"priority": 2, "title": "SW602 issue edited"}, 200)
 		record := r.write("issue-record-create", workspace, "POST", "/api/issue-records", map[string]any{"title": "SW602 record", "teamId": team}, 201)
 		r.name(workspace+"-record", rtID(record))

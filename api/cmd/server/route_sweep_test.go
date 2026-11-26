@@ -676,6 +676,7 @@ func (x *sw530Sweep) seed(t *testing.T) {
 	x.create(t, "private-issue", http.MethodPost, "/api/issue-records", jsonBody(map[string]any{"title": "SW530 private issue", "teamId": private}))
 	x.create(t, "child-issue", http.MethodPost, "/api/issue-records", jsonBody(map[string]any{"title": "SW530 child issue", "teamId": child}))
 	if issue != "" {
+		pinCreatedIssueAges(t, f.repository, x.workspace, false, issue)
 		x.create(t, "issues/comments", http.MethodPost, "/api/issues/"+issue+"/comments", jsonBody(map[string]any{"body": "SW530 comment"}))
 		x.create(t, "issues/attachments", http.MethodPost, "/api/issues/"+issue+"/links", jsonBody(map[string]any{"url": "https://example.test/sw530", "title": "SW530 link"}))
 	}

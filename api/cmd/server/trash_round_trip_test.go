@@ -68,6 +68,7 @@ func runTrashRoundTrip(t *testing.T) {
 	other := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Dependent project", "teamIds": []string{teamID}}, http.StatusCreated)
 	milestone := requestJSON[domain.ProjectMilestone](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/milestones", map[string]any{"name": "M1"}, http.StatusCreated)
 	inMilestone, inProject := newIssue("In milestone"), newIssue("In project")
+	pinCreatedIssueAges(t, repository, data.Workspace.URLKey, false, inMilestone.ID, inProject.ID)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+inMilestone.ID, map[string]any{"projectId": project.ID, "projectMilestoneId": milestone.ID}, http.StatusOK)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+inProject.ID, map[string]any{"projectId": project.ID}, http.StatusOK)
 	requestJSON[domain.Project](t, handler, http.MethodPatch, "/api/projects/"+other.ID, map[string]any{"dependencyIds": []string{project.ID}}, http.StatusOK)
@@ -149,8 +150,10 @@ func runTrashRoundTrip(t *testing.T) {
 	// requests come back.
 	parentIssue, sub, blocked := newIssue("Parent issue"), newIssue("Sub issue"), newIssue("Blocked issue")
 	label := data.Labels[0].ID
+	pinCreatedIssueAges(t, repository, data.Workspace.URLKey, false, sub.ID)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+sub.ID, map[string]any{"parentId": parentIssue.ID, "labelIds": []string{label}}, http.StatusOK)
 	grandchild := newIssue("Grandchild")
+	pinCreatedIssueAges(t, repository, data.Workspace.URLKey, false, grandchild.ID)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+grandchild.ID, map[string]any{"parentId": sub.ID}, http.StatusOK)
 	requestJSON[domain.IssueRelation](t, handler, http.MethodPost, "/api/issues/"+sub.ID+"/relations", map[string]any{"type": "blocks", "relatedIssueId": blocked.ID}, http.StatusCreated)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+sub.ID, map[string]any{"projectId": project.ID}, http.StatusOK)
@@ -193,6 +196,7 @@ func runTrashRoundTrip(t *testing.T) {
 
 	// Converting an issue to a project deletes it but keeps its sub-issues.
 	converted, kept := newIssue("Converted"), newIssue("Kept child")
+	pinCreatedIssueAges(t, repository, data.Workspace.URLKey, false, kept.ID)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+kept.ID, map[string]any{"parentId": converted.ID}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/issues/"+converted.ID+"?subIssues=keep", nil, http.StatusNoContent)
 	if issue := issueByID(kept.ID); issue.ParentID != nil {

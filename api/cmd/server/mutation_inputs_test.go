@@ -24,7 +24,8 @@ func TestScaleP04MutationSideEffectsDifferential(t *testing.T) {
 		name string
 		run  func(*testing.T) mutationScriptResult
 	}{
-		{"hotWrites", scaleP04HotWriteScript},
+		{"hotWrites", func(t *testing.T) mutationScriptResult { return scaleP04HotWriteScript(t, false) }},
+		{"hotWritesFresh", func(t *testing.T) mutationScriptResult { return scaleP04HotWriteScript(t, true) }},
 		{"scopedWrites", func(t *testing.T) mutationScriptResult { return runMutationScript(t, false) }},
 		{"teamAdministration", func(t *testing.T) mutationScriptResult { return runTeamAdministrationScript(t, true, false) }},
 	} {
@@ -51,7 +52,7 @@ func TestScaleP04MutationSideEffectsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
+func scaleP04HotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
 	t.Helper()
 	database := newScaleP04Database(t)
 	repo := database.repo
@@ -87,6 +88,7 @@ func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
 	requestJSON[any](t, handler, http.MethodPatch, "/api/teams/"+team.ID+"/settings", map[string]any{"autoCloseSubIssues": true, "autoCloseParents": true, "progressOrder": "last"}, http.StatusOK)
 	parent := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "P04 parent", "teamId": team.ID, "projectId": data.Projects[0].ID, "subscriberIds": []string{recipient.ID}}, http.StatusCreated)
 	child := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issue-records", map[string]any{"title": "P04 child", "teamId": team.ID, "parentId": parent.ID}, http.StatusCreated)
+	pinCreatedIssueAges(t, repo, database.key, fresh, parent.ID, child.ID)
 	issuePath := "/api/issue-records/" + parent.ID
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, issuePath, map[string]any{"title": "P04 renamed", "assigneeId": recipient.ID, "priority": 1}, http.StatusOK)
 	mention := map[string]any{"type": "doc", "content": []any{map[string]any{"type": "mention", "userId": recipient.ID}}}
@@ -115,6 +117,12 @@ func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
 	database.reopen(t)
 	repo = database.repo
 	data, _ = repo.BootstrapFor(database.key)
+	renamed := slices.ContainsFunc(data.Activities[parent.ID], func(activity domain.ActivityEvent) bool {
+		return activity.Type == "issue.updated" && activity.Metadata["title"] == "P04 renamed"
+	})
+	if want := !fresh; renamed != want {
+		t.Fatalf("creator's rename recorded update activity %t, want %t", renamed, want)
+	}
 	normalize := func(raw []byte) string {
 		for _, document := range data.Documents {
 			if document.SlugID != "" {

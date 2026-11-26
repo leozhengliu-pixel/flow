@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -443,6 +444,7 @@ func scaleP21CommentActionResolution(t *testing.T) {
 		user                 domain.User
 		change               func(*domain.Bootstrap)
 		code                 int
+		fresh                bool
 	}{
 		{name: "accept-priority", action: "ca-priority", status: "accepted", code: 200},
 		{name: "accept-status", action: "ca-status", status: "accepted", code: 200},
@@ -473,6 +475,7 @@ func scaleP21CommentActionResolution(t *testing.T) {
 			}
 		}},
 		{name: "owner-accepts-status", action: "ca-status", status: "accepted", user: c.owner, code: 200},
+		{name: "owner-accepts-status-fresh", action: "ca-status", status: "accepted", user: c.owner, code: 200, fresh: true},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -483,6 +486,9 @@ func scaleP21CommentActionResolution(t *testing.T) {
 			f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
 				c.seed(t, func(data *domain.Bootstrap) {
 					data.CommentActions = append(append(data.CommentActions, shadow), actions...)
+					if test.fresh {
+						pinIssueFixtureAges(true, c.issue)(data)
+					}
 					if test.change != nil {
 						test.change(data)
 					}
@@ -500,6 +506,21 @@ func scaleP21CommentActionResolution(t *testing.T) {
 			}
 			if legacy.Code != http.StatusOK && len(legacy.State.Events) != 0 {
 				t.Fatalf("legacy failure published %d events", len(legacy.State.Events))
+			}
+			if user.ID == c.owner.ID {
+				updated := slices.ContainsFunc(legacy.State.Content, func(row []any) bool {
+					if row[0] != "activity" || row[1] != c.issue {
+						return false
+					}
+					var activity domain.ActivityEvent
+					if err := json.Unmarshal([]byte(row[3].(string)), &activity); err != nil {
+						t.Fatal(err)
+					}
+					return activity.Type == "issue.updated" && activity.Actor.ID == user.ID
+				})
+				if want := !test.fresh; updated != want {
+					t.Fatalf("creator's status change recorded update activity %t, want %t", updated, want)
+				}
 			}
 		})
 	}
