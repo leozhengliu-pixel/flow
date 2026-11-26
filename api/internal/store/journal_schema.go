@@ -211,6 +211,14 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 							return resetErr
 						}
 					}
+					if !triggers {
+						// This replica writes without capture. A later
+						// capturing start must walk every workspace again
+						// (as after off); peers fail closed meanwhile.
+						if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
+							return err
+						}
+					}
 					return errRecordJournalTriggerPermission
 				}
 				application = true
