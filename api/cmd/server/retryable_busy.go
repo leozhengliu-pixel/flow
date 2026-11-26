@@ -65,6 +65,25 @@ func writeStoreBusy(w http.ResponseWriter, err error) bool {
 	return true
 }
 
+const metadataWorkRefusedMessage = "The server cannot take on this change right now; it was not saved"
+
+// writeMetadataWorkRefused answers a write the metadata work budget refused
+// outright: the work would not fit even an idle budget, so it is not a
+// server fault (500) and repeating it unchanged is refused the same way. It
+// answers 503 without Retry-After; contended refusals are writeStoreBusy's
+// retryable 503.
+func writeMetadataWorkRefused(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, store.ErrMetadataWorkBudget) {
+		return false
+	}
+	if r := apiErrorRequest(w); r != nil {
+		slog.WarnContext(r.Context(), "metadata work refused",
+			"request_id", serverRequestIDFrom(r.Context()), "cause", requestErrorCode(err))
+	}
+	writeError(w, http.StatusServiceUnavailable, metadataWorkRefusedMessage)
+	return true
+}
+
 func storeBusyRetryAfter(err error) time.Duration {
 	switch {
 	case errors.Is(err, store.ErrColdMetadataBusy):

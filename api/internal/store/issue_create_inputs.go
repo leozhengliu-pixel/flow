@@ -11,6 +11,22 @@ import (
 	"flow/api/internal/domain"
 )
 
+// issueCreateProjectFields are the fields of the referenced project an issue
+// create reads: all but the weekly progress histories. Creation never reads
+// or writes them (projects are not among its patches; the scoped progress
+// rebuild reads them on its own), and a project with years of history
+// would otherwise be admitted twice, with the callback's copies on top.
+var issueCreateProjectFields = func() []string {
+	kind := reflect.TypeFor[domain.Project]()
+	fields := make([]string, 0, kind.NumField())
+	for i := range kind.NumField() {
+		if field := kind.Field(i); field.IsExported() && !slices.Contains(legacyProgressHistoryFields, field.Name) {
+			fields = append(fields, field.Name)
+		}
+	}
+	return fields
+}()
+
 type issueCreateInputs struct {
 	*issueHotInputs
 	ordinals map[string][]int
@@ -251,7 +267,7 @@ func (s *SQLiteStore) loadIssueCreateInputs(ctx context.Context, source *metadat
 	if effective.ProjectID != nil {
 		if err := read.selectSlice(ctx, "projects", func(record metadataLogicalNode) (bool, error) {
 			return issueHotMatches(ctx, record, "ID", map[string]bool{*effective.ProjectID: true})
-		}); err != nil {
+		}, issueCreateProjectFields...); err != nil {
 			return nil, err
 		}
 	}

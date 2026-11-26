@@ -7468,6 +7468,9 @@ func respondMutationWithFallback(w http.ResponseWriter, err error, success int, 
 		// COLD slot, workspace lock or metadata work budget: retryable.
 		return
 	}
+	if writeMetadataWorkRefused(w, err) {
+		return
+	}
 	if errors.Is(err, store.ErrAuthForbidden) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return

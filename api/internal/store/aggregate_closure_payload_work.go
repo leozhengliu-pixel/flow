@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -78,10 +79,22 @@ func metadataAggregatePayloadEncodingWork(ctx context.Context, value reflect.Val
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
 			field := value.Type().Field(i)
-			if field.PkgPath != "" || field.Tag.Get("json") == "-" {
+			tag := field.Tag.Get("json")
+			if field.PkgPath != "" || tag == "-" {
 				continue
 			}
-			if err := add(uint64(len(field.Name)+len(field.Tag.Get("json"))) * 24); err != nil {
+			if metadataAggregateOmittedField(tag, value.Field(i)) {
+				// encoding/json writes neither the key nor the value of an
+				// empty omitempty field, and a decoder of that encoding builds
+				// nothing for it. Charging such fields as written made a long
+				// project progress history (mostly empty points) cost about
+				// 400 times its encoded size. The inline bytes stay charged.
+				if err := add(uint64(field.Type.Size())); err != nil {
+					return 0, err
+				}
+				continue
+			}
+			if err := add(uint64(len(field.Name)+len(tag)) * 24); err != nil {
 				return 0, err
 			}
 			if err := child(value.Field(i)); err != nil {
@@ -94,6 +107,31 @@ func metadataAggregatePayloadEncodingWork(ctx context.Context, value reflect.Val
 		}
 	}
 	return int(cost), nil
+}
+
+// metadataAggregateOmittedField reports whether encoding/json omits a field
+// with this tag and value: an omitempty field holding an empty value, as
+// encoding/json's isEmptyValue defines it.
+func metadataAggregateOmittedField(tag string, value reflect.Value) bool {
+	_, options, _ := strings.Cut(tag, ",")
+	omitEmpty := false
+	for options != "" && !omitEmpty {
+		var option string
+		option, options, _ = strings.Cut(options, ",")
+		omitEmpty = option == "omitempty"
+	}
+	if !omitEmpty {
+		return false
+	}
+	switch value.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return value.Len() == 0
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Interface, reflect.Pointer:
+		return value.IsZero()
+	}
+	return false
 }
 
 // Count the bytes encoding/json actually emits, before allocating any output.
