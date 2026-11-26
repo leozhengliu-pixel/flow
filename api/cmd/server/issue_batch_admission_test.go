@@ -32,6 +32,7 @@ func TestScaleP21SW184IssueBatchCancelledSQL(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP21IssueUpdateSetup(t)
 	ids := []string{f.triage.ID, f.visible.ID}
+	f.editBaseline = pinIssueFixtureAges(false, ids...)
 	var before scaleP21IssueUpdateState
 	outcomes := f.differential(t, "cancelled SQL argument batch", func(service *server) *httptest.ResponseRecorder {
 		if !service.store.BoundedMetadataEnabled() {

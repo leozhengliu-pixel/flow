@@ -54,11 +54,12 @@ func TestIssueReadFreshnessDifferential(t *testing.T) {
 			map[string]string{"title": "Freshness witness", "teamId": team}, workspace, http.StatusCreated)
 	}
 	visible, restricted := post(public), post(private)
+	f.host.Close()
+	pinCreatedIssueAges(t, seed, workspace, false, visible.ID)
 	report, err := seed.PrepareBoundedMetadata(t.Context())
 	if err != nil || !report.Ready {
 		t.Fatalf("metadata preparation: ready=%t, err=%v", report.Ready, err)
 	}
-	f.host.Close()
 
 	for _, flag := range []string{"off", "on"} {
 		t.Run(flag, func(t *testing.T) {

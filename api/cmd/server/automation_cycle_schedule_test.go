@@ -105,7 +105,7 @@ func scaleP21SW182Setup(t *testing.T) scaleP21SW182Fixture {
 	}
 }
 
-func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182Case, now time.Time, reload bool) domain.Bootstrap {
+func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182Case, now time.Time, reload bool) (domain.Bootstrap, time.Time) {
 	t.Helper()
 	for _, source := range []*store.SQLiteStore{f.repository, f.probe} {
 		source.SetWebhookSink(nil)
@@ -120,6 +120,7 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 	if upcoming == 0 {
 		upcoming = 2
 	}
+	var freshAt time.Time
 	restore := store.ForceFullMutationsForTesting(true)
 	err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw182_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Viewer, data.ViewerRole = f.base.Viewer, f.base.ViewerRole
@@ -222,15 +223,11 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 			if name == "unrelated" {
 				cycleID = f.prefix + "other-cycle"
 			}
-			created := stamp
-			if name == "recent" && !test.stableHistory {
-				created = now
-			}
 			issue := domain.Issue{
 				ID: id, Identifier: fmt.Sprintf("TICK-%d", index+1), Number: index + 1, Version: 3, Title: "Exact " + name,
 				Description: "Native issue body\x00" + name, Team: domain.Team{ID: team}, Creator: data.Viewer,
 				State:   domain.WorkflowState{ID: f.prefix + types[index], TeamID: team, Type: types[index]},
-				CycleID: &cycleID, Project: &domain.ProjectSummary{ID: f.project}, CreatedAt: created, UpdatedAt: stamp,
+				CycleID: &cycleID, Project: &domain.ProjectSummary{ID: f.project}, CreatedAt: stamp, UpdatedAt: stamp,
 			}
 			if name == "recent" && test.inherited {
 				issue.Creator = f.actor
@@ -254,6 +251,15 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 		data.Activities[f.prefix+"delete"] = []domain.ActivityEvent{{ID: f.prefix + "delete-history", Type: "issue.updated", Actor: historyActor, CreatedAt: historyTime, Metadata: domain.ActivityMetadata{"cycle": previous, "cycleBefore": next}}}
 		data.Activities[f.prefix+"comment"] = []domain.ActivityEvent{{ID: f.prefix + "comment-history", Type: "issue.updated", Actor: historyActor, CreatedAt: historyTime, Metadata: domain.ActivityMetadata{"priority": "2", "priorityBefore": "1"}}}
 		data.Comments[f.prefix+"comment"] = []domain.Comment{{ID: f.prefix + "boundary-comment", User: data.Viewer, Body: "The comment prevents history merging.", CreatedAt: now.Add(-10 * time.Minute)}}
+		if !test.stableHistory {
+			recentID := f.prefix + "recent"
+			pinIssueFixtureAges(true, recentID)(data)
+			recent, err := issueByID(data, recentID)
+			if err != nil {
+				return err
+			}
+			freshAt = recent.CreatedAt
+		}
 		return nil
 	})
 	restore()
@@ -275,7 +281,7 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 	if !found {
 		t.Fatal("missing seeded ticker metadata")
 	}
-	return before
+	return before, freshAt
 }
 
 func scaleP21SW182PoisonCount(t *testing.T, f scaleP21SW182Fixture) {
@@ -515,7 +521,7 @@ func scaleP21SW182CanonicalProject(t *testing.T, f scaleP21SW182Fixture) map[str
 	return nil
 }
 
-func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP21SW59Rows, metadata []scaleP21SW182MetadataRow, native, prior domain.Bootstrap, project any, started, finished time.Time) any {
+func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP21SW59Rows, metadata []scaleP21SW182MetadataRow, native, prior domain.Bootstrap, project any, started, finished time.Time, freshID string, freshAt time.Time) any {
 	t.Helper()
 	value := scaleP21SW59Normalized(t, got, before, started, finished).(map[string]any)
 	value["Metadata"] = scaleP21SW10JSON(t, metadata)
@@ -539,6 +545,7 @@ func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP
 			generated[cycle.ID] = fmt.Sprintf("<generated-cycle:%d>", len(generated))
 		}
 	}
+	freshStamp := freshAt.Format(time.RFC3339Nano)
 	var visit func(any, string) any
 	visit = func(value any, field string) any {
 		switch item := value.(type) {
@@ -554,6 +561,12 @@ func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP
 			}
 		case map[string]any:
 			for key, child := range item {
+				// Account for the per-arm fixture timestamp only after
+				// verifying it was preserved in the canonical issue row.
+				if !freshAt.IsZero() && key == "createdAt" && item["id"] == freshID && child == freshStamp {
+					item[key] = "<fresh-fixture-clock>"
+					continue
+				}
 				item[key] = visit(child, key)
 			}
 		case []any:
@@ -568,7 +581,7 @@ func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP
 
 func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLiteStore, test scaleP21SW182Case, now time.Time, reload bool, key, failure string) scaleP21SW182Run {
 	t.Helper()
-	nativeBefore := scaleP21SW182Seed(t, f, test, now, reload)
+	nativeBefore, freshAt := scaleP21SW182Seed(t, f, test, now, reload)
 	if test.poisonCount {
 		// Reload normalizes native counts against its unloaded issue slice.
 		// The canonical marker distinguishes writes by the actual branches.
@@ -830,7 +843,21 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 			t.Fatal("full fallback installed stale project/display counts", project)
 		}
 	}
-	result.Normalized = scaleP21SW182Normalize(t, got, before, result.Metadata, native, nativeBefore, project, started, finished)
+	freshID := f.prefix + "recent"
+	if !freshAt.IsZero() {
+		row := slices.IndexFunc(got.Rows.Issues, func(row any) bool { return row.([]any)[0] == freshID })
+		if row < 0 {
+			t.Fatal("ticker lost the fresh fixture issue")
+		}
+		var issue domain.Issue
+		if err := json.Unmarshal(got.Rows.Issues[row].([]any)[3].(json.RawMessage), &issue); err != nil {
+			t.Fatal(err)
+		}
+		if !issue.CreatedAt.Equal(freshAt) {
+			t.Fatalf("ticker changed issue creation time: got %s, want %s", issue.CreatedAt, freshAt)
+		}
+	}
+	result.Normalized = scaleP21SW182Normalize(t, got, before, result.Metadata, native, nativeBefore, project, started, finished, freshID, freshAt)
 	if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 		t.Fatal("ticker/native verification leaked ownership or decoded a full workspace", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 	}
