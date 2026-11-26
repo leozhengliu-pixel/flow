@@ -129,10 +129,18 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 		if err := s.ensureMySQLNgramIndex(ctx, "metadata_search_documents", "metadata_search_fulltext", true, fullTextIndexRebuilds("metadata_search_documents", metadataSearchStopwordsMigrationVersion, metadataSearchRestoreMigrationVersion)...); err != nil {
 			return err
 		}
-		for _, event := range []string{"INSERT", "UPDATE"} {
-			statements = append(statements, `CREATE TRIGGER metadata_records_search_`+strings.ToLower(event)+` AFTER `+event+` ON workspace_metadata_records FOR EACH ROW `+insert+` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`)
+		// An account that certainly cannot create triggers issues no trigger
+		// DDL; the application-level sync is authoritative either way.
+		denied, err := s.mysqlTriggerAuthorityDenied(ctx)
+		if err != nil {
+			return err
 		}
-		statements = append(statements, `CREATE TRIGGER metadata_records_search_delete AFTER DELETE ON workspace_metadata_records FOR EACH ROW `+remove)
+		if !denied {
+			for _, event := range []string{"INSERT", "UPDATE"} {
+				statements = append(statements, `CREATE TRIGGER metadata_records_search_`+strings.ToLower(event)+` AFTER `+event+` ON workspace_metadata_records FOR EACH ROW `+insert+` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`)
+			}
+			statements = append(statements, `CREATE TRIGGER metadata_records_search_delete AFTER DELETE ON workspace_metadata_records FOR EACH ROW `+remove)
+		}
 	case "postgres":
 		statements = append(statements, `CREATE INDEX IF NOT EXISTS metadata_search_trigram ON metadata_search_documents USING gin(content gin_trgm_ops)`,
 			`CREATE OR REPLACE FUNCTION flow_metadata_search_sync() RETURNS trigger AS $$ BEGIN IF TG_OP='DELETE' THEN `+remove+`; RETURN OLD; ELSE `+insert+` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=EXCLUDED.content WHERE metadata_search_documents.content<>EXCLUDED.content; RETURN NEW; END IF; END; $$ LANGUAGE plpgsql`,
