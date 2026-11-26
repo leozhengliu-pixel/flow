@@ -36,11 +36,11 @@ func syncMetadataSearchDocument(ctx context.Context, tx *sqlTx, workspace, field
 		return err
 	}
 	content := capSearchText(metadataSearchText(raw), tx.database.searchMaxChars)
-	if tx.dialect == "mysql" {
-		_, err := tx.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, workspace, field, key, content)
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) VALUES(?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content`, workspace, field, key, content)
+	return syncMetadataSearchContent(ctx, tx, workspace, field, key, content)
+}
+
+func syncMetadataSearchContent(ctx context.Context, tx *sqlTx, workspace, field, key, content string) error {
+	_, err := tx.ExecContext(ctx, metadataSQLStageLegacySearchSQL(tx.dialect), workspace, field, key, content)
 	return err
 }
 

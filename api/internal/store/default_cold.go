@@ -659,12 +659,14 @@ func (s *SQLiteStore) coldLegacyWrite(ctx context.Context, workspace string, run
 						noteColdPublishFallback(reason)
 					}
 				}
+				facade.coldWrite.publishBase = base
 			}
 			facade.writeMu.onUnlock = func() {
 				published := time.Now()
 				incremental := s.publishColdLegacyWriteLocked(ctx, requested(), logical, base)
 				base.release()
 				base = nil
+				facade.coldWrite.publishBase = nil
 				for _, key := range also {
 					if incremental && key == requested() {
 						// Published exact at the stored stamp already.

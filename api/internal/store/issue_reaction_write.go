@@ -726,6 +726,7 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 		return nil, err
 	}
 	var ordinals []int
+	var projectNodes []metadataLogicalNode
 	index, _, _ := metadataLogicalField("projects")
 	if err := source.fields[index].Children(ctx, func(ordinal reflect.Value, node metadataLogicalNode) error {
 		matched, err := issueHotMatches(ctx, node, "ID", keys)
@@ -745,6 +746,7 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 		}
 		inputs.data.Projects = append(inputs.data.Projects, value.Interface().(domain.Project))
 		ordinals = append(ordinals, int(ordinal.Int()))
+		projectNodes = append(projectNodes, node)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -754,7 +756,7 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 	}
 	data := inputs.data
 	before := slices.Clone(data.Projects)
-	work := &issueProgressWork{inputs: inputs, states: map[string]domain.WorkflowState{}, seen: map[string]bool{}}
+	work := &issueProgressWork{inputs: inputs, states: map[string]domain.WorkflowState{}, seen: map[string]bool{}, weeklyPrefix: map[string]bool{}}
 	work.prepareTeams = func(ctx context.Context, issues []progressIssue) error {
 		teams, err := inputs.keys(ctx)
 		if err != nil {
@@ -786,30 +788,37 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 		if _, err := rebuildProjectProgress(ctx, tx, workspace, &data, project, work.states, now); err != nil {
 			return nil, err
 		}
+		delete(work.weeklyPrefix, project.ID)
 	}
-	values, err := newMetadataLogicalBuilder(metadataLogicalSourceScratchContext(ctx, source))
-	if err != nil {
-		return nil, err
-	}
-	defer values.Close()
-	for _, storage := range source.stores {
-		if err := values.inheritLocations(storage); err != nil {
-			return nil, err
-		}
-	}
-	patches := map[int]metadataLogicalNode{}
+	patches := map[int]metadataAggregateNode{}
 	for index, project := range data.Projects {
 		if reflect.DeepEqual(before[index], project) {
 			continue
 		}
-		patch, err := values.writeValue(reflect.ValueOf(project), 0, false)
-		if err != nil {
+		base := projectNodes[index]
+		keep := make(map[string]metadataAggregateNode, len(legacyProgressHistoryFields))
+		if err := base.Children(ctx, func(key reflect.Value, original metadataLogicalNode) error {
+			name := key.String()
+			if !slices.Contains(legacyProgressHistoryFields, name) {
+				return nil
+			}
+			value := reflect.ValueOf(project).FieldByName(name)
+			var patch metadataAggregateNode = metadataAggregateNativeNode{value}
+			if work.weeklyPrefix[project.ID] && value.Len() != 0 {
+				patch = scopedIssueProgressTail{original, value.Len() - 1, value.Index(value.Len() - 1)}
+			}
+			keep[name] = patch
+			return nil
+		}); err != nil {
 			return nil, err
 		}
-		patches[ordinals[index]] = patch
+		patches[ordinals[index]] = metadataLogicalRetainedRecord{fresh: base, keep: keep}
+	}
+	if len(patches) == 0 {
+		return source, source.Retain()
 	}
 	return source.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
-		if name == "projects" && len(patches) > 0 {
+		if name == "projects" {
 			return scopedIssueReactionProjectCollection{base: node, patches: patches}, true, nil
 		}
 		return metadataAggregateStoredNode{node}, false, nil
@@ -818,7 +827,7 @@ func (p *scopedIssueReactionProgress) Rebuild(ctx context.Context, tx *sqlTx, wo
 
 type scopedIssueReactionProjectCollection struct {
 	base    metadataLogicalNode
-	patches map[int]metadataLogicalNode
+	patches map[int]metadataAggregateNode
 }
 
 func (n scopedIssueReactionProjectCollection) nodeType() reflect.Type           { return n.base.typ }
@@ -829,8 +838,30 @@ func (n scopedIssueReactionProjectCollection) nodeValue(ctx context.Context, lim
 func (n scopedIssueReactionProjectCollection) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	return n.base.Children(ctx, func(key reflect.Value, node metadataLogicalNode) error {
 		if patch, found := n.patches[int(key.Int())]; found {
-			return visit(key, legacyProgressProject{base: node, patch: patch})
+			return visit(key, patch)
 		}
 		return visit(key, metadataAggregateStoredNode{node})
+	})
+}
+
+// The incremental progress calculation copies each weekly prefix unchanged.
+// Preserve those frames as a range and encode only the final point.
+type scopedIssueProgressTail struct {
+	base  metadataLogicalNode
+	index int
+	tail  reflect.Value
+}
+
+func (n scopedIssueProgressTail) nodeType() reflect.Type           { return n.base.typ }
+func (n scopedIssueProgressTail) logicalBase() metadataLogicalNode { return n.base }
+func (n scopedIssueProgressTail) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
+	return metadataAggregateMaterializeChildren(ctx, n, limit)
+}
+func (n scopedIssueProgressTail) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+	return n.base.Children(ctx, func(key reflect.Value, point metadataLogicalNode) error {
+		if int(key.Int()) == n.index {
+			return visit(key, metadataAggregateNativeNode{n.tail})
+		}
+		return visit(key, metadataAggregateStoredNode{point})
 	})
 }

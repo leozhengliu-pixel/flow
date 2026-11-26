@@ -97,6 +97,13 @@ func (s *SQLiteStore) readRawMetadataLogicalSourcePart(ctx context.Context, tx *
 		return nil, err
 	}
 	read.root, read.snapshot = root, nil
+	return s.recoverRawMetadataLogicalSource(ctx, tx, workspace, read, stamp, validateRoot, part, supplied, shared)
+}
+
+func (s *SQLiteStore) recoverRawMetadataLogicalSource(ctx context.Context, tx *sqlTx, workspace string, read *MetadataCollectionRead, stamp copyStamp, validateRoot bool, part map[string]bool, supplied map[string]reflect.Value, shared map[string]metadataLogicalNode) (_ *metadataLogicalSource, err error) {
+	if read.rootSize > int64(s.maxStateBytes) {
+		return nil, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+	}
 	if err := read.scanRoot(nil); err != nil {
 		return nil, err
 	}
@@ -296,7 +303,7 @@ func (r *metadataLogicalRecovery) readManifest() error {
 			if value.size > metadataLogicalRecoveryRecordBytes {
 				return ErrMetadataWorkBudget
 			}
-			if err := json.NewDecoder(io.NewSectionReader(r.read.root, value.offset, value.size)).Decode(&shape); err != nil {
+			if err := json.NewDecoder(io.NewSectionReader(r.read.rootSource(), value.offset, value.size)).Decode(&shape); err != nil {
 				return err
 			}
 			r.hasRows = true
@@ -495,7 +502,7 @@ func (r *metadataLogicalRecovery) releaseWork() {
 }
 
 func (r *metadataLogicalRecovery) decode(part metadataCollectionRange, destination reflect.Value, done func() error) error {
-	return r.decodeAt(r.read.root, part, destination, done)
+	return r.decodeAt(r.read.rootSource(), part, destination, done)
 }
 
 func (r *metadataLogicalRecovery) decodeAt(input io.ReaderAt, part metadataCollectionRange, destination reflect.Value, done func() error) error {
@@ -941,7 +948,7 @@ func (r *metadataLogicalRecovery) object(name string, typ reflect.Type) error {
 
 func (r *metadataLogicalRecovery) mapValue(typ reflect.Type, key string, part metadataCollectionRange) error {
 	if typ.Kind() == reflect.Slice && typ.Elem().Kind() != reflect.Uint8 {
-		return r.mapSlice(typ, key, r.read.root, part)
+		return r.mapSlice(typ, key, r.read.rootSource(), part)
 	}
 	r.currentValueBytes = 0
 	r.currentValueWork = 0

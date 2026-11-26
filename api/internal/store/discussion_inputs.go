@@ -219,9 +219,10 @@ func (s *SQLiteStore) loadIssueDiscussionInputs(ctx context.Context, workspace s
 		{"labels", labels, nil},
 		{"projects", projects, []string{"ID", "Name", "Icon", "Color"}},
 	} {
-		if err := read.selectSlice(ctx, selection.field, func(record metadataLogicalNode) (bool, error) {
-			return issueHotMatches(ctx, record, "ID", selection.keys)
-		}, selection.names...); err != nil {
+		if len(selection.keys) == 0 {
+			continue
+		}
+		if err := read.selectSliceByID(ctx, selection.field, selection.keys, selection.names...); err != nil {
 			return nil, err
 		}
 	}

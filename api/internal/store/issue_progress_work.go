@@ -88,6 +88,7 @@ type issueProgressWork struct {
 	states       map[string]domain.WorkflowState
 	seen         map[string]bool
 	prepareTeams func(context.Context, []progressIssue) error
+	weeklyPrefix map[string]bool
 }
 
 func issueProgressWorkFrom(ctx context.Context) *issueProgressWork {

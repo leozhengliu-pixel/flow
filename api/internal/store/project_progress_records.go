@@ -212,7 +212,7 @@ func totalsFromProgressPoint(point domain.ProjectProgressHistoryPoint) progressT
 
 // replaceLastProgressPoint keeps the stored weekly points and rewrites the
 // final (today's) point from totals.
-func replaceLastProgressPoint(project *domain.Project, grid []time.Time, totals progressTotals) bool {
+func replaceLastProgressPoint(ctx context.Context, project *domain.Project, grid []time.Time, totals progressTotals) bool {
 	keep := len(grid) - 1
 	series := progressSeries{
 		issueCount: slices.Clone(project.IssueCountHistory[:keep]),
@@ -227,6 +227,9 @@ func replaceLastProgressPoint(project *domain.Project, grid []time.Time, totals 
 		*estimate = math.Round(*estimate*1e9) / 1e9
 	}
 	series.append(grid[keep], totals)
+	if work := issueProgressWorkFrom(ctx); work != nil && work.weeklyPrefix != nil {
+		work.weeklyPrefix[project.ID] = true
+	}
 	return series.store(project)
 }
 
@@ -394,7 +397,7 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 				totals.add(issue.State.Type, issueEstimate(issue, unestimatedPoints(data.TeamSettings, issue.Team.ID)), 1)
 			}
 		}
-		return replaceLastProgressPoint(project, grid, totals), nil
+		return replaceLastProgressPoint(ctx, project, grid, totals), nil
 	}
 	if progressSeriesMatch(*project, grid, true) {
 		issues, err := projectProgressIssues(ctx, reader, workspace, project.ID, states)
@@ -403,7 +406,7 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 		}
 		// No transition activity is dated after today, so the final point is
 		// the current state of the project's issues.
-		return replaceLastProgressPoint(project, grid, progressTotalsAt(states, nil, issues, last, data.TeamSettings)), nil
+		return replaceLastProgressPoint(ctx, project, grid, progressTotalsAt(states, nil, issues, last, data.TeamSettings)), nil
 	}
 	return rebuildProjectProgress(ctx, reader, workspace, data, project, states, now)
 }

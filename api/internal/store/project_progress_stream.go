@@ -24,6 +24,8 @@ var legacyProjectProgressFields = map[string]bool{
 	"InProgressScopeHistory": true, "ProgressHistory": true,
 }
 
+const legacyProjectDirectBytes = 256 << 10
+
 type advancedScheduleStreamKey struct{}
 
 func advancedScheduleStreamSelected(ctx context.Context) bool {
@@ -82,6 +84,17 @@ func legacyProjectBodyPatchOnly(ctx context.Context, before, next metadataLogica
 	if update && !advancedScheduleStreamSelected(ctx) {
 		return false, nil
 	}
+	if !before.unavailable && !next.unavailable && !before.blocked && !next.blocked &&
+		metadataLogicalFrameOrigin(before) == metadataLogicalFrameOrigin(next) {
+		return true, ctx.Err()
+	}
+	nextFields := make(map[string]metadataLogicalNode, next.typ.NumField())
+	if err := next.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
+		nextFields[key.String()] = child
+		return nil
+	}); err != nil {
+		return false, err
+	}
 	allowed := true
 	err := before.Children(ctx, func(key reflect.Value, left metadataLogicalNode) error {
 		name := key.String()
@@ -92,10 +105,7 @@ func legacyProjectBodyPatchOnly(ctx context.Context, before, next metadataLogica
 		if progress && legacyProjectProgressFields[name] {
 			return nil
 		}
-		right, err := issueHotField(ctx, next, key.String())
-		if err != nil {
-			return err
-		}
+		right := nextFields[name]
 		if name == "Lead" || name == "Creator" || update && name == "User" {
 			same, err := legacyProjectDisplayReferenceOnly(ctx, left, right)
 			allowed = allowed && same
@@ -118,10 +128,18 @@ func legacyProjectOpaqueField(kind reflect.Type) string {
 func legacyProjectProgressHeader(ctx context.Context, owner *ResourceRead, node metadataLogicalNode) (reflect.Value, metadataLogicalNode, error) {
 	bodyField := legacyProjectOpaqueField(node.typ)
 	cost := uint64(node.typ.Size())*2 + 128
+	type headerField struct {
+		name string
+		node metadataLogicalNode
+	}
+	fields := make([]headerField, 0, node.typ.NumField()-1)
+	var body metadataLogicalNode
 	if err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if key.String() == bodyField {
+			body = child
 			return nil
 		}
+		fields = append(fields, headerField{key.String(), child})
 		return bootstrapBodyAddWork(&cost, child.cost)
 	}); err != nil {
 		return reflect.Value{}, metadataLogicalNode{}, err
@@ -130,19 +148,14 @@ func legacyProjectProgressHeader(ctx context.Context, owner *ResourceRead, node 
 		return reflect.Value{}, metadataLogicalNode{}, err
 	}
 	value := reflect.New(node.typ).Elem()
-	var body metadataLogicalNode
-	err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
-		if key.String() == bodyField {
-			body = child
-			return nil
+	for _, field := range fields {
+		decoded, err := field.node.Value(ctx, int(field.node.cost))
+		if err != nil {
+			return reflect.Value{}, metadataLogicalNode{}, err
 		}
-		decoded, err := child.Value(ctx, int(child.cost))
-		if err == nil {
-			value.FieldByName(key.String()).Set(decoded)
-		}
-		return err
-	})
-	return value, body, err
+		value.FieldByName(field.name).Set(decoded)
+	}
+	return value, body, nil
 }
 
 // Frame the string's decoded bytes directly; a multi-megabyte JSON token is
@@ -459,13 +472,6 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if err != nil {
 		return true, err
 	}
-	right := left
-	if metadataLogicalFrameOrigin(row.before) != metadataLogicalFrameOrigin(row.next) {
-		right, _, err = legacyProjectProgressHeader(ctx, owner, row.next)
-		if err != nil {
-			return true, err
-		}
-	}
 	lock := ""
 	if p.tx.dialect != "sqlite" {
 		lock = " FOR UPDATE"
@@ -497,55 +503,79 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if size < 0 || size > metadataLogicalDiskBytes {
 		return true, ErrMetadataWorkBudget
 	}
-	spool, err := newMetadataLogicalRecordSpool(ctx)
-	if err != nil {
-		return true, err
-	}
-	defer spool.Close()
-	if err := spool.checkAppend(size); err != nil {
-		return true, err
-	}
-	reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{"projects", row.id}, size: size}
-	if copied, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || copied != size {
-		if err == nil {
-			err = io.ErrUnexpectedEOF
+	var input io.ReaderAt
+	if size <= legacyProjectDirectBytes {
+		if err := owner.reserve(ctx, uint64(size)*3); err != nil {
+			return true, err
 		}
-		return true, err
-	}
-	var rawBody metadataCollectionRange
-	raw, canonicalBody, err := legacyProjectCanonicalHeader(ctx, owner, p.frames, spool, size, &rawBody)
-	if err != nil {
-		return true, err
-	}
-	sameStoredBody, err := legacyProjectStoredBodyEqual(ctx, owner, nativeBody, spool, rawBody)
-	if err != nil {
-		return true, err
-	}
-	values := []reflect.Value{left}
-	if right != left {
-		values = append(values, right)
-	}
-	for _, value := range values {
-		encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+		var raw []byte
+		length := owner.byteLength("data")
+		if err := p.tx.QueryRowContext(ctx, "SELECT CASE WHEN "+length+"=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key=?"+lock,
+			size, p.workspace, row.id).Scan(&raw); err != nil {
+			return true, err
+		}
+		if raw == nil || int64(len(raw)) != size {
+			return true, ErrConcurrentWrite
+		}
+		// The ordinary rebase leaves an identical wire preimage alone,
+		// including native UTF-8 and time values. Compare before parsing any
+		// progress arrays or resolving display references from the SQL row.
+		if nativeBody.cost <= 4<<10 {
+			body, err := nativeBody.Value(ctx, 4<<10)
+			if err != nil {
+				return true, err
+			}
+			left.FieldByName("Description").SetString(body.String())
+			base, err := legacyProjectMarshalHeader(ctx, owner, left)
+			left.FieldByName("Description").SetString("")
+			if err != nil {
+				return true, err
+			}
+			if bytes.Equal(raw, base) {
+				p.markProjectRebased(key)
+				return true, nil
+			}
+		}
+		input = bytes.NewReader(raw)
+	} else {
+		spool, err := newMetadataLogicalRecordSpool(ctx)
 		if err != nil {
 			return true, err
 		}
-		if err := owner.reserve(ctx, uint64(encoding)*4+64<<10); err != nil {
+		defer spool.Close()
+		if err := spool.checkAppend(size); err != nil {
 			return true, err
 		}
+		reader := &canonicalMetadataReader{ctx: ctx, tx: p.tx, workspace: p.workspace, key: RecordKey{"projects", row.id}, size: size}
+		if copied, err := io.CopyBuffer(spool, reader, make([]byte, metadataRecordChunkBytes)); err != nil || copied != size {
+			if err == nil {
+				err = io.ErrUnexpectedEOF
+			}
+			return true, err
+		}
+		input = spool
 	}
-	base, err := json.Marshal(left.Interface())
+	var rawBody metadataCollectionRange
+	raw, canonicalBody, err := legacyProjectCanonicalHeader(ctx, owner, p.frames, input, size, &rawBody)
 	if err != nil {
 		return true, err
+	}
+	sameStoredBody, err := legacyProjectStoredBodyEqual(ctx, owner, nativeBody, input, rawBody)
+	if err != nil {
+		return true, err
+	}
+	base, err := legacyProjectMarshalHeader(ctx, owner, left)
+	if err != nil {
+		return true, err
+	}
+	p.markProjectRebased(key)
+	if sameStoredBody && bytes.Equal(base, raw) {
+		return true, nil
 	}
 	refs, err := p.references(ctx, p.requested, owner, nil, nil, base, raw)
 	if err != nil {
 		return true, err
 	}
-	if p.tx.rebasedMetadata == nil {
-		p.tx.rebasedMetadata = map[metadataRecordKey]bool{}
-	}
-	p.tx.rebasedMetadata[key] = true
 	if sameStoredBody && storedRecordEqual(p.tx, refs, "projects", raw, base) {
 		return true, nil
 	}
@@ -570,8 +600,13 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 		return true, nil
 	}
 	ours := base
-	if right != left {
-		ours, err = json.Marshal(right.Interface())
+	right := left
+	if metadataLogicalFrameOrigin(row.before) != metadataLogicalFrameOrigin(row.next) {
+		right, _, err = legacyProjectProgressHeader(ctx, owner, row.next)
+		if err != nil {
+			return true, err
+		}
+		ours, err = legacyProjectMarshalHeader(ctx, owner, right)
 		if err != nil {
 			return true, err
 		}
@@ -610,6 +645,24 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 		row.id = id
 	}
 	return true, nil
+}
+
+func (p *legacyMetadataWritePlan) markProjectRebased(key metadataRecordKey) {
+	if p.tx.rebasedMetadata == nil {
+		p.tx.rebasedMetadata = map[metadataRecordKey]bool{}
+	}
+	p.tx.rebasedMetadata[key] = true
+}
+
+func legacyProjectMarshalHeader(ctx context.Context, owner *ResourceRead, value reflect.Value) ([]byte, error) {
+	encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+	if err != nil {
+		return nil, err
+	}
+	if err := owner.reserve(ctx, uint64(encoding)*4+64<<10); err != nil {
+		return nil, err
+	}
+	return json.Marshal(value.Interface())
 }
 
 // Strip exactly the same JSON string escape as StripJSONNUL, including when
@@ -819,9 +872,17 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if err != nil {
 		return true, err
 	}
-	// A changed integer count survives display canonicalization. Compare
-	// full headers only when this cheap check cannot prove a write is needed.
-	if priorCount.Int() == right.FieldByName("IssueCount").Int() {
+	changedCount := priorCount.Int() != right.FieldByName("IssueCount").Int()
+	if !changedCount && p.progress != nil {
+		// Issue writes also change the scope recorded in the latest history
+		// point. Like IssueCount, that integer is independent of display
+		// references. When it differs, skip decoding the old histories again.
+		changedCount, err = legacyProjectProgressScopeChanged(ctx, row.before, right.Interface().(domain.Project).ProgressHistory)
+		if err != nil {
+			return true, err
+		}
+	}
+	if !changedCount {
 		left, _, err := legacyProjectProgressHeader(ctx, owner, row.before)
 		if err != nil {
 			return true, err
@@ -850,6 +911,9 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 		return true, err
 	}
 	defer closeData()
+	if dataBytes <= legacyProjectDirectBytes {
+		return true, p.writeProjectProgressDirect(ctx, owner, row.id, order, data, dataBytes, next, body)
+	}
 	var searchBytes legacyProjectByteCounter
 	if err := legacyProjectSearchContent(ctx, owner, next, body, &searchBytes); err != nil {
 		return true, err
@@ -900,6 +964,50 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 		return true, err
 	}
 	return true, stage.Close(ctx)
+}
+
+func legacyProjectProgressScopeChanged(ctx context.Context, before metadataLogicalNode, next []domain.ProjectProgressHistoryPoint) (bool, error) {
+	history, err := issueHotField(ctx, before, "ProgressHistory")
+	if err != nil {
+		return false, err
+	}
+	count := 0
+	var last metadataLogicalNode
+	err = history.Children(ctx, func(_ reflect.Value, point metadataLogicalNode) error {
+		count++
+		last = point
+		return nil
+	})
+	if err != nil || count != len(next) || count == 0 {
+		return count != len(next), err
+	}
+	scope, err := issueHotField(ctx, last, "ScopeCount")
+	if err != nil {
+		return false, err
+	}
+	value, err := scope.Value(ctx, 4096)
+	return err == nil && value.Int() != int64(next[count-1].ScopeCount), err
+}
+
+func (p *legacyMetadataWritePlan) writeProjectProgressDirect(ctx context.Context, owner *ResourceRead, id string, order int, data io.Reader, size int, header []byte, body metadataLogicalNode) error {
+	// The search projection is bounded by the encoded row plus its separators.
+	// Admit the row, search buffer and the driver copies before materializing.
+	if err := owner.reserve(ctx, uint64(size)*6+4096); err != nil {
+		return err
+	}
+	raw := make([]byte, size)
+	if _, err := io.ReadFull(data, raw); err != nil {
+		return err
+	}
+	var search bytes.Buffer
+	if err := legacyProjectSearchContent(ctx, owner, header, body, &search); err != nil {
+		return err
+	}
+	if _, err := p.tx.ExecContext(ctx, metadataSQLStageLegacyRowSQL, p.workspace, "projects", id, order, raw); err != nil {
+		return err
+	}
+	p.tx.metadataWritten = true
+	return syncMetadataSearchContent(ctx, p.tx, p.workspace, "projects", id, search.String())
 }
 
 // The typed header already holds the final JSON for every field except
