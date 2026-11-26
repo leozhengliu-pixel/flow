@@ -240,6 +240,8 @@ export interface LabelGroup {
   description?: string;
   scope?: string;
   resourceType: LabelResourceType;
+  /** Group type: several of the group's labels may be applied together (default single-select). */
+  multiSelect?: boolean;
   createdAt: string;
   archivedAt?: string;
 }

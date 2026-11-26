@@ -35,4 +35,13 @@ export const labelSettingsZhCN: Record<string, string> = {
   "These labels will be merged into": "这些标签将合并到",
   "The merged label will be applied to": "合并后的标签将应用到",
   "Labels merged": "标签已合并",
+  // Label group type and label groupings (display menus, group headers, board rows).
+  "Group type": "组类型",
+  "Single-select": "单选",
+  "Multi-select": "多选",
+  "No label": "无标签",
+  "No customer": "无客户",
+  "Rows": "行",
+  "Show empty rows": "显示空行",
+  "Show empty columns": "显示空列",
 }

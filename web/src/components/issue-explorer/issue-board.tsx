@@ -14,14 +14,14 @@ import { toast } from '@/lib/toast'
 import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/components/ui/row-context-menu'
 import { IssueAssigneeSlot } from '@/components/my-issues/issue-assignee-slot'
 import { useTeamStatusOptions } from '@/components/my-issues/use-team-status-options'
-import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
+import { GroupPathChevron, IssueContextMenu, MergedLabelBadge, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
-import { useI18n } from '@/i18n/i18n'
+import { useI18n, useOptionalTranslate } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
-import { toggleGroupedLabelIds } from '@/lib/labels'
+import { labelChips, toggleGroupedLabelIds } from '@/lib/labels'
 import { boardDropRejectReason } from './issue-board-drop'
 
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
@@ -38,16 +38,18 @@ type IssueBoardProps = Parameters<typeof IssueBoardColumns>[0]
  * `buildIssueGroups`; they are rendered as horizontal swimlanes, each lane a row of the same columns.
  */
 export function IssueBoard(props: IssueBoardProps) {
+  const t = useOptionalTranslate()
   const lanes = useMemo(() => {
     if (!props.groups.some(group => group.parentGroupId)) return undefined
-    const byLane = new Map<string, { id: string; label: string; groups: MyIssuesGroupData[] }>()
+    const byLane = new Map<string, { id: string; label: string; group: MyIssuesGroupData; order: number; groups: MyIssuesGroupData[] }>()
     for (const group of props.groups) {
       const laneId = group.id.split('::')[1] ?? 'all'
-      const lane = byLane.get(laneId) ?? { id: laneId, label: group.label, groups: [] }
-      lane.groups.push({ ...group, label: group.parentLabel ?? group.label })
+      const lane = byLane.get(laneId) ?? { id: laneId, label: group.label, group, order: group.rowOrder ?? byLane.size, groups: [] }
+      // Each lane repeats the columns: the column header is the primary group (its label path and colour too).
+      lane.groups.push({ ...group, ...group.parentGroup, id: group.id, label: group.parentLabel ?? group.label, labelPrefix: group.parentGroup?.labelPrefix, color: group.parentGroup?.color })
       byLane.set(laneId, lane)
     }
-    return [...byLane.values()]
+    return [...byLane.values()].sort((left, right) => left.order - right.order)
   }, [props.groups])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   if (!lanes) return <IssueBoardColumns {...props}/>
@@ -55,7 +57,9 @@ export function IssueBoard(props: IssueBoardProps) {
     {lanes.map(lane => <section key={lane.id} className={styles.swimlane} aria-label={lane.label}>
       <header className={styles.swimlaneHeader}>
         <button type="button" aria-expanded={!collapsed.has(lane.id)} aria-label={collapsed.has(lane.id) ? 'Expand row' : 'Collapse row'} onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}>▾</button>
-        <span data-i18n-ignore>{lane.label}</span><span className={styles.swimlaneCount}>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
+        {lane.group.color && <span className={styles.swimlaneDot} style={{ '--group-label-color': lane.group.color } as CSSProperties} aria-hidden="true"/>}
+        {lane.group.labelPrefix && <><span data-i18n-ignore className={styles.swimlanePrefix}>{lane.group.labelPrefix}</span><GroupPathChevron className={styles.swimlanePathChevron}/></>}
+        <span data-i18n-ignore>{lane.group.translatableLabel ? t(lane.label) : lane.label}</span><span className={styles.swimlaneCount}>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
         <SwimlaneMenu
           collapsed={collapsed.has(lane.id)}
           onSelectAll={() => lane.groups.forEach(group => group.issues.forEach(issue => props.onSelectIssue(issue.id, true, false)))}
@@ -270,7 +274,9 @@ export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add n
           state={{ id: group.id, teamId: group.state?.teamId, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
           size={14}
         />}
-        <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
+        {group.color && <span className={styles.columnDot} style={{ '--group-label-color': group.color } as CSSProperties} aria-hidden="true"/>}
+        {group.labelPrefix && <><span data-i18n-ignore className={styles.columnPrefix}>{group.labelPrefix}</span><GroupPathChevron className={styles.columnPathChevron}/></>}
+        <strong data-board-column-title data-i18n-ignore>{group.translatableLabel ? t(group.label) : group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
         <div className={styles.columnActions}>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent label={t('Open menu')} align="start" sideOffset={4}><FlowMenuItem label={count>group.issues.length?'Select loaded issues':'Select all in column'} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}/><FlowMenuItem label="Hide column" onSelect={()=>onHideGroup?.(group.id)}/></FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
         <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
@@ -315,8 +321,9 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
 
 function CardProperties({ issue, properties, propertyOptions, onPropertyChange, onOpenSubIssue }: { issue: MyIssuesRowData; properties: ReadonlySet<MyIssuesProperty>; propertyOptions: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onOpenSubIssue: (issue: MyIssuesRowData) => void }) {
   const labels = properties.has('labels') ? issue.labels ?? [] : []
-  const shownLabels = labels.slice(0, 4)
-  const hiddenLabelCount = labels.length - shownLabels.length
+  const chips = labelChips(labels)
+  const shownLabels = chips.slice(0, 4)
+  const hiddenLabelCount = chips.length - shownLabels.length
   const estimateSettings = useTeamEstimateSettings()(issue.teamId)
   const hasEstimateContext = Boolean(useIssueRowActions())
   const showEstimate = properties.has('estimate') && issue.estimate != null && issue.estimate >= 0 && (hasEstimateContext ? teamUsesEstimates(estimateSettings) : issue.estimate > 0)
@@ -335,7 +342,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange, 
     {properties.has('myActivity') && issue.myActivityAt ? <span className={styles.badge}><span>{formatDate(issue.myActivityAt)}</span></span> : null}
     {properties.has('project') && issue.project && <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => onPropertyChange('project', value)} triggerClassName={`${styles.metaTrigger} ${styles.projectBadge}`} trigger={<><ProjectGlyph project={issue.project} size={14}/><span data-i18n-ignore>{issue.project.name}</span></>}/>}
     {properties.has('cycle') && issue.cycleId && <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={(propertyOptions.cycle ?? []).filter(option => !option.teamId || !issue.teamId || option.teamId === issue.teamId)} onSelect={value => onPropertyChange('cycle', value)} triggerClassName={styles.metaTrigger} trigger={<><CycleIcon size={14}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></>}/>}
-    {shownLabels.length > 0 && <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => onPropertyChange('labels', toggleGroupedLabelIds(labels.map(label => label.id), value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<>{shownLabels.map(label => <Badge key={label.id} color={label.color}>{label.name}</Badge>)}{hiddenLabelCount > 0 && <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>}</>}/>}
+    {shownLabels.length > 0 && <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => onPropertyChange('labels', toggleGroupedLabelIds(labels.map(label => label.id), value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<>{shownLabels.map(chip => chip.labels.length > 1 ? <MergedLabelBadge key={chip.key} chip={chip} className={styles.badge} dotsClassName={styles.mergedDots}/> : <Badge key={chip.key} color={chip.labels[0].color}>{chip.labels[0].name}</Badge>)}{hiddenLabelCount > 0 && <span className={styles.badge}><span className={styles.labelStack}>{labels.slice(4, 6).map((label, index) => <i key={label.id} style={{ '--dot-index': index, backgroundColor: label.color } as CSSProperties}/>)}</span><span>+{hiddenLabelCount} labels</span></span>}</>}/>}
     {properties.has('dueDate') && issue.dueDate && <DueDatePicker value={issue.dueDate} allowRemove={!issue.recurrence} onChange={value => onPropertyChange('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDate(issue.dueDate)}`} triggerClassName={styles.metaTrigger} trigger={<><CalendarIcon size={13}/><span>{formatDate(issue.dueDate)}</span></>}/>}
     {properties.has('customers') && issue.customerCount ? <CustomersRowChip variant="square" customers={issue.customers ?? []} customerCount={issue.customerCount} importantCustomerIds={issue.importantCustomerIds ?? []} settings={issue.customerRevenueSettings}/> : null}
     {properties.has('customerRevenue') && issue.customers?.length ? <CustomerRevenueRowChip variant="square" customers={issue.customers} settings={issue.customerRevenueSettings}/> : null}

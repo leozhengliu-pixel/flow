@@ -3,7 +3,7 @@ import { teamUsesEstimates } from '@/lib/estimates'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { slaFeatureEnabled } from '@/components/settings/sla-model'
 import type { BootstrapData } from '@/types/flow'
-import type { MyIssuesProperty } from './my-issues-surface'
+import type { MyIssuesGrouping, MyIssuesProperty } from './my-issues-surface'
 
 /**
  * Display properties the issues in scope cannot have, so the display menu leaves them out: Cycle without cycles,
@@ -20,4 +20,19 @@ export function unavailableDisplayProperties(data: BootstrapData, teamIds?: read
   if (!data.customers?.length) hidden.push('customers', 'customerRevenue')
   if (!options.activity) hidden.push('myActivity')
   return hidden
+}
+
+/**
+ * The groupings the design reference offers on a team's issues and on My issues, in its menu order. Cycle needs a
+ * team with cycles, Customer the customer requests feature, Release the releases feature; a team list offers Team only when it
+ * covers sub-teams.
+ */
+export function availableIssueGroupings(data: BootstrapData, surface: 'team' | 'myIssues', teamIds?: readonly string[]): MyIssuesGrouping[] {
+  const scope = teamIds?.length ? teamIds : (data.teams ?? []).map(team => team.id)
+  const cycles: MyIssuesGrouping[] = scope.some(teamId => data.cycleSettings?.[teamId]?.enabled) ? ['cycle'] : []
+  const customers: MyIssuesGrouping[] = workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, 'customer-requests') ? ['customer'] : []
+  if (surface === 'myIssues') return ['none', 'focus', 'status', 'statusType', 'agent', 'project', 'priority', ...cycles, 'label', 'labelGroup', 'team', ...customers]
+  const teams: MyIssuesGrouping[] = scope.length > 1 ? ['team'] : []
+  const releases: MyIssuesGrouping[] = workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, 'releases') ? ['release'] : []
+  return ['none', 'status', 'statusType', 'assignee', 'agent', 'project', 'priority', ...cycles, 'label', 'labelGroup', ...teams, ...customers, ...releases]
 }

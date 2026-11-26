@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
-import { unavailableDisplayProperties } from './display-property-availability'
+import { availableIssueGroupings, unavailableDisplayProperties } from './display-property-availability'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useDepsSnapshot } from '@/hooks/use-deps-snapshot'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroupOptions, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -215,6 +215,8 @@ export function MyIssuesPage({ data, windowedList, initialView = 'assigned', loa
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
 
+  // The reference list; the Activity tab adds its activity-date buckets. Server-paged lists group by fewer fields.
+  const myIssuesGroupings = [...availableIssueGroupings(data, 'myIssues'), ...(controller.view === 'activity' ? ['activityDate' as const] : [])].filter(grouping => !data.issueCollectionPaged || PAGED_GROUPINGS.includes(grouping))
   return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue), onCreateIssue, onConvertIssue }}>
     <MyIssuesSurface
       activeView={controller.view}
@@ -222,14 +224,14 @@ export function MyIssuesPage({ data, windowedList, initialView = 'assigned', loa
       insightsOpen={insightsOpen}
       displayOptions={controller.display}
       displayMenuProps={{
-        availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+        availableGroupings: myIssuesGroupings,
         availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
         toggles: ['triage'],
         hiddenProperties: desktop ? unavailableDisplayProperties(data, undefined, { activity: controller.view === 'activity' }) : undefined,
         phoneIssueMenu: true,
         myIssuesPhoneMenu: true,
         groups: groupSummaries(displayedGroups),
-        labelGroupOptions: labelGroups(data.labels),
+        labelGroupOptions: labelGroupOptions(data),
         modified: !issueDisplayEqual(controller.display, displayDefaults),
         onReset: () => controller.changeDisplay(displayDefaults),
         resetLabel: 'Reset to default',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createIssueDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { buildIssueGroups, focusDescriptor, groupMoveUpdate, issueComparator, labelGroups, pagedDisplayQuery, withinCompletedWindow } from './issue-grouping'
+import { buildIssueGroups, chooseLabelGroup, defaultSubLabelGroupId, focusDescriptor, groupMoveUpdate, issueComparator, labelGroupOptions, pagedDisplayQuery, withinCompletedWindow } from './issue-grouping'
 
 const NOW = Date.parse('2026-09-24T12:00:00Z')
 const open = { id: 'todo', name: 'Todo', type: 'unstarted' as const, color: '#999' }
@@ -36,17 +36,69 @@ describe('issue grouping engine', () => {
     expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Bug', ['1']], ['Frontend', ['1']], ['No label', ['2']]])
   })
 
-  it('groups by one label group, keeps empty member groups, and swaps the exclusive label on move', () => {
-    const type = { id: 'type', name: 'Type', color: '#000' }
+  const labelData = () => {
+    const groups = [
+      { id: 'type', name: 'Type', color: '#000', resourceType: 'issue' as const, createdAt: '' },
+      { id: 'area', name: 'Area', color: '#000', resourceType: 'issue' as const, createdAt: '', multiSelect: true },
+      { id: 'squad', name: 'Squad', color: '#000', resourceType: 'issue' as const, createdAt: '', scope: 'team-1' },
+    ]
     const bug = { id: 'bug', name: 'Bug', color: '#f00', groupId: 'type' }, feature = { id: 'feature', name: 'Feature', color: '#0f0', groupId: 'type' }, chore = { id: 'chore', name: 'Chore', color: '#00f', groupId: 'type' }
-    const ui = { id: 'ui', name: 'UI', color: '#999' }
-    const data = { states: [], cycles: [], projects: [], users: [], teams: [], releases: [], labels: [type, bug, feature, chore, ui] } as never
-    expect(labelGroups([type, bug, feature, chore, ui]).map(label => label.id)).toEqual(['type'])
-    const rows = [row('1', { labels: [bug, ui] }), row('2', { labels: [feature] }), row('3', { labels: [ui] })]
+    const web = { id: 'web', name: 'Web', color: '#0ff', groupId: 'area' }, api = { id: 'api', name: 'API', color: '#ff0', groupId: 'area' }
+    const blue = { id: 'blue', name: 'Blue', color: '#00f', groupId: 'squad', scope: 'team-1' }
+    const ui = { id: 'ui', name: 'UI', color: '#999' }, docs = { id: 'docs', name: 'Docs', color: '#999' }
+    const labels = { bug, feature, chore, web, api, blue, ui, docs }
+    const data = { states: [], cycles: [], projects: [], users: [], teams: [{ id: 'team-1', name: 'Core' }], releases: [], labels: Object.values(labels), labelGroups: groups } as never
+    return { data, labels, groups }
+  }
+
+  it('offers the real label groups: workspace groups first, then each team under its name', () => {
+    const { data } = labelData()
+    expect(labelGroupOptions(data).map(option => [option.heading, option.name])).toEqual([['Workspace', 'Area'], ['Workspace', 'Type'], ['Core', 'Squad']])
+  })
+
+  it('heads grouped labels "Group › Label" and orders team labels, plain labels, then grouped labels', () => {
+    const { data, labels } = labelData()
+    const rows = [row('1', { labels: [labels.bug, labels.ui, labels.web, labels.blue] }), row('2', { labels: [labels.docs, labels.api] }), row('3')]
+    const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'label', completedWindow: 'all' }), { data })
+    expect(groups.map(group => [group.labelPrefix ?? '', group.label])).toEqual([['Squad', 'Blue'], ['', 'Docs'], ['', 'UI'], ['Area', 'API'], ['Area', 'Web'], ['Type', 'Bug'], ['', 'No label']])
+    const board = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'label', layout: 'board', completedWindow: 'all' }), { data })
+    expect(board[0].label).toBe('No label')
+  })
+
+  it('groups by one label group, keeps empty member groups, and swaps a single-select label on move', () => {
+    const { data, labels } = labelData()
+    const rows = [row('1', { labels: [labels.bug, labels.ui] }), row('2', { labels: [labels.feature] }), row('3', { labels: [labels.ui] })]
     const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'labelGroup', labelGroupId: 'type', showEmptyGroups: true, completedWindow: 'all' }), { data })
-    expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Bug', ['1']], ['Chore', []], ['Feature', ['2']], ['No Type', ['3']]])
-    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-feature', { labelGroupId: 'type' })).toEqual({ labelIds: ['ui', 'feature'] })
-    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-none', { labelGroupId: 'type' })).toEqual({ labelIds: ['ui'] })
+    expect(groups.map(group => [group.label, group.color, group.issues.map(issue => issue.id)])).toEqual([['Bug', '#f00', ['1']], ['Chore', '#00f', []], ['Feature', '#0f0', ['2']], ['No label', undefined, ['3']]])
+    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-feature', { labelGroupId: 'type', data })).toEqual({ labelIds: ['ui', 'feature'] })
+    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-none', { labelGroupId: 'type', data })).toEqual({ labelIds: ['ui'] })
+  })
+
+  it('puts an issue in each bucket of a multi-select group and adds the label on move', () => {
+    const { data, labels } = labelData()
+    const rows = [row('1', { labels: [labels.web, labels.api] }), row('2', { labels: [labels.web] })]
+    const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'labelGroup', completedWindow: 'all' }), { data })
+    // No stored group: the first option (Area) is the default.
+    expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['API', ['1']], ['Web', ['1', '2']]])
+    expect(groupMoveUpdate(rows[1], 'labelGroup', 'labelgroup-api', { labelGroupId: 'area', data })).toEqual({ labelIds: ['web', 'api'] })
+  })
+
+  it('sub-groups by a second label group and swaps the two levels when both pick the same group', () => {
+    const { data, labels } = labelData()
+    const rows = [row('1', { labels: [labels.bug, labels.web] }), row('2', { labels: [labels.feature] })]
+    const display = createIssueDisplayOptions({ grouping: 'labelGroup', subGrouping: 'labelGroup', labelGroupId: 'type', completedWindow: 'all' })
+    const groups = buildIssueGroups(rows, display, { data })
+    expect(groups.map(group => [group.parentLabel, group.label])).toEqual([['Bug', 'Web'], ['Feature', 'No label']])
+    const options = labelGroupOptions(data)
+    expect(defaultSubLabelGroupId(display, options)).toBe('area')
+    expect(chooseLabelGroup({ ...display, subLabelGroupId: 'area' }, 'subGrouping', 'type', options)).toMatchObject({ labelGroupId: 'area', subLabelGroupId: 'type' })
+    expect(chooseLabelGroup({ ...display, subLabelGroupId: 'area' }, 'grouping', 'area', options)).toMatchObject({ labelGroupId: 'area', subLabelGroupId: 'type' })
+  })
+
+  it('groups by status type in the status order', () => {
+    const started = { id: 'progress', name: 'In Progress', type: 'started' as const, color: '#f2c94c' }
+    const groups = buildIssueGroups([row('1'), row('2', { state: started }), row('3', { state: done })], createIssueDisplayOptions({ grouping: 'statusType', completedWindow: 'all' }))
+    expect(groups.map(group => group.label)).toEqual(['Started', 'Unstarted', 'Completed'])
   })
 
   it('groups by release date, newest day first, with unreleased last', () => {

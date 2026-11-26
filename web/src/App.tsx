@@ -364,7 +364,7 @@ import { subscriptionAfterGenericDelete } from "@/lib/subscription-records";
 import { INBOX_ACTIVITY_EVENT, inboxRealtimeRelevant, inboxUnread } from "@/lib/inbox-unread";
 import { LOOP_RUN_ACTIVITY_EVENT, isLoopRunSignal, loopRunActivity } from "@/lib/loop-run-activity";
 import { AGENT_TASK_ACTIVITY_EVENT } from "@/lib/application-agents";
-import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
+import { labelsForResource, registerLabelGroups, setGroupedLabelSelected } from "@/lib/labels";
 import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
 import { persistUserSettings } from "@/lib/settings-persistence";
 import { useExitPresence } from '@/components/ui/motion';
@@ -455,6 +455,8 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     }
     return byIssue.size ? deriveResourceCounts({ ...baseData, issues: baseData.issues.map(issue => byIssue.get(issue.id) ?? issue) }) : baseData;
   }, [baseData, visibleEdits]);
+  // Label pickers read each group's type (single- or multi-select) from the workspace's label groups.
+  useLayoutEffect(() => { registerLabelGroups(data?.labelGroups) }, [data?.labelGroups]);
   const [syncFallback, setSyncFallback] = useState('');
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;

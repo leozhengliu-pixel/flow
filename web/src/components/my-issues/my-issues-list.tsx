@@ -46,7 +46,7 @@ import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/
 import { fetchIssueHistory } from '@/lib/api'
 import { ApplicationStoreContext } from '@/store/application-store-contexts'
 import { StatusHoverPreview } from '@/components/property/issue-property-hover'
-import { toggleGroupedLabelIds } from '@/lib/labels'
+import { labelChips, toggleGroupedLabelIds, type LabelChip } from '@/lib/labels'
 import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -202,7 +202,8 @@ export interface MyIssuesRowData {
   viewMatch?: boolean
 }
 
-export interface MyIssuesGroupData { id: string; label: string; /** The label is generated UI copy, not a user-defined name. */ translatableLabel?: boolean; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number; /** Set on sub-groups (display sub-grouping / board rows). */ parentGroupId?: string; parentLabel?: string }
+export interface MyIssuesGroupData { id: string; label: string; /** The label is generated UI copy, not a user-defined name. */ translatableLabel?: boolean; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number; /** Set on sub-groups (display sub-grouping / board rows). */ parentGroupId?: string; parentLabel?: string; /** A label group's name shown before the label ("Group › Label"). */ labelPrefix?: string; /** The label colour shown as a dot before the name (label groupings). */ color?: string; /** A sub-group's primary group (its header in lists, its column on boards). */ parentGroup?: MyIssuesGroupMeta; /** A sub-group's place among every sub-group value (board row order). */ rowOrder?: number }
+export type MyIssuesGroupMeta = Omit<MyIssuesGroupData, 'issues' | 'totalCount' | 'parentGroupId' | 'parentLabel' | 'parentGroup' | 'rowOrder'>
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
@@ -237,7 +238,7 @@ export interface MyIssuesListProps {
 
 type MyIssuesListEntry =
   | { key: string; kind: 'group'; group: MyIssuesGroupData; collapsed: boolean }
-  | { key: string; kind: 'parent'; label: string; count: number }
+  | { key: string; kind: 'parent'; group: MyIssuesGroupData; collapsed: boolean }
   | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[]; groupEnd: boolean }
 
 const VIRTUALIZATION_THRESHOLD = 80
@@ -254,7 +255,9 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
-    const parent: MyIssuesListEntry[] = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId ? [{ key: `parent:${group.parentGroupId}`, kind: 'parent', label: group.parentLabel ?? '', count: groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0) }] : []
+    const parentCollapsed = Boolean(group.parentGroupId && collapsedGroupIds.has(group.parentGroupId))
+    const parent: MyIssuesListEntry[] = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId ? [{ key: `parent:${group.parentGroupId}`, kind: 'parent', group: parentGroupOf(groups, group), collapsed: parentCollapsed }] : []
+    if (parentCollapsed) return parent
     if (collapsed) return [...parent, header]
     if (hideGroupHeaders) return group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
@@ -279,7 +282,7 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
-    ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
+    ? <div style={{ paddingBottom: entry.collapsed ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : entry.kind === 'group'
     ? <div style={{ paddingBottom: (entry.collapsed ? desktopList : !entry.group.issues.length) ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
@@ -304,18 +307,26 @@ export function MyIssuesList({ groups, windowed = false, loading = false, error,
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
       const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
+      const parentCollapsed = Boolean(group.parentGroupId && collapsedGroupIds.has(group.parentGroupId))
+      const parentGroup = parentHeader ? parentGroupOf(groups, group) : undefined
+      if (parentCollapsed && !parentGroup) return null
       return <section className={styles.group} data-collapsed={collapsed || undefined} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
-        {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
-        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
-        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
+        {parentGroup && <MyIssuesGroupHeader collapsed={parentCollapsed} createIssueLabel={createIssueLabel} group={parentGroup} estimateSum={groupEstimate(parentGroup)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(parentGroup)}/>}
+        {!parentCollapsed && !hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
+        {!collapsed && !parentCollapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
 }
 
-/** Top-level header when a sub-grouping is active (the reference app renders the primary group above its sub-groups). */
-function MyIssuesParentGroupHeader({ label, count }: { label: string; count: number }) {
-  return <header className={styles.parentGroupHeader}><span data-i18n-ignore className={styles.groupName}>{label}</span><span className={styles.groupCount}>{count}</span></header>
+/**
+ * The primary group above its sub-groups (the design reference draws it as a full group header): its own label path,
+ * colour and status, holding each issue once even when it sits in several sub-groups.
+ */
+function parentGroupOf(groups: MyIssuesGroupData[], group: MyIssuesGroupData): MyIssuesGroupData {
+  const issues = new Map<string, MyIssuesRowData>()
+  for (const item of groups) if (item.parentGroupId === group.parentGroupId) for (const issue of item.issues) issues.set(issue.id, issue)
+  return { ...group.parentGroup, id: group.parentGroupId!, label: group.parentLabel ?? group.parentGroup?.label ?? '', issues: [...issues.values()] }
 }
 
 /** `estimateSum`: the group's estimate total ("Todo 2 △ 8"), shown when the issues' team uses estimates. */
@@ -343,12 +354,12 @@ export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estima
   const translatable = Boolean(group.translatableLabel || group.state)
   const label = translatable ? translate(group.label) : group.label
   const collapseButton = <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={event => { if (event.altKey && menuActions.onCollapseAll) menuActions.onCollapseAll(); else toggle?.() }}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
-  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-label-color={group.color ? true : undefined} style={group.color ? { '--group-label-color': group.color } as CSSProperties : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
     {toggle ? <FlowTooltip raised label={<span className="flow-tooltip-rows">
       <span className="flow-tooltip-row"><TooltipShortcut value="T"/>{translate(collapsed ? 'to expand group' : 'to collapse group')}</span>
       {menuActions.onCollapseAll && <span className="flow-tooltip-row"><TooltipShortcut value="⌥ Click"/>{translate('to collapse all')}</span>}
     </span>}><span className={styles.collapseTip}>{collapseButton}</span></FlowTooltip> : collapseButton}
-    <GroupStateIcon state={group.state ?? (desktop ? undefined : group.issues[0]?.state)} type={desktop && !group.state ? undefined : group.stateType}/><span data-i18n-ignore={translatable ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title><span className={styles.groupText}>{label}</span></span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
+    <GroupStateIcon state={group.state ?? (desktop || group.color ? undefined : group.issues[0]?.state)} type={desktop && !group.state && !group.id.startsWith('statustype-') ? undefined : group.stateType}/>{group.color && <span className={styles.groupDot} aria-hidden="true"/>}<span data-i18n-ignore={translatable ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title>{group.labelPrefix && <><span data-i18n-ignore className={styles.groupPrefix}>{group.labelPrefix}</span><GroupPathChevron/></>}<span className={styles.groupText}>{label}</span></span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
     {onCreateIssue && (group.createContext || group.stateType) && <FlowTooltip raised align="end" label={translate('Add issue…')}><button className={styles.createButton} aria-label={createIssueLabel} data-my-issues-group-add onClick={() => onCreateIssue(group)}><PlusIcon width={14} height={14}/></button></FlowTooltip>}
   </header></IssueGroupContextMenu>
@@ -455,7 +466,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
             onOpenSubIssue={onOpen}
           />:null}
           <span className={styles.badges}>
-            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <span key={label.id} className={styles.badgeSlot}><PropertyBadge label={label}/></span>)}</span>}/> : null}
+            {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{labelChips(issue.labels).map(chip => <span key={chip.key} className={styles.badgeSlot}>{chip.labels.length > 1 ? <MergedLabelBadge chip={chip} className={styles.badge} dotsClassName={styles.mergedDots}/> : <PropertyBadge label={chip.labels[0]}/>}</span>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} triggerClassName={`${styles.propertyTrigger} ${styles.projectTrigger}`} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={`${styles.dueDate} ${styles.cycleChip}`}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
             {displayProperties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.dueDate} releases={issue.releases}/> : null}
@@ -617,7 +628,15 @@ function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'labels') return <LabelIcon className={styles.optionIcon} size={14}/>
   return <span className={styles.optionSpacer}/>
 }
+/** The separator between a label group's name and the label in a "Group › Label" header. */
+export function GroupPathChevron({ className = styles.groupPathChevron }: { className?: string }) {
+  return <svg className={className} width="5" height="9" viewBox="0 0 5 9" aria-hidden="true"><path transform="rotate(-90 4.5 4.5)" d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" fill="currentColor"/></svg>
+}
 function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; type?: MyIssuesStateType }) { if (state?.id === 'triage') return <span className={styles.groupState}><WorkflowStatusGlyph state={state} size={14}/></span>; return state || type ? <span className={styles.groupState}><StatusIcon state={state ?? { id: type!, name: type!, type: type!, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
+/** Several labels of one multi-select group in one chip: their dots overlap, then the names ("Web, API"). */
+export function MergedLabelBadge({ chip, className, dotsClassName }: { chip: LabelChip<{ id: string; color: string }>; className: string; dotsClassName: string }) {
+  return <span className={className} aria-label={chip.ariaLabel}><span className={dotsClassName} aria-hidden="true">{chip.colors.map((color, index) => <i key={chip.labels[index].id} style={{ backgroundColor: color }}/>)}</span><span data-i18n-ignore>{chip.name}</span></span>
+}
 function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>

@@ -1,4 +1,4 @@
-import type { BootstrapData, IssueUpdateInput } from '@/types/flow'
+import type { BootstrapData, IssueUpdateInput, LabelGroup, LabelResourceType } from '@/types/flow'
 import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering } from '@/components/my-issues/my-issues-surface'
 import { teamEquivalentState } from '@/lib/team-workflow'
@@ -20,9 +20,13 @@ const DAY = 86_400_000
 
 export interface IssueGroupingContext {
   /** Workspace data when available; grouping degrades to row-only information without it. */
-  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers' | 'labels' | 'teamSettings'>>
-  /** Parent label for the `labelGroup` grouping. */
+  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers' | 'labels' | 'labelGroups' | 'teamSettings'>>
+  /** The label group the `labelGroup` grouping buckets by. */
   labelGroupId?: string
+  /** "No label" leads instead of trailing (board columns). */
+  noneFirst?: boolean
+  /** Teams whose labels an empty "Label" grouping lists besides the workspace labels; every team when unset. */
+  labelTeamIds?: readonly string[]
   /** States a status grouping should always show (for empty groups / board columns). */
   states?: MyIssuesRowData['state'][]
   /** Manual order override (drag-and-drop) keyed by issue id. */
@@ -33,7 +37,7 @@ export interface IssueGroupingContext {
 export type GroupDescriptor = Omit<MyIssuesGroupData, 'issues'> & { rank: number | string }
 
 export const GROUPING_LABELS: Record<MyIssuesGrouping, string> = {
-  none: 'No grouping', focus: 'Focus', status: 'Status', assignee: 'Assignee', agent: 'Agent', project: 'Project',
+  none: 'No grouping', focus: 'Focus', status: 'Status', statusType: 'Status type', assignee: 'Assignee', agent: 'Agent', project: 'Project',
   milestone: 'Milestone', priority: 'Priority', cycle: 'Cycle', label: 'Label', team: 'Team', customer: 'Customer',
   parent: 'Parent issue', sla: 'SLA status', release: 'Release', releaseDate: 'Release date', labelGroup: 'Label group', activityDate: 'Activity date',
 }
@@ -57,6 +61,7 @@ export function groupDescriptors(row: MyIssuesRowData, grouping: MyIssuesGroupin
   switch (grouping) {
     case 'none': return [{ id: 'all-issues', label: 'All issues', rank: 0 }]
     case 'status': return [statusDescriptor(row.state, context)]
+    case 'statusType': return [statusTypeDescriptor(row.state.type)]
     case 'focus': return [focusDescriptor(row, context)]
     case 'priority': return [{ id: `priority-${row.priority}`, label: PRIORITY_LABELS[row.priority], rank: PRIORITY_RANK[row.priority], createContext: { priority: row.priority } }]
     case 'assignee': return [row.assignee
@@ -82,8 +87,8 @@ export function groupDescriptors(row: MyIssuesRowData, grouping: MyIssuesGroupin
       return [{ id: `cycle-${row.cycleId}`, label: cycle?.name ?? row.cycleName ?? 'Cycle', rank: cycle?.startsAt ?? row.cycleName ?? '', createContext: { cycleId: row.cycleId } }]
     }
     case 'label': {
-      if (!row.labels?.length) return [{ id: 'label-none', label: 'No label', rank: '1', createContext: { labelIds: [] } }]
-      return row.labels.map(label => ({ id: `label-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }))
+      if (!row.labels?.length) return [noLabelDescriptor('label-none', context)]
+      return row.labels.map(label => labelDescriptor(label, context))
     }
     case 'team': return [{ id: `team-${row.teamId ?? 'none'}`, label: row.teamName ?? 'No team', rank: (row.teamName ?? '~').toLocaleLowerCase(), createContext: row.teamId ? { teamId: row.teamId } : undefined }]
     case 'customer': {
@@ -107,10 +112,10 @@ export function groupDescriptors(row: MyIssuesRowData, grouping: MyIssuesGroupin
       return [releaseDayDescriptor(released[0], context.now ?? Date.now())]
     }
     case 'labelGroup': {
-      const group = context.labelGroupId ? data?.labels?.find(label => label.id === context.labelGroupId) : undefined
-      const members = (row.labels ?? []).filter(label => context.labelGroupId && label.groupId === context.labelGroupId)
-      if (!members.length) return [{ id: 'labelgroup-none', label: `No ${group?.name ?? 'label'}`, rank: '1', createContext: { labelIds: [] } }]
-      return members.map(label => ({ id: `labelgroup-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }))
+      const groupId = context.labelGroupId
+      const members = groupId ? (row.labels ?? []).filter(label => labelGroupIdOf(label, data) === groupId) : []
+      if (!members.length) return [noLabelDescriptor('labelgroup-none', context)]
+      return members.map(label => labelGroupMemberDescriptor(label, data))
     }
     case 'activityDate': return [activityDescriptor(row.myActivityAt ?? row.updatedAt, context.now ?? Date.now())]
   }
@@ -127,10 +132,84 @@ function releaseDayDescriptor(value: string | undefined, now: number): GroupDesc
   return { id: `releasedate-${key}`, label, rank: -day.getTime() }
 }
 
-/** Parent labels that have child labels: the choices for the `labelGroup` grouping. */
-export function labelGroups(labels: Pick<BootstrapData['labels'][number], 'id' | 'name' | 'groupId' | 'archivedAt'>[]) {
-  const parents = new Set(labels.filter(label => label.groupId && !label.archivedAt).map(label => label.groupId!))
-  return labels.filter(label => parents.has(label.id) && !label.archivedAt)
+type GroupingLabel = { id: string; name: string; color?: string; groupId?: string; scope?: string }
+type GroupingData = IssueGroupingContext['data']
+
+const STATUS_TYPE_LABELS: Record<string, string> = { triage: 'Triage', backlog: 'Backlog', unstarted: 'Unstarted', started: 'Started', completed: 'Completed', canceled: 'Canceled' }
+
+/** The design reference "Status type": one group per workflow state type, started first (its default status order). */
+function statusTypeDescriptor(type: string): GroupDescriptor {
+  return { id: `statustype-${type}`, label: STATUS_TYPE_LABELS[type] ?? type, stateType: type as GroupDescriptor['stateType'], rank: DEFAULT_STATE_TYPE_RANK[type] ?? 9, translatableLabel: true }
+}
+
+function noLabelDescriptor(id: string, context: IssueGroupingContext): GroupDescriptor {
+  // Lists end with "No label"; board columns start with it.
+  return { id, label: 'No label', rank: context.noneFirst ? '' : '1', translatableLabel: true, createContext: { labelIds: [] } }
+}
+
+function labelGroupIdOf(label: GroupingLabel, data?: GroupingData) {
+  return label.groupId ?? data?.labels?.find(item => item.id === label.id)?.groupId
+}
+
+function isTeamScoped(item: { scope?: string }) {
+  return Boolean(item.scope) && item.scope!.toLowerCase() !== 'workspace'
+}
+
+/**
+ * A "Label" group. Labels in a label group are headed "Group › Label". Order: team labels, then workspace labels;
+ * within each, labels outside a group (by name) before grouped labels (by group name, then label name).
+ */
+function labelDescriptor(label: GroupingLabel, context: IssueGroupingContext): GroupDescriptor {
+  const data = context.data
+  const full = data?.labels?.find(item => item.id === label.id) ?? label
+  const groupId = full.groupId ?? label.groupId
+  const group = groupId ? data?.labelGroups?.find(item => item.id === groupId) : undefined
+  const rank = `0${isTeamScoped(full) ? 0 : 1}${group ? 1 : 0}${(group?.name ?? '').toLocaleLowerCase()}\u0001${full.name.toLocaleLowerCase()}`
+  return { id: `label-${label.id}`, label: full.name, labelPrefix: group?.name, color: full.color ?? label.color, rank, createContext: { labelIds: [label.id] } }
+}
+
+function labelGroupMemberDescriptor(label: GroupingLabel, data?: GroupingData): GroupDescriptor {
+  const full = data?.labels?.find(item => item.id === label.id) ?? label
+  return { id: `labelgroup-${label.id}`, label: full.name, color: full.color ?? label.color, rank: `0${full.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }
+}
+
+export interface LabelGroupOption { id: string; name: string; /** The heading the option sits under: "Workspace" or the owning team's name. */ heading: string; translatableHeading?: boolean }
+
+/**
+ * The label groups a "Label group" grouping offers, as the design reference lists them: workspace groups first, then
+ * each team's groups under the team's name (teams in workspace order); names sort alphabetically within a heading.
+ * `teamIds` limits the team groups (a team view offers its own and its sub-teams' groups); every team when unset.
+ */
+export function labelGroupOptions(data: { teams?: readonly { id: string; name: string }[]; labelGroups?: readonly LabelGroup[] }, resourceType: LabelResourceType = 'issue', teamIds?: readonly string[]): LabelGroupOption[] {
+  const groups = (data.labelGroups ?? []).filter(group => (group.resourceType ?? 'issue') === resourceType && !group.archivedAt)
+  const byName = (left: { name: string }, right: { name: string }) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+  const workspace = groups.filter(group => !isTeamScoped(group)).sort(byName).map(group => ({ id: group.id, name: group.name, heading: 'Workspace', translatableHeading: true }))
+  const teams = (data.teams ?? []).filter(team => !teamIds || teamIds.includes(team.id)).flatMap(team => groups.filter(group => group.scope === team.id).sort(byName).map(group => ({ id: group.id, name: group.name, heading: team.name })))
+  return [...workspace, ...teams]
+}
+
+/**
+ * Display options after choosing a label group for the grouping or sub-grouping: picking the group the other level
+ * uses swaps the two, so both levels never bucket by the same group (the design reference behaviour).
+ */
+export function chooseLabelGroup<T extends { grouping: string; subGrouping: string; labelGroupId?: string; subLabelGroupId?: string }>(display: T, level: 'grouping' | 'subGrouping', groupId: string, options: readonly { id: string }[]): T {
+  const primary = display.labelGroupId ?? options[0]?.id
+  const secondary = display.subLabelGroupId ?? defaultSubLabelGroupId(display, options)
+  const both = display.grouping === 'labelGroup' && display.subGrouping === 'labelGroup'
+  if (level === 'grouping') return { ...display, labelGroupId: groupId, ...(both && groupId === secondary ? { subLabelGroupId: primary } : {}) }
+  return { ...display, subLabelGroupId: groupId, ...(both && groupId === primary ? { labelGroupId: secondary } : {}) }
+}
+
+/** The sub-grouping's label group when none is stored: the first group the primary grouping does not use. */
+export function defaultSubLabelGroupId(display: { grouping: string; labelGroupId?: string }, options: readonly { id: string }[]) {
+  const primary = display.grouping === 'labelGroup' ? display.labelGroupId ?? options[0]?.id : undefined
+  return (options.find(option => option.id !== primary) ?? options[0])?.id
+}
+
+/** Every label an empty "Label" grouping lists: active issue labels of the workspace and of `teamIds` (every team when unset). */
+function groupingLabels(data: GroupingData, teamIds?: readonly string[]) {
+  const archivedGroups = new Set((data?.labelGroups ?? []).filter(group => group.archivedAt).map(group => group.id))
+  return (data?.labels ?? []).filter(label => (label.resourceType ?? 'issue') === 'issue' && !label.archivedAt && !(label.groupId && archivedGroups.has(label.groupId)) && (!isTeamScoped(label) || !teamIds || teamIds.includes(label.scope!)))
 }
 
 /**
@@ -357,14 +436,17 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   if (nested) projected = nested.rows
   const rootOf = (row: MyIssuesRowData) => nested?.roots.get(row.id) ?? row
   const grouping = display.grouping
-  options = { ...options, labelGroupId: display.labelGroupId ?? options.labelGroupId }
+  const groupChoices = options.data ? labelGroupOptions(options.data) : []
+  const primaryGroupId = display.labelGroupId ?? options.labelGroupId ?? groupChoices[0]?.id
+  const board = display.layout === 'board'
+  const subOptions: IssueGroupingOptions = { ...options, labelGroupId: display.subLabelGroupId ?? defaultSubLabelGroupId({ grouping, labelGroupId: primaryGroupId }, groupChoices), noneFirst: false }
+  options = { ...options, labelGroupId: primaryGroupId, noneFirst: board }
   const primary = collect(projected, row => groupDescriptors(rootOf(row), grouping, options))
-  const includeEmptyGroups = display.showEmptyGroups || display.layout === 'board'
-  if (includeEmptyGroups && grouping === 'labelGroup' && options.labelGroupId) {
-    for (const label of options.data?.labels?.filter(item => item.groupId === options.labelGroupId && !item.archivedAt) ?? []) {
-      const descriptor: GroupDescriptor = { id: `labelgroup-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }
-      if (!primary.has(descriptor.id)) primary.set(descriptor.id, { descriptor, issues: [] })
-    }
+  const includeEmptyGroups = display.showEmptyGroups || board
+  addEmptyLabelGroups(primary, grouping, options, includeEmptyGroups)
+  if (includeEmptyGroups && grouping === 'statusType') for (const type of new Set((options.states ?? options.data?.states ?? []).map(state => state.type))) {
+    const descriptor = statusTypeDescriptor(type)
+    if (!primary.has(descriptor.id) && (display.completedWindow !== 'none' || !COMPLETED_TYPES.has(type))) primary.set(descriptor.id, { descriptor, issues: [] })
   }
   if (includeEmptyGroups && grouping === 'status') {
     for (const state of options.states ?? options.data?.states ?? []) {
@@ -378,13 +460,45 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   }
   // Board columns follow the workflow (Backlog, Todo, In Progress, …); the list default puts the started statuses first.
   const ordered = sortGroups([...primary.values()], display.groupOrder ?? (display.layout === 'board' ? 'asc' : undefined))
-  const subGrouping = display.subGrouping && display.subGrouping !== 'none' && display.subGrouping !== grouping && grouping !== 'none' ? display.subGrouping : undefined
-  return ordered.flatMap(({ descriptor, issues }) => {
+  // Two label-group levels are allowed when they bucket by different groups.
+  const sameLevel = display.subGrouping === grouping && !(grouping === 'labelGroup' && subOptions.labelGroupId !== primaryGroupId)
+  const subGrouping = display.subGrouping && display.subGrouping !== 'none' && !sameLevel && grouping !== 'none' ? display.subGrouping : undefined
+  // Lists show empty sub-groups with "Show empty groups"; boards with "Show empty rows".
+  const includeEmptyRows = board ? Boolean(display.showEmptyRows) : display.showEmptyGroups
+  const subDescriptors: { descriptor: GroupDescriptor }[][] = []
+  const emitted = ordered.flatMap(({ descriptor, issues }) => {
     const group = toGroup(descriptor, issues)
     if (!subGrouping) return [group]
-    const children = sortGroups([...collect(issues, row => groupDescriptors(rootOf(row), subGrouping, options)).values()], 'asc')
-    return children.map(child => ({ ...toGroup(child.descriptor, child.issues), id: `${descriptor.id}::${child.descriptor.id}`, parentGroupId: descriptor.id, parentLabel: descriptor.label, createContext: { ...descriptor.createContext, ...child.descriptor.createContext } }))
+    const collected = collect(issues, row => groupDescriptors(rootOf(row), subGrouping, subOptions))
+    addEmptyLabelGroups(collected, subGrouping, subOptions, includeEmptyRows)
+    const children = sortGroups([...collected.values()], 'asc')
+    subDescriptors.push(children)
+    const { rank: _rank, ...parentGroup } = descriptor
+    return children.map(child => ({ ...toGroup(child.descriptor, child.issues), id: `${descriptor.id}::${child.descriptor.id}`, parentGroupId: descriptor.id, parentLabel: descriptor.label, parentGroup, createContext: mergeCreateContext(descriptor.createContext, child.descriptor.createContext) }))
   })
+  if (!subGrouping) return emitted
+  // Board rows run in the sub-grouping's order whichever column first holds them.
+  const laneRows = new Map<string, { descriptor: GroupDescriptor }>()
+  for (const children of subDescriptors) for (const child of children) if (!laneRows.has(child.descriptor.id)) laneRows.set(child.descriptor.id, child)
+  const rowOrder = new Map(sortGroups([...laneRows.values()], 'asc').map((row, index) => [row.descriptor.id, index]))
+  return emitted.map(group => ({ ...group, rowOrder: rowOrder.get(group.id.slice(group.id.indexOf('::') + 2)) }))
+}
+
+/** Label ids from both levels: "+" under "Bug › Flow parity A" creates an issue with both labels. */
+function mergeCreateContext(parent: GroupDescriptor['createContext'], child: GroupDescriptor['createContext']) {
+  const merged = { ...parent, ...child }
+  if (parent?.labelIds && child?.labelIds) merged.labelIds = [...new Set([...parent.labelIds, ...child.labelIds])]
+  return merged
+}
+
+function addEmptyLabelGroups(groups: Map<string, { descriptor: GroupDescriptor; issues: MyIssuesRowData[] }>, grouping: MyIssuesGrouping, options: IssueGroupingContext, include: boolean) {
+  if (!include) return
+  const labels = grouping === 'label' ? groupingLabels(options.data, options.labelTeamIds)
+    : grouping === 'labelGroup' && options.labelGroupId ? groupingLabels(options.data).filter(label => label.groupId === options.labelGroupId) : []
+  for (const label of labels) {
+    const descriptor = grouping === 'label' ? labelDescriptor(label, options) : labelGroupMemberDescriptor(label, options.data)
+    if (!groups.has(descriptor.id)) groups.set(descriptor.id, { descriptor, issues: [] })
+  }
 }
 
 function collect(rows: MyIssuesRowData[], descriptorsFor: (row: MyIssuesRowData) => GroupDescriptor[]) {
@@ -475,13 +589,22 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
       const current = (row.labels ?? []).map(label => label.id)
       if (id === 'label-none') return { labelIds: [] }
       const labelId = id.slice(6)
-      return current.includes(labelId) ? undefined : { labelIds: [...current, labelId] }
+      if (current.includes(labelId)) return undefined
+      // A label of a single-select group replaces the row's other label from that group.
+      const groupId = labelGroupIdOf({ id: labelId, name: '' }, context.data)
+      const single = groupId && !context.data?.labelGroups?.find(group => group.id === groupId)?.multiSelect
+      return { labelIds: [...(single ? current.filter(item => labelGroupIdOf({ id: item, name: '' }, context.data) !== groupId) : current), labelId] }
     }
     case 'labelGroup': {
-      // Labels in a group are exclusive: swap the row's label from this group for the target one.
+      // A single-select group swaps the row's label from this group for the target one; a multi-select group adds it.
       if (!id.startsWith('labelgroup-')) return undefined
-      const keep = (row.labels ?? []).filter(label => !context.labelGroupId || label.groupId !== context.labelGroupId).map(label => label.id)
-      return id === 'labelgroup-none' ? { labelIds: keep } : { labelIds: [...keep, id.slice(11)] }
+      const multiple = Boolean(context.data?.labelGroups?.find(group => group.id === context.labelGroupId)?.multiSelect)
+      const current = (row.labels ?? []).map(label => label.id)
+      const keep = (row.labels ?? []).filter(label => !context.labelGroupId || labelGroupIdOf(label, context.data) !== context.labelGroupId).map(label => label.id)
+      if (id === 'labelgroup-none') return { labelIds: keep }
+      const labelId = id.slice(11)
+      if (multiple) return current.includes(labelId) ? undefined : { labelIds: [...current, labelId] }
+      return { labelIds: [...keep, labelId] }
     }
     default: return undefined
   }

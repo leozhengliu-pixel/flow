@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
-import { unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
+import { availableIssueGroupings, unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
@@ -45,7 +45,7 @@ import {
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 import { MyIssuesSummaryCard } from '@/components/my-issues/my-issues-summary-card'
-import { labelGroups, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
+import { labelGroupOptions, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 import { isActiveSubscription } from '@/lib/subscription-records'
 import { BacklogEmptyState } from './backlog-empty-state'
 
@@ -347,8 +347,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     hiddenProperties: desktop ? unavailableDisplayProperties(data, scopeTeamIds ? [...scopeTeamIds] : undefined) : undefined,
     hideCompletedIssues: view !== 'all',
     groups: menuGroups,
-    labelGroupOptions: labelGroups(data.labels),
-    availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+    labelGroupOptions: labelGroupOptions(data, "issue", scopeTeamIds ? [...scopeTeamIds] : undefined),
+    availableGroupings: scope.kind === 'team' ? availableIssueGroupings(data, 'team', scopeTeamIds ? [...scopeTeamIds] : undefined).filter(grouping => !data.issueCollectionPaged || PAGED_GROUPINGS.includes(grouping)) : data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
     toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
     modified: displayModified,

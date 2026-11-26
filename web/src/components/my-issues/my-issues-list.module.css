@@ -58,9 +58,15 @@
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}
-/* Sub-grouping: primary header sits above indented sub-group headers. */
-.parentGroupHeader{height:32px;margin:6px 8px 2px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--theme-text-primary)}
-.groupHeader[data-subgroup]{margin-left:24px}
+/* Sub-grouping: the primary group keeps the full header; each sub-group is a bare row with a hairline after its count. */
+.groupHeader[data-subgroup]{background:transparent}
+.groupHeader[data-subgroup]::after{content:'';flex:1 1 auto;order:1;height:.5px;min-width:0;background:var(--group-subheader-line)}
+.groupHeader[data-subgroup] .createButton{order:2;margin-left:0}
+/* Label groupings: the label's colour dot, and "Group › Label" for a label in a group. */
+.groupDot{width:9px;height:9px;flex:0 0 9px;margin:0 3.5px 0 1.5px;border-radius:50%;background:var(--group-label-color)}
+.groupPrefix{color:var(--group-label-prefix);font-weight:450}
+.groupPathChevron{flex:0 0 5px;margin:0 8px;color:var(--group-label-chevron)}
+.groupName:has(.groupPrefix){display:flex;align-items:center}
 .row[data-active]{background:var(--bg-active)}.row[data-active]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent-primary)}
 :global(:root[data-theme="light"]) .groupHeader{background:var(--bg-sidebar)}
 :global(:where(:root[data-theme="light"])) .contextMenu .menuItem,:global(:where(:root[data-theme="light"])) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
@@ -253,3 +259,13 @@
 .creatorAvatar{display:inline-flex;flex:none;align-items:center}
 /* Row menu Labels: the labels picker hugs its widest row like the property picker (207px to 399px). */
 .contextSubmenu.contextLabelsSubmenu{width:max-content;min-width:207px;max-width:min(399px,calc(100vw - 20px));max-height:min(490px,calc(100vh - 20px));padding:0;overflow:hidden}
+/* Label groupings tint the header with the label colour (the design reference gradient, path, count and chevrons). */
+.groupHeader[data-label-color]:not([data-subgroup]){background-image:var(--group-label-bg)}
+.groupHeader[data-label-color]:not([data-subgroup]) .groupText{color:var(--group-label-name);font-weight:450}
+.groupHeader[data-label-color]:not([data-subgroup]) :is(.groupCount,.createButton,.groupEstimate){color:var(--group-label-count)}
+.groupHeader[data-label-color]:not([data-subgroup]) .groupEstimate{margin-left:-1px}
+.groupHeader[data-label-color]:not([data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-label-collapse)}
+/* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
+.mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
+.mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
+.mergedDots i+i{margin-left:-4.5px}

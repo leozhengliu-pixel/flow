@@ -431,3 +431,7 @@
   .hiddenStatus b{margin-left:auto;display:inline-flex;align-items:center;gap:0;height:24px;border-radius:8px;color:var(--theme-text-secondary);font-size:13px;font-weight:450;line-height:normal}
   .hiddenStatus b svg{display:block;flex:none;margin:-1px 4px 0 -1px}
 }
+/* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
+.mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
+.mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
+.mergedDots i+i{margin-left:-4.5px}

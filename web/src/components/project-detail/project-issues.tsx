@@ -33,7 +33,7 @@ import {
   issueHierarchyFields,
   issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
-import { buildIssueGroups, groupMoveUpdate, groupSummaries, focusCasesKey, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { buildIssueGroups, groupMoveUpdate, groupSummaries, focusCasesKey, labelGroupOptions, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
 import { boundedIssueSequence } from "@/lib/navigation-context";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
@@ -143,7 +143,7 @@ export function ProjectIssueDisplayMenu({
       hideSplit
       toggles={projectDisplayToggles}
       groups={groups}
-      labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
+      labelGroupOptions={issueData ? labelGroupOptions(issueData) : []}
       modified={!issueDisplayEqual(display, DEFAULT_PROJECT_ISSUE_DISPLAY)}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
       phoneIssueMenu
