@@ -18,6 +18,23 @@ function mount(settings: Partial<TeamSettings>) {
   </IssueRowActionsProvider></I18nProvider>)
 }
 
+describe('issue list count icon', () => {
+  it('draws the issue count beside the points icon in team issue lists, and not in other lists', () => {
+    const issues = [makeIssue({ id: 'a', identifier: 'TST-1' }), makeIssue({ id: 'b', identifier: 'TST-2' })]
+    const data = makeBootstrap({ issues })
+    const rows = issues.map(issue => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data))
+    const { unmount } = render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}>
+      <MyIssuesList countIcon groups={[{ id: 'todo', label: 'Todo', issues: rows }]}/>
+    </IssueRowActionsProvider></I18nProvider>)
+    expect(screen.getByLabelText('2 issues').querySelector('.estimate-icon')).not.toBeNull()
+    unmount()
+    render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}>
+      <MyIssuesList groups={[{ id: 'todo', label: 'Todo', issues: rows }]}/>
+    </IssueRowActionsProvider></I18nProvider>)
+    expect(screen.queryByLabelText('2 issues')).toBeNull()
+  })
+})
+
 describe('issue list estimates', () => {
   it('shows "△ N" chips on estimated rows and the group total (unestimated issues count as 1 point)', () => {
     mount({ estimateType: 'fibonacci' })
