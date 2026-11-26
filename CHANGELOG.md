@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Fix MySQL record journal deadlocks when transactions edit metadata in the same workspace or overlap catalog backfill, in both trigger and application capture.
 - Fix creating an issue in a project with a long progress history (for example a start date years back) failing with 500 when bounded metadata is on. Issue creation no longer reads the project's progress histories, and the memory estimate for encoding a record no longer counts empty optional fields, which made such a project cost hundreds of times its size. A metadata write that needs more than the whole metadata work budget now answers 503 without `Retry-After` instead of 500; writes refused under contention keep the retryable 503.
 - Renamed bounded metadata Go files by domain and updated their embedded inventory references.
 - Project template issues can start in a chosen workflow status: the template issue composer has a status button, the template API accepts `stateId` on each template issue (it must be a status of the issue's team), and projects created from the template start those issues in that status. The project template pickers, phone counts, label creation, team defaults on the team templates page and zh-CN copy follow the design reference.
