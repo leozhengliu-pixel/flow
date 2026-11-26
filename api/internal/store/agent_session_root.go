@@ -139,7 +139,7 @@ func (s *SQLiteStore) writeAgentSessionLifecycleRootPatch(ctx context.Context, t
 	if same, err := legacySessionRawEqual(ctx, legacySessionJSONPart{root.source, 0, root.source.size}, legacySessionSpoolPart(replacement)); err != nil || same {
 		return err
 	}
-	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	updatedAt := formatStoredTime(time.Now())
 	if integrationDeliveryStreamEvent(ctx) != "" {
 		if raw, binary, err := integrationDeliveryBinarySpool(ctx, owner, replacement); err != nil {
 			return err

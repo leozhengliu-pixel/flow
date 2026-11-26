@@ -38,7 +38,7 @@ func (s *SQLiteStore) PutConnectorSecret(ctx context.Context, id string, data []
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO connector_secrets(id,ciphertext,expires_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET ciphertext=excluded.ciphertext,expires_at=excluded.expires_at`, id, encrypted, expires.UTC().Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO connector_secrets(id,ciphertext,expires_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET ciphertext=excluded.ciphertext,expires_at=excluded.expires_at`, id, encrypted, formatStoredTime(expires))
 	return err
 }
 
@@ -122,7 +122,7 @@ func (s *SQLiteStore) UpdateConnectorSecret(ctx context.Context, id string, expi
 		if err != nil {
 			return err
 		}
-		result, err := s.db.ExecContext(ctx, `UPDATE connector_secrets SET ciphertext=?,expires_at=? WHERE id=? AND ciphertext=?`, sealed, expires.UTC().Format(time.RFC3339Nano), id, encrypted)
+		result, err := s.db.ExecContext(ctx, `UPDATE connector_secrets SET ciphertext=?,expires_at=? WHERE id=? AND ciphertext=?`, sealed, formatStoredTime(expires), id, encrypted)
 		if err != nil {
 			return err
 		}

@@ -56,7 +56,7 @@ func (s *SQLiteStore) RecordSearch(ctx context.Context, workspaceID, userID, que
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO search_history(user_id,workspace_id,query,use_count,last_used_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(user_id,workspace_id,query) DO UPDATE SET use_count=search_history.use_count+1,last_used_at=excluded.last_used_at`,
-		userID, workspaceID, query, 1, time.Now().UTC().Format(time.RFC3339Nano))
+		userID, workspaceID, query, 1, formatStoredTime(time.Now()))
 	return err
 }
 
@@ -94,7 +94,7 @@ func (s *SQLiteStore) RecordRecent(ctx context.Context, workspaceID, userID, res
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO recently_viewed(user_id,workspace_id,resource_type,resource_id,last_viewed_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(user_id,workspace_id,resource_type,resource_id) DO UPDATE SET last_viewed_at=excluded.last_viewed_at`,
-		userID, workspaceID, resourceType, resourceID, time.Now().UTC().Format(time.RFC3339Nano))
+		userID, workspaceID, resourceType, resourceID, formatStoredTime(time.Now()))
 	return err
 }
 

@@ -44,7 +44,7 @@ type AgentTaskArchive struct {
 // Archiving an archived session returns Archived=false without a write.
 func (s *SQLiteStore) ArchiveAgentTask(ctx context.Context, workspace, id, actorID string) (AgentTaskArchive, error) {
 	now := time.Now().UTC()
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := formatStoredTime(now)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return AgentTaskArchive{}, err

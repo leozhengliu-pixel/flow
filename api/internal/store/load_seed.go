@@ -88,7 +88,7 @@ func (s *SQLiteStore) SeedScaleP01Principals(ctx context.Context, workspace stri
 		return nil, err
 	}
 	people := make([]ScaleP01Principal, 0, count)
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	for start := 0; start < count; start += 128 {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -126,7 +126,7 @@ func (s *SQLiteStore) SeedScaleP01Principals(ctx context.Context, workspace stri
 						return err
 					}
 				}
-				expires := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339Nano)
+				expires := formatStoredTime(time.Now().Add(24 * time.Hour))
 				if _, err := tx.ExecContext(ctx, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, tokenHash(token), user.ID, expires, stamp, stamp); err != nil {
 					return err
 				}

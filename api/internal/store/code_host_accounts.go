@@ -84,7 +84,7 @@ func formatOptionalTime(value *time.Time) string {
 	if value == nil || value.IsZero() {
 		return ""
 	}
-	return value.UTC().Format(time.RFC3339Nano)
+	return formatStoredTime(*value)
 }
 
 // UpsertCodeHostAccount stores the account, replacing the user's previous
@@ -104,7 +104,7 @@ func (s *SQLiteStore) UpsertCodeHostAccount(ctx context.Context, account domain.
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO code_host_accounts(`+codeHostAccountColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET external_user_id=excluded.external_user_id,login=excluded.login,email=excluded.email,base_url=excluded.base_url,auth_type=excluded.auth_type,scopes=excluded.scopes,status=excluded.status,status_reason=excluded.status_reason,workspace_key=excluded.workspace_key,connection_id=excluded.connection_id,token_expires_at=excluded.token_expires_at,linked_at=excluded.linked_at,updated_at=excluded.updated_at`,
-		account.ID, account.UserID, account.CodeHost, account.HostName, account.BaseURL, account.ExternalUserID, account.Login, account.Email, account.AuthType, strings.Join(account.Scopes, " "), account.Status, account.StatusReason, account.WorkspaceKey, account.ConnectionID, formatOptionalTime(account.TokenExpiresAt), account.LinkedAt.UTC().Format(time.RFC3339Nano), account.UpdatedAt.Format(time.RFC3339Nano))
+		account.ID, account.UserID, account.CodeHost, account.HostName, account.BaseURL, account.ExternalUserID, account.Login, account.Email, account.AuthType, strings.Join(account.Scopes, " "), account.Status, account.StatusReason, account.WorkspaceKey, account.ConnectionID, formatOptionalTime(account.TokenExpiresAt), formatStoredTime(account.LinkedAt), formatStoredTime(account.UpdatedAt))
 	return account, err
 }
 
@@ -219,7 +219,7 @@ func (s *SQLiteStore) ReleaseCodeHostAccountRefresh(ctx context.Context, id, own
 // SetCodeHostAccountStatus marks an account active or as needing a
 // reconnect (revoked or expired token), with a reason.
 func (s *SQLiteStore) SetCodeHostAccountStatus(ctx context.Context, id, status, reason string, expiresAt *time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE code_host_accounts SET status=?,status_reason=?,token_expires_at=?,updated_at=? WHERE id=?`, status, reason, formatOptionalTime(expiresAt), time.Now().UTC().Format(time.RFC3339Nano), id)
+	_, err := s.db.ExecContext(ctx, `UPDATE code_host_accounts SET status=?,status_reason=?,token_expires_at=?,updated_at=? WHERE id=?`, status, reason, formatOptionalTime(expiresAt), formatStoredTime(time.Now()), id)
 	return err
 }
 

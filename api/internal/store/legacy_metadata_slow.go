@@ -191,6 +191,6 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 	}
 	tx.metadataWritten = true
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`,
-		target.Workspace.ID, raw, time.Now().UTC().Format(time.RFC3339Nano), workspace)
+		target.Workspace.ID, raw, formatStoredTime(time.Now()), workspace)
 	return true, err
 }

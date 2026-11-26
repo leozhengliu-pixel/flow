@@ -43,7 +43,7 @@ func (s *SQLiteStore) ReplaceTeamDefaultFavorites(ctx context.Context, workspace
 	if len(items) > 100 {
 		return fmt.Errorf("a team can have at most 100 default favorites")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (s *SQLiteStore) ApplyTeamDefaultFavorites(ctx context.Context, data *domai
 }
 
 func (s *SQLiteStore) SetTeamDefaultFavoriteOverride(ctx context.Context, workspace, userID, typ, rid string, hidden bool) error {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	if hidden {
 		q := `INSERT INTO team_default_favorite_overrides(workspace_key,user_id,resource_type,resource_id,hidden,updated_at) VALUES(?,?,?,?,1,?)`
 		if s.dialect == "mysql" {

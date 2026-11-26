@@ -768,14 +768,6 @@ func scaleP19SortProjects(projects []domain.Project, q scaleP19Query, data domai
 				date = scaleP19Month(parsed, []string{q.DateLocale})
 			}
 			return 0, date, false
-		case "Created":
-			return 0, p.CreatedAt.Format(time.RFC3339Nano), false
-		case "Updated":
-			updated := p.UpdatedAt
-			if t, ok := latest[p.ID]; ok {
-				updated = t
-			}
-			return 0, updated.Format(time.RFC3339Nano), false
 		case "Customer count", "Customer revenue", "Important count":
 			v := 0.0
 			if summary := customers[p.ID]; summary != nil {
@@ -822,7 +814,19 @@ func scaleP19SortProjects(projects []domain.Project, q scaleP19Query, data domai
 		}
 		return 0, p.Name, false
 	}
+	updated := func(project domain.Project) time.Time {
+		if at, ok := latest[project.ID]; ok {
+			return at
+		}
+		return project.UpdatedAt
+	}
 	slices.SortStableFunc(projects, func(a, b domain.Project) int {
+		switch q.Display.Ordering {
+		case "Created":
+			return a.CreatedAt.Compare(b.CreatedAt)
+		case "Updated":
+			return updated(a).Compare(updated(b))
+		}
 		av, as, num := value(a)
 		bv, bs, _ := value(b)
 		d := 0

@@ -73,7 +73,7 @@ func (s *SQLiteStore) persistRecordJournalCapture(ctx context.Context, mode stri
 		installed = 1
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO record_journal_capture(id,mode,triggers,changed_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET mode=excluded.mode,triggers=excluded.triggers,changed_at=excluded.changed_at`,
-		mode, installed, time.Now().UTC().Format(time.RFC3339Nano))
+		mode, installed, formatStoredTime(time.Now()))
 	return err
 }
 

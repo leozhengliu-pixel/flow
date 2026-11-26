@@ -360,7 +360,7 @@ func (s *SQLiteStore) SaveWorkspaceDeletionReceipt(ctx context.Context, receipt 
 	counts, _ := json.Marshal(receipt.Counts)
 	completed := ""
 	if receipt.CompletedAt != nil {
-		completed = receipt.CompletedAt.UTC().Format(time.RFC3339Nano)
+		completed = formatStoredTime(*receipt.CompletedAt)
 	}
 	var lastError any
 	if receipt.LastError != "" {
@@ -439,7 +439,7 @@ func (s *SQLiteStore) BeginWorkspacePurge(ctx context.Context, workspaceKey stri
 		}
 		now := time.Now().UTC()
 		receipt = WorkspaceDeletionReceipt{WorkspaceID: workspace.ID, WorkspaceKey: workspace.URLKey, RequestRef: s.deletionRequestRef(ctx, workspace.ID), RequestedAt: requested.UTC(), StartedAt: now, Status: WorkspacePurgePurging, Counts: map[string]int64{}}
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_deletion_receipts(`+workspaceReceiptColumns+`) VALUES(?,?,?,?,?,'',?,'{}',NULL) ON CONFLICT DO NOTHING`, receipt.WorkspaceID, receipt.WorkspaceKey, receipt.RequestRef, receipt.RequestedAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), receipt.Status); err != nil {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_deletion_receipts(`+workspaceReceiptColumns+`) VALUES(?,?,?,?,?,'',?,'{}',NULL) ON CONFLICT DO NOTHING`, receipt.WorkspaceID, receipt.WorkspaceKey, receipt.RequestRef, formatStoredTime(receipt.RequestedAt), formatStoredTime(now), receipt.Status); err != nil {
 			return err
 		}
 		started = true
@@ -1017,12 +1017,12 @@ func (s *SQLiteStore) removeWorkspaceFromCatalog(ctx context.Context, workspaceK
 		}
 		deleted[table] = rowsAffected(result)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key='',updated_at=? WHERE last_workspace_key=?`, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key='',updated_at=? WHERE last_workspace_key=?`, formatStoredTime(time.Now()), workspaceKey); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
 	viewerRaw, _ := json.Marshal(s.viewer)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, formatStoredTime(now)); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1220,7 +1220,7 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 			return fmt.Errorf("%s: %w", table.table, err)
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key='',updated_at=? WHERE last_workspace_key=?`, time.Now().UTC().Format(time.RFC3339Nano), target.Key); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key='',updated_at=? WHERE last_workspace_key=?`, formatStoredTime(time.Now()), target.Key); err != nil {
 		return err
 	}
 	s.dropMetadataCache(ctx, target.Key)

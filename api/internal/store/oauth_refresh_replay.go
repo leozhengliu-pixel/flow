@@ -60,8 +60,8 @@ func storeOAuthRefreshReplay(ctx context.Context, tx *sqlTx, token, successor st
 	if err != nil {
 		return err
 	}
-	stamp := now.Format(time.RFC3339Nano)
-	_, err = tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,revoked_at,created_at) VALUES(?,?,?,?,?)`, hash, raw, now.Add(OAuthRefreshReplayGrace).Format(time.RFC3339Nano), stamp, stamp)
+	stamp := formatStoredTime(now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,revoked_at,created_at) VALUES(?,?,?,?,?)`, hash, raw, formatStoredTime(now.Add(OAuthRefreshReplayGrace)), stamp, stamp)
 	return err
 }
 

@@ -254,7 +254,7 @@ func (s *SQLiteStore) CreateSCIMToken(ctx context.Context, workspaceID, name str
 	}
 	now := time.Now().UTC()
 	item := SCIMToken{ID: idgen.New("scim_"), WorkspaceID: workspaceID, Name: name, Secret: secret, CreatedAt: now}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO scim_tokens(id,workspace_id,token_hash,name,created_at) VALUES(?,?,?,?,?)`, item.ID, workspaceID, tokenHash(secret), name, now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO scim_tokens(id,workspace_id,token_hash,name,created_at) VALUES(?,?,?,?,?)`, item.ID, workspaceID, tokenHash(secret), name, formatStoredTime(now))
 	return item, err
 }
 
@@ -288,7 +288,7 @@ func (s *SQLiteStore) ListSCIMTokens(ctx context.Context, workspaceID string) ([
 }
 
 func (s *SQLiteStore) RevokeSCIMToken(ctx context.Context, workspaceID, tokenID string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE scim_tokens SET revoked_at=? WHERE workspace_id=? AND id=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), workspaceID, tokenID)
+	result, err := s.db.ExecContext(ctx, `UPDATE scim_tokens SET revoked_at=? WHERE workspace_id=? AND id=? AND revoked_at IS NULL`, formatStoredTime(time.Now()), workspaceID, tokenID)
 	if err != nil {
 		return err
 	}
@@ -314,7 +314,7 @@ func (s *SQLiteStore) AuthenticateSCIMToken(ctx context.Context, secret string) 
 	if err != nil {
 		return "", err
 	}
-	_, _ = s.db.ExecContext(ctx, `UPDATE scim_tokens SET last_used_at=? WHERE token_hash=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(secret))
+	_, _ = s.db.ExecContext(ctx, `UPDATE scim_tokens SET last_used_at=? WHERE token_hash=? AND revoked_at IS NULL`, formatStoredTime(time.Now()), tokenHash(secret))
 	return workspaceID, nil
 }
 
@@ -428,9 +428,9 @@ func scimUserOrder(sortBy string, descending bool) (string, error) {
 	case "id":
 		columns = []string{"u.id"}
 	case "created":
-		columns = []string{scimTimestampOrder("u.created_at")}
+		columns = []string{"u.created_at"}
 	case "lastModified":
-		columns = []string{scimTimestampOrder("u.updated_at")}
+		columns = []string{"u.updated_at"}
 	default:
 		return "", fmt.Errorf("unsupported SCIM user sort %q", sortBy)
 	}
@@ -438,15 +438,6 @@ func scimUserOrder(sortBy string, descending bool) (string, error) {
 		columns[index] += direction
 	}
 	return strings.Join(append(columns, "i.subject"+direction), ","), nil
-}
-
-// scimTimestampOrder sorts a UTC RFC3339Nano column in time order. The format
-// drops trailing zeros of the fraction, so the text compares "05.21272Z" after
-// "05.212721Z" ('Z' sorts after the digits); without the 'Z' a shorter
-// fraction is a prefix of the longer one and sorts first, which matches time
-// order for every stored value.
-func scimTimestampOrder(column string) string {
-	return "REPLACE(" + column + ",'Z','')"
 }
 
 // scimExactEquals compares column with a bound value byte for byte: externalId is case-exact in SCIM, and MySQL's
@@ -503,7 +494,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 		return SCIMUser{}, ErrSCIMUniqueness
 	}
 	now := time.Now().UTC()
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := formatStoredTime(now)
 	claims := scimClaimsJSON(input, defaulted)
 	// The account is a SCIM user deleted earlier (restored), an existing
 	// account with the same email (linked), or new.
@@ -612,7 +603,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 // control. An invitation still open for the email is kept (nil is returned,
 // its token is not recoverable).
 func (s *SQLiteStore) inviteSCIMLinkedAccount(ctx context.Context, workspaceID, userID string, input SCIMUserInput, now time.Time) (*domain.Invitation, error) {
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := formatStoredTime(now)
 	var open int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_invitations WHERE workspace_id=? AND lower(email)=? AND status='pending' AND expires_at>?`, workspaceID, strings.ToLower(input.Email), stamp).Scan(&open); err != nil {
 		return nil, err
@@ -635,7 +626,7 @@ func (s *SQLiteStore) inviteSCIMLinkedAccount(ctx context.Context, workspaceID, 
 		return nil, err
 	}
 	item := domain.Invitation{ID: idgen.New("invite_"), WorkspaceID: workspaceID, Email: input.Email, Role: role, TeamIDs: []string{}, Status: "pending", InviterID: inviter, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now, Token: token}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, item.Email, item.Role, []byte("[]"), tokenHash(token), inviter, item.Status, item.ExpiresAt.Format(time.RFC3339Nano), stamp); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, item.Email, item.Role, []byte("[]"), tokenHash(token), inviter, item.Status, formatStoredTime(item.ExpiresAt), stamp); err != nil {
 		return nil, err
 	}
 	return &item, nil
@@ -692,7 +683,7 @@ func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID st
 	}
 	now := time.Now().UTC()
 	if !current.LinkedExisting {
-		if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, boolInt(input.Active), now.Format(time.RFC3339Nano), current.User.ID); err != nil {
+		if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, boolInt(input.Active), formatStoredTime(now), current.User.ID); err != nil {
 			return SCIMUser{}, err
 		}
 	}
@@ -734,7 +725,7 @@ func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID str
 	if err := s.refuseErasedMember(ctx, s.db, workspaceID, userID); err != nil {
 		return SCIMUser{}, err
 	}
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := formatStoredTime(now)
 	// Provisioning is not activity: last_seen_at stays unset (or as it was), so a provisioned member is not shown online.
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,NULL) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status`, workspaceID, userID, role, status, stamp); err != nil {
 		return SCIMUser{}, err
@@ -822,7 +813,7 @@ func (s *SQLiteStore) DeprovisionSCIMUser(ctx context.Context, workspaceID, id s
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -858,7 +849,7 @@ func nullableString(value string) any {
 
 func nullableTime(active bool, now time.Time) any {
 	if active {
-		return now.Format(time.RFC3339Nano)
+		return formatStoredTime(now)
 	}
 	return nil
 }
@@ -868,7 +859,7 @@ func (s *SQLiteStore) setSCIMUserRole(ctx context.Context, workspaceID, userID, 
 	if !validSCIMRole(role) {
 		return errors.New("invalid SCIM role")
 	}
-	stamp := at.UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(at)
 	result, err := s.db.ExecContext(ctx, `UPDATE scim_user_roles SET role=?,updated_at=? WHERE workspace_id=? AND user_id=?`, role, stamp, workspaceID, userID)
 	if err != nil {
 		return err
@@ -908,7 +899,7 @@ func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, external
 	}
 	now := time.Now().UTC()
 	id := idgen.New("scimg_")
-	_, err := s.db.ExecContext(ctx, `INSERT INTO scim_groups(id,workspace_id,external_id,display_name,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, id, workspaceID, externalID, displayName, role, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO scim_groups(id,workspace_id,external_id,display_name,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, id, workspaceID, externalID, displayName, role, formatStoredTime(now), formatStoredTime(now))
 	if err != nil {
 		return SCIMGroup{}, err
 	}
@@ -1027,7 +1018,7 @@ func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, exte
 		return SCIMGroup{}, err
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `UPDATE scim_groups SET external_id=?,display_name=?,role=?,updated_at=? WHERE workspace_id=? AND id=?`, group.ExternalID, group.DisplayName, group.Role, now.Format(time.RFC3339Nano), workspaceID, group.ID)
+	_, err = s.db.ExecContext(ctx, `UPDATE scim_groups SET external_id=?,display_name=?,role=?,updated_at=? WHERE workspace_id=? AND id=?`, group.ExternalID, group.DisplayName, group.Role, formatStoredTime(now), workspaceID, group.ID)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
@@ -1041,7 +1032,7 @@ func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, exte
 
 // ClearSCIMGroupExternalID removes a group's externalId (PATCH remove).
 func (s *SQLiteStore) ClearSCIMGroupExternalID(ctx context.Context, workspaceID, id string) (SCIMGroup, error) {
-	if _, err := s.db.ExecContext(ctx, `UPDATE scim_groups SET external_id='',updated_at=? WHERE workspace_id=? AND id=?`, time.Now().UTC().Format(time.RFC3339Nano), workspaceID, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE scim_groups SET external_id='',updated_at=? WHERE workspace_id=? AND id=?`, formatStoredTime(time.Now()), workspaceID, id); err != nil {
 		return SCIMGroup{}, err
 	}
 	return s.SCIMGroup(ctx, workspaceID, id)
@@ -1160,7 +1151,7 @@ func (s *SQLiteStore) applySCIMGroupMembers(ctx context.Context, workspaceID str
 		current[member.UserID] = true
 	}
 	affected := []string{}
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SCIMGroup{}, err
@@ -1252,7 +1243,7 @@ func (s *SQLiteStore) SyncSCIMGroupTeamChanges(ctx context.Context, workspaceID,
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

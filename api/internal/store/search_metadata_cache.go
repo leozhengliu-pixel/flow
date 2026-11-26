@@ -101,7 +101,7 @@ func (c searchMetadataCache) read(ctx context.Context, kind searchMetadataKind, 
 }
 
 func (stamp searchMetadataStamp) version(fields []string) string {
-	parts := []string{"2", strconv.FormatInt(stamp.epoch, 10), strconv.FormatInt(stamp.repair, 10)}
+	parts := []string{"3", strconv.FormatInt(stamp.epoch, 10), strconv.FormatInt(stamp.repair, 10)}
 	for _, field := range fields {
 		parts = append(parts, strconv.FormatInt(stamp.versions[field], 10))
 	}

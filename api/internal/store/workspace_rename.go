@@ -388,7 +388,7 @@ func (s *SQLiteStore) moveWorkspaceKeyRows(ctx context.Context, tx *sqlTx, plans
 		}
 	}
 	// Accounts that last opened the workspace open it under its new key.
-	if _, err := tx.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, newKey, time.Now().UTC().Format(time.RFC3339Nano), oldKey); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, newKey, formatStoredTime(time.Now()), oldKey); err != nil {
 		return moved, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE account_state SET last_workspace_key=? WHERE last_workspace_key=?`, newKey, oldKey); err != nil {
@@ -844,7 +844,7 @@ func recordWorkspaceRename(ctx context.Context, tx *sqlTx, workspaceID, oldKey, 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_key_renames WHERE workspace_id=? AND old_key=?`, workspaceID, newKey); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,old_key) DO UPDATE SET new_key=excluded.new_key,renamed_at=excluded.renamed_at`, workspaceID, oldKey, newKey, at.UTC().Format(time.RFC3339Nano))
+	_, err := tx.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,old_key) DO UPDATE SET new_key=excluded.new_key,renamed_at=excluded.renamed_at`, workspaceID, oldKey, newKey, formatStoredTime(at))
 	return err
 }
 

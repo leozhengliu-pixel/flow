@@ -19,7 +19,7 @@ func (s *SQLiteStore) RegisterOAuthClient(ctx context.Context, client domain.OAu
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_clients(client_id,data,created_at) VALUES(?,?,?)`, client.ClientID, raw, client.CreatedAt.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_clients(client_id,data,created_at) VALUES(?,?,?)`, client.ClientID, raw, formatStoredTime(client.CreatedAt))
 	return err
 }
 
@@ -341,7 +341,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationCode(ctx context.Context, code str
 		return err
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_codes(code_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(code), raw, grant.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_codes(code_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(code), raw, formatStoredTime(grant.ExpiresAt), formatStoredTime(now))
 	return err
 }
 
@@ -362,7 +362,7 @@ func (s *SQLiteStore) ConsumeOAuthAuthorizationCode(ctx context.Context, code st
 	if err != nil || used.Valid || time.Now().UTC().After(expiresAt) {
 		return domain.OAuthAuthorizationCode{}, ErrAuthForbidden
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), hash); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL`, formatStoredTime(time.Now()), hash); err != nil {
 		return domain.OAuthAuthorizationCode{}, err
 	}
 	var grant domain.OAuthAuthorizationCode
@@ -380,7 +380,7 @@ func (s *SQLiteStore) CreateOAuthRefreshToken(ctx context.Context, token string,
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(token), raw, grant.ExpiresAt.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(token), raw, formatStoredTime(grant.ExpiresAt), formatStoredTime(time.Now()))
 	return err
 }
 
@@ -401,7 +401,7 @@ func (s *SQLiteStore) ConsumeOAuthRefreshToken(ctx context.Context, token string
 	if err != nil || revoked.Valid || time.Now().UTC().After(expiresAt) {
 		return domain.OAuthRefreshGrant{}, ErrAuthForbidden
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), hash); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`, formatStoredTime(time.Now()), hash); err != nil {
 		return domain.OAuthRefreshGrant{}, err
 	}
 	var grant domain.OAuthRefreshGrant
@@ -415,7 +415,7 @@ func (s *SQLiteStore) ConsumeOAuthRefreshToken(ctx context.Context, token string
 }
 
 func (s *SQLiteStore) RevokeOAuthRefreshToken(ctx context.Context, token string) error {
-	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`, formatStoredTime(time.Now()), tokenHash(token)); err != nil {
 		return err
 	}
 	// A revoked token must not be replayable inside the rotation grace window.
@@ -430,7 +430,7 @@ func (s *SQLiteStore) RevokeOAuthRefreshToken(ctx context.Context, token string)
 	}
 	// The rest of the chain (a successor already issued from this token)
 	// belongs to the same grant and is revoked too.
-	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "familyId")+`=?`, time.Now().UTC().Format(time.RFC3339Nano), state.Grant.FamilyID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "familyId")+`=?`, formatStoredTime(time.Now()), state.Grant.FamilyID); err != nil {
 		return err
 	}
 	return s.revokeOAuthAccessFamily(ctx, state.Grant.WorkspaceKey, state.Grant.FamilyID)

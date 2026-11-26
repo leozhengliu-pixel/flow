@@ -45,7 +45,7 @@ func (s *SQLiteStore) IssueDocumentID(ctx context.Context, workspace, issueID st
 }
 
 func (s *SQLiteStore) AppendDocumentCollaborationUpdate(ctx context.Context, workspaceKey string, update DocumentCollaborationUpdate) (bool, error) {
-	result, err := s.db.ExecContext(ctx, `INSERT INTO document_collaboration_updates(update_id,workspace_key,document_id,client_id,update_data,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, update.ID, workspaceKey, update.DocumentID, update.ClientID, update.Data, update.CreatedAt.UTC().Format(time.RFC3339Nano))
+	result, err := s.db.ExecContext(ctx, `INSERT INTO document_collaboration_updates(update_id,workspace_key,document_id,client_id,update_data,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, update.ID, workspaceKey, update.DocumentID, update.ClientID, update.Data, formatStoredTime(update.CreatedAt))
 	if err != nil {
 		return false, err
 	}

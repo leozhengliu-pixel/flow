@@ -202,7 +202,7 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at) VALUES(?,?,?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING`, task.ID, workspace, resource, id, "pending", raw, task.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at) VALUES(?,?,?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING`, task.ID, workspace, resource, id, "pending", raw, formatStoredTime(task.CreatedAt)); err != nil {
 			return err
 		}
 	}
