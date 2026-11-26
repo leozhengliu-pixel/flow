@@ -111,7 +111,7 @@ func TestAgentSessionStateFilterUsesTaskStatus(t *testing.T) {
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM application_agent_tasks WHERE workspace_key=? AND merged_at<>''`, workspace).Scan(&merged); err != nil || merged != 1 {
 		t.Fatalf("merged sessions=%d err=%v", merged, err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT merged_at FROM application_agent_tasks WHERE id='task-merged'`).Scan(&mergedAt); err != nil || mergedAt != first.Format(time.RFC3339Nano) {
+	if err := s.db.QueryRowContext(ctx, `SELECT merged_at FROM application_agent_tasks WHERE id='task-merged'`).Scan(&mergedAt); err != nil || mergedAt != formatStoredTime(first) {
 		t.Fatalf("merged_at=%q err=%v (must keep the first merge)", mergedAt, err)
 	}
 	for _, test := range []struct {
