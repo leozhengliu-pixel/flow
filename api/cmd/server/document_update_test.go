@@ -743,8 +743,9 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 				expected = normalized
 			} else if testName == "peer-large-merge-limited" {
 				// The 64 MiB allowance must refuse the large stale document
-				// merge without leaving a partial write.
-				if response.Code != http.StatusInternalServerError || len(got.Events) != 0 || len(got.Realtime) != 0 ||
+				// merge without leaving a partial write. A refusal the idle
+				// budget could not fit either is 503 without Retry-After.
+				if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "" || len(got.Events) != 0 || len(got.Realtime) != 0 ||
 					len(got.Webhooks) != 0 || len(newAudits) != 0 || !bytes.Equal(beforeCanonical, canonicalRaw) {
 					t.Fatal("large stale document merge was not refused atomically", mode, response.Code, len(got.Events), len(newAudits))
 				}

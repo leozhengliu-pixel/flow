@@ -179,6 +179,10 @@ var nonMetadataTableBuilders = map[string]bool{
 	// The workspace purge deletes the rows of a workspace that already left
 	// the catalog, its cache revisions included, and drops its metadata cache.
 	"deleteWorkspaceRows": true,
+	// MySQL application capture reruns an already classified purge
+	// `DELETE … LIMIT` as a delete of the keys it locked; the statement it
+	// replaces is the one this scan checks.
+	"captureDeleteKeys": true,
 	// webhook_signing_secrets and audit_stream_secrets only.
 	"resealTextSecrets": true,
 	// A rename moves workspaceRenameTables, which leaves out the metadata

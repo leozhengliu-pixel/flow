@@ -218,8 +218,11 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 			// metadataPrepare is `server metadata-prepare`: its only caller
 			// is runMetadataPrepareCommand, which only main dispatches; it
 			// opens the database flag-off once and exits.
+			// recordJournalCaptureCommand is `server record-journal-capture`,
+			// reached only through runRecordJournalCaptureCommand from main.
 			case "sqlite.go:OpenSQLite", "sqlite.go:OpenSQLiteTestFixture", "audit_log.go:runAuditVerifyCommand",
-				"metadata_prepare.go:metadataPrepare", "metadata_prepare.go:runMetadataPrepareCommand":
+				"metadata_prepare.go:metadataPrepare", "metadata_prepare.go:runMetadataPrepareCommand",
+				"record_journal_capture.go:recordJournalCaptureCommand", "record_journal_capture.go:runRecordJournalCaptureCommand":
 				function := caller[strings.Index(caller, ":")+1:]
 				if !constructors[function] {
 					constructors[function], changed = true, true
