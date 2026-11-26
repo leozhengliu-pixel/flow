@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
-import type { ProjectStatus } from '@/types/flow'
+import type { IssueLabel, LabelGroup, ProjectStatus } from '@/types/flow'
+import { defaultSubLabelGroupId, labelGroupOptions } from '@/components/issue-explorer/issue-grouping'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY, filterProjectsByLeadTeam, type ProjectsDisplaySettings } from './projects-display-model'
 import { ClientStorage } from '@/lib/client-storage'
@@ -26,6 +27,16 @@ type ProjectsViewStateOptions = {
   relevanceViewer?: ProjectRelevanceViewer
   /** The team whose projects page this is; enables "Only show lead team projects". */
   leadTeamId?: string
+  /** Names for multi-valued groupings: project labels and their groups, teams and initiatives. */
+  groupingContext?: ProjectGroupingContext
+}
+
+/** What the label, label group, team, lead team and initiative groupings name their groups from. */
+export type ProjectGroupingContext = {
+  labels?: ReadonlyMap<string, Pick<IssueLabel, 'id' | 'name' | 'color' | 'groupId' | 'scope'>>
+  labelGroups?: readonly LabelGroup[]
+  teams?: ReadonlyMap<string, { id: string; name: string }>
+  initiatives?: ReadonlyMap<string, string>
 }
 
 const PRIORITY_GROUPS = [
@@ -66,7 +77,7 @@ function statusForProject(project: ProjectPageItem, projectStatuses: ProjectStat
     ?? projectStatuses.find(status => status.name === project.status && (!project.statusType || status.type === project.statusType))
 }
 
-export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault, relevanceViewer, leadTeamId }: ProjectsViewStateOptions = {}) {
+export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault, relevanceViewer, leadTeamId, groupingContext }: ProjectsViewStateOptions = {}) {
   const personalKey = `flow:projects:view:${storageKey}`
   const workspaceDefaultKey = `flow:projects:view-default:${storageKey}`
   const [state, setState] = useState<ProjectsViewState>(() => createInitialState(initial, personalKey, workspaceDefaultKey, workspaceDefault))
@@ -86,7 +97,7 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
 
   const statuses = useMemo(() => projectStatusesForLayout(projectStatuses, state.display.layout), [projectStatuses, state.display.layout])
   const displayedProjects = useMemo(() => filterProjectsByLeadTeam(projects, state.display, leadTeamId), [leadTeamId, projects, state.display])
-  const grouped = useMemo(() => groupProjectsForView(displayedProjects, state, statuses, relevanceViewer), [displayedProjects, relevanceViewer, state, statuses])
+  const grouped = useMemo(() => groupProjectsForView(displayedProjects, state, statuses, relevanceViewer, groupingContext), [displayedProjects, groupingContext, relevanceViewer, state, statuses])
 
   const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort' | 'timelineZoom' | 'onTimelineZoomChange'> = {
     groups: grouped,
@@ -152,11 +163,19 @@ function writeStoredDisplay(key: string, display: ProjectsDisplaySettings) {
   ClientStorage.set(key, cloneDisplay(display), 'local')
 }
 
-export function groupProjectsForView(projects: ProjectPageItem[], state: ProjectsViewState, projectStatuses: ProjectStatus[] = [], relevanceViewer?: ProjectRelevanceViewer): ProjectDataGroup[] {
+export function groupProjectsForView(projects: ProjectPageItem[], state: ProjectsViewState, projectStatuses: ProjectStatus[] = [], relevanceViewer?: ProjectRelevanceViewer, context: ProjectGroupingContext = {}): ProjectDataGroup[] {
   const visible = projects.filter(project => includeProject(project, state.display.showClosed, projectStatuses))
-  const primary = makeGroups(visible, state.display.grouping, state.display.showEmptyGroups, projectStatuses)
-  if (state.display.groupOrder === 'desc') primary.reverse()
-  const shouldSubgroup = state.display.subGrouping !== 'No grouping' && state.display.subGrouping !== state.display.grouping
+  const display = state.display
+  const choices = labelGroupOptions({ teams: [...(context.teams?.values() ?? [])], labelGroups: context.labelGroups }, 'project')
+  const primaryGroupId = display.labelGroupId ?? choices[0]?.id
+  const board = display.layout === 'board'
+  const primary = makeGroups(visible, display.grouping, display.showEmptyGroups, projectStatuses, { ...context, labelGroupId: primaryGroupId, noneFirst: board })
+  if (display.groupOrder === 'desc') primary.reverse()
+  const subLabelGroupId = display.subLabelGroupId ?? defaultSubLabelGroupId({ grouping: display.grouping === 'Label group' ? 'labelGroup' : display.grouping, labelGroupId: primaryGroupId }, choices)
+  // Two label-group levels are allowed when they bucket by different groups.
+  const sameLevel = display.subGrouping === display.grouping && !(display.grouping === 'Label group' && subLabelGroupId !== primaryGroupId)
+  const shouldSubgroup = display.subGrouping !== 'No grouping' && !sameLevel
+  const includeEmptyRows = board ? Boolean(display.showEmptyRows) : display.showEmptyGroups
 
   return primary.map(group => {
     const orderedProjects = orderProjects(group.projects, state.display.ordering, state.display.orderingDirection, projectStatuses, relevanceViewer)
@@ -164,7 +183,7 @@ export function groupProjectsForView(projects: ProjectPageItem[], state: Project
     return {
       ...group,
       projects: [],
-      subgroups: makeGroups(orderedProjects, state.display.subGrouping, state.display.showEmptyGroups, projectStatuses).map(subgroup => ({
+      subgroups: makeGroups(orderedProjects, display.subGrouping, includeEmptyRows, projectStatuses, { ...context, labelGroupId: subLabelGroupId }).map(subgroup => ({
         ...subgroup,
         projects: orderProjects(subgroup.projects, state.display.ordering, state.display.orderingDirection, projectStatuses, relevanceViewer),
       })),
@@ -181,18 +200,73 @@ function includeProject(project: ProjectPageItem, window: ProjectsDisplaySetting
   return Number.isFinite(updatedAt) && updatedAt >= Date.now() - days * 24 * 60 * 60 * 1000
 }
 
-function makeGroups(projects: ProjectPageItem[], grouping: string, includeEmpty: boolean, projectStatuses: ProjectStatus[]): ProjectDataGroup[] {
+type GroupingScope = ProjectGroupingContext & { labelGroupId?: string; noneFirst?: boolean }
+type GroupDescriptor = Omit<ProjectDataGroup, 'projects'>
+
+function makeGroups(projects: ProjectPageItem[], grouping: string, includeEmpty: boolean, projectStatuses: ProjectStatus[], scope: GroupingScope = {}): ProjectDataGroup[] {
   if (grouping === 'No grouping') return [{ id: 'all-projects', name: 'All projects', projects }]
   const buckets = new Map<string, ProjectDataGroup>()
   projects.forEach(project => {
-    const descriptor = descriptorFor(project, grouping, projectStatuses)
-    const group = buckets.get(descriptor.id) ?? { ...descriptor, projects: [] }
-    group.projects.push(project)
-    buckets.set(descriptor.id, group)
+    // Labels, label groups (multi-select), teams, initiatives and customers put a project in every group it has.
+    for (const descriptor of descriptorsFor(project, grouping, projectStatuses, scope)) {
+      const group = buckets.get(descriptor.id) ?? { ...descriptor, projects: [] }
+      group.projects.push(project)
+      buckets.set(descriptor.id, group)
+    }
   })
-  const defaults = includeEmpty ? emptyGroupsFor(projects, grouping, projectStatuses) : []
+  const defaults = includeEmpty ? emptyGroupsFor(projects, grouping, projectStatuses, scope) : []
   defaults.forEach(group => { if (!buckets.has(group.id)) buckets.set(group.id, group) })
   return [...buckets.values()].sort((left, right) => groupOrder(left, right, grouping, projectStatuses))
+}
+
+const STATUS_TYPE_NAMES: Record<string, string> = { backlog: 'Backlog', planned: 'Planned', started: 'Started', paused: 'Paused', completed: 'Completed', canceled: 'Canceled' }
+const NO_VALUE_COLOR = '#6b6b70'
+
+function noLabel(id: string, scope: GroupingScope): GroupDescriptor {
+  // Lists end with "No label"; board columns start with it.
+  return { id, name: 'No label', color: NO_VALUE_COLOR, rank: scope.noneFirst ? '' : '1' }
+}
+
+/** A project label's group: "Group › Label", ordered like issue labels (labels outside a group first, then by group name). */
+function labelDescriptor(labelId: string, scope: GroupingScope, prefix: string): GroupDescriptor | undefined {
+  const label = scope.labels?.get(labelId)
+  if (!label) return undefined
+  const group = label.groupId ? scope.labelGroups?.find(item => item.id === label.groupId) : undefined
+  const teamScoped = Boolean(label.scope) && label.scope!.toLowerCase() !== 'workspace'
+  return { id: `${prefix}-${label.id}`, name: label.name, color: label.color, labelPrefix: group?.name, rank: `0${teamScoped ? 0 : 1}${group ? 1 : 0}${(group?.name ?? '').toLocaleLowerCase()}\u0001${label.name.toLocaleLowerCase()}` }
+}
+
+function descriptorsFor(project: ProjectPageItem, grouping: string, projectStatuses: ProjectStatus[], scope: GroupingScope): GroupDescriptor[] {
+  if (grouping === 'Label') {
+    const groups = (project.labelIds ?? []).map(id => labelDescriptor(id, scope, 'label')).filter((group): group is GroupDescriptor => Boolean(group))
+    return groups.length ? groups : [noLabel('label-none', scope)]
+  }
+  if (grouping === 'Label group') {
+    // The design reference keeps the group's name before each label here too ("Stage › Alpha").
+    const groups = (project.labelIds ?? []).filter(id => scope.labelGroupId && scope.labels?.get(id)?.groupId === scope.labelGroupId).map(id => labelDescriptor(id, scope, 'labelgroup')).filter((group): group is GroupDescriptor => Boolean(group))
+    return groups.length ? groups : [noLabel('labelgroup-none', scope)]
+  }
+  if (grouping === 'Status type') {
+    const type = statusForProject(project, projectStatuses)?.type ?? project.statusType ?? 'backlog'
+    const status = projectStatuses.find(item => item.type === type)
+    return [{ id: `statustype-${type}`, name: STATUS_TYPE_NAMES[type] ?? type, color: status?.color ?? project.statusColor ?? NO_VALUE_COLOR }]
+  }
+  if (grouping === 'Customer') {
+    const customers = project.customers ?? []
+    return customers.length ? customers.map(customer => ({ id: `customer-${customer.id}`, name: customer.name, color: '#8e8e94' })) : [{ id: 'customer-none', name: 'No customer', color: NO_VALUE_COLOR }]
+  }
+  if (grouping === 'Lead team') {
+    const team = project.leadTeamId ? scope.teams?.get(project.leadTeamId) : undefined
+    return [team ? { id: `leadteam-${team.id}`, name: team.name, color: '#8e8e94' } : { id: 'leadteam-none', name: 'No lead team', color: NO_VALUE_COLOR }]
+  }
+  if (grouping === 'Team' && scope.teams && project.teamIds?.length) {
+    return project.teamIds.map(id => scope.teams!.get(id)).filter((team): team is { id: string; name: string } => Boolean(team)).map(team => ({ id: `team-${team.id}`, name: team.name, color: '#8e8e94' }))
+  }
+  if (grouping === 'Initiative') {
+    const ids = project.initiativeIds ?? []
+    return ids.length ? ids.map(id => ({ id: `initiative-${id}`, name: scope.initiatives?.get(id) ?? 'Initiative', color: '#8e8e94' })) : [{ id: 'initiative-none', name: 'No initiative', color: NO_VALUE_COLOR }]
+  }
+  return [descriptorFor(project, grouping, projectStatuses)]
 }
 
 function descriptorFor(project: ProjectPageItem, grouping: string, projectStatuses: ProjectStatus[]): Omit<ProjectDataGroup, 'projects'> {
@@ -210,15 +284,18 @@ function descriptorFor(project: ProjectPageItem, grouping: string, projectStatus
   }
   if (grouping === 'Lead') return project.lead ? { id: `lead-${project.lead.id}`, name: project.lead.name, color: '#8e8e94' } : { id: 'lead-none', name: 'No lead', color: '#6b6b70' }
   if (grouping === 'Member') return project.lead ? { id: `member-${project.lead.id}`, name: project.lead.name, color: '#8e8e94' } : { id: 'member-none', name: 'No members', color: '#6b6b70' }
-  if (grouping === 'Initiative') return { id: 'initiative-none', name: 'No initiative', color: '#6b6b70' }
-  if (grouping === 'Label') return { id: 'label-none', name: 'No labels', color: '#6b6b70' }
   if (grouping === 'Start date') return { id: `start-${project.startDate ?? 'none'}`, name: project.startDate ?? 'No start date', color: '#8e8e94' }
   if (grouping === 'Target date') return { id: `target-${project.targetDate ?? 'none'}`, name: project.targetDate ?? 'No target date', color: '#8e8e94' }
   if (grouping === 'Team') return project.team ? { id: `team-${project.team.id}`, name: project.team.name, color: '#8e8e94' } : { id: 'team-none', name: 'No team', color: '#6b6b70' }
   return { id: 'all-projects', name: 'All projects' }
 }
 
-function emptyGroupsFor(projects: ProjectPageItem[], grouping: string, projectStatuses: ProjectStatus[]): ProjectDataGroup[] {
+function emptyGroupsFor(projects: ProjectPageItem[], grouping: string, projectStatuses: ProjectStatus[], scope: GroupingScope = {}): ProjectDataGroup[] {
+  if (grouping === 'Label' || grouping === 'Label group') {
+    const ids = [...(scope.labels?.values() ?? [])].filter(label => grouping === 'Label' || (scope.labelGroupId && label.groupId === scope.labelGroupId)).map(label => label.id)
+    return ids.map(id => labelDescriptor(id, scope, grouping === 'Label' ? 'label' : 'labelgroup')).filter((group): group is GroupDescriptor => Boolean(group)).map(group => ({ ...group, projects: [] }))
+  }
+  if (grouping === 'Status type') return [...new Set(projectStatuses.map(status => status.type))].map(type => ({ id: `statustype-${type}`, name: STATUS_TYPE_NAMES[type] ?? type, color: projectStatuses.find(status => status.type === type)?.color, projects: [] }))
   if (grouping === 'Status') return projectStatuses.map(status => ({ id: `status-${status.id}`, name: status.name, color: status.color, projects: [] }))
   if (grouping === 'Priority') return PRIORITY_GROUPS.map(group => ({ ...group, projects: [] }))
   if (grouping === 'Health') return HEALTH_GROUPS.map(group => ({ ...group, projects: [] }))
@@ -229,6 +306,8 @@ function emptyGroupsFor(projects: ProjectPageItem[], grouping: string, projectSt
 }
 
 function groupOrder(left: ProjectDataGroup, right: ProjectDataGroup, grouping: string, projectStatuses: ProjectStatus[]) {
+  if (left.rank !== undefined || right.rank !== undefined) return (left.rank ?? '').localeCompare(right.rank ?? '')
+  if (grouping === 'Status type') return BOARD_STATUS_TYPE_ORDER.indexOf(left.id.slice(11)) - BOARD_STATUS_TYPE_ORDER.indexOf(right.id.slice(11))
   const order = grouping === 'Status' ? projectStatuses.map(status => `status-${status.id}`) : grouping === 'Priority' ? PRIORITY_GROUPS.map(group => group.name) : grouping === 'Health' ? HEALTH_GROUPS.map(group => group.name) : []
   const leftIndex = order.indexOf(grouping === 'Status' ? left.id : left.name)
   const rightIndex = order.indexOf(grouping === 'Status' ? right.id : right.name)

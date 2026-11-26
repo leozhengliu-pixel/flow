@@ -69,6 +69,8 @@ export type ProjectTimelineProps = {
   /** Desktop only: the property buttons (health, status, priority, lead) shown after each project's name. */
   renderCells?: (project: ProjectPageItem) => ReactNode
   renderGroupIcon?: (group: ProjectDataGroup) => ReactNode
+  /** A group's title (a label's "Group › Label", translated generated names); its plain name otherwise. */
+  renderGroupName?: (group: ProjectDataGroup) => ReactNode
   groupCount?: (group: ProjectDataGroup) => number
   /** Injectable for tests. */
   today?: Date
@@ -85,7 +87,7 @@ type Row =
   | { kind: 'group'; key: string; y: number; group: ProjectDataGroup }
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan; milestones: TimelineDatedMilestone[] }
 
-export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
+export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, renderGroupName, groupCount, today: todayProp }: ProjectTimelineProps) {
   const globalDates = useContext(ScaleP19TimelineContext)
   const desktop = useDesktopSettings()
   const { t, locale } = useI18n()
@@ -445,7 +447,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
             <div aria-hidden="true" className="lp-project-timeline__grid" style={{ width: range.width }}>{gridLines.map(segment => <i data-emphasis={segment.emphasis || undefined} key={segment.key} style={{ left: segment.x }}/>)}</div>
             {visibleRows.map(row => row.kind === 'group'
               ? <div className="lp-project-timeline__group" key={row.key} style={{ top: row.y, height: GROUP_HEIGHT }}>
-                <h2>{renderGroupIcon?.(row.group)}<span data-i18n-ignore>{row.group.name}</span><small>{groupCount ? groupCount(row.group) : row.group.projects.length}</small></h2>
+                <h2>{renderGroupIcon?.(row.group)}{renderGroupName ? <span className="lp-project-timeline__group-name">{renderGroupName(row.group)}</span> : <span data-i18n-ignore>{row.group.name}</span>}<small>{groupCount ? groupCount(row.group) : row.group.projects.length}</small></h2>
               </div>
               : <TimelineProjectRow
                 axis={axis}

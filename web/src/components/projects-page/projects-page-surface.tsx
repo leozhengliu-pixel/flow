@@ -1,4 +1,5 @@
 import { FilterGlyph } from '@/components/issue/filter-glyph'
+import type { LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
 import type { MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
 import { ProjectCustomerFilterValues } from './project-customer-filter'
@@ -66,6 +67,8 @@ export type ProjectsPageSurfaceProps = {
   /** The reference app's Customers blocks for the Customers filter sub-menu. */
   customerFilterOptions?: MyIssuesFilterOption[]
   displayLabelGroups?: Array<{ id: string; name: string }>
+  /** The project label groups the "Label group" grouping offers, with their headings. */
+  groupingLabelGroups?: LabelGroupOption[]
   sidebarOpen?: boolean
   views: ProjectsView[]
   onAddFilter?: (filter: string, option?: ProjectFilterOption) => void
@@ -109,6 +112,7 @@ export function ProjectsPageSurface({
   onFilterOpenChange,
   customerFilterOptions = [],
   displayLabelGroups = [],
+  groupingLabelGroups = [],
   sidebarOpen = true,
   views,
   onAddFilter,
@@ -177,6 +181,7 @@ export function ProjectsPageSurface({
     {openSurface?.origin === origin && openSurface.kind === 'display' && <ProjectsDisplayMenu
       defaultSettings={displayDefault ?? DEFAULT_PROJECTS_DISPLAY}
       labelGroups={displayLabelGroups}
+      groupingLabelGroups={groupingLabelGroups}
       onChange={updateSettings}
       onReset={() => {
         if (onResetDisplay) onResetDisplay()

@@ -1910,3 +1910,8 @@
 .lp-project-row__customers { min-width: 0; overflow: hidden; }
 .lp-project-row__revenue, .lp-project-table__revenue-header { justify-content: flex-end; }
 .lp-project-table__revenue-unit { white-space: pre; }
+/* A label in a label group heads its group "Group › Label": the group name muted, then a 5px chevron. */
+.lp-project-group__prefix { color: var(--theme-text-secondary); font-size: 13px; font-weight: 450; white-space: nowrap; }
+.lp-project-group__path-chevron { flex: 0 0 5px; color: var(--theme-text-tertiary); }
+.lp-project-group__title:has(.lp-project-group__prefix), .lp-project-board__heading:has(.lp-project-group__prefix) { gap: 8px; }
+.lp-project-timeline__group-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }

@@ -4,12 +4,18 @@ import type { TimelineZoom } from './project-timeline-model'
 export type ProjectsDisplaySettings = {
   layout: 'list' | 'board' | 'timeline'
   grouping: string
+  /** The project label group the "Label group" grouping buckets by (the first group when unset). */
+  labelGroupId?: string
   groupOrder: 'asc' | 'desc'
   subGrouping: string
+  /** The label group of a "Label group" sub-grouping; never the grouping's own group. */
+  subLabelGroupId?: string
   ordering: string
   orderingDirection: 'asc' | 'desc'
   showClosed: string
   showEmptyGroups: boolean
+  /** Board rows without projects (lists use `showEmptyGroups` for both levels). */
+  showEmptyRows?: boolean
   /** Team projects pages only: keep projects whose lead team is the page's team (the reference app's "Only show lead team projects"). */
   onlyLeadTeamProjects?: boolean
   properties: string[]
@@ -71,6 +77,9 @@ export function projectsDisplayEqual(left: ProjectsDisplaySettings, right: Proje
     || left.orderingDirection !== right.orderingDirection
     || left.showClosed !== right.showClosed
     || left.showEmptyGroups !== right.showEmptyGroups
+    || Boolean(left.showEmptyRows) !== Boolean(right.showEmptyRows)
+    || (left.labelGroupId ?? '') !== (right.labelGroupId ?? '')
+    || (left.subLabelGroupId ?? '') !== (right.subLabelGroupId ?? '')
     || Boolean(left.onlyLeadTeamProjects) !== Boolean(right.onlyLeadTeamProjects)) return false
   const properties = new Set(left.properties)
   return properties.size === new Set(right.properties).size && right.properties.every(property => properties.has(property))

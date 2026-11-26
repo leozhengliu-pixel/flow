@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { chooseLabelGroup, defaultSubLabelGroupId, type LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
 import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List, Plus } from 'lucide-react'
 import { usePropertyCommand, type PropertyCommandOption } from '@/components/property/use-property-command'
 import { CheckIcon } from './projects-page-icons'
@@ -6,8 +7,8 @@ import { DEFAULT_PROJECTS_DISPLAY, projectDisplayProperties, projectLabelGroupPr
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { Toggle } from '@/components/ui/toggle'
 
-type DisplayField = 'grouping' | 'subGrouping' | 'ordering' | 'showClosed'
-type DisplayOption = PropertyCommandOption & { id: string }
+type DisplayField = 'grouping' | 'subGrouping' | 'ordering' | 'showClosed' | 'labelGroup' | 'subLabelGroup'
+type DisplayOption = PropertyCommandOption & { id: string; heading?: string; translatableHeading?: boolean }
 
 const GROUPING_OPTIONS: DisplayOption[] = [
   { id: 'No grouping', label: 'No grouping' },
@@ -15,15 +16,19 @@ const GROUPING_OPTIONS: DisplayOption[] = [
   { id: 'Lead', label: 'Lead' },
   { id: 'Member', label: 'Member' },
   { id: 'Status', label: 'Status' },
+  { id: 'Status type', label: 'Status type' },
   { id: 'Priority', label: 'Priority' },
   { id: 'Label', label: 'Label' },
+  { id: 'Label group', label: 'Label group' },
+  { id: 'Customer', label: 'Customer' },
+  { id: 'Lead team', label: 'Lead team' },
   { id: 'Team', label: 'Team' },
   { id: 'Health', label: 'Health' },
   { id: 'Start date', label: 'Start date' },
   { id: 'Target date', label: 'Target date' },
 ]
 
-const SELECT_OPTIONS: Record<DisplayField, DisplayOption[]> = {
+const SELECT_OPTIONS: Record<Exclude<DisplayField, 'labelGroup' | 'subLabelGroup'>, DisplayOption[]> = {
   grouping: GROUPING_OPTIONS,
   subGrouping: GROUPING_OPTIONS,
   ordering: [
@@ -59,10 +64,12 @@ const LAYOUTS = [
 
 const ALL_PROJECT_DISPLAY_PROPERTIES = projectDisplayProperties()
 
-export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY, labelGroups = [], onChange, onReset, onSetDefault, properties = ALL_PROJECT_DISPLAY_PROPERTIES, rootRef, settings, teamScoped = false }: {
+export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY, labelGroups = [], groupingLabelGroups = [], onChange, onReset, onSetDefault, properties = ALL_PROJECT_DISPLAY_PROPERTIES, rootRef, settings, teamScoped = false }: {
   /** The settings Reset returns to; the footer only appears once the current settings differ from it. */
   defaultSettings?: ProjectsDisplaySettings
   labelGroups?: Array<{ id: string; name: string }>
+  /** Project label groups the "Label group" grouping offers, under "Workspace" and team headings; the grouping is hidden without any. */
+  groupingLabelGroups?: LabelGroupOption[]
   onChange: (settings: ProjectsDisplaySettings) => void
   onReset?: () => void
   onSetDefault?: () => void
@@ -80,6 +87,22 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
     ? settings.properties.filter(item => item !== property)
     : [...settings.properties, property])
   const grouped = settings.grouping !== 'No grouping'
+  const board = settings.layout === 'board'
+  // Customer needs the customer requests feature (its display properties are offered only then).
+  const groupingOptions = GROUPING_OPTIONS.filter(option => (option.id !== 'Label group' || groupingLabelGroups.length > 0) && (option.id !== 'Customer' || properties.includes('Customers')))
+  const labelGroupChoices: DisplayOption[] = groupingLabelGroups.map(group => ({ id: group.id, label: group.name, heading: group.heading, translatableHeading: group.translatableHeading }))
+  const labelGroupName = (id?: string) => groupingLabelGroups.find(group => group.id === id)?.name ?? ''
+  // Display values use the menu's grouping names; the label-group helpers use the issue grouping ids.
+  const asIssueGrouping = <T extends { grouping: string; subGrouping: string }>(value: T) => ({ ...value, grouping: value.grouping === 'Label group' ? 'labelGroup' : value.grouping, subGrouping: value.subGrouping === 'Label group' ? 'labelGroup' : value.subGrouping })
+  const primaryLabelGroupId = settings.labelGroupId ?? groupingLabelGroups[0]?.id
+  const subLabelGroupId = settings.subLabelGroupId ?? defaultSubLabelGroupId(asIssueGrouping(settings), groupingLabelGroups)
+  const chooseGroup = (level: 'grouping' | 'subGrouping', id: string) => { const next = chooseLabelGroup(asIssueGrouping(settings), level, id, groupingLabelGroups); onChange({ ...settings, labelGroupId: next.labelGroupId, subLabelGroupId: next.subLabelGroupId }) }
+  const changeGrouping = (grouping: string) => onChange({ ...settings, grouping, ...(grouping === 'Label group' && !settings.labelGroupId ? { labelGroupId: groupingLabelGroups[0]?.id } : {}) })
+  const changeSubGrouping = (subGrouping: string) => {
+    // Picking the grouping's own value swaps the two levels (label groups instead pick a second group).
+    if (subGrouping !== 'No grouping' && subGrouping === settings.grouping && subGrouping !== 'Label group') { onChange({ ...settings, grouping: settings.subGrouping === 'No grouping' ? subGrouping : settings.subGrouping, subGrouping: settings.subGrouping === 'No grouping' ? 'No grouping' : subGrouping }); return }
+    onChange({ ...settings, subGrouping, ...(subGrouping === 'Label group' && !settings.subLabelGroupId ? { subLabelGroupId: defaultSubLabelGroupId(asIssueGrouping(settings), groupingLabelGroups) } : {}) })
+  }
   const modified = !projectsDisplayEqual(settings, defaultSettings)
   const selectProps = (field: DisplayField) => ({ field, onOpenChange: (open: boolean) => setOpenField(open ? field : null), open: openField === field })
 
@@ -96,8 +119,10 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
     </div>
 
     <div className="lp-projects-display__rows">
-      <ProjectDisplaySelect {...selectProps('grouping')} direction={grouped ? settings.groupOrder : undefined} label="Grouping" onChange={value => set('grouping', value)} onToggleDirection={() => set('groupOrder', settings.groupOrder === 'asc' ? 'desc' : 'asc')} value={settings.grouping} />
-      {grouped && <ProjectDisplaySelect {...selectProps('subGrouping')} label="Sub-grouping" onChange={value => set('subGrouping', value)} value={settings.subGrouping} />}
+      <ProjectDisplaySelect {...selectProps('grouping')} direction={grouped ? settings.groupOrder : undefined} label={board ? 'Columns' : 'Grouping'} onChange={changeGrouping} onToggleDirection={() => set('groupOrder', settings.groupOrder === 'asc' ? 'desc' : 'asc')} options={groupingOptions} value={settings.grouping} />
+      {settings.grouping === 'Label group' && primaryLabelGroupId && <ProjectDisplaySelect {...selectProps('labelGroup')} label="Label group" onChange={id => chooseGroup('grouping', id)} options={labelGroupChoices} value={primaryLabelGroupId} valueLabel={labelGroupName(primaryLabelGroupId)} />}
+      {grouped && <ProjectDisplaySelect {...selectProps('subGrouping')} label={board ? 'Rows' : 'Sub-grouping'} onChange={changeSubGrouping} options={groupingOptions} value={settings.subGrouping} />}
+      {grouped && settings.subGrouping === 'Label group' && subLabelGroupId && <ProjectDisplaySelect {...selectProps('subLabelGroup')} label="Label group" onChange={id => chooseGroup('subGrouping', id)} options={labelGroupChoices} value={subLabelGroupId} valueLabel={labelGroupName(subLabelGroupId)} />}
       <ProjectDisplaySelect {...selectProps('ordering')} direction={settings.ordering !== 'Manual' ? settings.orderingDirection : undefined} label="Ordering" onChange={value => set('ordering', value)} onToggleDirection={() => set('orderingDirection', settings.orderingDirection === 'asc' ? 'desc' : 'asc')} value={settings.ordering} />
     </div>
     <div className="lp-projects-display__separator" role="separator" />
@@ -113,8 +138,12 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
     {(settings.layout === 'list' || settings.layout === 'board') && <section className="lp-projects-display__options">
       <h2>{settings.layout === 'board' ? 'Board options' : 'List options'}</h2>
       {grouped && <div className="lp-projects-display__row">
-        <span>Show empty groups</span>
-        <Toggle checked={settings.showEmptyGroups} label="Show empty groups" onChange={showEmptyGroups => set('showEmptyGroups', showEmptyGroups)}/>
+        <span>{board ? 'Show empty columns' : 'Show empty groups'}</span>
+        <Toggle checked={settings.showEmptyGroups} label={board ? 'Show empty columns' : 'Show empty groups'} onChange={showEmptyGroups => set('showEmptyGroups', showEmptyGroups)}/>
+      </div>}
+      {grouped && board && settings.subGrouping !== 'No grouping' && <div className="lp-projects-display__row">
+        <span>Show empty rows</span>
+        <Toggle checked={Boolean(settings.showEmptyRows)} label="Show empty rows" onChange={showEmptyRows => set('showEmptyRows', showEmptyRows)}/>
       </div>}
     </section>}
 
@@ -153,7 +182,7 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
   </div>
 }
 
-function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange, onToggleDirection, open, value }: {
+function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange, onToggleDirection, open, options, value, valueLabel }: {
   direction?: 'asc' | 'desc'
   field: DisplayField
   label: string
@@ -161,7 +190,11 @@ function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange,
   onOpenChange: (open: boolean) => void
   onToggleDirection?: () => void
   open: boolean
+  /** Choices when they are not the field's fixed list (grouping availability, label groups). */
+  options?: DisplayOption[]
   value: string
+  /** The trigger's text when the value is an id (a label group). */
+  valueLabel?: string
 }) {
   const listboxId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -171,7 +204,7 @@ function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange,
     onOpenChange,
     onSelect: option => onChange(option.id),
     open,
-    options: SELECT_OPTIONS[field],
+    options: options ?? SELECT_OPTIONS[field as keyof typeof SELECT_OPTIONS],
     selectedIds: [value],
   })
 
@@ -208,10 +241,10 @@ function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange,
         role="combobox"
         ref={triggerRef}
         type="button"
-      ><span>{value}</span><ChevronDown aria-hidden="true" size={12} /></button>
+      ><span data-i18n-ignore={valueLabel ? true : undefined}>{valueLabel ?? value}</span><ChevronDown aria-hidden="true" size={12} /></button>
     </div>
     {open && <div aria-label={`Choose ${label}`} className="lp-projects-display-select__menu" onKeyDown={command.onKeyDown} ref={optionsRef} role="listbox">
-      {command.filteredOptions.map(option => <button
+      {command.filteredOptions.map((option, index, list) => <Fragment key={option.id}>{option.heading !== undefined && option.heading !== list[index - 1]?.heading && <div className="lp-projects-display-select__heading" data-i18n-ignore={option.translatableHeading ? undefined : true} role="presentation">{option.heading}</div>}<button
         aria-selected={command.isSelected(option.id)}
         className={command.activeId === option.id ? 'is-active' : ''}
         id={`${listboxId}-${option.id}`}
@@ -220,7 +253,7 @@ function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange,
         onMouseMove={() => command.setActiveId(option.id)}
         role="option"
         type="button"
-      ><span>{option.label}</span>{command.isSelected(option.id) && <CheckIcon />}</button>)}
+      ><span data-i18n-ignore={option.heading !== undefined ? true : undefined}>{option.label}</span>{command.isSelected(option.id) && <CheckIcon />}</button></Fragment>)}
     </div>}
   </div>
 }
