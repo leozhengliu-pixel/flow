@@ -91,6 +91,12 @@ func renameFixture(t *testing.T) (*SQLiteStore, *memoryObjects, domain.AgentSess
 // body, a credential, a developer token and an OAuth grant, and checks that
 // all of it is found under the new key and nothing is left under the old.
 func TestWorkspaceRenameMovesEveryKeyedRowAndObject(t *testing.T) {
+	// The synthetic rows below bypass the writers and the record journal, so
+	// this test keeps the flags-off store it always ran with; renames with the
+	// journal on are covered by the journal rename tests.
+	for _, flag := range []string{"FLOW_BOUNDED_METADATA", "FLOW_RECORD_HYDRATION", "FLOW_RECORD_JOURNAL", "FLOW_SYNC_V2"} {
+		t.Setenv(flag, "off")
+	}
 	ctx := context.Background()
 	repo, objects, session, reply := renameFixture(t)
 	const oldKey, newKey, otherKey = "test-workspace", "renamed-workspace", "rename-other"
