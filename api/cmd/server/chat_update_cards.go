@@ -170,14 +170,14 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 		}
 		return ""
 	case "bulletList", "orderedList", "taskList":
-		start := 1
+		start := int64(1)
 		if attrs, _ := node["attrs"].(map[string]any); attrs != nil {
 			if value, ok := attrs["start"].(float64); ok {
 				if parsed, valid := chatOrderedListStart(value); valid {
 					start = parsed
 				}
 			} else if value, ok := attrs["start"].(int); ok && value >= 1 {
-				start = value
+				start = int64(value)
 			}
 		}
 		lines := []string{}
@@ -186,7 +186,7 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 			marker := "- "
 			switch kind {
 			case "orderedList":
-				marker = strconv.Itoa(start+index) + ". "
+				marker = strconv.FormatInt(start+int64(index), 10) + ". "
 			case "taskList":
 				marker = "- ☐ "
 				if attrs, _ := item["attrs"].(map[string]any); attrs != nil && attrs["checked"] == true {
@@ -265,13 +265,13 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 	return ""
 }
 
-func chatOrderedListStart(value float64) (int, bool) {
+func chatOrderedListStart(value float64) (int64, bool) {
 	// A list starts at 1 or later; anything past the 32-bit range falls back
-	// to the default numbering, so the conversion fits int on every platform.
+	// to the default numbering. Numbering stays int64 so no value is narrowed.
 	if value < 1 || value > math.MaxInt32 || math.IsInf(value, 0) || value != math.Trunc(value) {
 		return 0, false
 	}
-	return int(value), true
+	return int64(value), true
 }
 
 func (c chatMarkdownContext) inline(nodes []any) string {
