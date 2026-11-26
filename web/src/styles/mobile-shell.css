@@ -27,7 +27,7 @@
   /* The reference phone shell has no fixed Agent/history footer bar. */
   html:root body .bottom-agent { display: none; }
   html:root body:has(.command-dialog) [data-my-issues-bulk-bar] { display: none; }
-  .phone-create-issue { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
+  .phone-create-issue { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
   .phone-create-issue:hover { background: var(--theme-surface-hover); }
   .phone-create-issue:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); }
   :root { --phone-menu-top: min(110px, 13.04dvh); }
