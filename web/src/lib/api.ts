@@ -505,7 +505,11 @@ export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: Abo
   return request(`/api/projects${params.size ? `?${params}` : ''}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 
-export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {
+/** `aggregate: 'estimatePoints'` adds each group's estimate point total (left out for a group without issues of a team that uses estimates). */
+export type IssueRecordGroupsInput = IssueQueryInput & { aggregate?: 'estimatePoints' }
+export type IssueRecordGroup = { value: string; count: number; estimatePoints?: number }
+
+export function listIssueRecordGroups(filters: IssueRecordGroupsInput, signal?: AbortSignal): Promise<{ groups: IssueRecordGroup[] }> {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || key === 'cursor' || key === 'groupValue' || key === 'groupValues') continue

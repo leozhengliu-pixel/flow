@@ -68,7 +68,8 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   useEffect(() => { trimPagedIssueListCache() }, [revision, groups])
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(() => cachedState.groups.length === 0)
-  const boardPoints = useBoardEstimateTotals(rowProps.displayProperties?.has('estimate') ? query : undefined, groups, data, retry)
+  // One aggregate request: list headers always show point totals, boards with the Estimate property.
+  const boardPoints = useBoardEstimateTotals(layout === 'list' || rowProps.displayProperties?.has('estimate') ? query : undefined, groups, data, retry)
   const updateGroups = useCallback((next: Group[] | ((current: Group[]) => Group[])) => {
     setGroups(current => {
       const value = typeof next === 'function' ? next(current) : next
