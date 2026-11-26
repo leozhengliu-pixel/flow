@@ -1,14 +1,9 @@
 /* Projects › Timeline layout. Colours come from --project-timeline-* tokens in styles/tokens.css. */
 .lp-project-timeline { --timeline-label-width: 240px; color: var(--theme-text-primary); display: flex; flex: 1; flex-direction: column; min-height: 0; outline: 0; }
 .lp-project-timeline__toolbar { align-items: center; display: flex; gap: 8px; justify-content: flex-end; padding: 0 12px 8px; }
-.lp-project-timeline__zoom { border: .5px solid var(--theme-border-strong); border-radius: 6px; display: inline-flex; height: 28px; overflow: hidden; }
-.lp-project-timeline__zoom-option { background: transparent; border: 0; color: var(--theme-text-secondary); cursor: pointer; font-size: 12px; padding: 0 10px; }
-.lp-project-timeline__zoom-option + .lp-project-timeline__zoom-option { border-left: .5px solid var(--theme-border); }
-.lp-project-timeline__zoom-option:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.lp-project-timeline__zoom-option[aria-checked=true] { background: var(--theme-surface-2); color: var(--theme-text-primary); }
 .lp-project-timeline__today { background: var(--theme-surface-1); border: .5px solid var(--theme-border-strong); border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; font-size: 12px; height: 28px; padding: 0 10px; }
 .lp-project-timeline__today:hover { background: var(--theme-surface-hover); }
-.lp-project-timeline__zoom-option:focus-visible, .lp-project-timeline__today:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
+.lp-project-timeline__today:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 
 .lp-project-timeline__scroller { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; position: relative; }
 .lp-project-timeline__canvas { min-width: 100%; position: relative; }
