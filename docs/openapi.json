@@ -19137,6 +19137,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/link-icon": {
+      "get": {
+        "operationId": "get_link_icon",
+        "tags": [
+          "link-icon"
+        ],
+        "summary": "GET /api/link-icon",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "public_api_routes.go"
+      }
+    },
     "/api/loop-config": {
       "get": {
         "operationId": "get_loop_config",

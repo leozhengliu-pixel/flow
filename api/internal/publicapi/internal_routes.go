@@ -447,6 +447,8 @@ var InternalRoutes = []string{
 	"POST /api/labels",
 	"POST /api/labels/merge",
 	"POST /api/labels/{id}/move-to-teams",
+	// /api/link-icon
+	"GET /api/link-icon",
 	// /api/loop-config
 	"GET /api/loop-config",
 	// /api/loop-templates
