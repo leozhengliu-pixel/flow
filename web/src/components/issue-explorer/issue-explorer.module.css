@@ -104,7 +104,7 @@
   .tab,.savedTab{line-height:normal}
 }
 @media(--desktop-layout){
-  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) .headerNewIssue{box-sizing:border-box;justify-content:center;padding:0 2px;width:28px}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) .headerNewIssue{padding-right:10px}
   .filterBar [data-filter-chip]{padding:.5px;border:0;box-shadow:inset 0 0 0 .5px var(--theme-border-strong);font-weight:400;background:var(--project-toolbar-bg);color:var(--text)}
   .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{border:0;box-shadow:inset -.5px 0 0 var(--theme-border-strong)}
   .filterBar [data-filter-chip]>span:first-child{padding:0 6.5px 0 6px}
