@@ -1,9 +1,11 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +45,115 @@ func scaleP21CompleteWorkspaceCatalog(t *testing.T, f scaleP09Fixture, workspace
 				t.Fatalf("catalog %s did not complete", field)
 			}
 		}
+	}
+}
+
+// A flag-off replica can maintain catalog summaries without opening a
+// checkpoint. A flag-on writer with an older snapshot must count those
+// summaries when it publishes the first checkpoint.
+func TestRecordJournalMySQLCheckpointUsesCurrentOmissions(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_METADATA_CATALOG", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := captureMySQLFixture(t)
+	workspace, field := f.data.Workspace.URLKey, "emailIntakeMessages"
+	ctx := t.Context()
+	tx, err := f.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field=?`, workspace, field).Scan(&count); err != nil || count != 0 {
+		t.Fatal("expected an empty collection in the write snapshot", count, err)
+	}
+	const put = `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,0,?)`
+	if _, err := f.db.ExecContext(ctx, put, workspace, field, "legacy", []byte(`"opaque"`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, field); found {
+		t.Fatal("flag-off write opened a checkpoint")
+	}
+	f.db.boundedCatalog.Store(true)
+	if _, err := tx.ExecContext(ctx, put, workspace, field, "current", []byte(`"opaque"`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if phase, omissions, found := scaleP21CatalogCheckpoint(t, f, workspace, field); !found || phase != 2 || omissions != 2 {
+		t.Fatal("new checkpoint did not count both omissions", found, phase, omissions)
+	}
+}
+
+func TestRecordJournalMySQLBackfillLockOrder(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		checkpoint bool
+	}{
+		{"existing-checkpoint", true},
+		{"flag-off-writer", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			t.Setenv("FLOW_METADATA_CATALOG", "off")
+			t.Setenv("FLOW_RECORD_HYDRATION", "on")
+			t.Setenv("FLOW_RECORD_JOURNAL", "on")
+			f := captureMySQLFixture(t)
+			workspace, field := f.data.Workspace.URLKey, "emailIntakeMessages"
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			f.db.boundedCatalog.Store(test.checkpoint)
+			const put = `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data)
+				VALUES(?,?,'message',0,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`
+			if _, err := f.db.ExecContext(ctx, put, workspace, field, []byte(`{"id":"message","name":"before"}`)); err != nil {
+				t.Fatal(err)
+			}
+			if test.checkpoint {
+				if err := f.ResetMetadataCatalogBackfill(ctx, workspace, field); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, field); found != test.checkpoint {
+				t.Fatal("unexpected checkpoint state before backfill")
+			}
+
+			writer, err := f.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer writer.Rollback()
+			if _, err := writer.ExecContext(ctx, put, workspace, field, []byte(`{"id":"message","name":"after"}`)); err != nil {
+				t.Fatal(err)
+			}
+
+			seeding := make(chan struct{})
+			backfillDone := make(chan error, 1)
+			backfill := WithSQLStatementObserver(ctx, func(query string) {
+				if strings.HasPrefix(query, "INSERT INTO record_versions(") {
+					close(seeding)
+				}
+			})
+			go func() {
+				_, err := f.BackfillMetadataCatalog(backfill, workspace, field)
+				backfillDone <- err
+			}()
+			select {
+			case <-seeding:
+			case err := <-backfillDone:
+				t.Fatalf("backfill finished before seeding versions: %v", err)
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+
+			writerErr := writer.Commit()
+			backfillErr := <-backfillDone
+			if writerErr != nil || !errors.Is(backfillErr, ErrConcurrentWrite) {
+				t.Fatalf("writer must commit and backfill must discard its stale snapshot: writer=%v backfill=%v", writerErr, backfillErr)
+			}
+		})
 	}
 }
 

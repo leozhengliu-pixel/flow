@@ -222,6 +222,17 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 		// is not a transactional revision or proof of old-writer coverage.
 		after.revision, progress.Complete = metadataFingerprint([]byte(after.digest)), true
 	}
+	mysqlSeed := s.dialect == "mysql" && len(prepared) > 0 && journalDatabaseReady(read)
+	checkStamp := mysqlSeed && before.revision == "" && s.lifecycle != nil
+	var stamp copyStamp
+	if checkStamp {
+		// While the checkpoint is missing, even tracked flag-off writers
+		// can change these records without advancing its revision.
+		stamp, err = readMetadataStamp(ctx, read, workspace)
+		if err != nil {
+			return progress, err
+		}
+	}
 	if err := read.Rollback(); err != nil {
 		return progress, err
 	}
@@ -230,12 +241,25 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 		return progress, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO metadata_catalog_collections(workspace_key,field,last_record_key,started,phase,omissions,digest,revision) VALUES(?,?,?,0,0,0,'','') ON CONFLICT(workspace_key,field) DO NOTHING`, workspace, kind, ""); err != nil {
-		return progress, err
-	}
 	// Reserve the checkpoint (and SQLite's writer) only for bounded writes.
-	if _, err := tx.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=phase WHERE workspace_key=? AND field=?`, workspace, kind); err != nil {
-		return progress, err
+	if tx.dialect == "mysql" {
+		// INSERT ... SELECT locks canonical keys and record versions.
+		// Reserve them before the checkpoint, in live writer order.
+		if mysqlSeed {
+			if err := seedCatalogRecordVersions(ctx, tx, workspace, kind, prepared); err != nil {
+				return progress, err
+			}
+		}
+		if err := tx.claimMySQLCatalogCollection(ctx, catalogCollectionKey{workspace, kind}, 0, ""); err != nil {
+			return progress, err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO metadata_catalog_collections(workspace_key,field,last_record_key,started,phase,omissions,digest,revision) VALUES(?,?,?,0,0,0,'','') ON CONFLICT(workspace_key,field) DO NOTHING`, workspace, kind, ""); err != nil {
+			return progress, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE metadata_catalog_collections SET phase=phase WHERE workspace_key=? AND field=?`, workspace, kind); err != nil {
+			return progress, err
+		}
 	}
 	if s.lifecycle != nil {
 		// A purge removes the workspace catalog row before deleting owned
@@ -263,6 +287,20 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 	}
 	if current != before {
 		return MetadataCatalogProgress{}, ErrConcurrentWrite
+	}
+	if checkStamp {
+		currentStamp, err := readMetadataStamp(ctx, tx, workspace)
+		if err != nil {
+			return progress, err
+		}
+		if currentStamp != stamp {
+			return MetadataCatalogProgress{}, ErrConcurrentWrite
+		}
+	}
+	if tx.dialect != "mysql" && len(prepared) > 0 && journalDatabaseReady(tx) {
+		if err := seedCatalogRecordVersions(ctx, tx, workspace, kind, prepared); err != nil {
+			return progress, err
+		}
 	}
 	if err := writeMetadataCatalogBatch(ctx, tx, workspace, kind, prepared); err != nil {
 		return progress, err
@@ -301,8 +339,20 @@ func metadataCatalogValues(workspace string, row metadataCatalogRow) []any {
 	return []any{workspace, row.key.Kind, row.key.ID, row.order, row.version, row.bodyBytes, row.summary, omitted, row.created, row.updated, row.archived}
 }
 
-// Backfill owns the collection checkpoint and bounds the total batch bytes.
-// Group statements to avoid several network round trips for every record.
+func seedCatalogRecordVersions(ctx context.Context, tx *sqlTx, workspace, kind string, rows []metadataCatalogRow) error {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.key.ID)
+	}
+	clause, keys := bindList("record_key", ids)
+	_, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted)
+		SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+
+		` ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, append([]any{workspace, kind}, keys...)...)
+	return err
+}
+
+// The caller owns the collection checkpoint and bounds the total batch bytes.
+// Group statements, including the relations of a single record.
 func writeMetadataCatalogBatch(ctx context.Context, tx *sqlTx, workspace, kind string, rows []metadataCatalogRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -315,13 +365,6 @@ func writeMetadataCatalogBatch(ctx context.Context, tx *sqlTx, workspace, kind s
 	}
 	clause, keys := bindList("record_key", ids)
 	args := append([]any{workspace, kind}, keys...)
-	if journalDatabaseReady(tx) {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted)
-			SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+
-			` ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, args...); err != nil {
-			return err
-		}
-	}
 	tuples := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?,?,?,?,?,?,?),", len(rows)), ",")
 	if _, err := tx.ExecContext(ctx, metadataCatalogInsert+tuples+metadataCatalogUpsert, values...); err != nil {
 		return err
@@ -364,31 +407,7 @@ const metadataCatalogRelationInsert = `INSERT INTO metadata_catalog_relations(wo
 const metadataCatalogRelationConflict = ` ON CONFLICT(workspace_key,field,record_key,relation,value_hash) DO NOTHING`
 
 func writeMetadataCatalogRow(ctx context.Context, tx *sqlTx, workspace string, row metadataCatalogRow) error {
-	if journalDatabaseReady(tx) {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted) SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=? ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, workspace, row.key.Kind, row.key.ID); err != nil {
-			return err
-		}
-	}
-	_, err := tx.ExecContext(ctx, metadataCatalogInsert+`(?,?,?,?,?,?,?,?,?,?,?)`+metadataCatalogUpsert, metadataCatalogValues(workspace, row)...)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM metadata_catalog_relations WHERE workspace_key=? AND field=? AND record_key=?`, workspace, row.key.Kind, row.key.ID); err != nil {
-		return err
-	}
-	for relation, values := range metadataCatalogRelations(row.summary) {
-		seen := map[string]bool{}
-		for _, value := range values {
-			if seen[value] {
-				continue
-			}
-			seen[value] = true
-			if _, err := tx.ExecContext(ctx, metadataCatalogRelationInsert+`(?,?,?,?,?,?)`+metadataCatalogRelationConflict, workspace, row.key.Kind, row.key.ID, relation, metadataFingerprint([]byte(value)), value); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return writeMetadataCatalogBatch(ctx, tx, workspace, row.key.Kind, []metadataCatalogRow{row})
 }
 
 func metadataCatalogWriteBytes(workspace string, row metadataCatalogRow) int {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -128,6 +129,9 @@ func (s *SQLiteStore) metadataCollectionsInSnapshot(ctx context.Context, tx *sql
 }
 
 func (r *MetadataCollectionRead) rootSource() io.ReaderAt {
+	if r.rootBytes != nil {
+		return bytes.NewReader(r.rootBytes)
+	}
 	if r.snapshot != nil {
 		return r.snapshot.root
 	}

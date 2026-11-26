@@ -86,9 +86,10 @@ type coldPublishState struct {
 
 // coldPublishBase is the state the installed generation (source) is exact at.
 type coldPublishBase struct {
-	workspace string
-	source    *metadataLogicalSource
-	state     *coldPublishState
+	workspace    string
+	source       *metadataLogicalSource
+	state        *coldPublishState
+	projectLinks initiativeProjectLinks
 }
 
 func (b *coldPublishBase) release() {
@@ -188,16 +189,14 @@ var coldPublishFieldNames = sync.OnceValue(func() []string {
 	return names
 })
 
-// coldPublishBaseFields are the normalizer's base (newMetadataLogicalNormalizer),
-// always recovered. The base's normalization (normalizeStoredMetadata: every
-// collection's empty default) reads workspaceSettings only to normalize
-// workspaceSettings itself (normalize, normalizeParity), and a record's
-// normalization sees no settings: a change of it rebuilds that field alone.
+// coldPublishBaseFields are the normalizer's base (newMetadataLogicalNormalizer).
+// The base uses workspaceSettings only to normalize workspaceSettings itself,
+// so it needs the raw value only when that field is rebuilt.
 // The viewer is read only for
 // initiatives (normalize defaults an initiative's creator to it, and the
 // normalizer's index looks the viewer up among users), a dependency below;
 // workspace and viewerRole are read by no other field's normalization.
-var coldPublishBaseFields = []string{"workspace", "viewer", "viewerRole", "workspaceSettings"}
+var coldPublishBaseFields = []string{"workspace", "viewer", "viewerRole"}
 
 // coldPublishDependencies are the raw fields the normalizer's index reads for
 // a field's records (metadataLogicalNormalizer.record and missing). "projects"
@@ -536,11 +535,11 @@ func (s *SQLiteStore) readColdPublishState(ctx context.Context, tx *sqlTx, works
 	if err != nil {
 		return nil, err
 	}
-	return s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp)
+	return s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp, nil)
 }
 
 // readColdPublishStateWithStamp requires a stamp read for workspace in tx's snapshot.
-func (s *SQLiteStore) readColdPublishStateWithStamp(ctx context.Context, tx *sqlTx, workspace string, stamp copyStamp) (*coldPublishState, error) {
+func (s *SQLiteStore) readColdPublishStateWithStamp(ctx context.Context, tx *sqlTx, workspace string, stamp copyStamp, reuseRoot *[]byte) (*coldPublishState, error) {
 	state := &coldPublishState{stamp: stamp, records: map[string]map[string]coldPublishRecord{}, occurrences: map[string][]byte{}, manifest: map[string]string{}}
 	var enabled, capturing int
 	if err := tx.QueryRowContext(ctx, `SELECT enabled,capturing,generation FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing, &state.generation); err != nil {
@@ -563,6 +562,11 @@ func (s *SQLiteStore) readColdPublishStateWithStamp(ctx context.Context, tx *sql
 	}
 	if err := state.readRoot(root); err != nil {
 		return nil, coldPublishInexact("root: " + err.Error())
+	}
+	// Small roots fit the caller's parser lease alongside its read windows.
+	// Keep them only for the publication build in this same SQL snapshot.
+	if reuseRoot != nil && len(root) <= 256<<10 {
+		*reuseRoot = root
 	}
 	physical := "0"
 	if s.dialect == "sqlite" {
@@ -813,7 +817,8 @@ func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPubl
 	// The retained base is exact at before. The prepared source is exact at
 	// after, even when another writer installs a generation during this read.
 	installed := base.source
-	after, err := s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp)
+	var root []byte
+	after, err := s.readColdPublishStateWithStamp(ctx, tx, workspace, stamp, &root)
 	if err != nil {
 		return nil, err
 	}
@@ -828,12 +833,12 @@ func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPubl
 		return nil, coldPublishInexact("manifest presence changed")
 	}
 	changes := diffColdPublishStates(before, after)
-	plan, err := s.planColdPublish(ctx, tx, workspace, installed, before, after, changes)
+	plan, err := s.planColdPublish(ctx, tx, workspace, installed, before, after, changes, base.projectLinks)
 	if err != nil {
 		return nil, err
 	}
 	defer plan.close()
-	source, err := s.buildColdPublication(ctx, tx, workspace, installed, after, plan)
+	source, err := s.buildColdPublication(ctx, tx, workspace, installed, after, plan, root)
 	if err != nil {
 		return nil, err
 	}
@@ -852,7 +857,7 @@ func (s *SQLiteStore) prepareColdPublication(ctx context.Context, base *coldPubl
 		return nil, err
 	}
 	prepared.state, prepared.head, prepared.policy, prepared.cost = after, head, data, cost
-	plan.rows, plan.order, plan.before = nil, nil, nil
+	plan.rows, plan.order, plan.before, plan.shared = nil, nil, nil, nil
 	// Keep only the counts and timings needed for publication reporting.
 	for field := range plan.supplied {
 		plan.supplied[field] = reflect.Value{}
@@ -873,6 +878,7 @@ type coldPublishPlan struct {
 	// uses of every project).
 	part     map[string]bool
 	supplied map[string]reflect.Value
+	shared   map[string]metadataLogicalNode
 	// rows: the decoded changed rows of patched fields, by key.
 	rows map[string]map[string]reflect.Value
 	// order, before: the rows of patched fields in recovery order, after
@@ -882,7 +888,8 @@ type coldPublishPlan struct {
 	timings map[string]time.Duration
 	// keys: the rows each patched field normalizes (its changed rows, and
 	// the rows holding a changed user), sorted.
-	keys map[string][]string
+	keys         map[string][]string
+	projectLinks initiativeProjectLinks
 }
 
 // describeColdPublishChanges formats changed fields for the log:
@@ -924,15 +931,26 @@ func (p *coldPublishPlan) close() {}
 
 // planColdPublish decides each field's production. Fields whose inputs and
 // dependencies are unchanged keep their installed node.
-func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange) (*coldPublishPlan, error) {
+func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, before, after *coldPublishState, changes map[string]*coldPublishChange, links initiativeProjectLinks) (*coldPublishPlan, error) {
 	plan := &coldPublishPlan{changes: changes, rebuild: map[string]bool{}, patch: map[string]bool{}, part: map[string]bool{},
 		supplied: map[string]reflect.Value{}, rows: map[string]map[string]reflect.Value{}, order: map[string][]string{}, before: map[string][]string{},
 		timings: map[string]time.Duration{}, keys: map[string][]string{}}
 	labels := newColdLabelUses(s, workspace, after)
 	// A project change reaches labels and issues only through label counts:
 	// when every changed project uses the same labels as before, it does not.
-	countNeutral := false
-	if change := changes["projects"]; change != nil && !change.root && !change.manifest {
+	countNeutral := links.matches(changes["projects"], before, after)
+	if countNeutral {
+		labels.cache.mu.Lock()
+		if labels.cache.generation == after.generation && labels.cache.identity == after.stamp.workspaceID {
+			for key, link := range links {
+				labels.cache.uses[key] = coldLabelUse{version: after.records["projects"][key].version, project: link.labelUse}
+			}
+		}
+		labels.cache.mu.Unlock()
+		if changes["users"] == nil && changes["projectStatuses"] == nil && changes["issues"] == nil {
+			plan.projectLinks = links
+		}
+	} else if change := changes["projects"]; change != nil && !change.root && !change.manifest {
 		neutral, err := labels.unchanged(ctx, tx, installed, before, after, change.keys)
 		if err != nil {
 			return nil, err
@@ -1015,7 +1033,7 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 		} else if change := changes[name]; change != nil {
 			plan.keys[name] = change.keys
 		}
-		if s.coldPublishPatchable(name, installed, before, after, changes, ignore, len(plan.keys[name])) {
+		if name == "projects" && plan.projectLinks != nil || s.coldPublishPatchable(name, installed, before, after, changes, ignore, len(plan.keys[name])) {
 			plan.patch[name] = true
 			if viaUsers[name] {
 				coldPublishUserReaderPatches.Add(1)
@@ -1029,6 +1047,9 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 	}
 	needsLabelCounts := false
 	for name := range affected {
+		if name == "projects" && plan.projectLinks != nil {
+			continue
+		}
 		if plan.rebuild[name] {
 			plan.part[name] = true
 		}
@@ -1052,7 +1073,29 @@ func (s *SQLiteStore) planColdPublish(ctx context.Context, tx *sqlTx, workspace 
 			plan.supplied["projects"] = projects
 		}
 	}
+	// Core values and users are unchanged by normalization. The status
+	// index already applies the same color, ordinal and empty defaults as
+	// the installed status field. Reuse these exact inputs when unchanged.
+	for _, name := range []string{"workspace", "viewer", "viewerRole", "users", "projectStatuses"} {
+		if plan.part[name] && !plan.rebuild[name] && changes[name] == nil {
+			if plan.shared == nil {
+				plan.shared = map[string]metadataLogicalNode{}
+			}
+			index, _, _ := metadataLogicalField(name)
+			plan.shared[name] = installed.fields[index]
+			delete(plan.part, name)
+		}
+	}
+	if !plan.rebuild["issues"] && len(after.records["issues"]) == 0 && coldPublishRootEmpty(after.occurrences["issues"], "[]") {
+		// Neither issue counts nor label counts need an empty raw input.
+		delete(plan.part, "issues")
+	}
 	for name := range plan.patch {
+		if name == "projects" && plan.projectLinks != nil {
+			plan.before[name] = coldPublishRecoveryOrder(before.records[name], false)
+			plan.order[name] = plan.before[name]
+			continue
+		}
 		if err := s.readColdPublishRows(ctx, tx, workspace, name, before, after, plan.keys[name], plan); err != nil {
 			return nil, err
 		}
@@ -1407,14 +1450,20 @@ func decodeColdPublishRow(raw []byte, typ reflect.Type) (reflect.Value, error) {
 // buildColdPublication produces the new generation: unchanged fields share
 // the installed nodes, rebuilt fields are recovered and normalized from tx,
 // patched fields copy their unchanged items.
-func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, after *coldPublishState, plan *coldPublishPlan) (_ *metadataLogicalSource, err error) {
+func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, workspace string, installed *metadataLogicalSource, after *coldPublishState, plan *coldPublishPlan, root []byte) (_ *metadataLogicalSource, err error) {
 	if err := installed.Retain(); err != nil {
 		return nil, err
 	}
 	defer installed.Release()
 	scratch := metadataLogicalSourceScratchContext(ctx, installed)
 	rawStarted := time.Now()
-	raw, err := s.readRawMetadataLogicalSourcePart(scratch, tx, workspace, true, plan.part, plan.supplied)
+	var raw *metadataLogicalSource
+	if root != nil {
+		read := &MetadataCollectionRead{ctx: scratch, rootBytes: root, rootSize: int64(len(root))}
+		raw, err = s.recoverRawMetadataLogicalSource(scratch, tx, workspace, read, after.stamp, true, plan.part, plan.supplied, plan.shared)
+	} else {
+		raw, err = s.readRawMetadataLogicalSourcePart(scratch, tx, workspace, true, plan.part, plan.supplied, plan.shared)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1434,6 +1483,9 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 	plan.timings["(raw+index)"] = time.Since(rawStarted)
 	patched := map[string]map[string]reflect.Value{}
 	for name := range plan.patch {
+		if name == "projects" && plan.projectLinks != nil {
+			continue
+		}
 		values, err := s.normalizeColdPublishRows(normalizeCtx, n, name, plan)
 		if err != nil {
 			return nil, err
@@ -1455,14 +1507,7 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 			return nil
 		}
 		if !plan.rebuild[name] && !plan.patch[name] {
-			if !slices.Contains(b.source.stores, node.source) {
-				if err := node.source.Retain(); err != nil {
-					return err
-				}
-				b.source.stores = append(b.source.stores, node.source)
-			}
-			b.source.fields[index] = node
-			return nil
+			return b.shareField(index, node)
 		}
 		// Each rewritten field has its own registry (as Fork): copied frames
 		// keep the installed storage's dynamic type and time IDs.
@@ -1488,9 +1533,9 @@ func (s *SQLiteStore) buildColdPublication(ctx context.Context, tx *sqlTx, works
 	return b.Finish(after.stamp)
 }
 
-// normalizeColdPublishRows stages the decoded changed rows of field name as
-// recovery stages them (a typed frame, read back, written into the raw
-// field) and normalizes each from its raw frame as the normalizer does.
+// normalizeColdPublishRows passes each freshly decoded row through recovery's
+// typed codec. Each point row is unique, so it can normalize that frame
+// directly without recovery's second pass that assembles a whole field.
 func (s *SQLiteStore) normalizeColdPublishRows(ctx context.Context, n *metadataLogicalNormalizer, name string, plan *coldPublishPlan) (map[string]reflect.Value, error) {
 	result := map[string]reflect.Value{}
 	rows := plan.rows[name]
@@ -1506,72 +1551,36 @@ func (s *SQLiteStore) normalizeColdPublishRows(ctx context.Context, n *metadataL
 	}
 	isMap := field.Type.Kind() == reflect.Map
 	index, _, _ := metadataLogicalField(name)
-	// stage writes values as one collection of a scratch builder and returns
-	// its node; close abandons the builder (the node is read before).
-	stage := func(values func(func(string, reflect.Value) error) error) (metadataLogicalNode, func(), error) {
-		builder, err := newMetadataLogicalBuilder(ctx)
-		if err != nil {
-			return metadataLogicalNode{}, nil, err
-		}
-		if err := builder.BeginCollection(name, false); err != nil {
-			builder.Close()
-			return metadataLogicalNode{}, nil, err
-		}
-		if err := values(func(key string, value reflect.Value) error {
-			if err := builder.auditJSONLocations(value); err != nil {
-				return err
-			}
-			k := reflect.Value{}
-			if isMap {
-				k = reflect.ValueOf(key).Convert(field.Type.Key())
-			}
-			return builder.Append(k, value)
-		}); err != nil {
-			builder.Close()
-			return metadataLogicalNode{}, nil, err
-		}
-		if err := builder.EndCollection(); err != nil {
-			builder.Close()
-			return metadataLogicalNode{}, nil, err
-		}
-		return builder.source.fields[index], builder.Close, nil
-	}
-	// recovery's typed stage (put): a fresh decode, audited.
-	typed, closeTyped, err := stage(func(appendValue func(string, reflect.Value) error) error {
-		for _, key := range keys {
-			if err := appendValue(key, rows[key]); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	builder, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer closeTyped()
-	// recovery's builder (get, audit, Append): the staged values read back.
-	stored, closeStored, err := stage(func(appendValue func(string, reflect.Value) error) error {
-		position := 0
-		return typed.Children(ctx, func(_ reflect.Value, item metadataLogicalNode) error {
-			value, err := item.Value(ctx, int(item.cost))
-			if err != nil {
-				return err
-			}
-			key := keys[position]
-			position++
-			return appendValue(key, value)
-		})
-	})
-	if err != nil {
+	defer builder.Close()
+	if err := builder.BeginCollection(name, false); err != nil {
 		return nil, err
 	}
-	defer closeStored()
+	for _, id := range keys {
+		value := rows[id]
+		if err := builder.auditJSONLocations(value); err != nil {
+			return nil, err
+		}
+		var key reflect.Value
+		if isMap {
+			key = reflect.ValueOf(id).Convert(field.Type.Key())
+		}
+		if err := builder.Append(key, value); err != nil {
+			return nil, err
+		}
+	}
+	if err := builder.EndCollection(); err != nil {
+		return nil, err
+	}
 	position := 0
 	ordinals := map[string]int{}
 	for index, key := range plan.order[name] {
 		ordinals[key] = index
 	}
-	err = stored.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
+	err = builder.source.fields[index].Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
 		id := keys[position]
 		position++
 		if !isMap {
@@ -1624,6 +1633,19 @@ func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadata
 		run := metadataLogicalCopyRun{b: b}
 		defer run.abandon()
 		for _, key := range plan.order[name] {
+			index, ok := position[key]
+			if link, patched := plan.projectLinks[key]; name == "projects" && patched {
+				if !ok {
+					return coldPublishInexact("installed items")
+				}
+				if err := run.flush(); err != nil {
+					return err
+				}
+				if err := appendColdProjectLink(ctx, b, items[index], key, link.ids); err != nil {
+					return err
+				}
+				continue
+			}
 			if changed[key] {
 				if err := run.flush(); err != nil {
 					return err
@@ -1640,7 +1662,6 @@ func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadata
 				}
 				continue
 			}
-			index, ok := position[key]
 			if !ok {
 				return coldPublishInexact("installed items")
 			}
@@ -1663,6 +1684,7 @@ func (s *SQLiteStore) patchColdPublicationField(ctx context.Context, b *metadata
 					return err
 				}
 			}
+			b.collectionIndex.add(copied)
 			b.cost += copied.cost + uint64(item.typ.Size())*2
 			b.unavailable = b.unavailable || copied.unavailable
 			b.count++

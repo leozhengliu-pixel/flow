@@ -8,7 +8,7 @@ import (
 )
 
 // Project inputs extend the frozen non-project selector with project
-// progress, legacy editor snapshots (DescriptionState: its mention checks
+// references, legacy editor snapshots (DescriptionState: its mention checks
 // read the owned issueEditorLookups) and actual team moves (the label and
 // SLA closure of loadIssueSelectedInputs plus the attached documents).
 // CRDT snapshots use the write-owned metered editor validator.
@@ -45,7 +45,7 @@ func (s *SQLiteStore) loadIssueProjectInputs(ctx context.Context, workspace stri
 			return nil, err
 		}
 	}
-	if err := read.selectSliceByID(ctx, "projects", projects); err != nil {
+	if err := read.selectSliceByID(ctx, "projects", projects, issueProjectFields...); err != nil {
 		return nil, err
 	}
 	if read.move != nil {
@@ -111,9 +111,7 @@ func (r *issueHotInputs) loadIssueDocuments(ctx context.Context, issueIDs map[st
 	for _, project := range r.data.Projects {
 		delete(projects, project.ID)
 	}
-	return r.selectSlice(ctx, "projects", func(record metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, record, "ID", projects)
-	})
+	return r.selectSliceByID(ctx, "projects", projects, issueProjectFields...)
 }
 
 func (r *issueHotInputs) installProjects(data, baseline *domain.Bootstrap) {

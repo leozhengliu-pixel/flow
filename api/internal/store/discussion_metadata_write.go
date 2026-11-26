@@ -31,13 +31,29 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 			return nil, ErrMetadataRecordQuery
 		}
 	}
-	for _, field := range changedMetadataFields(before, next) {
+	changed := changedMetadataFields(before, next)
+	for _, field := range changed {
 		if mode := metadataResidencyFields()[field.name]; mode == "core" || mode == "policy" {
 			return nil, fmt.Errorf("%w: discussion metadata cannot publish %s policy", ErrBoundedMetadataCoverage, field.name)
 		}
 	}
+	if len(changed) == 0 && len(metadataRecordFields(scope)) == 0 {
+		// The transaction still checks its commit stamp and installs/reloads
+		// on the normal boundary. It has no metadata rows to prepare or encode.
+		candidate, err := source.Transform(ctx, func(_ string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+			return metadataAggregateStoredNode{node}, false, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		publication, err := s.prepareMetadataLogicalPublication(ctx, tx, workspace, candidate, baseStamp, exact, false)
+		if err != nil {
+			candidate.Release()
+		}
+		return publication, err
+	}
 	if issueID, _ := ctx.Value(discussionThreadTargetKey{}).(string); issueID != "" {
-		for _, field := range changedMetadataFields(before, next) {
+		for _, field := range changed {
 			if field.name != "threadSubscriptions" {
 				return nil, ErrBoundedMetadataCoverage
 			}

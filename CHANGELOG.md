@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Batch reciprocal project links on initiative writes, and reduce catalog, publication and project progress work on bounded metadata writes.
+- Speed up bounded metadata writes for projects, initiatives and issues. Issue edits read a project's progress histories only when they need to update them.
+- Fix MySQL record journal deadlocks when transactions edit metadata in the same workspace or overlap catalog backfill, in both trigger and application capture.
 - Fix creating an issue in a project with a long progress history (for example a start date years back) failing with 500 when bounded metadata is on. Issue creation no longer reads the project's progress histories, and the memory estimate for encoding a record no longer counts empty optional fields, which made such a project cost hundreds of times its size. A metadata write that needs more than the whole metadata work budget now answers 503 without `Retry-After` instead of 500; writes refused under contention keep the retryable 503.
 - Issue Resources now loads and caches supported site favicons for ordinary links at read time, while known brand icons and the generic link glyph keep their existing fallbacks.
 - Renamed bounded metadata Go files by domain and updated their embedded inventory references.

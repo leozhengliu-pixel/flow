@@ -78,6 +78,12 @@ func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *
 			cleanupAll()
 		}
 	}()
+	// This private index is consumed on the same connection and discarded.
+	// Keep its writes in one transaction so the scratch pages can stay dirty
+	// in SQLite's bounded page cache between index inserts.
+	if _, err := stage.db.ExecContext(ctx, "BEGIN"); err != nil {
+		return nil, ctx, nil, err
+	}
 	for _, query := range []string{
 		`CREATE TABLE logical_values(kind TEXT NOT NULL,key TEXT NOT NULL,ordinal INTEGER NOT NULL,value BLOB,frame_offset INTEGER,frame_size INTEGER,frame_cost INTEGER,frame_unavailable INTEGER,frame_blocked INTEGER,PRIMARY KEY(kind,key))`,
 		`CREATE INDEX logical_values_order ON logical_values(kind,ordinal)`,

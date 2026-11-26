@@ -393,13 +393,19 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 			return err
 		}
 		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
-		eventSource, err := boundedDiscussionEventSource(ctx, publication.candidate, data)
-		if err != nil {
-			return err
+		eventImage := metadataAggregateImage{Source: publication.candidate, transient: &data}
+		if len(data.Comments) > 1 || len(data.Activities) > 1 {
+			// For several resource buckets, keep the framed map's iteration
+			// order when looking for the legacy aggregate winner.
+			eventImage.Source, err = boundedDiscussionEventSource(ctx, publication.candidate, data)
+			if err != nil {
+				return err
+			}
+			defer eventImage.Source.Release()
+			eventImage.transient = nil
 		}
-		defer eventSource.Release()
 		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: attempt.inputs.source},
-			metadataAggregateImage{Source: eventSource}, aggregate, false, payloadRaw, eventType)
+			eventImage, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
 		}

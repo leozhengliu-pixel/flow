@@ -126,6 +126,8 @@ type sqlTx struct {
 	// metadataWritten: a metadata record or the workspace document changed,
 	// so the shared metadata cache must be dropped after commit.
 	metadataWritten bool
+	// The COLD publisher may use this receipt only for a committed transaction.
+	initiativeProjectLinks initiativeProjectLinks
 	// sequencing: the change-log events this transaction inserted without a
 	// cursor; they are queued at commit and numbered after it
 	// (event_sequencer.go).

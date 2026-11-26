@@ -134,13 +134,14 @@ func (m *coldWriteMutex) TryLock() bool {
 
 type coldFullWrite struct {
 	// legacy marks a default COLD legacy write (coldLegacyMutation).
-	legacy    bool
-	parent    *SQLiteStore
-	requested string
-	workspace string
-	source    *metadataLogicalSource
-	prepared  *coldFullPublication
-	decoded   *metadataLogicalBuilder
+	legacy      bool
+	parent      *SQLiteStore
+	requested   string
+	workspace   string
+	source      *metadataLogicalSource
+	prepared    *coldFullPublication
+	decoded     *metadataLogicalBuilder
+	publishBase *coldPublishBase
 }
 
 type coldFullPublication struct {
