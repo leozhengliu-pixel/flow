@@ -54,8 +54,16 @@ func readAllChanges(t *testing.T, f *SQLiteStore, workspaceID, after string) ([]
 // order, by a reader that follows the cursor while they commit and by one
 // that reads afterwards; none is skipped or repeated.
 func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
+	switch os.Getenv("FLOW_TEST_DATABASE_DRIVER") {
+	case "mysql", "postgres", "postgresql":
+	default:
+		t.Skip("exercises concurrent external database writers")
+	}
+	t.Setenv("FLOW_BOUNDED_METADATA", "on")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := captureMySQLFixture(t)
+	f := scaleP09Database(t)
+	t.Logf("dialect=%s capture=%s", f.dialect, f.RecordJournalCapture())
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	start := scaleP09Head(t, f)
 	const writers, perWriter = 6, 20
@@ -63,6 +71,7 @@ func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
 	var deadlocks atomic.Int64
 	var wg sync.WaitGroup
 	errs := make(chan error, writers)
+	began := time.Now()
 	for w := range writers {
 		wg.Add(1)
 		go func() {
@@ -118,7 +127,7 @@ func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
 		cursor, last := start, int64(0)
 		finished := false
 		for {
-			page, err := f.ReadCommittedChanges(context.Background(), workspaceID, cursor, 20, 256<<10)
+			page, err := f.ReadCommittedChanges(t.Context(), workspaceID, cursor, 20, 256<<10)
 			if err != nil || page.ResyncRequired {
 				followErr = fmt.Errorf("follow after %s: resync=%t %w", cursor, page.ResyncRequired, err)
 				return
@@ -144,11 +153,12 @@ func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+	writeDuration := time.Since(began)
 	close(errs)
+	<-done
 	for err := range errs {
 		t.Fatal(err)
 	}
-	<-done
 	if followErr != nil {
 		t.Fatal(followErr)
 	}
@@ -187,7 +197,11 @@ func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
 			t.Fatalf("%v: committed version %s, journal %d: %v", key, current, version, err)
 		}
 	}
-	t.Logf("concurrent transactions=%d deadlocks=%d records=%d", events, deadlocks.Load(), len(versions))
+	t.Logf("concurrent transactions=%d deadlocks=%d records=%d writer_elapsed=%s commits_per_second=%.1f",
+		events, deadlocks.Load(), len(versions), writeDuration, float64(events)/writeDuration.Seconds())
+	if deadlocks.Load() != 0 || events != writers*perWriter {
+		t.Fatalf("committed %d of %d attempts with %d deadlocks", events, writers*perWriter, deadlocks.Load())
+	}
 }
 
 // errsClosed reports when every writer returned.

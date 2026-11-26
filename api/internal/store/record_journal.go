@@ -377,6 +377,9 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 	if err := tx.openNewCatalogCollections(ctx); err != nil {
 		return err
 	}
+	openMySQLCollections := tx.dialect == "mysql" && tx.database.boundedCatalog.Load()
+	var previousCollection catalogCollectionKey
+	var openedCollections []catalogCollectionKey
 	pending := map[string]*pendingRecordJournal{}
 	get := func(workspace string) *pendingRecordJournal {
 		if pending[workspace] == nil {
@@ -428,6 +431,18 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 				delta := RecordDelta{Key: RecordKey{dirty.field, dirty.id}, Version: strconv.FormatInt(version, 10), Deleted: deleted != 0}
 				p.add(delta)
 				if dirty.source == "workspace_metadata_records" {
+					// Open and maintain checkpoints in the same collection
+					// order, including across dirty-key batches.
+					if key := (catalogCollectionKey{dirty.workspace, dirty.field}); openMySQLCollections && key != previousCollection {
+						created, err := tx.openMySQLCatalogCollection(ctx, key)
+						if err != nil {
+							return err
+						}
+						if created {
+							openedCollections = append(openedCollections, key)
+						}
+						previousCollection = key
+					}
 					if err := tx.maintainRecordSummary(ctx, dirty, deleted != 0); err != nil {
 						return fmt.Errorf("journal summary %s/%s/%s: %w", dirty.workspace, dirty.field, dirty.id, err)
 					}
@@ -448,6 +463,11 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM record_journal_dirty WHERE tx_id=? AND workspace_key=? AND field=? AND record_key=?`, tx.journalToken, dirty.workspace, dirty.field, dirty.id); err != nil {
 				return err
 			}
+		}
+	}
+	for _, key := range openedCollections {
+		if err := tx.initializeMySQLCatalogOmissions(ctx, key); err != nil {
+			return err
 		}
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT p.event_id,w.workspace_key FROM record_journal_event_pending p JOIN workspace_states w ON w.workspace_id=`+recordJournalIdentitySQL(tx.dialect, "p.workspace_id")+` WHERE p.tx_id=? ORDER BY p.workspace_id,p.event_id`, tx.journalToken)
