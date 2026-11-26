@@ -59,7 +59,7 @@
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}
 /* Sub-grouping: the primary group keeps the full header; each sub-group is a bare row with a hairline after its count. */
-.groupHeader[data-subgroup]{background:transparent}
+.groupHeader[data-subgroup],:global(:root[data-theme="light"]) .groupHeader[data-subgroup]{background:var(--group-subheader-bg)}
 .groupHeader[data-subgroup]::after{content:'';flex:1 1 auto;order:1;height:.5px;min-width:0;background:var(--group-subheader-line)}
 .groupHeader[data-subgroup] .createButton{order:2;margin-left:0}
 /* Label groupings: the label's colour dot, and "Group › Label" for a label in a group. */
@@ -263,9 +263,20 @@
 .groupHeader[data-label-color]:not([data-subgroup]){background-image:var(--group-label-bg)}
 .groupHeader[data-label-color]:not([data-subgroup]) .groupText{color:var(--group-label-name);font-weight:450}
 .groupHeader[data-label-color]:not([data-subgroup]) :is(.groupCount,.createButton,.groupEstimate){color:var(--group-label-count)}
-.groupHeader[data-label-color]:not([data-subgroup]) .groupEstimate{margin-left:-1px}
+.groupHeader[data-label-grouping] .groupEstimate{margin-left:-1px}
+/* Label grouping headers without a label colour ("No label") and every sub-group row use neutral tints. */
+.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.groupCount,.createButton,.groupEstimate){color:var(--group-plain-count)}
+.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-plain-caret)}
 .groupHeader[data-label-color]:not([data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-label-collapse)}
 /* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
 .mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
 .mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
 .mergedDots i+i{margin-left:-4.5px}
+/* Phones keep the reference spacing for label headers: the dot nudged into its slot, 7px before the estimate glyph, tinted plus. */
+@media(max-width:767px){
+  .groupHeader[data-label-grouping] .groupDot{margin:0 1.32px 0 -0.7px}
+  .groupHeader[data-label-grouping] .groupEstimate{margin-left:2.66px}
+  .groupHeader[data-label-grouping] .groupEstimate:global(.estimate-chip){gap:4px}
+  .groupHeader[data-label-grouping] .createButton{width:24px;height:24px}
+  .groupHeader[data-label-grouping] .createButton svg{color:inherit}
+}

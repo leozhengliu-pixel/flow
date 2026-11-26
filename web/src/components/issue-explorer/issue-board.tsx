@@ -39,6 +39,9 @@ type IssueBoardProps = Parameters<typeof IssueBoardColumns>[0]
  */
 export function IssueBoard(props: IssueBoardProps) {
   const t = useOptionalTranslate()
+  const estimateSettingsFor = useTeamEstimateSettings()
+  // A row shows the estimate glyph before its count when its issues' teams use estimates (as group headers do).
+  const laneEstimates = (groups: MyIssuesGroupData[]) => props.properties.has('estimate') && groups.some(group => group.issues.some(issue => teamUsesEstimates(estimateSettingsFor(issue.teamId))))
   const lanes = useMemo(() => {
     if (!props.groups.some(group => group.parentGroupId)) return undefined
     const byLane = new Map<string, { id: string; label: string; group: MyIssuesGroupData; order: number; groups: MyIssuesGroupData[] }>()
@@ -55,11 +58,11 @@ export function IssueBoard(props: IssueBoardProps) {
   if (!lanes) return <IssueBoardColumns {...props}/>
   return <div className={styles.swimlanes}>
     {lanes.map(lane => <section key={lane.id} className={styles.swimlane} aria-label={lane.label}>
-      <header className={styles.swimlaneHeader}>
-        <button type="button" aria-expanded={!collapsed.has(lane.id)} aria-label={collapsed.has(lane.id) ? 'Expand row' : 'Collapse row'} onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}>▾</button>
-        {lane.group.color && <span className={styles.swimlaneDot} style={{ '--group-label-color': lane.group.color } as CSSProperties} aria-hidden="true"/>}
+      <header className={styles.swimlaneHeader} data-label-color={lane.group.color ? true : undefined} style={lane.group.color ? { '--group-label-color': lane.group.color } as CSSProperties : undefined}>
+        <button type="button" aria-expanded={!collapsed.has(lane.id)} aria-label={collapsed.has(lane.id) ? 'Expand row' : 'Collapse row'} onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
+        {lane.group.color && <span className={styles.swimlaneDot} aria-hidden="true"/>}
         {lane.group.labelPrefix && <><span data-i18n-ignore className={styles.swimlanePrefix}>{lane.group.labelPrefix}</span><GroupPathChevron className={styles.swimlanePathChevron}/></>}
-        <span data-i18n-ignore>{lane.group.translatableLabel ? t(lane.label) : lane.label}</span><span className={styles.swimlaneCount}>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
+        <span data-i18n-ignore>{lane.group.translatableLabel ? t(lane.label) : lane.label}</span><span className={styles.swimlaneCount}>{laneEstimates(lane.groups) && <EstimateIcon className={styles.swimlaneEstimate} size={14}/>}{new Set(lane.groups.flatMap(group => group.issues.map(issue => issue.id))).size}</span>
         <SwimlaneMenu
           collapsed={collapsed.has(lane.id)}
           onSelectAll={() => lane.groups.forEach(group => group.issues.forEach(issue => props.onSelectIssue(issue.id, true, false)))}

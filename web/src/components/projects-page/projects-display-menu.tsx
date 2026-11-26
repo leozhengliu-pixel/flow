@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { chooseLabelGroup, defaultSubLabelGroupId, type LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
 import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List, Plus } from 'lucide-react'
 import { usePropertyCommand, type PropertyCommandOption } from '@/components/property/use-property-command'
@@ -104,10 +104,25 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
     onChange({ ...settings, subGrouping, ...(subGrouping === 'Label group' && !settings.subLabelGroupId ? { subLabelGroupId: defaultSubLabelGroupId(asIssueGrouping(settings), groupingLabelGroups) } : {}) })
   }
   const modified = !projectsDisplayEqual(settings, defaultSettings)
+  // The design reference sizes every select to the widest one's text (99px to 144px); a label group's stops at 142px.
+  // The layout tabs are the menu's first row; the menu is their parent (its own ref belongs to the caller).
+  const modesRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const menu = modesRef.current?.parentElement
+    if (!menu) return
+    const size = () => {
+      const natural = Math.max(0, ...[...menu.querySelectorAll<HTMLElement>('.lp-projects-display-select__trigger > span')].map(span => Math.ceil(span.scrollWidth) + 26))
+      menu.style.setProperty('--display-select-width', `${Math.max(99, Math.min(natural, 144))}px`)
+    }
+    size()
+    const observer = new MutationObserver(size)
+    observer.observe(menu, { subtree: true, childList: true, characterData: true })
+    return () => observer.disconnect()
+  }, [])
   const selectProps = (field: DisplayField) => ({ field, onOpenChange: (open: boolean) => setOpenField(open ? field : null), open: openField === field })
 
   return <div aria-label="Display options" className="lp-projects-display" ref={rootRef} role="dialog">
-    <div aria-label="Project layout" className="lp-projects-display__modes" role="tablist">
+    <div aria-label="Project layout" className="lp-projects-display__modes" ref={modesRef} role="tablist">
       {LAYOUTS.map(({ icon: Icon, id, label }) => <button
         aria-selected={settings.layout === id}
         className={settings.layout === id ? 'is-active' : ''}
@@ -221,7 +236,7 @@ function ProjectDisplaySelect({ direction, field, label, onChange, onOpenChange,
     }
   }
 
-  return <div className="lp-projects-display-select" ref={rootRef}>
+  return <div className="lp-projects-display-select" data-label-group-select={field === "labelGroup" || field === "subLabelGroup" ? "" : undefined} ref={rootRef}>
     <span>{label}</span>
     <div className="lp-projects-display-select__actions">
       {direction && <button

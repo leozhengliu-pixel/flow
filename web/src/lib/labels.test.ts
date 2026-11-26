@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { IssueLabel, LabelGroup, Team } from '@/types/flow'
-import { groupsForResource, isWorkspaceLabel, labelResourceType, labelScopeName, labelsForIssueTeam, labelsForProject, labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from './labels'
+import { groupsForResource, isWorkspaceLabel, labelChips, labelResourceType, labelScopeName, labelsForIssueTeam, labelsForProject, labelsForResource, registerLabelGroups, setGroupedLabelSelected, toggleGroupedLabelIds } from './labels'
 
 const labels = [
   { id: 'issue-a', name: 'A', scope: 'Workspace', resourceType: 'issue', groupId: 'issue-group' },
@@ -68,5 +68,25 @@ describe('label helpers', () => {
 
     expect(inherited.map(label => label.id)).toEqual(['label-0', 'label-1'])
     expect(elapsed).toBeLessThan(5_000)
+  })
+})
+
+describe('label group types', () => {
+  const groups = [{ id: 'area', name: 'Area', multiSelect: true }, { id: 'type', name: 'Type' }]
+  const options = [{ id: 'web', name: 'Web', color: '#0ff', groupId: 'area' }, { id: 'api', name: 'API', color: '#ff0', groupId: 'area' }, { id: 'bug', name: 'Bug', color: '#f00', groupId: 'type' }, { id: 'task', name: 'Task', color: '#0f0', groupId: 'type' }, { id: 'ui', name: 'UI', color: '#999' }]
+
+  it('lets a multi-select group keep several labels while a single-select group swaps', () => {
+    registerLabelGroups(groups)
+    expect(toggleGroupedLabelIds(['web'], 'api', options)).toEqual(['web', 'api'])
+    expect(toggleGroupedLabelIds(['bug'], 'task', options)).toEqual(['task'])
+    registerLabelGroups([])
+    expect(toggleGroupedLabelIds(['web'], 'api', options)).toEqual(['api'])
+  })
+
+  it('orders chips grouped first and merges a multi-select group into one chip', () => {
+    registerLabelGroups(groups)
+    const chips = labelChips([options[4], options[2], options[0], options[1]])
+    expect(chips.map(chip => [chip.name, chip.ariaLabel])).toEqual([['API, Web', 'Area: API, Web'], ['Bug', 'Bug'], ['UI', 'UI']])
+    registerLabelGroups([])
   })
 })

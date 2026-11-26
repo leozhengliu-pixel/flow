@@ -224,7 +224,7 @@ const NO_VALUE_COLOR = '#6b6b70'
 
 function noLabel(id: string, scope: GroupingScope): GroupDescriptor {
   // Lists end with "No label"; board columns start with it.
-  return { id, name: 'No label', color: NO_VALUE_COLOR, rank: scope.noneFirst ? '' : '1' }
+  return { id, name: 'No label', color: NO_VALUE_COLOR, rank: scope.noneFirst ? '' : '1', bare: true }
 }
 
 /** A project label's group: "Group › Label", ordered like issue labels (labels outside a group first, then by group name). */
@@ -233,7 +233,7 @@ function labelDescriptor(labelId: string, scope: GroupingScope, prefix: string):
   if (!label) return undefined
   const group = label.groupId ? scope.labelGroups?.find(item => item.id === label.groupId) : undefined
   const teamScoped = Boolean(label.scope) && label.scope!.toLowerCase() !== 'workspace'
-  return { id: `${prefix}-${label.id}`, name: label.name, color: label.color, labelPrefix: group?.name, rank: `0${teamScoped ? 0 : 1}${group ? 1 : 0}${(group?.name ?? '').toLocaleLowerCase()}\u0001${label.name.toLocaleLowerCase()}` }
+  return { id: `${prefix}-${label.id}`, name: label.name, color: label.color, labelColor: label.color, labelPrefix: group?.name, rank: `0${teamScoped ? 0 : 1}${group ? 1 : 0}${(group?.name ?? '').toLocaleLowerCase()}\u0001${label.name.toLocaleLowerCase()}` }
 }
 
 function descriptorsFor(project: ProjectPageItem, grouping: string, projectStatuses: ProjectStatus[], scope: GroupingScope): GroupDescriptor[] {

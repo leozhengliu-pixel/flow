@@ -435,3 +435,20 @@
 .mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
 .mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
 .mergedDots i+i{margin-left:-4.5px}
+/* Label groupings: columns and rows show the label's colour dot and "Group › Label"; a group name gives way first. */
+.columnDot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:var(--group-label-color)}
+.columnPrefix{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--board-label-prefix);font-size:13px;font-weight:450;line-height:normal}
+.columnPathChevron{flex:0 0 5px;color:var(--board-label-chevron)}
+.columnHeader:has(.columnDot) strong{flex:0 0 auto;margin-left:0;color:var(--board-label-name);font-weight:450;line-height:normal}
+/* Rows: an 18px caret, the label dot, then the name; counts in tabular figures, tinted by the label colour. */
+.swimlaneHeader{padding-left:16px}
+.swimlaneHeader>button:first-child{width:18px;height:18px;display:grid;place-items:center;padding:0;color:var(--group-plain-count)}
+.swimlaneHeader>button:first-child[aria-expanded=true] svg{transform:rotate(90deg)}
+.swimlaneHeader>button:first-child[aria-expanded=false]{transform:none}
+.swimlaneHeader .swimlaneCount{display:flex;align-items:center;gap:4px;margin-left:-1px;font-size:13px;font-weight:450;line-height:normal;font-variant-numeric:tabular-nums;color:var(--group-plain-count)}
+.swimlaneHeader>span{line-height:normal}
+.swimlaneEstimate{flex:0 0 14px}
+.swimlaneHeader[data-label-color]>button:first-child,.swimlaneHeader[data-label-color] .swimlaneCount{color:var(--group-label-lane)}
+.swimlaneDot{width:9px;height:9px;flex:0 0 9px;margin-left:3px;border-radius:50%;background:var(--group-label-color)}
+.swimlanePrefix{color:var(--board-label-prefix);font-weight:450}
+.swimlanePathChevron{flex:0 0 5px;color:var(--board-label-chevron)}
