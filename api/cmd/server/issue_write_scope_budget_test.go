@@ -153,6 +153,13 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 			for sample := range samples {
 				id := fmt.Sprintf("sw244-%d-%d-%d", phaseIndex, index, sample)
 				var from, to runtime.MemStats
+				// Two collections empty every sync.Pool (the first moves its
+				// objects to the victim cache, the second drops them): each
+				// sample then allocates its pooled buffers itself. After a
+				// single collection a sample reused them or not depending on
+				// the collections the previous request triggered, which moved
+				// a route's median by about 48 KiB between runs.
+				runtime.GC()
 				runtime.GC()
 				runtime.ReadMemStats(&from)
 				response := sw244Send(handler, workspace, cookies, "", route, id)

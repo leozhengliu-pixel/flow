@@ -80,7 +80,12 @@ func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
 	}
 	defer repository.Close()
 	result := mutationScriptResult{state: map[string]string{}}
-	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	// The arms compare every realtime event: a delivery scheduler tick (a
+	// Pulse summary, say) landing inside only the slower arm is not part of
+	// the script.
+	service := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	disableBackgroundWorkersForTest(service)
+	handler := newHandler(service)
 	// newHandler installs the server's sinks; capture the store's output instead.
 	repository.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		result.events = append(result.events, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+normalizeMutationJSON(event.Payload, true))
