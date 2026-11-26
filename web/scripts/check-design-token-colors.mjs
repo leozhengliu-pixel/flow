@@ -28,7 +28,7 @@ const tokenSource = await readFile(new URL('../src/styles/tokens.css', import.me
 const allCSS = `${tokenSource}\n${sources.join('\n')}`
 const definitions = new Set([...allCSS.matchAll(/(?:^|[;{])\s*(--[\w-]+)\s*:/gm)].map(match => match[1]))
 const dynamicProperties = new Set([
-  '--accent', '--capacity', '--customer-columns', '--dashboard-columns', '--display-select-width', '--dot-index', '--group-label-color', '--flow-inbox-avatar', '--insight-columns', '--issue-identifier-width', '--li-extra-columns', '--li-month-count', '--li-month-width', '--li-today-left', '--nest-level', '--nested-depth', '--option-indent', '--palette-color', '--picker-hue', '--project-status-color', '--status-color', '--status-hue', '--status-progress', '--sub-depth', '--team-columns', '--timeline-drag-offset', '--timeline-start', '--timeline-width', '--view-color', '--views-columns',
+  '--accent', '--capacity', '--customer-columns', '--dashboard-columns', '--display-select-width', '--dot-index', '--group-label-color', '--group-label-lane-tint', '--group-label-tint', '--flow-inbox-avatar', '--insight-columns', '--issue-identifier-width', '--li-extra-columns', '--li-month-count', '--li-month-width', '--li-today-left', '--nest-level', '--nested-depth', '--option-indent', '--palette-color', '--picker-hue', '--project-status-color', '--rows-columns', '--rows-viewport', '--status-color', '--status-hue', '--status-progress', '--sub-depth', '--team-columns', '--timeline-drag-offset', '--timeline-start', '--timeline-width', '--view-color', '--views-columns',
   '--split-list-width', '--tree-level', '--branch-level', '--team-inset', '--x', '--x-phone',
 ])
 for (const match of allCSS.matchAll(/var\(\s*(--[\w-]+)/g)) {

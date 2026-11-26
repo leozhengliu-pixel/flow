@@ -1,4 +1,5 @@
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
+import { useLabelColors } from '@/hooks/use-label-colors'
 import { GroupPathChevron } from '@/components/my-issues/my-issues-list'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { revenueSuffix } from '@/components/issue-explorer/customer-filter'
@@ -505,7 +506,8 @@ function ProjectGroupHeader({ bare, collapsed, color = '#d6b326', count, labelCo
 }) {
   // Label groupings draw the design reference's issue-style header: a 16px caret and a 14px plus.
   const labelHeader = Boolean(labelColor || bare)
-  return <div className="lp-project-group__header" data-label-header={labelHeader || undefined} data-group-status={labelColor || bare ? undefined : projectGroupStatusType(name, propertyOptions) || undefined} data-label-color={labelColor ? true : undefined} style={labelColor ? { '--group-label-color': labelColor } as CSSProperties : undefined} role="row">
+  const labelColors = useLabelColors()
+  return <div className="lp-project-group__header" data-label-header={labelHeader || undefined} data-group-status={labelColor || bare ? undefined : projectGroupStatusType(name, propertyOptions) || undefined} data-label-color={labelColor ? true : undefined} style={labelColor ? { '--group-label-color': labelColors.dot(labelColor), '--group-label-tint': labelColors.tint(labelColor) } as CSSProperties : undefined} role="row">
     <span />
     <button aria-expanded={!collapsed} aria-label={collapsed ? 'Expand group' : 'Collapse group'} className="lp-project-group__toggle" onClick={onToggle} type="button">{labelHeader ? <svg className="lp-project-group__caret" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg> : <ChevronRightIcon />}</button>
     <span className="lp-project-group__title"><ProjectGroupStatus bare={bare} color={color} labelColor={labelColor} name={name} propertyOptions={propertyOptions}/><ProjectGroupName as="strong" name={name} prefix={labelPrefix} propertyOptions={propertyOptions}/><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
@@ -759,10 +761,16 @@ function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }
 
 function ProjectGroupStatus({ bare = false, color = '#77777c', compact = false, labelColor, name, propertyOptions }: { bare?: boolean, color?: string, compact?: boolean, labelColor?: string, name: string, propertyOptions?: ProjectPropertyOptions }) {
   if (bare) return null
-  if (labelColor) return <span aria-hidden="true" className="lp-project-group__label-dot" style={{ backgroundColor: labelColor }}/>
+  if (labelColor) return <ProjectLabelDot color={labelColor}/>
   const status = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value.toLocaleLowerCase() === name.toLocaleLowerCase())
   if (status) return <span aria-hidden="true" className={`lp-project-group__status-icon${compact ? ' is-compact' : ''}`}><ProjectStatusGlyph color={status.color ?? color} name={status.label} type={status.statusType}/></span>
   return <span aria-hidden="true" className={`lp-project-group__status${compact ? ' is-compact' : ''}`} style={{ '--project-status-color': color } as CSSProperties}/>
+}
+
+/** A label grouping's colour dot, in the label colour the theme shows. */
+function ProjectLabelDot({ color }: { color: string }) {
+  const labelColors = useLabelColors()
+  return <span aria-hidden="true" className="lp-project-group__label-dot" style={{ backgroundColor: labelColors.dot(color) }}/>
 }
 
 /** Generated group names (empty buckets, status types) translate; other names are data. */

@@ -465,23 +465,23 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   const subGrouping = display.subGrouping && display.subGrouping !== 'none' && !sameLevel && grouping !== 'none' ? display.subGrouping : undefined
   // Lists show empty sub-groups with "Show empty groups"; boards with "Show empty rows".
   const includeEmptyRows = board ? Boolean(display.showEmptyRows) : display.showEmptyGroups
-  const subDescriptors: { descriptor: GroupDescriptor }[][] = []
-  const emitted = ordered.flatMap(({ descriptor, issues }) => {
-    const group = toGroup(descriptor, issues)
-    if (!subGrouping) return [group]
+  if (!subGrouping) return ordered.map(({ descriptor, issues }) => toGroup(descriptor, issues))
+  const columns = ordered.map(({ descriptor, issues }) => {
     const collected = collect(issues, row => groupDescriptors(rootOf(row), subGrouping, subOptions))
     addEmptyLabelGroups(collected, subGrouping, subOptions, includeEmptyRows)
-    const children = sortGroups([...collected.values()], 'asc')
-    subDescriptors.push(children)
-    const { rank: _rank, ...parentGroup } = descriptor
-    return children.map(child => ({ ...toGroup(child.descriptor, child.issues), id: `${descriptor.id}::${child.descriptor.id}`, parentGroupId: descriptor.id, parentLabel: descriptor.label, parentGroup, createContext: mergeCreateContext(descriptor.createContext, child.descriptor.createContext) }))
+    return { descriptor, children: sortGroups([...collected.values()], 'asc') }
   })
-  if (!subGrouping) return emitted
   // Board rows run in the sub-grouping's order whichever column first holds them.
   const laneRows = new Map<string, { descriptor: GroupDescriptor }>()
-  for (const children of subDescriptors) for (const child of children) if (!laneRows.has(child.descriptor.id)) laneRows.set(child.descriptor.id, child)
-  const rowOrder = new Map(sortGroups([...laneRows.values()], 'asc').map((row, index) => [row.descriptor.id, index]))
-  return emitted.map(group => ({ ...group, rowOrder: rowOrder.get(group.id.slice(group.id.indexOf('::') + 2)) }))
+  for (const { children } of columns) for (const child of children) if (!laneRows.has(child.descriptor.id)) laneRows.set(child.descriptor.id, child)
+  const lanes = sortGroups([...laneRows.values()], 'asc')
+  const rowOrder = new Map(lanes.map((row, index) => [row.descriptor.id, index]))
+  return columns.flatMap(({ descriptor, children }) => {
+    const { rank: _rank, ...parentGroup } = descriptor
+    // A board is one grid: every column has a cell in every row, empty ones included.
+    const cells = board ? lanes.map(lane => children.find(child => child.descriptor.id === lane.descriptor.id) ?? { descriptor: lane.descriptor, issues: [] }) : children
+    return cells.map(child => ({ ...toGroup(child.descriptor, child.issues), id: `${descriptor.id}::${child.descriptor.id}`, parentGroupId: descriptor.id, parentLabel: descriptor.label, parentGroup, createContext: mergeCreateContext(descriptor.createContext, child.descriptor.createContext), rowOrder: rowOrder.get(child.descriptor.id) }))
+  })
 }
 
 /** Label ids from both levels: "+" under "Bug › Flow parity A" creates an issue with both labels. */

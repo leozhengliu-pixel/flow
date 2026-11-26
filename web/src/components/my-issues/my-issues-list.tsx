@@ -1,4 +1,5 @@
 import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
+import { useLabelColors } from '@/hooks/use-label-colors'
 import { FlowTooltip, TooltipShortcut } from '@/components/ui/tooltip'
 import { memo, useContext, useEffect, useId, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
@@ -352,11 +353,12 @@ export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estima
   }, [hovered, canToggle])
   // Status groups translate like the status picker does: the default workflow names have a Chinese entry, a renamed one stays as typed.
   const translatable = Boolean(group.translatableLabel || group.state)
+  const labelColors = useLabelColors()
   // A label or label group bucket (sub-groups carry "parent::child" ids): never a status icon, even on phones.
   const labelGrouping = /^label(group)?-/.test(group.id.split('::').at(-1) ?? '')
   const label = translatable ? translate(group.label) : group.label
   const collapseButton = <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={event => { if (event.altKey && menuActions.onCollapseAll) menuActions.onCollapseAll(); else toggle?.() }}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
-  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-label-color={group.color ? true : undefined} data-label-grouping={labelGrouping || undefined} style={group.color ? { '--group-label-color': group.color } as CSSProperties : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-label-color={group.color ? true : undefined} data-label-grouping={labelGrouping || undefined} style={group.color ? { '--group-label-color': labelColors.dot(group.color), '--group-label-tint': labelColors.tint(group.color) } as CSSProperties : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
     {toggle ? <FlowTooltip raised label={<span className="flow-tooltip-rows">
       <span className="flow-tooltip-row"><TooltipShortcut value="T"/>{translate(collapsed ? 'to expand group' : 'to collapse group')}</span>
       {menuActions.onCollapseAll && <span className="flow-tooltip-row"><TooltipShortcut value="⌥ Click"/>{translate('to collapse all')}</span>}
@@ -637,10 +639,12 @@ export function GroupPathChevron({ className = styles.groupPathChevron }: { clas
 function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; type?: MyIssuesStateType }) { if (state?.id === 'triage') return <span className={styles.groupState}><WorkflowStatusGlyph state={state} size={14}/></span>; return state || type ? <span className={styles.groupState}><StatusIcon state={state ?? { id: type!, name: type!, type: type!, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
 /** Several labels of one multi-select group in one chip: their dots overlap, then the names ("Web, API"). */
 export function MergedLabelBadge({ chip, className, dotsClassName }: { chip: LabelChip<{ id: string; color: string }>; className: string; dotsClassName: string }) {
-  return <span className={className} aria-label={chip.ariaLabel}><span className={dotsClassName} aria-hidden="true">{chip.colors.map((color, index) => <i key={chip.labels[index].id} style={{ backgroundColor: color }}/>)}</span><span data-i18n-ignore>{chip.name}</span></span>
+  const labelColors = useLabelColors()
+  return <span className={className} aria-label={chip.ariaLabel}><span className={dotsClassName} aria-hidden="true">{chip.colors.map((color, index) => <i key={chip.labels[index].id} style={{ backgroundColor: labelColors.dot(color) }}/>)}</span><span data-i18n-ignore>{chip.name}</span></span>
 }
 function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
-  if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
+  const labelColors=useLabelColors()
+  if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:labelColors.dot(label.color)}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>
 }
 

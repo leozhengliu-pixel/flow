@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { useLabelColors } from '@/hooks/use-label-colors'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { ChevronRight, Layers3, Plus } from 'lucide-react'
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
@@ -143,10 +144,14 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const phone = usePhoneLayout()
   const sheetRecord = usePhoneSheetRecord()
   const directory = usePeopleDirectory()
-  const menuOptions = useMemo(() => options.map(option => {
+  const labelColors = useLabelColors()
+  const labelPicker = explicitKind === 'labels' || explicitKind === 'project-labels' || (multiple && label === 'Labels')
+  const menuOptions = useMemo(() => options.map(rawOption => {
+    // Label dots show the colour the theme draws them in.
+    const option = labelPicker && rawOption.color ? { ...rawOption, color: labelColors.dot(rawOption.color) } : rawOption
     const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
     return person ? { ...option, label: displayUserName({displayName:person.displayName || option.label,name:person.name && person.name!==person.id ? person.name : option.label}), person, icon: <span aria-hidden="true">{option.icon ?? <UserAvatar className="people-menu-avatar" avatarUrl={person.avatarUrl} name={person.displayName || ('label' in person ? person.label : undefined) || person.name || person.id} userId={person.id}/>}</span>, keywords: `${option.keywords ?? ''} ${personSearchText({ ...person, ...directoryPerson(directory.users, person.id) })}`, hoverContent: option.hoverContent ?? <PersonInfo person={person}/>, hoverClassName: option.hoverClassName ?? 'person-info-surface' } : option
-  }), [options, directory.users, label])
+  }), [options, directory.users, label, labelPicker, labelColors])
   const [localOpen, setLocalOpen] = useState(false)
   const open = embedded || (controlledOpen ?? localOpen)
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }
