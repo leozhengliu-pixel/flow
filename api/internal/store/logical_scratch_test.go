@@ -76,3 +76,37 @@ func TestScaleP21LogicalScratchContention(t *testing.T) {
 		t.Fatal("closing a spool must return its quota")
 	}
 }
+
+func TestScaleP21FullLogicalDiskHoldOutlastsConcurrentScratch(t *testing.T) {
+	before := metadataLogicalDiskUsed.Load()
+	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", strconv.FormatInt(before+1024, 10))
+	ctx, _ := withMetadataWorkDemand(t.Context())
+	// Concurrent work (a peer's reload) holds scratch when the disk fills.
+	concurrent, err := HoldMetadataLogicalDiskForTesting(512)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer concurrent()
+	full, err := HoldMetadataLogicalDiskForTesting(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer full()
+	concurrent()
+	builder, err := newMetadataLogicalBuilder(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Close()
+	if err := builder.write(make([]byte, 16)); !errors.Is(err, ErrRecordSpoolContended) {
+		t.Fatal("scratch released by concurrent work must not reopen room under a full disk")
+	}
+	full()
+	if err := builder.write(make([]byte, 16)); err != nil {
+		t.Fatal(err)
+	}
+	builder.Close()
+	if got := metadataLogicalDiskUsed.Load(); got != before {
+		t.Fatalf("holds left %d bytes charged", got-before)
+	}
+}
