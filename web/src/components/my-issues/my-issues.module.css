@@ -76,3 +76,8 @@
 }
 
 @media(max-width:767px){.viewsSubheader.viewsSubheader{gap:6px;border-style:none}}
+
+/* Phone header: the reference's 28px menu button, 12px before the title. */
+@media (max-width: 767px) {
+  html:root[data-sidebar-mode] body :global(.app) [data-my-issues-surface="true"] [data-content-view-header] [data-sidebar-trigger] { flex-basis: 28px; height: 28px; margin-right: 12px; min-width: 28px; width: 28px; }
+}

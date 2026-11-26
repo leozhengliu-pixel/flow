@@ -68,7 +68,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   useEffect(() => { trimPagedIssueListCache() }, [revision, groups])
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(() => cachedState.groups.length === 0)
-  const boardPoints = useBoardEstimateTotals(layout === 'board' && Boolean(rowProps.displayProperties?.has('estimate')) ? query : undefined, groups, data, retry)
+  const boardPoints = useBoardEstimateTotals(rowProps.displayProperties?.has('estimate') ? query : undefined, groups, data, retry)
   const updateGroups = useCallback((next: Group[] | ((current: Group[]) => Group[])) => {
     setGroups(current => {
       const value = typeof next === 'function' ? next(current) : next
@@ -390,7 +390,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       </div>
     }
     return <>{identifierColumn.probe}<GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
-      groupContent={index => hideGroupHeaders || hiddenGroupIds.includes(groups[index].value) ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} onCollapseAll={onGroupCollapsedChange ? () => groups.forEach(group => onGroupCollapsedChange(group.value, true)) : undefined} onSelectAll={rowProps.onSelectIssue ? () => void selectGroup(groups[index]) : undefined} onHideGroup={onHideGroup ? () => onHideGroup(groups[index].value) : undefined}/>}
+      groupContent={index => hideGroupHeaders || hiddenGroupIds.includes(groups[index].value) ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} estimateSum={boardPoints?.[groups[index].value]} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} onCollapseAll={onGroupCollapsedChange ? () => groups.forEach(group => onGroupCollapsedChange(group.value, true)) : undefined} onSelectAll={rowProps.onSelectIssue ? () => void selectGroup(groups[index]) : undefined} onHideGroup={onHideGroup ? () => onHideGroup(groups[index].value) : undefined}/>}
       itemContent={(index, groupIndex) => {
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex]
         const pageIndex = cache.pageAt(group.value, localIndex), page = cache.get(group.value, pageIndex)

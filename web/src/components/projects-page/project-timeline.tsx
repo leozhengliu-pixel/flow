@@ -91,8 +91,8 @@ type Row =
   | { kind: 'group'; key: string; y: number; group: ProjectDataGroup }
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan; milestones: TimelineDatedMilestone[] }
 
-/** The reference's phone timeline: below 600px (names column, property gaps, axis weeks and the missing zoom menu all switch there). */
-const PHONE_TIMELINE_QUERY = '(max-width: 599px)'
+/** The reference numbers the other weeks below 588px (measured at load; the names column and the zoom menu follow other widths). */
+const PHONE_TIMELINE_QUERY = '(max-width: 587px)'
 const subscribePhoneTimeline = (notify: () => void) => {
   const media = window.matchMedia(PHONE_TIMELINE_QUERY)
   media.addEventListener('change', notify)

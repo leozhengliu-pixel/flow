@@ -67,9 +67,13 @@
 .lp-project-timeline__group h2 { box-sizing: border-box; padding: 0 13px; width: var(--timeline-names-width); z-index: 6; }
 .lp-project-timeline__milestone { top: 29px; }
 .lp-project-timeline__add-dates { top: 24px; }
-/* Phones (the reference measures the switch between 550 and 600px at load): a 250px names column with 2px between the property buttons, and no zoom menu. */
-@media (width < 600px) {
-  .lp-project-timeline { --timeline-names-width: 250px; }
-  .lp-project-timeline__cells { gap: 2px; }
+/* Names column (the reference): the pane minus 320px, between 250px and 320px; the property buttons sit 2px apart until the pane is 620px wide.
+   The zoom menu is only there from a 1024px viewport. */
+.lp-project-timeline { container-type: inline-size; --timeline-names-width: clamp(250px, calc(100cqw - 320px), 320px); }
+.lp-project-timeline__cells { gap: 2px; }
+@container (min-width: 620px) {
+  .lp-project-timeline__cells { gap: 6px; }
+}
+@media (max-width: 1023px) {
   .lp-project-timeline__zoom-menu { display: none; }
 }
