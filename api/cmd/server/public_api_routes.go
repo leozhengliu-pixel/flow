@@ -26,6 +26,7 @@ func (s *server) registerPublicAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/comments", s.listCommentsConnection)
 	mux.HandleFunc("GET /api/attachments", s.listAttachmentsConnection)
 	mux.HandleFunc("GET /api/attachments/{id}", s.getAttachment)
+	mux.HandleFunc("GET /api/link-icon", s.getLinkIcon)
 	mux.HandleFunc("GET /api/customers", s.listCustomersConnection)
 	mux.HandleFunc("GET /api/customers/{id}", s.getCustomerRecord)
 	mux.HandleFunc("PUT /api/customers", s.upsertCustomer)

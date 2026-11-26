@@ -23,11 +23,11 @@ const caret = <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><p
 function LinkFavicon({ src }: { src: string }) {
   const [failed, setFailed] = useState(false)
   if (failed) return <FlowUrlIcon className="res-link-glyph"/>
-  return <img alt="" height={16} onError={() => setFailed(true)} referrerPolicy="no-referrer" src={src} width={16}/>
+  return <img alt="" height={16} loading="lazy" onError={() => setFailed(true)} referrerPolicy="no-referrer" src={src} width={16}/>
 }
 
 /** The issue's Resources section (the design reference's layout): a collapsible header with an add button, then one row per linked document or link. */
-export function IssueResources({ documents, links, files = [], workspaceKey, issueKey, actions, onDeleteLink, onEditLink, readOnly = false }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void>; onEditLink?: (id: string, input: { url: string; title: string }) => Promise<void>; /** The viewer may only read: no add button, no Edit… or Remove. */ readOnly?: boolean }) {
+export function IssueResources({ documents, links, files = [], workspaceKey, issueId, issueKey, actions, onDeleteLink, onEditLink, readOnly = false }: { documents: FlowDocument[]; links: Attachment[]; files?: Attachment[]; workspaceKey: string; issueId: string; issueKey: string; actions?: IssueOptionsActions; onDeleteLink: (id: string) => Promise<void>; onEditLink?: (id: string, input: { url: string; title: string }) => Promise<void>; /** The viewer may only read: no add button, no Edit… or Remove. */ readOnly?: boolean }) {
   const { t, locale } = useI18n()
   const nowMs = useCurrentTimeMs()
   const [collapsed, setCollapsed] = useState(false)
@@ -69,8 +69,15 @@ export function IssueResources({ documents, links, files = [], workspaceKey, iss
       {[...links, ...files].map(link => {
         const isFile = link.contentType !== 'text/uri-list'
         const when = link.createdAt ? formatRelativeTime(link.createdAt, locale, nowMs) : ''
+        const brand = isFile ? null : linkBrand(link.url)
+        let faviconURL = link.iconUrl
+        if (!isFile && !brand && !faviconURL) {
+          const query = new URLSearchParams({ workspace: workspaceKey, issueId, attachmentId: link.id })
+          if (link.updatedAt) query.set('v', link.updatedAt)
+          faviconURL = `/api/link-icon?${query}`
+        }
         return <a className="res-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-          <span className="res-icon" data-brand={!isFile ? linkBrand(link.url) ?? undefined : undefined}>{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : linkBrand(link.url) ? <LinkBrandIcon brand={linkBrand(link.url)!}/> : link.iconUrl ? <LinkFavicon src={link.iconUrl}/> : <FlowUrlIcon className="res-link-glyph"/>}</span>
+          <span className="res-icon" data-brand={brand ?? undefined}>{isFile && link.contentType.startsWith('image/') ? <img alt="" height={16} src={link.url} width={16}/> : isFile ? <File size={16}/> : brand ? <LinkBrandIcon brand={brand}/> : faviconURL && <LinkFavicon key={faviconURL} src={faviconURL}/>}</span>
           <span className="res-title" data-i18n-ignore>{(!link.title || link.title === safeHost(link.url)) && !isFile ? defaultLinkTitle(link.url) : link.title || safeHost(link.url)}</span>
           {(link.subtitle || isFile) && <span className="res-subtitle" data-i18n-ignore>{link.subtitle || formatFileSize(link.size)}</span>}
           <span className="res-meta"><span className="res-time">{when}</span>
