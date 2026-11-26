@@ -1807,13 +1807,13 @@
   .lp-projects__top > .lp-projects__header { flex: none; gap: 0; height: 44px; padding: 0 8px; }
   html:root body .app .lp-projects .lp-projects__top > .lp-projects__header { padding: 0 8px; }
   .lp-projects__top > .lp-projects__header h1 { color: var(--text); border-style: none; font-size: 13px; font-weight: 500; line-height: normal; margin: 0 0 0 12px; }
-  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { display: grid; flex: 0 0 28px; height: 28px; min-width: 28px; width: 28px; place-items: center; margin: 0; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
-  html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { box-sizing: border-box; flex: 0 0 28px; height: 28px; width: 28px; justify-content: center; gap: 0; margin-left: auto; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--ui-pill-fg); font: 500 12px var(--font); }
+  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { display: grid; flex: 0 0 32px; height: 32px; min-width: 32px; width: 32px; place-items: center; margin: 0; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
+  html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { box-sizing: border-box; flex: 0 0 32px; height: 32px; width: 32px; justify-content: center; gap: 0; margin-left: auto; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--ui-pill-fg); font: 500 12px var(--font); }
   .lp-projects .lp-projects__new-project > span { display: none; }
   .lp-projects__top > .lp-projects__toolbar { border-style: none; flex: none; gap: 6px; height: 43.5px; padding: 0 8px; }
   .lp-projects__views { gap: 4px; }
   .lp-projects__actions { border-style: none; gap: 6px; }
-  .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 28px; height: 28px; width: 28px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
+  .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 32px; height: 32px; width: 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
   .lp-projects__toolbar .lp-projects__icon-button svg { color: var(--phone-icon-fg); }
   :root .lp-projects__toolbar .lp-projects__add-view { color: var(--project-toolbar-icon-fg); margin-left: 0; }
   .lp-projects__toolbar .lp-projects__add-view svg { color: var(--phone-icon-dim); }
@@ -1822,7 +1822,14 @@
   html:root body .app .lp-projects .lp-projects__header [data-sidebar-trigger] > svg { display: block; width: 14px; height: 14px; color: var(--phone-icon-fg); }
   .lp-projects__toolbar .lp-projects__desktop-sidebar-icon { display: none; }
   .lp-projects__toolbar .lp-projects__phone-sidebar-icon { display: block; }
-  .lp-projects__view { --ui-pill-ring: transparent; line-height: normal; }
+  .lp-projects__view { --ui-pill-ring: transparent; height: 32px; line-height: normal; }
+  /* Fine pointers at phone widths (a desktop browser window) use the reference's 28px controls; touch devices keep 32px. */
+  @media (pointer: fine) {
+    html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { flex-basis: 28px; height: 28px; min-width: 28px; width: 28px; }
+    html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { flex-basis: 28px; height: 28px; width: 28px; }
+    .lp-projects__toolbar .lp-projects__icon-button { flex-basis: 28px; height: 28px; width: 28px; }
+    .lp-projects__view { height: 28px; }
+  }
   .lp-projects__view > span { border-style: none; font-size: 12px; font-weight: 500; line-height: normal; }
 
   .lp-projects :is(.lp-projects-filter, .lp-projects-display, .lp-projects-filter__nested, .lp-projects-display-select__menu) {

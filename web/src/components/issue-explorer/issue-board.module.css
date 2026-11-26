@@ -483,6 +483,17 @@
   .hiddenStatus b{margin-left:auto;display:inline-flex;align-items:center;gap:0;height:24px;border-radius:8px;color:var(--theme-text-secondary);font-size:13px;font-weight:450;line-height:normal}
   .hiddenStatus b svg{display:block;flex:none;margin:-1px 4px 0 -1px}
 }
+/* Touch phones (coarse pointer) keep the reference's phone-mode geometry: a 298px column from the left edge, 16px card insets, 28px header buttons. */
+@media(max-width:767px) and (pointer:coarse){
+  .board{padding:0}
+  .column{width:298px;min-width:298px}
+  .cards{padding:9px 16px 8px}
+  .columnHeader{box-sizing:border-box;height:50px;gap:2px;padding:4px 16px 0 22px}
+  .columnHeader::before{left:8px;right:8px;height:auto;bottom:0}
+  .columnHeader strong{margin-left:8px}
+  .count{gap:3px;margin-left:6px}
+  .headerButton{width:28px;height:28px}
+}
 /* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
 .mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
 .mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
