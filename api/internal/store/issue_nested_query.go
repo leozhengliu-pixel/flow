@@ -338,7 +338,7 @@ func (s *SQLiteStore) nestedIssueMoves(ctx context.Context, query IssueRecordQue
 	defer rows.Close()
 	moves := map[string]int64{}
 	for rows.Next() {
-		if query.GroupBy == "customer" {
+		if query.GroupBy == "customer" || query.GroupBy == "labels" {
 			var sign, count int64
 			var key string
 			if err := rows.Scan(&sign, &key, &count); err != nil {
@@ -380,7 +380,7 @@ func (s *SQLiteStore) nestedIssueMovesSQL(query IssueRecordQuery) (string, []any
 	columns, anchor, step := "id,root_key,depth", "i.id,i.id,0", "t.root_key,t.depth+1"
 	var keyArgs []any
 	attribute := issueGroupAttribute(query.GroupBy)
-	if query.GroupBy != "customer" && attribute == "" {
+	if query.GroupBy != "customer" && query.GroupBy != "labels" && attribute == "" {
 		var key string
 		if query.GroupBy == "cases" {
 			if key, keyArgs, err = issueGroupCaseExpression(query.GroupCases); err != nil {
@@ -429,6 +429,26 @@ func (s *SQLiteStore) nestedIssueMovesSQL(query IssueRecordQuery) (string, []any
 		}
 		statement = member("1", "t.root_key") + " UNION ALL " + member("-1", "t.id") + " UNION ALL " + none("1", "t.root_key") + " UNION ALL " + none("-1", "t.id")
 		args = append(args, query.Workspace, query.Workspace, query.Workspace, query.Workspace)
+	case query.GroupBy == "labels":
+		// Label groups are multi-membership like customer groups: a nested
+		// row leaves each of its own labels' groups (or "No label") and
+		// joins each of its top-level row's.
+		limit, limitArgs := "", []any(nil)
+		if len(query.GroupLabelIDs) > 0 {
+			clause, values := bindList("l.label_id", query.GroupLabelIDs)
+			limit, limitArgs = " AND "+clause, values
+		}
+		member := func(sign, issue string) string {
+			return "SELECT " + sign + ",l.label_id,COUNT(DISTINCT t.id) FROM nest_tree t JOIN issue_label_records l ON l.workspace_key=? AND l.issue_id=" + issue + limit + " WHERE t.depth>0 GROUP BY l.label_id"
+		}
+		none := func(sign, issue string) string {
+			return "SELECT " + sign + ",'',COUNT(*) FROM nest_tree t WHERE t.depth>0 AND NOT EXISTS (SELECT 1 FROM issue_label_records l WHERE l.workspace_key=? AND l.issue_id=" + issue + limit + ")"
+		}
+		statement = member("1", "t.root_key") + " UNION ALL " + member("-1", "t.id") + " UNION ALL " + none("1", "t.root_key") + " UNION ALL " + none("-1", "t.id")
+		for range 4 {
+			args = append(args, query.Workspace)
+			args = append(args, limitArgs...)
+		}
 	case attribute != "":
 		// The field comes from the fixed allowlist, never from input SQL.
 		value := func(alias, issue string) string {

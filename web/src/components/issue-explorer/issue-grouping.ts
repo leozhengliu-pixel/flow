@@ -611,15 +611,17 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
 }
 
 /** Groupings the server-backed issue list can group by (`issueGroupAttribute` in the API). */
-export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'customer']
+export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'statusType', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'labelGroup', 'team', 'customer']
 /** Orderings the server-backed issue list can sort by. */
 export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated', 'customerCount', 'customerRevenue', 'customerImportantCount']
 
 /**
  * Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. Focus groups by the
- * ordered Focus cases (`focusGroupCases`) when the workspace data is given, else by status.
+ * ordered Focus cases (`focusGroupCases`) when the workspace data is given, else by status. "Label" groups by every
+ * label an issue has (the server's multi-membership `labels` grouping); "Label group" by the chosen group's labels,
+ * `defaultLabelGroupId` (the first offered group) when the display has none.
  */
-export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = [], focusData?: FocusCaseData) {
+export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = [], focusData?: FocusCaseData, defaultLabelGroupId?: string) {
   const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt', customerCount: 'customerCount', customerRevenue: 'customerRevenue', customerImportantCount: 'customerImportantCount' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated' | 'customerCount' | 'customerRevenue' | 'customerImportantCount'] ?? 'sortOrder'
   const direction = display.orderDirection ?? defaultOrderDirection(display.ordering)
   const conditions: Record<string, unknown>[] = []
@@ -634,8 +636,10 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
   // Hide untriaged backlog issues of triage-enabled teams, like the local isTriage() check.
   if (display.showTriageIssues === false && triageTeamIds.length) conditions.push({ not: { and: [{ field: 'team', operator: 'in', values: triageTeamIds }, { field: 'statusType', operator: 'in', values: ['backlog'] }, { field: 'triagedAt', operator: 'isEmpty' }] } })
   const focus = display.grouping === 'focus' && focusData ? focusGroupCases(focusData, now) : undefined
-  const groupBy = focus ? 'cases' : display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
-  return { sort, direction, groupBy, ...(focus ? { groupCases: focus } : {}), archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
+  const grouping = focus ? 'cases' : display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
+  const groupBy = grouping === 'label' ? 'labels' : grouping
+  const labelGroupId = grouping === 'labelGroup' ? display.labelGroupId ?? defaultLabelGroupId ?? '' : undefined
+  return { sort, direction, groupBy, ...(focus ? { groupCases: focus } : {}), ...(labelGroupId === undefined ? {} : { labelGroupId }), archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
 }
 
 /**

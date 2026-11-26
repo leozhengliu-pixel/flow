@@ -98,9 +98,10 @@ export function MyIssuesPage({ data, windowedList, initialView = 'assigned', loa
   })
   // Focus buckets depend on the current cycles, triage teams and SLA risk: the query changes only when they do.
   const focusKey = focusCasesKey(controller.display, data)
-  const myIssuesPagedQuery = useDepsSnapshot([controller.display, controller.filters, data.viewer.id, projectedView, focusKey], () => {
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? data : undefined)
-    return { archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+  const defaultLabelGroupId = labelGroupOptions(data)[0]?.id
+  const myIssuesPagedQuery = useDepsSnapshot([controller.display, controller.filters, data.viewer.id, projectedView, focusKey, defaultLabelGroupId], () => {
+    const { sort, direction, groupBy, groupCases, labelGroupId, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? data : undefined, defaultLabelGroupId)
+    return { archived, groupBy, groupCases, labelGroupId, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
   })
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {

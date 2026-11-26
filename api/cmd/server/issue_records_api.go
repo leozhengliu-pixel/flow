@@ -86,6 +86,13 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		return data, query, store.ErrIssueQuery
 	}
 	query.Filter = root.storeFilter()
+	if query.GroupBy == "labelGroup" {
+		// labelGroupId: the label group whose labels the issues group by.
+		query.GroupBy = "labels"
+		if query.GroupLabelIDs, err = s.issueGroupLabelIDs(r.Context(), query.Workspace, r.URL.Query().Get("labelGroupId")); err != nil {
+			return data, query, err
+		}
+	}
 	if query.GroupBy == "cases" {
 		// groupCases: [{"value": "…", "filter": <filter expression>}, …], the groups in order.
 		cases, err := decodeIssueGroupCases(r.URL.Query().Get("groupCases"))
@@ -372,6 +379,9 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
 	groups, err := s.store.QueryIssueGroups(r.Context(), query)
+	if err == nil {
+		groups, err = s.orderIssueRecordGroups(r.Context(), query, groups)
+	}
 	if err != nil {
 		issueRecordsErrorFor(w, r, err)
 		return

@@ -184,4 +184,12 @@ describe('issue grouping engine', () => {
     expect(query.conditions).toContainEqual({ field: 'parent', operator: 'isEmpty' })
     expect(JSON.stringify(query.conditions)).toContain('completedAt')
   })
+
+  it('groups server queries by every label, a label group and status type', () => {
+    expect(pagedDisplayQuery(createIssueDisplayOptions({ grouping: 'label' }), NOW)).toMatchObject({ groupBy: 'labels' })
+    expect(pagedDisplayQuery(createIssueDisplayOptions({ grouping: 'label' }), NOW)).not.toHaveProperty('labelGroupId')
+    expect(pagedDisplayQuery(createIssueDisplayOptions({ grouping: 'labelGroup' }), NOW, [], undefined, 'g1')).toMatchObject({ groupBy: 'labelGroup', labelGroupId: 'g1' })
+    expect(pagedDisplayQuery(createIssueDisplayOptions({ grouping: 'labelGroup', labelGroupId: 'g2' }), NOW, [], undefined, 'g1')).toMatchObject({ labelGroupId: 'g2' })
+    expect(pagedDisplayQuery(createIssueDisplayOptions({ grouping: 'statusType' }), NOW)).toMatchObject({ groupBy: 'statusType' })
+  })
 })

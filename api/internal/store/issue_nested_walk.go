@@ -24,7 +24,7 @@ func (s *SQLiteStore) nestedIssueGroupsByWalk(ctx context.Context, query IssueRe
 		if carried, carriedArgs, err = issueGroupCaseExpression(query.GroupCases); err != nil {
 			return nil, err
 		}
-	} else if query.GroupBy != "none" && query.GroupBy != "customer" && issueGroupAttribute(query.GroupBy) == "" {
+	} else if query.GroupBy != "none" && query.GroupBy != "customer" && query.GroupBy != "labels" && issueGroupAttribute(query.GroupBy) == "" {
 		column, err := issueGroupColumn(query.GroupBy)
 		if err != nil {
 			return nil, err
@@ -86,6 +86,25 @@ func (s *SQLiteStore) nestedIssueGroupsByWalk(ctx context.Context, query IssueRe
 			return nil, err
 		}
 		none, noneArgs := customerGroupClause("")
+		empty, err := count("SELECT '',COUNT(*) FROM "+from+" WHERE "+none, noneArgs...)
+		if err != nil {
+			return nil, err
+		}
+		return append(groups, empty...), nil
+	}
+	if query.GroupBy == "labels" {
+		// Label groups are multi-membership: a top-level row counts with its
+		// tree in each of its labels' groups, else in "No label".
+		join, joinArgs := "JOIN issue_label_records l ON l.workspace_key=i.workspace_key AND l.issue_id=i.id", []any(nil)
+		if len(query.GroupLabelIDs) > 0 {
+			clause, values := bindList("l.label_id", query.GroupLabelIDs)
+			join, joinArgs = join+" AND "+clause, values
+		}
+		groups, err := count("SELECT l.label_id,COUNT(DISTINCT t.id) FROM "+from+" "+join+" GROUP BY l.label_id ORDER BY l.label_id", joinArgs...)
+		if err != nil {
+			return nil, err
+		}
+		none, noneArgs := labelGroupClause("", query.GroupLabelIDs)
 		empty, err := count("SELECT '',COUNT(*) FROM "+from+" WHERE "+none, noneArgs...)
 		if err != nil {
 			return nil, err

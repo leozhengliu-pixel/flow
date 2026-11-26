@@ -82,6 +82,12 @@ func nestedCountIssues(rng *rand.Rand, base domain.Issue, prefix string, n int) 
 		}
 		if rng.Intn(100) < 40 {
 			item.Labels = []domain.IssueLabel{{ID: shape.labels[rng.Intn(len(shape.labels))]}}
+			// Some issues have a second label (multi-membership "labels"
+			// groups), chosen without the random source so the rest of
+			// the shape stays the same.
+			if second := shape.labels[i%len(shape.labels)]; i%5 == 0 && second != item.Labels[0].ID {
+				item.Labels = append(item.Labels, domain.IssueLabel{ID: second})
+			}
 		}
 		parent := -1
 		switch roll := rng.Intn(100); {
@@ -216,7 +222,7 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		{Filter: IssueFilter{Field: "labels", Operator: "notIn", Values: []string{shape.labels[0]}}},
 		{Filter: IssueFilter{Or: []IssueFilter{{Field: "priority", Values: []string{"1", "2"}}, {Field: "labels", Values: []string{shape.labels[1]}}}}},
 	}
-	groupings := []string{"status", "priority", "assignee", "team", "project", "creator", "cycle", "label", "estimate", "customer", "cases", "none"}
+	groupings := []string{"status", "statusType", "priority", "assignee", "team", "project", "creator", "cycle", "label", "labels", "estimate", "customer", "cases", "none"}
 	for _, scope := range scopes {
 		for _, group := range []string{"project", "creator", "cycle", "customer"} {
 			query := scope
@@ -354,7 +360,7 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		if err := repository.ImportIssues(ctx, workspace, []domain.Issue{issues[index]}); err != nil {
 			t.Fatal(err)
 		}
-		compare(step, []string{"status", "label", "customer", "cases", "priority", "assignee", "none"}, scopes[:7])
+		compare(step, []string{"status", "label", "labels", "customer", "cases", "priority", "assignee", "none"}, scopes[:7])
 	}
 	write("re-parent", func(issue *domain.Issue) { issue.ParentID = &issues[other].ID }, parent)
 	write("status change", func(issue *domain.Issue) { issue.State = shape.states[issues[other].Team.ID][1] }, other)

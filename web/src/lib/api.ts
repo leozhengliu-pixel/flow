@@ -473,6 +473,8 @@ export type IssueQueryInput = {
   groupValues?: string[];
   /** `groupBy: 'cases'`: each row is in the group of the first case whose filter it matches (the Focus buckets). */
   groupCases?: { value: string; filter: Record<string, unknown> }[];
+  /** `groupBy: 'labelGroup'`: the label group whose labels the issues group by. */
+  labelGroupId?: string;
   includeTotal?: boolean;
   includeStatusHistory?: boolean;
   /** Nested sub-issues: sub-issues whose parent matches come with the parent's page (`descendants`), not as rows of their own. */

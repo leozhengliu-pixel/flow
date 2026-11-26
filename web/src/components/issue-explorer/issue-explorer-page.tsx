@@ -196,12 +196,12 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const summaryRows = useMemo(() => [...new Map(groups.flatMap(group => group.issues).map(row => [row.id, row])).values()], [groups])
   const buildPagedQuery = useCallback((list: MyIssuesAppliedFilter[]) => {
     const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data)
+    const { sort, direction, groupBy, groupCases, labelGroupId, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data, labelGroupOptions(data, 'issue', scopeTeamIds ? [...scopeTeamIds] : undefined)[0]?.id)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
-  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, labelGroupId, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
+  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, scopeTeamIds, view])
   const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
   // Compare the same scope and display settings, clearing only personal filters, never the saved view's filters.
   const clearableFilters = bandActive ? extraFilters : filters

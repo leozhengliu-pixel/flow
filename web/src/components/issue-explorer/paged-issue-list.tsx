@@ -3,11 +3,11 @@ import { GroupedVirtuoso, Virtuoso } from 'react-virtuoso'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import { useIdentifierColumnWidth } from '@/components/my-issues/identifier-column'
-import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
+import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
 import { nestedIssuePage, nestedPageLines } from './paged-issue-cache'
 import { teamEquivalentState } from '@/lib/team-workflow'
-import { focusGroupDescriptor } from './issue-grouping'
+import { focusGroupDescriptor, groupDescriptors, groupMoveUpdate } from './issue-grouping'
 import { pagedGroupQuery, pagedStatusGroups } from './paged-issue-groups'
 import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
@@ -287,10 +287,16 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       const { rank: _rank, ...focus } = focusGroupDescriptor(group.value, { cycles: data.cycles })
       return { ...focus, issues: [], totalCount: group.count }
     }
+    if (field === 'labels' || field === 'labelGroup' || field === 'statusType') {
+      // The same header as the full list: "Group › Label", the label's colour, "No label", status type names.
+      const row = (field === 'statusType' ? { state: { id: '', name: '', type: group.value } } : { labels: group.value ? [{ id: group.value, name: '' }] : [] }) as unknown as MyIssuesRowData
+      const [{ rank: _rank, ...item }] = groupDescriptors(row, field === 'labels' ? 'label' : field, { data, labelGroupId: query.labelGroupId })
+      return { ...item, id: group.value, issues: [], totalCount: group.count }
+    }
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined
     const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : field === 'customer' ? (group.value === UNKNOWN_CUSTOMER_GROUP ? 'Unknown customer' : group.value ? data.customers?.find(customer => customer.id === group.value)?.name ?? 'Unknown customer' : 'No customer') : undefined) ?? (group.value || `No ${field}`)
     return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
-  }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, data.customers, query.groupBy])
+  }, [data, query.groupBy, query.labelGroupId])
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) || hiddenGroupIds.includes(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
   const selectGroup = async (group: Group) => {
     const request = active.current
@@ -339,9 +345,21 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     if (!groups.length && !emptyBoard) return <div className={styles.state}>No issues</div>
     if (layout === 'board') {
       const boardGroups = [...groups, ...emptyGroups.filter(group => !groups.some(item => item.value === group.id)).map(group => ({ value: group.id, count: 0, loaded: 0, hasMore: false }))]
+      // Label board columns start with "No label" (lists end with it).
+      const labelGrouping = query.groupBy === 'labels' || query.groupBy === 'labelGroup'
+      if (labelGrouping) boardGroups.sort((a, b) => Number(Boolean(a.value)) - Number(Boolean(b.value)))
       const isHidden = (group: Group) => hiddenGroupIds.includes(group.value) || (!showEmptyGroups && !group.count && !revealedIds.includes(group.value))
       const drop = (group: Group, before?: Issue) => {
         if (!dragging || !onMoveIssueRecord) return
+        if (labelGrouping) {
+          // A single-select group swaps the issue's label from that group; a multi-select group adds the label.
+          const grouping = query.groupBy === 'labels' ? 'label' : 'labelGroup'
+          const row = { labels: dragging.issue.labels } as unknown as MyIssuesRowData
+          const update = groupMoveUpdate(row, grouping, `${grouping === 'label' ? 'label' : 'labelgroup'}-${group.value || 'none'}`, { data, labelGroupId: query.labelGroupId })
+          const issue = dragging.issue; setDragging(undefined)
+          if (update) void onMoveIssueRecord(issue, { ...update, ...(before ? { sortOrder: (before.sortOrder ?? 0) - .5 } : {}) }).then(() => setRetry(value => value + 1)).catch(error => setError(String(error.message ?? error)))
+          return
+        }
         const property = query.groupBy === 'status' ? 'stateId' : query.groupBy === 'priority' ? 'priority' : query.groupBy === 'assignee' ? 'assigneeId' : query.groupBy === 'project' ? 'projectId' : query.groupBy === 'cycle' ? 'cycleId' : undefined
         if (!property) return
         const input: IssueUpdateInput = { [property]: property === 'priority' ? Number(group.value) : group.value }
@@ -426,7 +444,7 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
   if (query.groupBy === 'cases') { fields.delete('cases'); for (const item of query.groupCases ?? []) visit(item.filter) }
   if (before.archivedAt !== after.archivedAt || before.team.id !== after.team.id) return true
   if (query.projectId && before.project?.id !== after.project?.id || query.stateId && before.state.id !== after.state.id) return true
-  const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'statusType' ? issue.state.type : field === 'team' ? issue.team.id : field === 'delegateId' ? issue.delegate?.id : field?.startsWith('relation:') ? (issue.relations ?? []).filter(relation => relation.type === field.slice(9)).length : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
+  const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'statusType' ? issue.state.type : field === 'team' ? issue.team.id : field === 'delegateId' ? issue.delegate?.id : field?.startsWith('relation:') ? (issue.relations ?? []).filter(relation => relation.type === field.slice(9)).length : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' || field === 'labelGroup' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
   return [...fields].some(field => value(before, field) !== value(after, field)) || Boolean(query.q && (before.title !== after.title || before.description !== after.description))
 }
 

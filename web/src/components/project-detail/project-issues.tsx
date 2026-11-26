@@ -363,10 +363,11 @@ export function ProjectIssues({
   const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
   const showProjectIntro = !milestoneScope && projectHasNoIssues;
   const focusKey = issueData ? focusCasesKey(display, issueData) : '';
-  const pagedQuery = useDepsSnapshot<IssueQueryInput>([project.id, milestoneScope, filters, display, focusKey], () => {
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueData : undefined);
+  const defaultLabelGroupId = issueData ? labelGroupOptions(issueData)[0]?.id : undefined;
+  const pagedQuery = useDepsSnapshot<IssueQueryInput>([project.id, milestoneScope, filters, display, focusKey, defaultLabelGroupId], () => {
+    const { sort, direction, groupBy, groupCases, labelGroupId, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueData : undefined, defaultLabelGroupId);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
+    return { projectId: project.id, archived, groupBy, groupCases, labelGroupId, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
   });
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),
