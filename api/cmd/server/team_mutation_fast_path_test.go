@@ -72,7 +72,12 @@ func runTeamAdministrationScript(t *testing.T, auth, forceFull bool) mutationScr
 	if auth {
 		t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	}
-	api := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: !auth}))
+	// The arms compare every realtime event: a delivery scheduler tick (a
+	// Pulse summary, say) landing inside only the slower arm is not part of
+	// the script.
+	service := &server{store: repository, uploadPath: t.TempDir(), authDisabled: !auth}
+	disableBackgroundWorkersForTest(service)
+	api := httptest.NewServer(newHandler(service))
 	defer api.Close()
 	repository.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		result.events = append(result.events, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+normalizeMutationJSON(event.Payload, true))
