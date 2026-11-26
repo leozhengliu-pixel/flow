@@ -138,8 +138,8 @@ func TestScaleP21SW26RenameStageAggregationAndResume(t *testing.T) {
 	for _, key := range owned {
 		var current, at string
 		if err := f.db.QueryRowContext(t.Context(), `SELECT new_key,renamed_at FROM workspace_key_renames WHERE workspace_id=? AND old_key=?`, id, key).Scan(&current, &at); err != nil ||
-			current != f.data.Workspace.URLKey || at != "2026-01-02T03:04:05Z" {
-			t.Fatalf("staged pair changed legacy max/string order: key=%s current=%s at=%s error=%v", key, current, at, err)
+			current != f.data.Workspace.URLKey || at != "2026-01-02T03:04:05.000000000Z" {
+			t.Fatalf("staged pair timestamp: key=%s current=%s at=%s error=%v", key, current, at, err)
 		}
 	}
 }
@@ -222,9 +222,13 @@ func TestScaleP21SW26RenameEventPagesBounded(t *testing.T) {
 		if f.dialect == "sqlite" && index%2 == 0 {
 			stored = payload
 		}
-		if _, err := tx.ExecContext(t.Context(), `INSERT INTO domain_events(id,event_type,aggregate_id,workspace_id,payload,created_at) VALUES(?,'workspace.updated',?,?,?,?)`, idgen.New("sw26-event-"), f.data.Workspace.ID, f.data.Workspace.ID, stored, "2026-01-02T03:04:05Z"); err != nil {
+		if _, err := tx.ExecContext(t.Context(), `INSERT INTO domain_events(id,event_type,aggregate_id,workspace_id,payload,created_at) VALUES(?,'workspace.updated',?,?,?,?)`, idgen.New("sw26-event-"), f.data.Workspace.ID, f.data.Workspace.ID, stored, "2026-01-02T03:04:05.371Z"); err != nil {
 			t.Fatal(err)
 		}
+	}
+	later := []byte(fmt.Sprintf(`{"urlKey":"%s-000"}`, prefix))
+	if _, err := tx.ExecContext(t.Context(), `INSERT INTO domain_events(id,event_type,aggregate_id,workspace_id,payload,created_at) VALUES(?,'workspace.updated',?,?,?,?)`, idgen.New("sw26-event-"), f.data.Workspace.ID, f.data.Workspace.ID, later, "2026-01-02T03:04:05.3716Z"); err != nil {
+		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -248,6 +252,10 @@ func TestScaleP21SW26RenameEventPagesBounded(t *testing.T) {
 	var count int
 	if err := stage.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pairs WHERE id=? AND key LIKE ?`, f.data.Workspace.ID, prefix+"-%").Scan(&count); err != nil || count != 507 || pages < 2 {
 		t.Fatalf("event page snapshot/aggregation differs: rows=%d pages=%d error=%v", count, pages, err)
+	}
+	var at string
+	if err := stage.db.QueryRowContext(t.Context(), `SELECT at FROM pairs WHERE id=? AND key=?`, f.data.Workspace.ID, prefix+"-000").Scan(&at); err != nil || at != "2026-01-02T03:04:05.371600000Z" {
+		t.Fatalf("timestamp across staged pages = %q, %v", at, err)
 	}
 }
 

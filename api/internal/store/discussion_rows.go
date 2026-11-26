@@ -385,8 +385,9 @@ func (r *issueMutationRows) activeDiscussionNotifications(ctx context.Context, i
 			r.discussion.notificationSlices = append(r.discussion.notificationSlices, notifications)
 		}
 	}()
-	where := "workspace_key=? AND kind='notification' AND resource_id=? AND status='unread' AND " + r.owner.store.jsonText("data", "updatedAt") + ">=?"
-	cutoff := time.Now().UTC().Add(-6 * time.Hour).Format(time.RFC3339Nano)
+	s := r.owner.store
+	where := "workspace_key=? AND kind='notification' AND resource_id=? AND status='unread' AND " + s.timestampTextKey(s.jsonText("data", "updatedAt")) + ">=?"
+	cutoff := formatStoredTime(time.Now().Add(-6 * time.Hour))
 	err := discussionSelectedRows(ctx, r, "notification", where, []any{r.workspace, issue, cutoff}, " ORDER BY created_at,id", 0, func(notification domain.Notification) error {
 		result[issue] = append(result[issue], notification)
 		return nil

@@ -1313,7 +1313,7 @@ func writeRootCollectionArray(ctx context.Context, tx *sqlTx, workspace, field s
 	}
 	// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000.
 	encoded = StripJSONNUL(encoded)
-	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET data=?,updated_at=? WHERE workspace_key=?`, encoded, time.Now().UTC().Format(time.RFC3339Nano), workspace)
+	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET data=?,updated_at=? WHERE workspace_key=?`, encoded, formatStoredTime(time.Now()), workspace)
 	return err
 }
 

@@ -105,8 +105,9 @@ func (s *SQLiteStore) seedWorkspaceKeyRenames(ctx context.Context) (int, error) 
 				continue
 			}
 			pair := [2]string{id, key}
-			if previous, ok := keys[pair]; !ok || created > previous.at {
-				keys[pair] = seen{at: created}
+			at := normalizeStoredTime(created)
+			if previous, ok := keys[pair]; !ok || at > previous.at {
+				keys[pair] = seen{at: at}
 			}
 		}
 		err = rows.Err()
@@ -143,11 +144,11 @@ func (s *SQLiteStore) seedWorkspaceKeyRenames(ctx context.Context) (int, error) 
 		if isLive && current == pair[1] {
 			continue
 		}
-		at := keys[pair].at
-		if _, err := time.Parse(time.RFC3339Nano, at); err != nil {
-			at = time.Now().UTC().Format(time.RFC3339Nano)
+		at, err := time.Parse(time.RFC3339Nano, keys[pair].at)
+		if err != nil {
+			at = time.Now()
 		}
-		result, err := s.db.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, pair[0], pair[1], current, at)
+		result, err := s.db.ExecContext(ctx, `INSERT INTO workspace_key_renames(workspace_id,old_key,new_key,renamed_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, pair[0], pair[1], current, formatStoredTime(at))
 		if err != nil {
 			return recorded, err
 		}

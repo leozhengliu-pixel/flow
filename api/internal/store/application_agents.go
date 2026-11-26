@@ -196,7 +196,7 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 		a.CreatedAt = now
 		// An application installed again after being uninstalled reuses its
 		// app user (kept so history still names it).
-		_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,'',1,?,?) ON CONFLICT(id) DO NOTHING`, a.UserID, nil, a.Name, a.Name, a.AvatarURL, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,'',1,?,?) ON CONFLICT(id) DO NOTHING`, a.UserID, nil, a.Name, a.Name, a.AvatarURL, formatStoredTime(now), formatStoredTime(now))
 		if err != nil {
 			return current, a, err
 		}
@@ -222,10 +222,10 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 		memberStatus = "suspended"
 		active = 0
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, a.Name, a.Name, a.AvatarURL, active, now.Format(time.RFC3339Nano), a.UserID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, a.Name, a.Name, a.AvatarURL, active, formatStoredTime(now), a.UserID); err != nil {
 		return current, a, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,'app',?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role='app',status=excluded.status`, current.Workspace.ID, a.UserID, memberStatus, a.CreatedAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,'app',?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role='app',status=excluded.status`, current.Workspace.ID, a.UserID, memberStatus, formatStoredTime(a.CreatedAt), formatStoredTime(now)); err != nil {
 		return current, a, err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND user_id=?`, current.Workspace.ID, a.UserID); err != nil {
@@ -233,7 +233,7 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 	}
 	if a.Active {
 		for _, team := range a.TeamIDs {
-			if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,'member',?)`, current.Workspace.ID, team, a.UserID, now.Format(time.RFC3339Nano)); err != nil {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,'member',?)`, current.Workspace.ID, team, a.UserID, formatStoredTime(now)); err != nil {
 				return current, a, err
 			}
 		}

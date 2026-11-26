@@ -28,13 +28,13 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",
 		// The result cache only checks for a borrowed snapshot to bypass Redis.
 		"shared_result_cache.go":                 "a8b3776efb34fe28b10957fe5e9e29f064bf2965809262760d29bfa07351afb3",
-		"auth.go":                                "ebf4155c13b06f088ef0cd452d12112b5a032c4411a8955a89bac54273895f44",
-		"team_default_favorites.go":              "8ba62b09173955d3f412bba9820ba6292e3ee06fec852571c691e5a62e49e657",
+		"auth.go":                                "f2ec6e4263b8a860678bc995f9324515c3ed5dcdab9f485689091c7f1d9f65ce",
+		"team_default_favorites.go":              "160beec6f9080397a9addddd55d7c0399ad2a755c2b9331ea7b1699811e9083e",
 		"snapshot_buffers.go":                    "023c93b51f6e9eaa6c0ba0b29a9f9e49d92ce006406801fb07d45cc8609e6bb2",
 		"snapshot_clone.go":                      "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
 		"../../cmd/server/advanced_features.go":  "919984659f265f6551ba609b814286bac136b3bb918dc5a0204d1583d0a00cbe",
 		"../../cmd/server/loop_settings.go":      "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":               "ed1ac2ff5a759a711ded5a9ec4fd066df7471fc0984f2666ce74fbbc12dc6c10",
+		"../../cmd/server/main.go":               "34ae00f91e6c50daf360a2cce466a26240eef6cdd4d1a5dcf20a9d5b380f8709",
 		"../../cmd/server/notification_state.go": "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":      "ac5b80d21fc3f3edc717e140729d0b59b9e245ae5d68597c388336856cc0bb01",
 		"../../cmd/server/cold_dispatch.go":      "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
@@ -50,10 +50,10 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/settings_features.go":               "f2867b72c1f9b5611f57a4b8033cd362865754b1757d7866600ecb95fc0e84e6",
 		"authz_epoch.go":                                      "6de890ae6a645e416fbbfb479dfcb165c68b78ccd384851c433f03c5a285e583",
 		"content_records.go":                                  "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
-		"database.go":                                         "fbc497f2bd38e111567d09380d519f3313bea953fe5c312589a6d99e483326d5",
+		"database.go":                                         "4ab29a400063e797d151e7b17b9bf2d4013790b60e2e88ce698c3863274679c9",
 		"issue_access_metadata.go":                            "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
 		"metadata_decode.go":                                  "2df3c831f43724f14fbe66f470de959c92d6044a87aa42ff4f2771d8928f8b2e",
-		"metadata_delta.go":                                   "a79e58b9c65fd49c020acf27493596a9ce1546378d3a4ffa5548ccc9e81b7b0b",
+		"metadata_delta.go":                                   "366ef37cf6bb72eba0add53e6b73262c9d3c0c25e9cc7694038eb0941ad2c7c7",
 		"metadata_copy_revision.go":                           "f41b31e55f638beb5ba7fd37adc66cc39f31e5602cf94d5987ad930e205f1ba5",
 		"metadata_mutation.go":                                "b7589f199a137fbec8cf28d63b4558bc9712e148cd3c67eae2a9984174c21293",
 		"metadata_record_scope.go":                            "25885e1106e0b8ee8dbc2b9f2f24d94c0d9764c99dfd644fe5a32165e21647b8",
@@ -110,7 +110,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
 		"issue_read_source.go":          "434b6412f3e6546786feba97a97e5dd5c9c1a726f579949b03bf9d78bf0f9286",
 		// Search binds its local SQL reader for bounded candidates and catalog coverage.
-		"search_metadata.go": "0390e2d77516e735c5ae06607ba529444ded63d079e8964db6c20a736b4e7faf",
+		"search_metadata.go": "8e47c2d662d818e441cdf74f780affd7313aaa757c5790aaabb622c4f8a84025",
 		// Cold-request route: the cold store stays inside its callback.
 		"../../cmd/server/oauth_authorized_applications.go": "8a0e9bec2c8ea317de40e3e4872b8587a6930369391d9e70fa7b895c38c94e9a",
 		// The issue read owns a SQL transaction and the policy it uses.

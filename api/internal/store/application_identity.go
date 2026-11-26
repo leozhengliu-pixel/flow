@@ -90,7 +90,7 @@ func (s *SQLiteStore) syncInstallationIdentity(ctx context.Context, ref Installa
 		if _, err := tx.ExecContext(ctx, `UPDATE application_installations SET data=? WHERE id=?`, raw, installation.ID); err != nil {
 			return current, err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, name, name, avatarURL, now.Format(time.RFC3339Nano), installation.UserID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, name, name, avatarURL, formatStoredTime(now), installation.UserID); err != nil {
 			return current, err
 		}
 		if index >= 0 {

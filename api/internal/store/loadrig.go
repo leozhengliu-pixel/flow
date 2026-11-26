@@ -77,7 +77,7 @@ func (s *SQLiteStore) SeedLoadRigContent(ctx context.Context, workspace string, 
 // database can be driven on later days. It touches only sessions of the
 // given users.
 func (s *SQLiteStore) ExtendLoadRigSessions(ctx context.Context, users []string, ttl time.Duration) error {
-	expires := time.Now().UTC().Add(ttl).Format(time.RFC3339Nano)
+	expires := formatStoredTime(time.Now().Add(ttl))
 	for start := 0; start < len(users); start += 200 {
 		clause, args := bindList("user_id", users[start:min(start+200, len(users))])
 		if _, err := s.db.ExecContext(ctx, `UPDATE auth_sessions SET expires_at=? WHERE `+clause, append([]any{expires}, args...)...); err != nil {

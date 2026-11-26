@@ -51,6 +51,7 @@ environment variable) added under server:. A key config.file sets itself
 wins over the chart's value. Empty when there is no file to render.
 
   storage.uploadMaxBytes -> server.storage.uploadMaxBytes
+  database.recordJournalCapture -> server.database.recordJournalCapture
 */ -}}
 {{- define "flow.config.file" -}}
 {{- $file := deepCopy (default dict .Values.config.file) -}}
@@ -61,6 +62,15 @@ wins over the chart's value. Empty when there is no file to render.
 {{- $_ := set $storage "uploadMaxBytes" (int64 .) -}}
 {{- end -}}
 {{- $_ := set $server "storage" $storage -}}
+{{- $_ := set $file "server" $server -}}
+{{- end -}}
+{{- with .Values.database.recordJournalCapture -}}
+{{- $server := default dict $file.server -}}
+{{- $database := default dict $server.database -}}
+{{- if not (hasKey $database "recordJournalCapture") -}}
+{{- $_ := set $database "recordJournalCapture" . -}}
+{{- end -}}
+{{- $_ := set $server "database" $database -}}
 {{- $_ := set $file "server" $server -}}
 {{- end -}}
 {{- if $file -}}

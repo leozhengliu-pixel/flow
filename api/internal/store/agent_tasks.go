@@ -61,7 +61,7 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at) VALUES(?,?,?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING`, task.ID, workspace, issue.ID, task.AppUserID, task.Status, raw, task.CreatedAt.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at) VALUES(?,?,?,?,?,1,?,?) ON CONFLICT(id) DO NOTHING`, task.ID, workspace, issue.ID, task.AppUserID, task.Status, raw, formatStoredTime(task.CreatedAt))
 	return err
 }
 
@@ -314,7 +314,7 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	defer tx.Rollback()
 	lease := ""
 	if task.Status == "active" {
-		lease = task.UpdatedAt.Add(5 * time.Minute).Format(time.RFC3339Nano)
+		lease = formatStoredTime(task.UpdatedAt.Add(5 * time.Minute))
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt='',lease_until=?,stale_at=? WHERE workspace_key=? AND id=? AND version=? AND archived_at=''`, task.Status, task.Version, taskRaw, lease, agentTaskStaleAt(task), workspace, id, expected)
 	if err != nil {
@@ -329,7 +329,7 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		// archive bumps the version as well); the caller rereads either way.
 		return task, ErrIssueVersion
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, id, activity.ID, activityRaw, activity.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, id, activity.ID, activityRaw, formatStoredTime(activity.CreatedAt)); err != nil {
 		return task, err
 	}
 	if err = s.deleteEphemeralActivity(ctx, tx, id, replacedEphemeral); err != nil {
@@ -383,7 +383,7 @@ func agentTaskStaleAt(task domain.AgentTask) string {
 }
 
 func agentTaskTimeColumn(at time.Time) string {
-	return at.UTC().Format("2006-01-02T15:04:05.000000000Z")
+	return formatStoredTime(at)
 }
 
 func agentReplyActivity(kind string) bool {
@@ -391,7 +391,7 @@ func agentReplyActivity(kind string) bool {
 }
 
 func (s *SQLiteStore) PendingApplicationTasks(ctx context.Context) ([]domain.AgentTask, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	rows, err := s.db.QueryContext(ctx, `SELECT `+agentTaskColumns+` FROM application_agent_tasks WHERE status IN ('pending','active') AND archived_at='' AND next_attempt<=? AND lease_until<=? ORDER BY id LIMIT 16`, now, now)
 	if err != nil {
 		return nil, err
@@ -410,7 +410,7 @@ func (s *SQLiteStore) PendingApplicationTasks(ctx context.Context) ([]domain.Age
 
 func (s *SQLiteStore) ClaimApplicationTask(ctx context.Context, id string, version int64) (bool, error) {
 	now := time.Now().UTC()
-	result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until=?,attempts=attempts+1 WHERE id=? AND version=? AND status IN ('pending','active') AND archived_at='' AND lease_until<=?`, now.Add(5*time.Minute).Format(time.RFC3339Nano), id, version, now.Format(time.RFC3339Nano))
+	result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until=?,attempts=attempts+1 WHERE id=? AND version=? AND status IN ('pending','active') AND archived_at='' AND lease_until<=?`, formatStoredTime(now.Add(5*time.Minute)), id, version, formatStoredTime(now))
 	if err != nil {
 		return false, err
 	}
@@ -425,7 +425,7 @@ func (s *SQLiteStore) FinishApplicationDelivery(ctx context.Context, id string, 
 	if success {
 		when = when.Add(24 * time.Hour)
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until='',next_attempt=? WHERE id=? AND version=?`, when.Format(time.RFC3339Nano), id, version)
+	_, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until='',next_attempt=? WHERE id=? AND version=?`, formatStoredTime(when), id, version)
 	return err
 }
 

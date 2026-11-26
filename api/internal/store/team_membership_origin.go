@@ -294,7 +294,7 @@ func (s *SQLiteStore) changeTeamMembership(ctx context.Context, request TeamMemb
 	}
 	result.Changes = append(result.Changes, domain.TeamMemberChange{TeamID: teamID, TeamKey: teamKey, UserID: userID, Action: domain.TeamMemberAdded, RoleAfter: role, Origin: origin})
 	if !request.DryRun {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at,origin) VALUES(?,?,?,?,?,?)`, workspaceID, teamID, userID, role, time.Now().UTC().Format(time.RFC3339Nano), origin); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at,origin) VALUES(?,?,?,?,?,?)`, workspaceID, teamID, userID, role, formatStoredTime(time.Now()), origin); err != nil {
 			return result, err
 		}
 	}
@@ -317,7 +317,7 @@ func addTeamAncestorMemberships(ctx context.Context, tx *sqlTx, data domain.Boot
 		return nil, nil
 	}
 	changes := []domain.TeamMemberChange{}
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	seen := map[string]bool{teamID: true}
 	for parent := data.TeamSettings[teamID].ParentTeamID; parent != "" && !seen[parent]; parent = data.TeamSettings[parent].ParentTeamID {
 		seen[parent] = true

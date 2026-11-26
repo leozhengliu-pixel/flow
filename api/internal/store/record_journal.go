@@ -168,6 +168,12 @@ func (tx *sqlTx) beginRecordJournal(ctx context.Context) error {
 		prefix = "rjv2"
 	}
 	tx.journalToken = idgen.New(prefix)
+	if tx.dialect == "mysql" && tx.database.appCapture.Load() && !tx.database.captureTriggers.Load() {
+		// Application capture without triggers: the token lives only in
+		// this transaction's captured rows.
+		return nil
+	}
+	tx.journalSession = tx.dialect == "mysql"
 	query := `UPDATE record_journal_context SET tx_id=? WHERE id=1`
 	if tx.dialect == "mysql" {
 		query = `SET @flow_record_tx=?`
@@ -193,7 +199,7 @@ func (tx *sqlTx) beginRecordJournal(ctx context.Context) error {
 
 func (tx *sqlTx) Rollback() error {
 	tx.metadataWrites++
-	if tx.journalToken != "" && tx.dialect == "mysql" {
+	if tx.journalSession {
 		// MySQL session variables outlive rollback and pooled transactions.
 		// Clear the token before returning this connection to the pool.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(tx.context()), time.Second)
@@ -330,7 +336,7 @@ func (tx *sqlTx) deferRecordJournalBudget() error {
 	}
 	if tx.dialect == "sqlite" {
 		_, err = tx.Tx.ExecContext(ctx, `UPDATE record_journal_context SET tx_id='' WHERE id=1`)
-	} else if tx.dialect == "mysql" {
+	} else if tx.journalSession {
 		if _, err = tx.Tx.ExecContext(ctx, `DELETE FROM record_journal_active WHERE tx_id=?`, tx.journalToken); err == nil {
 			_, err = tx.Tx.ExecContext(ctx, `SET @flow_record_tx=''`)
 		}
@@ -358,7 +364,7 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 		if enabled == 0 {
 			// Disabling another replica must not reject a canonical write.
 			// Retained dirty keys remain unavailable until activation repair.
-			if tx.dialect == "mysql" {
+			if tx.journalSession {
 				if _, err := tx.ExecContext(ctx, `DELETE FROM record_journal_active WHERE tx_id=?`, tx.journalToken); err != nil {
 					return err
 				}
@@ -504,7 +510,7 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO record_journal(id,workspace_id,seq,authz_epoch,payload,created_at) VALUES(?,?,?,?,?,?)`, p.change.TxID, workspaceID, seq, p.change.AuthzEpoch, raw, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO record_journal(id,workspace_id,seq,authz_epoch,payload,created_at) VALUES(?,?,?,?,?,?)`, p.change.TxID, workspaceID, seq, p.change.AuthzEpoch, raw, formatStoredTime(time.Now())); err != nil {
 			return err
 		}
 		for _, event := range p.events {
@@ -518,7 +524,7 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 	}
 	if tx.dialect == "sqlite" {
 		_, err = tx.ExecContext(ctx, `UPDATE record_journal_context SET tx_id='' WHERE id=1`)
-	} else if tx.dialect == "mysql" {
+	} else if tx.journalSession {
 		if _, err = tx.ExecContext(ctx, `DELETE FROM record_journal_active WHERE tx_id=?`, tx.journalToken); err == nil {
 			_, err = tx.ExecContext(ctx, `SET @flow_record_tx=''`)
 		}
@@ -926,7 +932,7 @@ func (s *SQLiteStore) pruneRecordJournalRetention(ctx context.Context, before ti
 		return nil
 	}
 	var workspaceID string
-	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM record_journal WHERE seq IS NOT NULL GROUP BY workspace_id HAVING COUNT(*)>1 AND (MIN(created_at)<? OR SUM(LENGTH(payload)+256)>?) ORDER BY MIN(created_at) LIMIT 1`, before.UTC().Format(time.RFC3339Nano), RecordJournalRetentionBytes).Scan(&workspaceID)
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM record_journal WHERE seq IS NOT NULL GROUP BY workspace_id HAVING COUNT(*)>1 AND (MIN(created_at)<? OR SUM(LENGTH(payload)+256)>?) ORDER BY MIN(created_at) LIMIT 1`, formatStoredTime(before), RecordJournalRetentionBytes).Scan(&workspaceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

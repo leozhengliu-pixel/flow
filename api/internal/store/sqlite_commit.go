@@ -139,7 +139,7 @@ func (tx *sqlTx) flushSQLRecordJournal() (bool, error) {
 		queued = append(queued, revision{workspace, cacheKindIssues, false})
 	}
 	queuedJSON, _ := json.Marshal(queued)
-	_, err := writer.ExecContext(ctx, tx.journalToken, time.Now().UTC().Format(time.RFC3339Nano), queuedJSON)
+	_, err := writer.ExecContext(ctx, tx.journalToken, formatStoredTime(time.Now()), queuedJSON)
 	writer.Close()
 	if err != nil && strings.Contains(err.Error(), recordJournalSmallFallback) {
 		if tx.journalBudget != nil {

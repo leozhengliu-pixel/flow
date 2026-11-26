@@ -51,6 +51,9 @@ type DatabaseConfig struct {
 	// that is running the schema work on the same database (default
 	// DefaultStartupLockTimeout).
 	MigrationLockTimeout time.Duration
+	// RecordJournalCapture is server.database.recordJournalCapture: auto
+	// (default), triggers or application (record_capture_mode.go).
+	RecordJournalCapture string
 }
 
 type sqlDatabase struct {
@@ -90,6 +93,11 @@ type sqlDatabase struct {
 	// utf8Repair: PostgreSQL's flow_utf8 is the repair decoder, so a write
 	// of a raw invalid UTF-8 body needs no switch (postgres_utf8_decoder.go).
 	utf8Repair atomic.Bool
+	// appCapture: MySQL journal inputs are recorded by the writer's
+	// transaction instead of triggers (record_capture.go). captureTriggers:
+	// triggers may still be installed, so writers also identify themselves
+	// to them with the session token.
+	appCapture, captureTriggers atomic.Bool
 }
 
 // commitHooks run inside sqlTx.Commit: beforeCommit once the transaction's
@@ -150,6 +158,9 @@ type sqlTx struct {
 	// windows (collection_snapshot.go) are valid only while it
 	// is unchanged.
 	metadataWrites uint64
+	// journalSession: the MySQL session token and active marker are set for
+	// triggers (record_journal.go), so the transaction's end clears them.
+	journalSession bool
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -448,7 +459,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if maxTransactionBytes <= 0 {
 		maxTransactionBytes = 32 << 20
 	}
-	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes, recordJournalCapture: normalizeRecordJournalCapture(config.RecordJournalCapture)}
 	if bounded || prepare {
 		s.db.boundedCatalog.Store(true)
 	}
@@ -472,6 +483,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		run  func(context.Context) error
 	}{
 		{"migrate", s.migrate},
+		{"detectRecordJournalCapture", s.detectRecordJournalCapture},
 		{"ensureIssueRecords", s.ensureIssueRecords},
 		{"ensureAttachmentIndex", s.ensureAttachmentIndex},
 		{"ensureIssueListProjection", s.ensureIssueListProjection},
@@ -486,6 +498,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 			if !errors.Is(err, errRecordJournalTriggerPermission) {
 				return err
 			}
+			// Only server.database.recordJournalCapture=triggers gets here.
 			// Journal readiness stays false for this replica. Skip bounded
 			// admission and use the existing metadata and realtime paths.
 			bounded, prepare = false, false
@@ -511,6 +524,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureOffloadedContent", s.ensureOffloadedContent},
 		{"ensureWorkspaceDeletionReceipts", s.ensureWorkspaceDeletionReceipts},
 		{"ensureWorkspaceKeyRenames", s.ensureWorkspaceKeyRenames},
+		{"migrateStoredTimes", s.migrateStoredTimes},
 		{"loadOrSeed", func(ctx context.Context) error {
 			if bounded && prepare {
 				pending, err := s.dataMigrationsPending(ctx)
@@ -679,7 +693,7 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
-	if d.journalReady.Load() && recordJournalMode(d.dialect) != "off" && journalWriteStatement(query) {
+	if (d.journalReady.Load() && recordJournalMode(d.dialect) != "off" || d.appCapture.Load()) && journalWriteStatement(query) {
 		tx, err := d.BeginTx(ctx, nil)
 		if err != nil {
 			return nil, err
@@ -802,14 +816,29 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		}
 		tx.utf8Repair = switched
 	}
+	var capture *capturePlan
+	if tx.captureApplication() && journalWriteStatement(query) {
+		if capture, err = tx.captureBefore(ctx, query, args); err != nil {
+			return nil, err
+		}
+	}
 	observeSQLStatement(ctx, query)
 	var result sql.Result
-	if tx.journalToken != "" && tx.database.journalWrites[query] != nil {
+	if capture != nil && capture.replace {
+		result, err = tx.captureDeleteKeys(ctx, capture)
+	} else if tx.journalToken != "" && tx.database.journalWrites[query] != nil {
 		statement := tx.Tx.StmtContext(ctx, tx.database.journalWrites[query])
 		result, err = statement.ExecContext(ctx, textArgs(tx.dialect, args)...)
 		_ = statement.Close()
 	} else {
 		result, err = tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	}
+	if err == nil && capture != nil {
+		if err = tx.captureAfter(ctx, capture, result); err != nil {
+			// The canonical change must not commit without its journal input.
+			tx.writeErr = fmt.Errorf("record journal capture: %w", err)
+			return result, err
+		}
 	}
 	if err == nil && tx.journalToken != "" {
 		if workspace, ok := metadataWriteWorkspace(query, args); ok {

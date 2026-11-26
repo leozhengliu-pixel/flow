@@ -71,9 +71,19 @@ func (s *SQLiteStore) applySearchIndexCap(ctx context.Context) error {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO search_index_settings(name,value) VALUES('max_chars',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value`, strconv.Itoa(current))
 		return err
 	}
+	denied := false
+	if s.dialect == "mysql" {
+		// An account that certainly cannot drop triggers issues no DDL.
+		if denied, err = s.mysqlTriggerAuthorityDenied(ctx); err != nil {
+			return err
+		}
+	}
 	switch s.dialect {
 	case "sqlite", "mysql":
 		for _, trigger := range []string{"metadata_records_search_insert", "metadata_records_search_update"} {
+			if denied {
+				break
+			}
 			if _, err := s.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+trigger); err != nil && !(s.dialect == "mysql" && isMySQLSearchPermissionError(err)) {
 				return err
 			}

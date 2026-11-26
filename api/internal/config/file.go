@@ -22,6 +22,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // ConfigFileEnv names the YAML configuration file (docs/configuration.md,
@@ -66,6 +67,9 @@ type File struct {
 type FileSettings struct {
 	// UploadMaxBytes is server.storage.uploadMaxBytes (Config.UploadMaxBytes).
 	UploadMaxBytes int64
+	// RecordJournalCapture is server.database.recordJournalCapture
+	// (Config.Database.RecordJournalCapture): auto, triggers or application.
+	RecordJournalCapture string
 }
 
 // loadedFileSettings are the file-only settings of the file LoadFileFromArgs
@@ -281,6 +285,11 @@ func fileInt(min, max int64, apply func(*FileSettings, int64)) *field {
 	return &field{kind: kindInt, min: min, max: max, limited: true, apply: func(f *File, value any) { apply(&f.Settings, value.(int64)) }}
 }
 
+// fileString is a string that only the file sets (FileSettings).
+func fileString(enum []string, apply func(*FileSettings, string)) *field {
+	return &field{kind: kindString, enum: enum, apply: func(f *File, value any) { apply(&f.Settings, value.(string)) }}
+}
+
 func defaultString(apply func(*domain.CreationDefaults, string), enum ...string) *field {
 	return &field{kind: kindString, enum: enum, apply: func(f *File, value any) { apply(&f.Defaults, value.(string)) }}
 }
@@ -420,6 +429,8 @@ var fileSchema = map[string]*field{
 			"contentCacheBytes":           envInt("FLOW_CONTENT_CACHE_BYTES", 0, byteLimit),
 			"searchIndexMaxChars":         envInt("FLOW_SEARCH_INDEX_MAX_CHARS", 0, 1<<30),
 			"agentTranscriptOffloadBytes": envInt("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES", 1024, 1<<30),
+			// File only (FileSettings): no environment variable.
+			"recordJournalCapture": fileString(store.RecordJournalCaptureModes, func(s *FileSettings, value string) { s.RecordJournalCapture = value }),
 		}),
 		"redis": section(map[string]*field{
 			"mode":           envString("FLOW_REDIS_MODE", "disabled", "standalone", "cluster"),

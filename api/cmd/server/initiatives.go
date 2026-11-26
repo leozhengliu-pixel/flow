@@ -168,9 +168,9 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 		case "health":
 			return c.CompareString(a.Health, b.Health)
 		case "created":
-			return c.CompareString(a.CreatedAt.Format(time.RFC3339Nano), b.CreatedAt.Format(time.RFC3339Nano))
+			return a.CreatedAt.Compare(b.CreatedAt)
 		case "updated":
-			return c.CompareString(a.UpdatedAt.Format(time.RFC3339Nano), b.UpdatedAt.Format(time.RFC3339Nano))
+			return a.UpdatedAt.Compare(b.UpdatedAt)
 		}
 		return c.CompareString(a.Name, b.Name)
 	})

@@ -100,7 +100,7 @@ func (s *SQLiteStore) UninstallApplication(ctx context.Context, workspace, id st
 			{`UPDATE application_agent_tasks SET status='canceled',version=version+1 WHERE workspace_key=? AND app_user_id=? AND status IN ('pending','active','awaitingInput')`, []any{current.Workspace.URLKey, removed.UserID}},
 			{`DELETE FROM team_memberships WHERE workspace_id=? AND user_id=?`, []any{current.Workspace.ID, removed.UserID}},
 			{`DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, []any{current.Workspace.ID, removed.UserID}},
-			{`UPDATE auth_users SET active=0,updated_at=? WHERE id=?`, []any{now.Format(time.RFC3339Nano), removed.UserID}},
+			{`UPDATE auth_users SET active=0,updated_at=? WHERE id=?`, []any{formatStoredTime(now), removed.UserID}},
 			{`DELETE FROM application_installations WHERE id=?`, []any{removed.ID}},
 		}
 		for _, statement := range statements {

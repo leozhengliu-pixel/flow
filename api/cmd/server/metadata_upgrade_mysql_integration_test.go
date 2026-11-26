@@ -51,11 +51,12 @@ func TestDefaultMetadataUpgradeWithRestrictedMySQL(t *testing.T) {
 		t.Fatalf("fixture requires MySQL 8.4 with binary logging on and trigger creator trust off (database code %q)", store.DatabaseErrorCode(err))
 	}
 	for _, test := range []struct {
-		name    string
-		trigger bool
+		name           string
+		trigger, fresh bool
 	}{
-		{"without-trigger-grant", false},
-		{"binlog-requires-super", true},
+		{"fresh-install", false, true},
+		{"without-trigger-grant", false, false},
+		{"binlog-requires-super", true, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// Use no wildcard characters in the schema name used in GRANT.
@@ -103,12 +104,12 @@ func TestDefaultMetadataUpgradeWithRestrictedMySQL(t *testing.T) {
 				t.Fatal("open restricted MySQL fixture connection")
 			}
 			defer probe.Close()
-			exerciseRestrictedMySQLMetadataUpgrade(t, restricted, privileged, probe, test.trigger)
+			exerciseRestrictedMySQLMetadataUpgrade(t, restricted, privileged, probe, admin, name, test.trigger, test.fresh)
 		})
 	}
 }
 
-func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged store.DatabaseConfig, probe *sql.DB, triggerGrant bool) {
+func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged store.DatabaseConfig, probe, admin *sql.DB, schema string, triggerGrant, fresh bool) {
 	t.Helper()
 	const fallbackWarning = "MySQL record journal trigger permission denied. Using legacy metadata and sync"
 	var repo *store.SQLiteStore
@@ -174,7 +175,13 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 			}
 		}
 	}
-	openStore(restricted, false, false)
+	if fresh {
+		// A fresh install starts in real bounded mode on its first start.
+		defaults()
+		openStore(restricted, true, false)
+	} else {
+		openStore(restricted, false, false)
+	}
 	_, session, err := repo.Login(t.Context(), "admin@example.test", restricted.FixturePassword)
 	if err != nil {
 		t.Fatal("log in to previous-default workspace")
@@ -222,6 +229,44 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 	project := create("/api/projects", fmt.Sprintf(`{"name":"Previous project","teamIds":[%q]}`, team))
 	existingIssue := create("/api/issue-records", fmt.Sprintf(`{"title":"Previous issue","teamId":%q,"projectId":%q}`, team, project))
 	existingDocument := create("/api/documents", fmt.Sprintf(`{"title":"Previous document","content":"Saved body","projectId":%q}`, project))
+	if fresh {
+		for start := range 2 {
+			if repo.RecordJournalCapture() != store.RecordJournalCaptureApplication {
+				t.Fatalf("fresh start %d captures with %q", start, repo.RecordJournalCapture())
+			}
+			catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
+			if err != nil || len(catalogs) == 0 {
+				t.Fatal("fresh install has no catalog")
+			}
+			for _, catalog := range catalogs {
+				if catalog.Incomplete != 0 {
+					t.Fatal("fresh install left incomplete catalog collections")
+				}
+			}
+			var page syncV2ChangesResponse
+			w := request(http.MethodGet, route{path: "/api/sync/changes?after=0"}, "", "", http.StatusOK)
+			if json.Unmarshal(w.Body.Bytes(), &page) != nil || page.ResyncRequired || len(page.Transactions) == 0 {
+				t.Fatal("fresh install Sync V2 did not return its writes")
+			}
+			found := false
+			for _, transaction := range page.Transactions {
+				for _, upsert := range transaction.Upserts {
+					found = found || upsert.Key.Kind == "documents" && upsert.Key.ID == existingDocument
+				}
+			}
+			if !found {
+				t.Fatal("fresh install Sync V2 lacks the document")
+			}
+			request(http.MethodGet, route{path: "/api/issue-records/" + existingIssue}, "", "", http.StatusOK)
+			closeStore()
+			openStore(restricted, true, false)
+		}
+		var journalDDL int
+		if err := admin.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME=? AND (DIGEST_TEXT LIKE 'CREATE TRIGGER%' OR DIGEST_TEXT LIKE 'DROP TRIGGER%')`, schema).Scan(&journalDDL); err != nil || journalDDL != 0 {
+			t.Fatalf("fresh install issued %d trigger statements", journalDDL)
+		}
+		return
+	}
 	if status, err := repo.MetadataCatalogStatus(t.Context(), workspace, "projects"); err != nil || status.Complete {
 		t.Fatal("previous-default fixture already has catalog coverage")
 	}
@@ -278,22 +323,81 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 	openStore(restricted, false, false)
 	before := snapshot(reads)
 	closeStore()
+
+	// The previous-default database upgrades to real bounded mode on the
+	// restricted account: application capture, a complete catalog and
+	// Sync V2, with no trigger DDL.
 	defaults()
-	openStore(restricted, false, true)
+	openStore(restricted, true, false)
+	assertApplicationCapture := func() {
+		t.Helper()
+		if repo.RecordJournalCapture() != store.RecordJournalCaptureApplication {
+			t.Fatalf("restricted start captures with %q", repo.RecordJournalCapture())
+		}
+		catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
+		if err != nil || len(catalogs) == 0 {
+			t.Fatal("bounded start did not build the catalog")
+		}
+		for _, catalog := range catalogs {
+			if catalog.Incomplete != 0 {
+				t.Fatal("bounded start left incomplete catalog collections")
+			}
+		}
+	}
+	assertApplicationCapture()
 	compare(before, snapshot(reads))
 	compare(before[1:2], snapshot([]route{{path: "/api/issue-records/bootstrap", sync: "summary"}}))
-	assertLegacySync()
 
-	cursor := request(http.MethodGet, route{path: "/api/issue-records/bootstrap"}, "", "", http.StatusOK).Header().Get(changeCursorHeader)
-	if _, err := strconv.ParseInt(cursor, 10, 64); err != nil {
-		t.Fatal("legacy bootstrap did not expose a realtime cursor")
+	// syncFrom drains /api/sync/changes from a cursor and checks the
+	// transactions arrive in strictly increasing cursor order.
+	syncFrom := func(cursor string) (syncV2ChangesResponse, []syncV2Transaction) {
+		t.Helper()
+		var page syncV2ChangesResponse
+		var all []syncV2Transaction
+		last := int64(-1)
+		if value, err := strconv.ParseInt(cursor, 10, 64); err == nil {
+			last = value
+		}
+		for range 1000 {
+			w := request(http.MethodGet, route{path: "/api/sync/changes?after=" + url.QueryEscape(cursor)}, "", "", http.StatusOK)
+			page = syncV2ChangesResponse{}
+			if json.Unmarshal(w.Body.Bytes(), &page) != nil || page.Head == "" {
+				t.Fatal("Sync V2 did not return a page")
+			}
+			if page.ResyncRequired {
+				return page, all
+			}
+			for _, transaction := range page.Transactions {
+				seq, err := strconv.ParseInt(transaction.Seq, 10, 64)
+				if err != nil || seq <= last {
+					t.Fatalf("Sync V2 transaction cursor %q after %d", transaction.Seq, last)
+				}
+				last = seq
+			}
+			all = append(all, page.Transactions...)
+			cursor = page.Next
+			if !page.HasMore {
+				return page, all
+			}
+		}
+		t.Fatal("Sync V2 did not reach its head")
+		return page, all
 	}
-	realtime := "/api/realtime/changes?since=" + cursor + "&limit=50"
+	start, _ := syncFrom("0")
+	if start.ResyncRequired {
+		t.Fatal("Sync V2 requires a resync after the upgrade")
+	}
+
 	issue := create("/api/issue-records", fmt.Sprintf(`{"title":"Restricted create","teamId":%q,"projectId":%q}`, team, project))
 	request(http.MethodPatch, route{path: "/api/issue-records/" + issue}, `{"title":"Restricted edit"}`, "", http.StatusOK)
 	create("/api/issue-records/"+issue+"/comments", `{"body":"Restricted comment"}`)
 	request(http.MethodPatch, route{path: "/api/projects/" + project}, `{"name":"Restricted project edit"}`, "", http.StatusOK)
 	doc := create("/api/documents", fmt.Sprintf(`{"title":"Restricted document","content":"Restricted body","projectId":%q}`, project))
+	label := create("/api/labels", `{"name":"Restricted label","color":"#4cb782"}`)
+	request(http.MethodPatch, route{path: "/api/labels/" + label}, `{"name":"Restricted label renamed"}`, "", http.StatusOK)
+	request(http.MethodDelete, route{path: "/api/labels/" + label}, "", "", http.StatusNoContent)
+	gone := create("/api/issue-records", fmt.Sprintf(`{"title":"Restricted delete","teamId":%q}`, team))
+	request(http.MethodDelete, route{path: "/api/issue-records/" + gone}, "", "", http.StatusNoContent)
 	key := request(http.MethodPost, route{path: "/api/api-keys"}, `{"name":"Restricted key","scopes":["read"]}`, "", http.StatusCreated)
 	var secrets struct{ Secret string }
 	if json.Unmarshal(key.Body.Bytes(), &secrets) != nil || secrets.Secret == "" {
@@ -304,6 +408,85 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		request(http.MethodGet, route{path: "/api/issue-records/" + issue}, "", secrets.Secret, http.StatusOK)
 	}
 	assertKey()
+
+	// Creations, updates, the deletion's tombstone and the permission change
+	// (a new API key advances the authorization epoch) arrive in order.
+	page, changes := syncFrom(start.Next)
+	if page.ResyncRequired || len(changes) == 0 {
+		t.Fatal("Sync V2 did not return the restricted writes")
+	}
+	if page.AuthzEpoch == start.AuthzEpoch {
+		t.Fatal("the API key did not advance the authorization epoch")
+	}
+	position := func(kind, id string, removal bool) int {
+		for i, transaction := range changes {
+			if removal {
+				for _, item := range transaction.Removals {
+					if item.Key.Kind == kind && item.Key.ID == id {
+						return i
+					}
+				}
+				continue
+			}
+			for _, item := range transaction.Upserts {
+				if item.Key.Kind == kind && item.Key.ID == id {
+					return i
+				}
+			}
+		}
+		return -1
+	}
+	invalidatedAt := func(kind string, after int) int {
+		for i := after + 1; i < len(changes); i++ {
+			if slices.Contains(changes[i].Invalidations, kind) {
+				return i
+			}
+		}
+		return -1
+	}
+	// Projects and documents are summarized upserts; Sync V2 serves the
+	// other collections as invalidations, an issue deletion as a removal
+	// when it can prove the reader saw the issue.
+	edited, documented := position("projects", project, false), position("documents", doc, false)
+	labelCreated := invalidatedAt("labels", documented)
+	labelRemoved := invalidatedAt("labels", invalidatedAt("labels", labelCreated))
+	removedAt := position("issues", gone, true)
+	if removedAt < 0 {
+		removedAt = invalidatedAt("issues", labelRemoved)
+	}
+	if edited < 0 || documented <= edited || labelCreated <= documented || labelRemoved <= labelCreated || removedAt <= labelRemoved {
+		t.Fatalf("Sync V2 order: project %d, document %d, label %d..%d, issue removal %d", edited, documented, labelCreated, labelRemoved, removedAt)
+	}
+	// The trusted journal behind it holds the versions and the tombstones.
+	journal, err := repo.ReadCommittedChanges(t.Context(), fixture.Workspace.ID, start.Next, 500, store.MetadataRecordPageMaxBytes)
+	if err != nil || journal.ResyncRequired || journal.HasMore {
+		t.Fatal("the journal page after the upgrade is incomplete")
+	}
+	versions := map[store.RecordKey][]store.RecordDelta{}
+	epochs := map[string]bool{}
+	for _, transaction := range journal.Transactions {
+		epochs[transaction.AuthzEpoch] = true
+		for _, record := range transaction.Records {
+			versions[record.Key] = append(versions[record.Key], record)
+		}
+	}
+	history := func(key store.RecordKey) []store.RecordDelta { return versions[key] }
+	labelHistory := history(store.RecordKey{Kind: "labels", ID: label})
+	issueHistory := history(store.RecordKey{Kind: "issues", ID: gone})
+	if len(labelHistory) < 3 || labelHistory[0].Deleted || !labelHistory[len(labelHistory)-1].Deleted ||
+		len(issueHistory) < 2 || !issueHistory[len(issueHistory)-1].Deleted || len(epochs) < 2 {
+		t.Fatalf("journal lacks the creation, update or tombstone (label %+v, issue %+v, epochs %d)", labelHistory, issueHistory, len(epochs))
+	}
+	for _, records := range versions {
+		for i := 1; i < len(records); i++ {
+			previous, _ := strconv.ParseInt(records[i-1].Version, 10, 64)
+			current, _ := strconv.ParseInt(records[i].Version, 10, 64)
+			if current <= previous {
+				t.Fatalf("record versions went back: %+v", records)
+			}
+		}
+	}
+
 	// The key's lastUsedAt is written by the store's asynchronous use worker,
 	// which can land after the next read. Every later startup loads it from
 	// the database, so wait until the bootstrap shows it before taking the
@@ -331,19 +514,18 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		route{path: "/api/issue-records/" + issue},
 		route{path: "/api/comments?issueId=" + issue},
 		route{path: "/api/documents/" + doc},
-		route{path: realtime},
 	)
 	after := snapshot(reads)
-	assertLegacyWrites := func(outcomes []sw530Outcome) {
+	issueTitle := "Restricted edit"
+	assertWrites := func(outcomes []sw530Outcome) {
 		t.Helper()
 		expected := map[string]string{
-			"/api/issue-records?limit=10&includeTotal=true": `"title":"Restricted edit"`,
-			"/api/issue-records/" + issue:                   `"title":"Restricted edit"`,
+			"/api/issue-records?limit=10&includeTotal=true": `"title":"` + issueTitle + `"`,
+			"/api/issue-records/" + issue:                   `"title":"` + issueTitle + `"`,
 			"/api/projects/" + project:                      `"name":"Restricted project edit"`,
 			"/api/api-keys":                                 `"name":"Restricted key"`,
 			"/api/comments?issueId=" + issue:                `"body":"Restricted comment"`,
 			"/api/documents/" + doc:                         `"content":"Restricted body"`,
-			realtime:                                        `"type":"issue.updated"`,
 		}
 		for i, target := range reads {
 			if value, checked := expected[target.path]; checked && !strings.Contains(outcomes[i].Body, value) {
@@ -351,46 +533,71 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 			}
 		}
 	}
-	assertLegacyWrites(after)
-	// Negotiating delta must still return the legacy feed when capture is unavailable.
-	compare(after[len(after)-1:], snapshot([]route{{path: realtime, sync: "delta"}}))
+	assertWrites(after)
+	_, settled := syncFrom(page.Next)
+	cursor := page.Next
+	for _, transaction := range settled {
+		cursor = transaction.Seq
+	}
 	closeStore()
 
-	openStore(restricted, false, true)
+	// A restart keeps bounded mode and continues the same cursor.
+	openStore(restricted, true, false)
+	assertApplicationCapture()
 	compare(after, snapshot(reads))
 	assertKey()
-	assertLegacySync()
+	request(http.MethodPatch, route{path: "/api/issue-records/" + issue}, `{"title":"Restart edit"}`, "", http.StatusOK)
+	page, changes = syncFrom(cursor)
+	if page.ResyncRequired || position("issues", issue, false) < 0 && invalidatedAt("issues", -1) < 0 {
+		t.Fatal("Sync V2 lost its cursor or the write after a restart")
+	}
+	cursor = page.Next
 	closeStore()
 
+	// Back to the previous default (legacy reads) and forward again: the
+	// journal walks every workspace again, so the legacy write is not lost.
 	for _, flag := range metadataUpgradeFlags {
 		t.Setenv(flag, "off")
 	}
 	openStore(restricted, false, false)
-	compare(after, snapshot(reads))
 	assertLegacySync()
+	request(http.MethodPatch, route{path: "/api/issue-records/" + issue}, `{"title":"Legacy edit"}`, "", http.StatusOK)
+	issueTitle = "Legacy edit"
+	closeStore()
+	defaults()
+	openStore(restricted, true, false)
+	assertApplicationCapture()
+	if !strings.Contains(request(http.MethodGet, route{path: "/api/issue-records/" + issue}, "", "", http.StatusOK).Body.String(), `"title":"Legacy edit"`) {
+		t.Fatal("the legacy write is missing after the journal returned")
+	}
+	page, changes = syncFrom(cursor)
+	invalidated := page.ResyncRequired
+	for _, transaction := range changes {
+		invalidated = invalidated || slices.Contains(transaction.Invalidations, "workspace")
+	}
+	if !invalidated && position("issues", issue, false) < 0 && invalidatedAt("issues", -1) < 0 {
+		t.Fatal("Sync V2 neither resynced nor returned the legacy write")
+	}
 	closeStore()
 
-	defaults()
+	// The privileged account keeps the database's application capture.
 	openStore(privileged, true, false)
-	assertLegacyWrites(snapshot(reads))
+	assertApplicationCapture()
+	assertWrites(snapshot(reads))
 	assertKey()
-	catalogs, err := repo.MetadataCatalogCompleteness(t.Context())
-	if err != nil || len(catalogs) == 0 {
-		t.Fatal("privileged restart did not build the catalog")
-	}
-	for _, catalog := range catalogs {
-		if catalog.Incomplete != 0 {
-			t.Fatal("privileged restart left incomplete catalog collections")
-		}
-	}
-	page := request(http.MethodGet, route{path: "/api/sync/changes?after=0"}, "", "", http.StatusOK)
-	var syncPage syncV2ChangesResponse
-	if json.Unmarshal(page.Body.Bytes(), &syncPage) != nil || syncPage.Head == "" {
+	request(http.MethodPatch, route{path: "/api/issue-records/" + issue}, `{"title":"Journal recovered"}`, "", http.StatusOK)
+	start, _ = syncFrom("0")
+	if start.ResyncRequired || start.Head == "" {
 		t.Fatal("privileged restart did not expose Sync V2")
 	}
-	request(http.MethodPatch, route{path: "/api/issue-records/" + issue}, `{"title":"Journal recovered"}`, "", http.StatusOK)
-	page = request(http.MethodGet, route{path: "/api/sync/changes?after=" + url.QueryEscape(syncPage.Head)}, "", "", http.StatusOK)
-	if json.Unmarshal(page.Body.Bytes(), &syncPage) != nil || len(syncPage.Transactions) == 0 || syncPage.ResyncRequired {
-		t.Fatal("privileged restart did not capture subsequent writes")
+	var journalTriggers, journalDDL int
+	if err := admin.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=? AND TRIGGER_NAME LIKE 'flow\_rj\_%'`, schema).Scan(&journalTriggers); err != nil {
+		t.Fatal("count journal triggers")
+	}
+	if err := admin.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME=? AND DIGEST_TEXT LIKE '%TRIGGER `+"`"+`flow\_rj\_%'`, schema).Scan(&journalDDL); err != nil {
+		t.Fatal("count journal trigger statements")
+	}
+	if journalTriggers != 0 || journalDDL != 0 {
+		t.Fatalf("journal trigger DDL ran: %d triggers, %d statements", journalTriggers, journalDDL)
 	}
 }

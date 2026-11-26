@@ -302,6 +302,7 @@ func Load() (Config, error) {
 			ContentCacheBytes:    integer("FLOW_CONTENT_CACHE_BYTES", 128<<20),
 			SearchIndexMaxChars:  integer("FLOW_SEARCH_INDEX_MAX_CHARS", 20000),
 			MigrationLockTimeout: duration("FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT", store.DefaultStartupLockTimeout),
+			RecordJournalCapture: fileSettings().RecordJournalCapture,
 		},
 		Retention: RetentionConfig{
 			DomainEvents:           time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,

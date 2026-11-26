@@ -81,7 +81,7 @@ func (s *SQLiteStore) ensureFileUploads(ctx context.Context) error {
 	return nil
 }
 
-func formatUploadTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
+func formatUploadTime(value time.Time) string { return formatStoredTime(value) }
 
 func scanFileUpload(row interface{ Scan(...any) error }) (FileUpload, error) {
 	var upload FileUpload

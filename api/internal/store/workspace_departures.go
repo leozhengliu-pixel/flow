@@ -34,7 +34,7 @@ func recordWorkspaceDepartureTx(ctx context.Context, tx *sqlTx, workspaceID, use
 	_, err := tx.ExecContext(ctx, `INSERT INTO workspace_departures(workspace_id,user_id,role,joined_at,left_at)
 		SELECT m.workspace_id,m.user_id,m.role,m.joined_at,? FROM workspace_memberships m WHERE m.workspace_id=? AND m.user_id=?
 		ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,joined_at=excluded.joined_at,left_at=excluded.left_at`,
-		now.UTC().Format(time.RFC3339Nano), workspaceID, userID)
+		formatStoredTime(now), workspaceID, userID)
 	return err
 }
 

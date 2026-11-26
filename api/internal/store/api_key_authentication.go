@@ -291,11 +291,12 @@ func (s *SQLiteStore) writeAPIKeyUseRows(ctx context.Context, tx *sqlTx, use api
 	if s.dialect == "postgres" {
 		expression = "convert_to(jsonb_set(flow_utf8(data)::jsonb,'{lastUsedAt}',to_jsonb(?::text))::text,'UTF8')"
 	}
+	lastUsed := s.jsonText("data", "lastUsedAt")
 	for _, record := range []struct{ field, id string }{{"apiKeys", use.keyID}, {"oauthAuthorizations", use.authorizationID}} {
 		if record.id == "" {
 			continue
 		}
-		_, err := tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+s.jsonText("data", "lastUsedAt")+" IS NULL OR "+s.jsonText("data", "lastUsedAt")+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, use.at.Add(-time.Minute).Format(time.RFC3339Nano))
+		_, err := tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+lastUsed+" IS NULL OR "+s.timestampTextKey(lastUsed)+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, formatStoredTime(use.at.Add(-time.Minute)))
 		if err != nil {
 			return err
 		}

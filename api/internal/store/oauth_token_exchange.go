@@ -155,7 +155,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 			// tokens are separate and stay.
 			supersede := kind == "authorization_code" && grant.Actor == "app"
 			if supersede {
-				if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "clientId")+`=? AND `+s.jsonText("data", "userId")+`=?`, time.Now().UTC().Format(time.RFC3339Nano), grant.ClientID, grant.UserID); err != nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "clientId")+`=? AND `+s.jsonText("data", "userId")+`=?`, formatStoredTime(time.Now()), grant.ClientID, grant.UserID); err != nil {
 					return err
 				}
 			}
@@ -210,10 +210,10 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 				if err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(refreshToken), refreshRaw, grant.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(refreshToken), refreshRaw, formatStoredTime(grant.ExpiresAt), formatStoredTime(now)); err != nil {
 					return err
 				}
-				result, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+consumed+"=? WHERE "+identity+"=? AND "+consumed+" IS NULL", now.Format(time.RFC3339Nano), hash)
+				result, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+consumed+"=? WHERE "+identity+"=? AND "+consumed+" IS NULL", formatStoredTime(now), hash)
 				if err != nil {
 					return err
 				}

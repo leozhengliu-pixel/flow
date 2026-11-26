@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -23,7 +24,36 @@ var errRecordJournalTriggerPermission = errors.New("record journal trigger permi
 // token row is set with the first write and cleared before commit.
 func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	mode := recordJournalMode(s.dialect)
-	legacyOnDenied := s.dialect == "mysql" && (mode == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "")
+	capture := normalizeRecordJournalCapture(s.recordJournalCapture)
+	if s.dialect != "mysql" {
+		capture = RecordJournalCaptureTriggers
+	}
+	legacyOnDenied := s.dialect == "mysql" && capture == RecordJournalCaptureTriggers && (mode == "shadow" || strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")) == "")
+	// application: this start records journal inputs in the application
+	// (record_capture.go) and issues no trigger DDL. An automatic start
+	// keeps triggers unless the account cannot install them, or the
+	// database already switched (recorded below; switching back to triggers
+	// takes an explicit setting).
+	application := capture == RecordJournalCaptureApplication
+	var persisted recordJournalCaptureState
+	if s.dialect == "mysql" {
+		if _, err := s.db.ExecContext(ctx, recordJournalCaptureSchema); err != nil {
+			return fmt.Errorf("record journal capture schema: %w", err)
+		}
+		var err error
+		if persisted, err = s.persistedRecordJournalCapture(ctx); err != nil {
+			return err
+		}
+	}
+	if capture == RecordJournalCaptureAuto && mode != "off" {
+		application = persisted.mode == RecordJournalCaptureApplication
+		if !application {
+			var err error
+			if application, err = s.mysqlTriggerAuthorityDenied(ctx); err != nil {
+				return err
+			}
+		}
+	}
 	applied, err := s.migrationApplied(ctx, recordJournalSchemaVersion)
 	if err != nil {
 		return err
@@ -89,17 +119,29 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, `SELECT enabled,capturing,generation FROM record_journal_mode WHERE id=1`).Scan(&enabled, &capturing, &generation); err != nil {
 		return err
 	}
+	// triggers: an earlier start may have installed triggers. Before the
+	// capture table existed, capturing meant exactly that.
+	triggers := capturing != 0
+	if persisted.found {
+		triggers = persisted.triggers
+	}
 	// Off removes canonical-table triggers. Disable authority before DDL so
 	// enabled peers fail closed until the next bounded repair completes.
 	if mode == "off" {
+		s.db.appCapture.Store(false)
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
 			return err
 		}
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_context SET tx_id='' WHERE id=1`); err != nil {
 			return err
 		}
-		if err := s.dropRecordJournalTriggers(ctx, capturing != 0); err != nil {
+		if err := s.dropRecordJournalTriggers(ctx, triggers); err != nil {
 			return err
+		}
+		if persisted.found {
+			if err := s.persistRecordJournalCapture(ctx, persisted.mode, false); err != nil {
+				return err
+			}
 		}
 		if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); err != nil {
 			return err
@@ -114,11 +156,18 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 			return err
 		}
 		enabled = 0
-		if err := s.dropRecordJournalTriggers(ctx, capturing != 0); err != nil {
-			if legacyOnDenied && isMySQLSearchPermissionError(err) {
-				return errRecordJournalTriggerPermission
+		if !application {
+			if err := s.dropRecordJournalTriggers(ctx, triggers); err != nil {
+				if legacyOnDenied && isMySQLSearchPermissionError(err) {
+					return errRecordJournalTriggerPermission
+				}
+				if capture != RecordJournalCaptureAuto || !isMySQLSearchPermissionError(err) {
+					return err
+				}
+				// Earlier triggers stay; application capture keeps them
+				// tracked with the session token.
+				application = true
 			}
-			return err
 		}
 	}
 	// Persist intent before DDL, including a crash partway through MySQL's
@@ -126,6 +175,11 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 	// mistake invisible information_schema rows for confirmed absence.
 	if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=1 WHERE id=1`); err != nil {
 		return err
+	}
+	if s.dialect == "mysql" && !application {
+		if err := s.persistRecordJournalCapture(ctx, RecordJournalCaptureTriggers, true); err != nil {
+			return err
+		}
 	}
 	if s.dialect == "sqlite" {
 		if err := s.ensureSQLiteRecordJournalInline(ctx); err != nil {
@@ -135,18 +189,59 @@ func (s *SQLiteStore) ensureRecordJournal(ctx context.Context) error {
 			return err
 		}
 	}
-	for index, spec := range recordJournalTriggerSpecs(s.dialect) {
+	triggerSpecs := recordJournalTriggerSpecs(s.dialect)
+	if application {
+		triggerSpecs = nil
+	}
+	for index, spec := range triggerSpecs {
 		if err := s.installRecordJournalTrigger(ctx, spec); err != nil {
-			if legacyOnDenied && isMySQLSearchPermissionError(err) {
-				if capturing == 0 && index == 0 {
-					if _, resetErr := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); resetErr != nil {
-						return resetErr
+			denied := s.dialect == "mysql" && isMySQLSearchPermissionError(err)
+			if denied && (legacyOnDenied || capture == RecordJournalCaptureAuto) {
+				if index == 0 && !triggers {
+					// Nothing was installed: record that no trigger fires.
+					if err := s.persistRecordJournalCapture(ctx, RecordJournalCaptureTriggers, false); err != nil {
+						return err
 					}
+				} else {
+					triggers = true
 				}
-				return errRecordJournalTriggerPermission
+				if legacyOnDenied {
+					if capturing == 0 && index == 0 {
+						if _, resetErr := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET capturing=0 WHERE id=1`); resetErr != nil {
+							return resetErr
+						}
+					}
+					if !triggers {
+						// This replica writes without capture. A later
+						// capturing start must walk every workspace again
+						// (as after off); peers fail closed meanwhile.
+						if _, err := s.db.ExecContext(ctx, `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
+							return err
+						}
+					}
+					return errRecordJournalTriggerPermission
+				}
+				application = true
+				break
 			}
 			return fmt.Errorf("record journal trigger %s: %w", spec.name, err)
 		}
+	}
+	if s.dialect == "mysql" {
+		if !application {
+			triggers = true
+		}
+		persist := RecordJournalCaptureTriggers
+		if application {
+			persist = RecordJournalCaptureApplication
+			slog.Info("record journal captures changes in the application", "triggers_recorded", triggers)
+		}
+		if err := s.persistRecordJournalCapture(ctx, persist, triggers); err != nil {
+			return err
+		}
+		// Capture starts before activation below and before readiness.
+		s.db.captureTriggers.Store(application && triggers)
+		s.db.appCapture.Store(application)
 	}
 	if s.dialect == "sqlite" {
 		if err := s.migrateSQLiteRecordJournalContentKeys(ctx); err != nil {

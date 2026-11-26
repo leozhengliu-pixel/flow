@@ -509,7 +509,7 @@ func (s *SQLiteStore) MarkAgentSessionsMerged(ctx context.Context, workspace str
 			return err
 		}
 	}
-	stamp := at.UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(at)
 	for _, id := range sessions {
 		if _, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET merged_at=? WHERE workspace_key=? AND id=? AND merged_at=''`, stamp, workspace, id); err != nil {
 			return err

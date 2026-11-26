@@ -320,6 +320,18 @@ func TestBoundedMetadataRolloutPrepareOrphanJournalScopes(t *testing.T) {
 	}
 	tokenless := func(query string, args ...any) {
 		t.Helper()
+		if repo.RecordJournalCapture() == RecordJournalCaptureApplication {
+			// No trigger sees the raw pool. Application capture records a
+			// write without a journal transaction (a startup stage before
+			// the journal is ready) as the triggers record an old binary's.
+			repo.db.journalReady.Store(false)
+			_, err := repo.db.ExecContext(ctx, query, args...)
+			repo.db.journalReady.Store(true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
 		// The raw pool: no journal transaction, as an older binary writes.
 		if _, err := repo.db.DB.ExecContext(ctx, rewriteSQL(query, repo.dialect), args...); err != nil {
 			t.Fatal(err)

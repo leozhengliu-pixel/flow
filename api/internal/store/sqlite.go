@@ -87,6 +87,9 @@ type SQLiteStore struct {
 	// (nil backend: none needed); see WithStartupLock.
 	startupLock        func(context.Context) (startupLockBackend, error)
 	startupLockTimeout time.Duration
+	// recordJournalCapture is server.database.recordJournalCapture
+	// (record_capture_mode.go).
+	recordJournalCapture string
 }
 
 // lockWorkspaceWrites serializes the caller with other writers and excludes
@@ -625,7 +628,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		if err := migration.apply(ctx); err != nil {
 			return fmt.Errorf("database migration %d (%s): %w", migration.version, migration.name, err)
 		}
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, migration.version, migration.name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, migration.version, migration.name, formatStoredTime(time.Now())); err != nil {
 			return fmt.Errorf("record database migration %d: %w", migration.version, err)
 		}
 		ran = append(ran, fmt.Sprintf("%d (%s)", migration.version, migration.name))
@@ -2440,7 +2443,7 @@ func (s *SQLiteStore) createWorkspaceLocked(ctx context.Context, name, urlKey, r
 		s.setWorkspaceLocked(urlKey, stored)
 		s.lastWorkspaceKey = urlKey
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := formatStoredTime(time.Now())
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
 		return domain.Bootstrap{}, fmt.Errorf("auth user: %w", err)
 	}

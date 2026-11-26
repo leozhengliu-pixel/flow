@@ -123,14 +123,14 @@ func (s *SQLiteStore) CreatePersonalDataExport(ctx context.Context, userID strin
 		return PersonalDataExportRecord{}, false, err
 	}
 	var count int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM personal_data_exports WHERE user_id=? AND created_at>?`, userID, now.Add(-window).UTC().Format(time.RFC3339Nano)).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM personal_data_exports WHERE user_id=? AND created_at>?`, userID, formatStoredTime(now.Add(-window))).Scan(&count); err != nil {
 		return PersonalDataExportRecord{}, false, err
 	}
 	if count >= limit {
 		return PersonalDataExportRecord{}, false, ErrPersonalDataExportLimited
 	}
 	item := PersonalDataExportRecord{UserID: userID, PersonalDataExport: domain.PersonalDataExport{ID: idgen.New("pdx_"), Status: PersonalDataExportQueued, CreatedAt: now.UTC()}}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO personal_data_exports(id,user_id,status,created_at) VALUES(?,?,?,?)`, item.ID, userID, item.Status, item.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO personal_data_exports(id,user_id,status,created_at) VALUES(?,?,?,?)`, item.ID, userID, item.Status, formatStoredTime(item.CreatedAt)); err != nil {
 		return PersonalDataExportRecord{}, false, err
 	}
 	return item, true, tx.Commit()
@@ -182,7 +182,7 @@ func (s *SQLiteStore) FinishPersonalDataExport(ctx context.Context, id, objectKe
 	if errText != "" {
 		status, objectKey, size = PersonalDataExportFailed, "", 0
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE personal_data_exports SET status=?,object_key=?,size=?,error_text=?,completed_at=?,expires_at=? WHERE id=? AND status IN ('queued','running')`, status, objectKey, size, storableText(errText, 512), now.UTC().Format(time.RFC3339Nano), expires.UTC().Format(time.RFC3339Nano), id)
+	result, err := s.db.ExecContext(ctx, `UPDATE personal_data_exports SET status=?,object_key=?,size=?,error_text=?,completed_at=?,expires_at=? WHERE id=? AND status IN ('queued','running')`, status, objectKey, size, storableText(errText, 512), formatStoredTime(now), formatStoredTime(expires), id)
 	if err != nil {
 		return err
 	}
@@ -210,8 +210,8 @@ func (s *SQLiteStore) LivePersonalDataExports(ctx context.Context, userIDs []str
 // ExpiredPersonalDataExports lists exports whose download expired but whose
 // object is still kept, and exports stuck before completion past cutoff.
 func (s *SQLiteStore) ExpiredPersonalDataExports(ctx context.Context, now time.Time, limit int) ([]PersonalDataExportRecord, error) {
-	stamp := now.UTC().Format(time.RFC3339Nano)
-	return s.queryPersonalDataExports(ctx, `SELECT `+personalDataExportColumns+` FROM personal_data_exports WHERE (status='completed' AND expires_at<?) OR (status IN ('queued','running') AND created_at<?) ORDER BY created_at LIMIT ?`, stamp, now.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano), limit)
+	stamp := formatStoredTime(now)
+	return s.queryPersonalDataExports(ctx, `SELECT `+personalDataExportColumns+` FROM personal_data_exports WHERE (status='completed' AND expires_at<?) OR (status IN ('queued','running') AND created_at<?) ORDER BY created_at LIMIT ?`, stamp, formatStoredTime(now.Add(-24*time.Hour)), limit)
 }
 
 // ExpirePersonalDataExport marks an export expired once its object is gone.
@@ -399,7 +399,7 @@ func (s *SQLiteStore) ErasePersonFromWorkspace(ctx context.Context, workspaceKey
 	if err := recordWorkspaceDepartureTx(ctx, tx, workspaceID, userID, now); err != nil {
 		return err
 	}
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := formatStoredTime(now)
 	statements := []struct {
 		query string
 		args  []any
@@ -502,7 +502,7 @@ func (s *SQLiteStore) EraseAccount(ctx context.Context, userID string) error {
 		return fmt.Errorf("erase the account from its %d workspaces first", memberships)
 	}
 	anonymous := domain.DeletedUserIdentity(userID)
-	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	stamp := formatStoredTime(time.Now())
 	statements := []struct {
 		query string
 		args  []any

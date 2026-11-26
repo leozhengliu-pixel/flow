@@ -103,6 +103,8 @@ func (s *SQLiteStore) ReadCollaborationRecoveryPage(ctx context.Context, workspa
 		}
 		cursor.Started = true
 	}
+	cursor.AfterTime = normalizeStoredTime(cursor.AfterTime)
+	cursor.ThroughTime = normalizeStoredTime(cursor.ThroughTime)
 	length := "OCTET_LENGTH(update_data)"
 	if s.dialect == "sqlite" {
 		length = "LENGTH(update_data)"
