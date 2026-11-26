@@ -387,6 +387,7 @@ var scaleP21ReviewedRoutes = []string{
 	"GET /api/jira/remote/projects\ts.listJiraRemoteProjects",
 	"GET /api/jira/remote/projects/{projectId}/statuses\ts.listJiraRemoteStatuses",
 	"GET /api/labels\ts.listWorkspaceLabels",
+	"GET /api/link-icon\ts.getLinkIcon",
 	"GET /api/loop-config\ts.getLoopConfig",
 	"GET /api/loop-templates\ts.listLoopTemplates",
 	"GET /api/loops\ts.listLoops",

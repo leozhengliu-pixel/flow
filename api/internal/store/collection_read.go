@@ -90,6 +90,7 @@ type MetadataCollectionRead struct {
 	ctx         context.Context
 	stamp       copyStamp
 	root, data  *RecordSpool
+	rootBytes   []byte // borrowed from the same SQL snapshot during COLD publication
 	rootSize    int64
 	collections map[string]*metadataDetachedCollection
 	release     func()

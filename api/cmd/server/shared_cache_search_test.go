@@ -212,6 +212,8 @@ func testSharedCacheDifferential(t *testing.T, flag string) {
 	privateIssue := authRequest[domain.Issue](t, admin, http.MethodPost, first+"/api/issue-records", map[string]any{"title": "Private sync fixture", "teamId": vault.ID}, "test-workspace", http.StatusCreated)
 	// Mark the key used before recording the stable cursor for the page.
 	sharedCacheSearch(t, nil, key.Secret, first, "q=zephyr&types=issue")
+	// The cacheable page needs field history without activity rows.
+	pinCreatedIssueAges(t, replicas[0].store, "test-workspace", true, publicIssue.ID, privateIssue.ID)
 	after, err := replicas[0].store.RecordJournalHead(t.Context(), policy.Workspace.ID)
 	if err != nil {
 		t.Fatal(err)

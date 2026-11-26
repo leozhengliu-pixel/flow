@@ -22,7 +22,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":      "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":        "23f45fb47a621904d237a6e14ee3c72bb6c00495217e7f7b627cf60cb6f5bb37",
+		"issue_query.go":        "1e7cfc29bebf6e58999abc0cb7bf5924e563558b48d346f03865ee1be5c3a621",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
 		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",
@@ -50,7 +50,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/settings_features.go":               "87273670857aaf48a54850c1a341472a1734110efb883ecf83f7b089672d4ea0",
 		"authz_epoch.go":                                      "6de890ae6a645e416fbbfb479dfcb165c68b78ccd384851c433f03c5a285e583",
 		"content_records.go":                                  "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
-		"database.go":                                         "4ab29a400063e797d151e7b17b9bf2d4013790b60e2e88ce698c3863274679c9",
+		"database.go":                                         "0f8031be40273399b3e770ff44726abdb107483b5d282feaa5d675277c4be0cb",
 		"issue_access_metadata.go":                            "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
 		"metadata_decode.go":                                  "2df3c831f43724f14fbe66f470de959c92d6044a87aa42ff4f2771d8928f8b2e",
 		"metadata_delta.go":                                   "366ef37cf6bb72eba0add53e6b73262c9d3c0c25e9cc7694038eb0941ad2c7c7",
@@ -74,7 +74,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"bootstrap_issue_walk.go":                             "6a38ace7422b68e5155589cf66c0ce72c9b6a7f5d4a2ec355ffdc6ccb5d39032",
 		"bootstrap_projection_read.go":                        "2f3a7f0955fa03c089526e1ad3a04b47c4557ddb762039e93a5fb9fe9fe07687",
 		"collaboration_document_read.go":                      "d4839174c25808b899839955839d6cd2d9e4a74b5ac76d1158c8a0fb1fb8fae8",
-		"collection_snapshot.go":                              "e8d843ee5626ba45c1aa11009ddf1e6860289895367d581fd8552309dbaec1fa",
+		"collection_snapshot.go":                              "4c56cbee0ff4e8e6cfb40b1b38044d05c907ee1604f71e877b775c46b1cac137",
 		"cycle_schedule_write.go":                             "b46905598700071bba0d7344f42f1560652af77c980d84dfd02bbd219fc28c8a",
 		"delivery_context.go":                                 "89590bfc452c82e405c4ddd0727946bf6274794ce0c819576ed8da1d0271792a",
 		"desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",

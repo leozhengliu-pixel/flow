@@ -293,12 +293,17 @@ func issueAccessCTE(query IssueRecordQuery) (string, []any) {
 		return "", nil
 	}
 	team, teamArgs := bindList("p.subject_id", access.VisibleTeamIDs)
+	// The recursive step reads each shared issue's children through the
+	// (workspace_key, parent_id) index. Written as a plain join, SQLite made
+	// issue_records the outer loop and scanned the whole workspace once per
+	// shared issue; CROSS JOIN fixes the shared issue as the outer table there
+	// and is an inner join elsewhere.
 	prefix := `WITH RECURSIVE shared_issues(id) AS (
 	 SELECT p.issue_id FROM issue_permission_records p WHERE p.workspace_key=? AND (
 	 (p.subject_type='user' AND p.subject_id=?) OR
 	 (p.subject_type='workspace' AND p.subject_id IN ('',?,?)) OR
 	 (p.subject_type='team' AND ` + team + `))
-	 UNION SELECT child.id FROM issue_records child JOIN shared_issues parent ON child.parent_id=parent.id WHERE child.workspace_key=?
+	 UNION SELECT child.id FROM shared_issues parent CROSS JOIN issue_records child WHERE child.workspace_key=? AND child.parent_id=parent.id
 	) `
 	args := []any{query.Workspace, access.UserID, access.WorkspaceID, query.Workspace}
 	args = append(args, teamArgs...)

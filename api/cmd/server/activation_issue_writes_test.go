@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -61,6 +62,7 @@ func scaleP21ActivationHTTPPeers(t *testing.T, mode string) ([2]activationHTTPPe
 		"title": "Activation issue", "teamId": team, "projectId": project, "priority": 3,
 	}, workspace, http.StatusCreated)
 	f.host.Close()
+	pinCreatedIssueAges(t, seed, workspace, false, issue.ID)
 	if mode != "off" {
 		report, err := seed.PrepareBoundedMetadata(t.Context())
 		if err != nil || !report.Ready {
@@ -160,11 +162,30 @@ func TestScaleP21ActivationIssueWritesDifferential(t *testing.T) {
 			if updated.Priority != 2 || updated.Version <= issue.Version || comments[0].ID == "" || comments[1].ID == "" || comments[0].ID == comments[1].ID {
 				t.Fatal("cross-replica writes did not return the committed issue and two distinct comments")
 			}
+
+			fresh := authRequest[domain.Issue](t, f.admin, http.MethodPost, peers[0].URL+"/api/issue-records", map[string]any{
+				"title": "Fresh activation issue", "teamId": issue.Team.ID, "priority": 3,
+			}, workspace, http.StatusCreated)
+			freshRoute := "/api/issue-records/" + fresh.ID
+			authRequest[domain.Issue](t, f.admin, http.MethodPatch, peers[0].URL+freshRoute, map[string]int{"priority": 2}, workspace, http.StatusOK)
 			for _, peer := range peers {
 				reloaded := authRequest[domain.Issue](t, f.admin, http.MethodGet, peer.URL+route, nil, workspace, http.StatusOK)
 				history := authRequest[store.IssueHistory](t, f.admin, http.MethodGet, peer.URL+route+"/history", nil, workspace, http.StatusOK)
 				if reloaded.Priority != updated.Priority || reloaded.Version != updated.Version || len(history.Comments) != len(comments) {
 					t.Fatal("peer did not return the final issue and both comments")
+				}
+				updates := 0
+				for _, event := range history.Activities {
+					if event.Type == "issue.updated" {
+						updates++
+					}
+				}
+				if updates != 1 {
+					t.Fatalf("peer returned %d update activities, want 1", updates)
+				}
+				history = authRequest[store.IssueHistory](t, f.admin, http.MethodGet, peer.URL+freshRoute+"/history", nil, workspace, http.StatusOK)
+				if slices.ContainsFunc(history.Activities, func(event domain.ActivityEvent) bool { return event.Type == "issue.updated" }) {
+					t.Fatal("peer returned update activity for a fresh issue")
 				}
 			}
 		})

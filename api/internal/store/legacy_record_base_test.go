@@ -718,6 +718,51 @@ func TestScaleP21SW93LegacyRecordPreparedLockOrder(t *testing.T) {
 	}
 }
 
+func TestLegacyRecordBaseReadsBorrowedIssueFrames(t *testing.T) {
+	_, view := scaleP21SW78Fixture(t)
+	ctx := t.Context()
+	issue := domain.Issue{ID: "borrowed-issue", Number: 1, Description: strings.Repeat("x", metadataLogicalBorrowMinimum)}
+	source, err := captureMetadataLogicalSource(ctx, domain.Bootstrap{Issues: []domain.Issue{issue}}, copyStamp{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Release()
+	target, err := source.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+		if name != "issues" {
+			return nil, false, nil
+		}
+		return legacyDiscussionSlicePatch{base: node, shape: node}, true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Release()
+	index, _, _ := metadataLogicalField("issues")
+	field := target.fields[index]
+	if field.source.borrows.Load() == nil || field.size <= field.source.bytes {
+		t.Fatal("fixture did not borrow the issue frame")
+	}
+
+	base, err := view.newLegacyRecordBase(ctx, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer base.Close()
+	if err := base.prepareIssueOrder(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	work := &ResourceRead{store: view}
+	defer work.Close()
+	headers, err := base.issueBatch(ctx, target, 0, work)
+	if err != nil || len(headers) != 1 || headers[0].id != issue.ID {
+		t.Fatal("staged issue frame refused", len(headers), err)
+	}
+	value, err := headers[0].node.Value(ctx, metadataWorkBytes)
+	if err != nil || !reflect.DeepEqual(value.Interface(), issue) {
+		t.Fatal("staged issue frame did not decode to the original issue", err)
+	}
+}
+
 func TestScaleP21SW93LegacyRecordBaseCancellation(t *testing.T) {
 	f, view := scaleP21SW78Fixture(t)
 	data := scaleP21SW93Data(f, idgen.New("sw93_cancel_"), 2000)

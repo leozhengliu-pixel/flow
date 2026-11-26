@@ -492,7 +492,11 @@ func TestTriageIntelligenceRegeneratesAfterMaterialEdits(t *testing.T) {
 	fixture := newTriageAIFixture(t, func() string {
 		return `{"duplicate":null,"related":[],"assignee":null,"project":null,"labels":[],"team":null,"thinking":"Nothing fits."}`
 	})
-	fixture.service.triageEditDebounce = 40 * time.Millisecond
+	// The debounce restarts when the next edit's request schedules the run,
+	// so it must outlast one PATCH round trip (around 100ms under the race
+	// detector with bounded metadata on); otherwise two quick edits settle
+	// into two runs. waitIdle waits for the pending debounce, not a sleep.
+	fixture.service.triageEditDebounce = 2 * time.Second
 	created := requestJSON[domain.Issue](t, fixture.handler, http.MethodPost, "/api/issues", map[string]any{
 		"title": "Export to PDF cuts off long tables", "teamId": fixture.team.ID, "stateId": fixture.backlogID,
 	}, http.StatusCreated)

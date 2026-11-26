@@ -10,10 +10,14 @@ import (
 	"sync/atomic"
 )
 
-const sw26MigrationStageChunk = int64(1 << 20)
+const (
+	sw26MigrationStageChunk    = int64(1 << 20)
+	sw26MigrationStagePageSize = int64(4096)
+)
 
 type sw26MigrationStage struct {
-	db       *sql.DB
+	db       *sql.Conn
+	pool     *sql.DB
 	path     string
 	reserved int64
 	logical  bool
@@ -55,59 +59,72 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
-	stage.db, err = sql.Open("sqlite", stage.path)
+	stage.pool, err = sql.Open("sqlite", stage.path)
 	if err != nil {
 		return nil, err
 	}
-	stage.db.SetMaxOpenConns(1)
+	stage.db, err = stage.pool.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Only this connection uses the scratch file. Keep the file lock and
+	// the connection-local page ceiling across all staging statements.
 	for _, query := range []string{
-		"PRAGMA journal_mode=OFF", "PRAGMA synchronous=OFF",
+		"PRAGMA locking_mode=EXCLUSIVE", "PRAGMA journal_mode=OFF", "PRAGMA synchronous=OFF",
 		"PRAGMA page_size=4096", "PRAGMA cache_size=-512",
 		"PRAGMA mmap_size=0", "PRAGMA temp_store=FILE",
-		fmt.Sprintf("PRAGMA max_page_count=%d", stage.reserved/4096),
 	} {
 		if _, err := stage.db.ExecContext(ctx, query); err != nil {
 			return nil, err
 		}
 	}
+	var pageSize int64
+	if err := stage.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
+		return nil, err
+	}
+	if pageSize != sw26MigrationStagePageSize {
+		return nil, ErrRecordSpoolBudget
+	}
+	if err := stage.setPageLimit(ctx); err != nil {
+		return nil, err
+	}
 	return stage, nil
 }
 
+func (s *sw26MigrationStage) setPageLimit(ctx context.Context) error {
+	limit := s.reserved / sw26MigrationStagePageSize
+	var actual int64
+	if err := s.db.QueryRowContext(ctx, fmt.Sprintf("PRAGMA max_page_count=%d", limit)).Scan(&actual); err != nil {
+		return err
+	}
+	if actual != limit {
+		return ErrRecordSpoolBudget
+	}
+	return nil
+}
+
 func (s *sw26MigrationStage) exec(ctx context.Context, bytes int64, query string, args ...any) (sql.Result, error) {
-	var pages, pageSize int64
-	if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
-		return nil, err
-	}
-	if err := s.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
-		return nil, err
-	}
 	// B-tree page splits and indexes need space beyond encoded values. Reserve
 	// before SQLite can grow, and enforce the same physical page ceiling.
 	if bytes < 0 || bytes > metadataPolicyBytes {
 		return nil, ErrMetadataWorkBudget
 	}
-	want := pages*pageSize + bytes*4 + 64<<10
+	var pages int64
+	if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		return nil, err
+	}
+	want := pages*sw26MigrationStagePageSize + bytes*4 + 64<<10
 	if want > s.reserved {
 		grow := ((want - s.reserved + sw26MigrationStageChunk - 1) / sw26MigrationStageChunk) * sw26MigrationStageChunk
 		if err := s.reserve(grow); err != nil {
 			return nil, err
 		}
 		s.reserved += grow
-		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("PRAGMA max_page_count=%d", s.reserved/pageSize)); err != nil {
+		if err := s.setPageLimit(ctx); err != nil {
 			return nil, err
 		}
 	}
-	result, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
-		return nil, err
-	}
-	if pages*pageSize > s.reserved {
-		return nil, ErrRecordSpoolBudget
-	}
-	return result, nil
+	return s.db.ExecContext(ctx, query, args...)
 }
 
 func (s *sw26MigrationStage) Close() error {
@@ -118,6 +135,10 @@ func (s *sw26MigrationStage) Close() error {
 	if s.db != nil {
 		result = s.db.Close()
 		s.db = nil
+	}
+	if s.pool != nil {
+		result = errors.Join(result, s.pool.Close())
+		s.pool = nil
 	}
 	if s.path != "" {
 		if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {

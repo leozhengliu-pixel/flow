@@ -83,33 +83,13 @@ type scaleP21IssueBatchCase struct {
 	check func(*testing.T, scaleP21IssueUpdateOutcome)
 }
 
-// scaleP21IssueBatchIssueAges pins the age of every reset issue. An edit by
-// an issue's creator within three minutes of its creation adds no activity
-// (store.RecordIssueActivity), and the fixture issues are created with the
-// wall clock at setup, so arms that run on either side of that moment (slow
-// race builds) would record different histories. Every arm now sees the
-// same side: aged issues an hour past the window, or fresh ones created at
-// the reset.
-func scaleP21IssueBatchIssueAges(fresh bool) func(*domain.Bootstrap) {
-	return func(data *domain.Bootstrap) {
-		now := time.Now().UTC()
-		for index := range data.Issues {
-			if fresh {
-				data.Issues[index].CreatedAt = now
-			} else {
-				data.Issues[index].CreatedAt = data.Issues[index].CreatedAt.Add(-time.Hour)
-			}
-		}
-	}
-}
-
 func (f scaleP21IssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleP21IssueBatchCase) {
 	t.Helper()
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			single := scaleP21IssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID}
 			f.scaleP21TriageWriterFixture.prepare = f.prepare(single)
-			f.scaleP21TriageWriterFixture.editBaseline = scaleP21IssueBatchIssueAges(test.fresh)
+			f.scaleP21TriageWriterFixture.editBaseline = pinIssueFixtureAges(test.fresh)
 			defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
 			var before scaleP21IssueUpdateState
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
@@ -279,7 +259,7 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 	test := scaleP21IssueUpdateCase{issue: f.triage.ID, setup: triageOff, edit: func(issue *domain.Issue) { issue.SubscriberIDs = []string{member.ID} }}
 	f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
 	// The owner moves issues it created: every run sees them aged.
-	f.scaleP21TriageWriterFixture.editBaseline = scaleP21IssueBatchIssueAges(false)
+	f.scaleP21TriageWriterFixture.editBaseline = pinIssueFixtureAges(false)
 	defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.batch(service, owner, nil, []string{f.triage.ID, f.visible.ID}, map[string]any{"teamId": "tm-parent"}, false)

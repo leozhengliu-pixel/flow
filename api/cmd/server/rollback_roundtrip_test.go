@@ -416,6 +416,9 @@ func rtWrites(r *rtRun) {
 	// Issues.
 	issue := r.write("issue-create", admin, "POST", "/api/issue-records", map[string]any{"title": "RT issue", "description": "first", "teamId": teamID, "projectId": rtID(project), "labelIds": []string{rtID(label)}, "assigneeId": user.ID}, 201)
 	r.name("issue", rtID(issue))
+	if id := rtID(issue); id != "" {
+		pinCreatedIssueAges(t, r.st.repo, rtWorkspace, false, id)
+	}
 	r.write("issue-update", admin, "PATCH", "/api/issue-records/"+rtID(issue), map[string]any{"priority": 2, "title": "RT issue edited"}, 200)
 	comment := r.write("comment-create", admin, "POST", "/api/issue-records/"+rtID(issue)+"/comments", map[string]any{"body": "first comment"}, 201)
 	r.name("comment", rtID(comment))

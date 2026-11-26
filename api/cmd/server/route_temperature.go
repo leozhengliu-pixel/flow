@@ -285,6 +285,7 @@ var scaleP21RouteTemperature = map[string]string{
 	"GET /api/jira/remote/projects":                                              "cold: server/server.listJiraRemoteProjects",
 	"GET /api/jira/remote/projects/{projectId}/statuses":                         "cold: server/server.listJiraRemoteStatuses",
 	"GET /api/labels":                                                            "hot",
+	"GET /api/link-icon":                                                         "hot",
 	"GET /api/loop-config":                                                       "hot",
 	"GET /api/loop-templates":                                                    "hot",
 	"GET /api/loops":                                                             "cold: server/server.listLoops",

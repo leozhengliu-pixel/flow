@@ -142,7 +142,7 @@ func scaleP16MutationScript(t *testing.T) map[string]string {
 	milestone := call("POST", path+"/milestones", map[string]string{"name": "P16 milestone"}, 201)
 	call("PATCH", path+"/milestones/"+id(milestone), map[string]string{"description": "Milestone body"}, 200)
 	call("POST", path+"/milestones/reorder", map[string]any{"ids": []string{id(milestone)}}, 200)
-	call("POST", "/api/issue-records", map[string]string{"title": "P16 linked issue", "teamId": fixture.Teams[0].ID, "projectId": id(project), "projectMilestoneId": id(milestone)}, 201)
+	issue := call("POST", "/api/issue-records", map[string]string{"title": "P16 linked issue", "teamId": fixture.Teams[0].ID, "projectId": id(project), "projectMilestoneId": id(milestone)}, 201)
 	call("DELETE", path+"/milestones/"+id(milestone), nil, 204)
 	mention := map[string]any{"type": "doc", "content": []any{map[string]any{"type": "mention", "userId": fixture.Users[1].ID}}}
 	for _, item := range []struct{ kind, path string }{{"project", path}, {"initiative", "/api/initiatives/" + id(call("POST", "/api/initiatives", map[string]any{"name": "P16 initiative", "projectIds": []string{id(project)}}, 201))}} {
@@ -181,6 +181,7 @@ func scaleP16MutationScript(t *testing.T) map[string]string {
 	relation := call("POST", path+"/relations", map[string]string{"relatedProjectId": id(other), "type": "related"}, 201)
 	call("PATCH", path+"/relations/"+id(relation), map[string]string{"type": "blocks"}, 200)
 	call("DELETE", path+"/relations/"+id(relation), nil, 204)
+	pinCreatedIssueAges(t, db.repo, db.key, false, id(issue))
 	call("DELETE", path, nil, 204)
 	for name, query := range map[string]string{
 		"rootSQL":           "SELECT data FROM workspace_states WHERE workspace_key=?",

@@ -207,6 +207,17 @@ func (b *metadataLogicalBuilder) Close() {
 	}
 }
 
+func (b *metadataLogicalBuilder) shareField(index int, node metadataLogicalNode) error {
+	if !slices.Contains(b.source.stores, node.source) {
+		if err := node.source.Retain(); err != nil {
+			return err
+		}
+		b.source.stores = append(b.source.stores, node.source)
+	}
+	b.source.fields[index] = node
+	return nil
+}
+
 func captureMetadataLogicalSource(ctx context.Context, data domain.Bootstrap, stamp copyStamp) (_ *metadataLogicalSource, err error) {
 	b, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {

@@ -210,10 +210,10 @@ func (b *metadataLogicalBuilder) writeAggregateNode(value metadataAggregateNode,
 		}
 	}
 	headers = newWrittenChildIndex(t, b.offset)
-	// Consecutive stored records of a slice or array copied verbatim are
-	// copied as one range (metadataLogicalCopyRun).
+	// Consecutive stored children copied verbatim are copied as one range
+	// (metadataLogicalCopyRun).
 	var run *metadataLogicalCopyRun
-	if (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) && depth+1 < metadataLogicalDepth {
+	if (t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Struct) && depth+1 < metadataLogicalDepth {
 		run = &metadataLogicalCopyRun{b: b}
 		defer run.abandon()
 	}

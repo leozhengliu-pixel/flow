@@ -378,7 +378,7 @@ func TestScaleP21SW197ProjectProgressLegacyDifferential(t *testing.T) {
 	}
 	defer bounded.releaseMetadataLogicalSources()
 	for _, reload := range []bool{false, true} {
-		for _, mode := range []string{"unchanged", "native-invalid", "nul", "alternate-escapes", "canonical-name", "native-invalid-canonical-name", "canonical-body", "canonical-defaults-body", "unknown-canonical", "count-conflict"} {
+		for _, mode := range []string{"unchanged", "history-only", "native-invalid", "nul", "alternate-escapes", "canonical-name", "native-invalid-canonical-name", "canonical-body", "canonical-defaults-body", "unknown-canonical", "count-conflict"} {
 			t.Run(mode+map[bool]string{false: "/warm", true: "/reloaded"}[reload], func(t *testing.T) {
 				before := cloneBootstrap(fixture.data)
 				body := "Original <tag>&\u2028"
@@ -401,7 +401,9 @@ func TestScaleP21SW197ProjectProgressLegacyDifferential(t *testing.T) {
 					}
 				}
 				next := cloneBootstrap(before)
-				next.Projects[0].IssueCount = 13
+				if mode != "history-only" {
+					next.Projects[0].IssueCount = 13
+				}
 				next.Projects[0].ProgressHistory = []domain.ProjectProgressHistoryPoint{{Date: before.Projects[0].CreatedAt, Value: 0.5}}
 				want, _ := scaleP21SW197Run(t, fixture, bounded, before, next, mode, false)
 				got, _ := scaleP21SW197Run(t, fixture, bounded, before, next, mode, true)

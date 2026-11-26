@@ -947,10 +947,10 @@ func TestColdIncrementalReloadDerivesFromKnown(t *testing.T) {
 		if got := [2]int64{residentReloadIncrementals.Load() - beforeIncremental, residentReloadFulls.Load() - beforeFull}; got != [2]int64{incremental, full} {
 			t.Fatalf("%s: reloads (incremental, full) %v, want %v (fallbacks %v)", label, got, [2]int64{incremental, full}, ColdPublishFallbacksForTesting())
 		}
-		// Preflight and state capture share a stamp. Raw recovery and its root
-		// cursor each read one, then installation rechecks under writeMu.
-		if incremental == 1 && (snapshotReads != 3 || publicationChecks != 1) {
-			t.Fatalf("%s: stamp queries (snapshot, publication) = (%d, %d), want (3, 1)", label, snapshotReads, publicationChecks)
+		// Recovery reuses the small root and stamp from state capture.
+		// Installation still rechecks the stamp under writeMu.
+		if incremental == 1 && (snapshotReads != 1 || publicationChecks != 1) {
+			t.Fatalf("%s: stamp queries (snapshot, publication) = (%d, %d), want (1, 1)", label, snapshotReads, publicationChecks)
 		}
 		coldIncrementalAssertExact(t, f, view, workspace, label)
 	}
