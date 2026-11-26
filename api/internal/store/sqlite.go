@@ -2211,6 +2211,9 @@ func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey str
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	if s.coldWrite != nil && s.coldWrite.publishBase != nil {
+		s.coldWrite.publishBase.projectLinks = tx.initiativeProjectLinks
+	}
 	s.dropMetadataCache(ctx, workspaceKey)
 	return nil
 }
@@ -2313,12 +2316,25 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 				return err
 			}
 		}
-		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, stored, &data); err != nil {
+		deltaBefore, deltaAfter := stored, data
+		if event != nil && s.coldWrite != nil &&
+			(event.Type == "initiative.created" || event.Type == "initiative.updated") {
+			patched, err := s.writeInitiativeProjectLinks(ctx, tx, workspaceKey, stored.Projects, data.Projects)
+			if err != nil {
+				return err
+			}
+			if patched {
+				// The callback's postimage is unchanged. The SQL patch has
+				// already persisted its project links.
+				deltaBefore.Projects = deltaAfter.Projects
+			}
+		}
+		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, deltaBefore, &deltaAfter); err != nil {
 			return err
 		}
 		// Records merged with another write's change go back to the caller,
 		// which installs them (import inputs stay as the caller has them).
-		source, destination := reflect.ValueOf(&data).Elem(), reflect.ValueOf(target).Elem()
+		source, destination := reflect.ValueOf(&deltaAfter).Elem(), reflect.ValueOf(target).Elem()
 		for _, field := range persistedMetadataFields() {
 			setRebasedField(field, destination.Field(field.index), source.Field(field.index))
 		}

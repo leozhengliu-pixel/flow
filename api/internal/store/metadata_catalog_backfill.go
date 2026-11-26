@@ -301,8 +301,8 @@ func metadataCatalogValues(workspace string, row metadataCatalogRow) []any {
 	return []any{workspace, row.key.Kind, row.key.ID, row.order, row.version, row.bodyBytes, row.summary, omitted, row.created, row.updated, row.archived}
 }
 
-// Backfill owns the collection checkpoint and bounds the total batch bytes.
-// Group statements to avoid several network round trips for every record.
+// The caller owns the collection checkpoint and bounds the total batch bytes.
+// Group statements, including the relations of a single record.
 func writeMetadataCatalogBatch(ctx context.Context, tx *sqlTx, workspace, kind string, rows []metadataCatalogRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -364,31 +364,7 @@ const metadataCatalogRelationInsert = `INSERT INTO metadata_catalog_relations(wo
 const metadataCatalogRelationConflict = ` ON CONFLICT(workspace_key,field,record_key,relation,value_hash) DO NOTHING`
 
 func writeMetadataCatalogRow(ctx context.Context, tx *sqlTx, workspace string, row metadataCatalogRow) error {
-	if journalDatabaseReady(tx) {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted) SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=? ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, workspace, row.key.Kind, row.key.ID); err != nil {
-			return err
-		}
-	}
-	_, err := tx.ExecContext(ctx, metadataCatalogInsert+`(?,?,?,?,?,?,?,?,?,?,?)`+metadataCatalogUpsert, metadataCatalogValues(workspace, row)...)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM metadata_catalog_relations WHERE workspace_key=? AND field=? AND record_key=?`, workspace, row.key.Kind, row.key.ID); err != nil {
-		return err
-	}
-	for relation, values := range metadataCatalogRelations(row.summary) {
-		seen := map[string]bool{}
-		for _, value := range values {
-			if seen[value] {
-				continue
-			}
-			seen[value] = true
-			if _, err := tx.ExecContext(ctx, metadataCatalogRelationInsert+`(?,?,?,?,?,?)`+metadataCatalogRelationConflict, workspace, row.key.Kind, row.key.ID, relation, metadataFingerprint([]byte(value)), value); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return writeMetadataCatalogBatch(ctx, tx, workspace, row.key.Kind, []metadataCatalogRow{row})
 }
 
 func metadataCatalogWriteBytes(workspace string, row metadataCatalogRow) int {

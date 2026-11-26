@@ -194,9 +194,7 @@ func (s *SQLiteStore) loadIssueBatchInputs(ctx context.Context, source *metadata
 			return nil, err
 		}
 	}
-	if err := read.selectSlice(ctx, "projects", func(record metadataLogicalNode) (bool, error) {
-		return issueHotMatches(ctx, record, "ID", projects)
-	}); err != nil {
+	if err := read.selectSliceByID(ctx, "projects", projects, issueProjectFields...); err != nil {
 		return nil, err
 	}
 	// selectIssueInputs selected the family's SLAs; their ordinals let the
@@ -256,7 +254,7 @@ func (s *SQLiteStore) loadIssueBatchInputs(ctx context.Context, source *metadata
 				}
 			}
 		}
-		if err := read.selectIssueTeamMoveDocuments(ctx, read.move, moved, nil); err != nil {
+		if err := read.selectIssueTeamMoveDocuments(ctx, read.move, moved, issueProjectFields); err != nil {
 			return nil, err
 		}
 	}

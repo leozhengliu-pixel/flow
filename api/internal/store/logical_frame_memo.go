@@ -76,6 +76,8 @@ func (s *metadataLogicalStorage) originStep(node metadataLogicalNode) (metadataL
 // from verbatim, or the node itself. Two nodes with the same origin hold the
 // same bytes and decode identically.
 func metadataLogicalFrameOrigin(node metadataLogicalNode) metadataLogicalNode {
+	// A read window belongs to one traversal. It does not identify the frame.
+	node.window = nil
 	for range metadataLogicalDepth {
 		if node.source == nil {
 			return node

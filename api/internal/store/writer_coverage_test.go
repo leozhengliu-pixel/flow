@@ -43,6 +43,7 @@ auth.go:provisionExternalMemberships
 content_offload.go:migrateOffloadedRecord
 favorite_mutation.go:mutateStandaloneFavorite
 feature_flags_mutation.go:mutateFeatureFlags
+initiative_project_links.go:writeInitiativeProjectLinks
 issue_records.go:replaceIssueRecords
 label_deletion.go:labelDeletionWrite
 metadata_catalog_pass.go:normalizeMetadataRecordStorage

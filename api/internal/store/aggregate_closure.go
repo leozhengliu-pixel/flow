@@ -21,6 +21,8 @@ type metadataAggregateImage struct {
 	Selected       *domain.Bootstrap
 	Scope          MetadataRecordScope
 	ExcludedFields []string
+	// transient overlays the callback's owned issue and content collections.
+	transient *domain.Bootstrap
 }
 
 type metadataAggregateNode interface {
@@ -327,6 +329,13 @@ func (image metadataAggregateImage) visit(ctx context.Context, visit func(string
 			return nil
 		}
 		var node metadataAggregateNode = metadataAggregateStoredNode{stored}
+		if image.transient != nil {
+			switch name {
+			case "issues", "comments", "activities", "notifications", "notificationDeliveries":
+				index, _, _ := metadataLogicalField(name)
+				return visit(name, metadataAggregateNativeNode{reflect.ValueOf(image.transient).Elem().Field(index)})
+			}
+		}
 		if image.Selected != nil {
 			field, ok := metadataFieldByName(name)
 			if ok {
