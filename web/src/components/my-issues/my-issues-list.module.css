@@ -114,7 +114,9 @@
 
 /* Estimate chip on rows ("△ 5", 12px 450 in the muted colour) and the group total ("Todo 2 △ 8", 13px 450). */
 .estimateChip{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--theme-border-strong);border-radius:48px;background:var(--theme-surface-1);color:var(--issue-muted)}
-.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}
+.groupCountButton,.groupEstimate:global(.estimate-chip){appearance:none;border:0;background:transparent;padding:0;cursor:pointer}.groupCountButton{color:var(--estimate-group-total);font:450 13px/normal var(--font);font-variant-numeric:tabular-nums}.groupCountButton:hover{color:var(--estimate-group-total-hover)}
+.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}.groupEstimate>:global(.estimate-icon){margin-top:-1px}
+.groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}.groupCountButton:focus-visible,.groupEstimate:global(.estimate-chip):focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .submenuItem>:global(.estimate-icon){flex:0 0 16px;color:var(--pk-muted)}
 .submenuItem[data-highlighted]>:global(.estimate-icon){color:var(--pk-text-strong)}
 
@@ -163,7 +165,7 @@
   .collapseButton svg{color:var(--phone-icon-subtle)}
   .groupName{line-height:normal;border-style:none}
   .groupCount{font-size:13px;font-weight:450;line-height:normal;border-style:none}
-  .groupEstimate:global(.estimate-chip){gap:3px}
+  .groupEstimate:global(.estimate-chip){margin-left:-1px}
   .createButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;font-size:12px;font-weight:500;line-height:normal}
   .createButton svg{color:var(--phone-icon-secondary)}
   .sessionPillTrigger{min-width:0;min-height:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent}
@@ -249,7 +251,7 @@
   .collapseTip>.collapseButton{margin-left:0}
   .groupCaret{color:var(--issue-dim)}
   .groupHeader:has(.groupEstimate) .groupCount{display:none}
-  .groupEstimate{margin-left:3px}
+  .groupEstimate{margin-left:-1px}
 }
 .identifierProbe{position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums;font-feature-settings:"calt","cpsp","tnum";letter-spacing:0}
 .identifierProbe[data-observe-width]{width:max-content;height:0;overflow:hidden}
@@ -266,10 +268,10 @@
 /* Label groupings tint the header with the label colour (the design reference gradient, path, count and chevrons). */
 .groupHeader[data-label-color]:not([data-subgroup]){background-image:var(--group-label-bg)}
 .groupHeader[data-label-color]:not([data-subgroup]) .groupText{color:var(--group-label-name);font-weight:450}
-.groupHeader[data-label-color]:not([data-subgroup]) :is(.groupCount,.createButton,.groupEstimate){color:var(--group-label-count)}
+.groupHeader[data-label-color]:not([data-subgroup]) :is(.groupCount,.groupCountButton,.createButton,.groupEstimate){color:var(--group-label-count)}
 .groupHeader[data-label-grouping] .groupEstimate{margin-left:-1px}
 /* Label grouping headers without a label colour ("No label") and every sub-group row use neutral tints. */
-.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.groupCount,.createButton,.groupEstimate){color:var(--group-plain-count)}
+.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.groupCount,.groupCountButton,.createButton,.groupEstimate){color:var(--group-plain-count)}
 .groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-plain-caret)}
 .groupHeader[data-label-color]:not([data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-label-collapse)}
 /* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
