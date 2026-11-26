@@ -697,7 +697,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onPropertyChange={changeProperty}
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
-      /> : display.layout !== 'board' || (desktop && filteredEmptyState && visibleCount === 0) ? <MyIssuesList countIcon
+      /> : display.layout !== 'board' || (desktop && filteredEmptyState && visibleCount === 0) ? <MyIssuesList
         groups={listGroups}
         windowed={windowedList}
         onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}

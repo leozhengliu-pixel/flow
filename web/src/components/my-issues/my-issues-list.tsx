@@ -25,6 +25,7 @@ import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties } fr
 import { useIssueRowActions, useTeamEstimateSettings } from './use-issue-row-actions'
 import { EstimateChip, EstimateIcon } from '@/components/issue/estimate-icon'
 import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
+import { useListGroupCountMode } from '@/lib/list-group-count-mode'
 import { useTeamStatusOptions } from './use-team-status-options'
 import { useIdentifierColumnWidth } from './identifier-column'
 import { teamWorkflowStates } from '@/lib/team-workflow'
@@ -208,8 +209,6 @@ export type MyIssuesGroupMeta = Omit<MyIssuesGroupData, 'issues' | 'totalCount' 
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
-  /** Group headers draw the count beside the points icon (team issue lists). */
-  countIcon?: boolean
   windowed?: boolean
   loading?: boolean
   error?: string
@@ -252,7 +251,7 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <LoadingListFooter label="Loading issues"/> : null
 }
 
-export function MyIssuesList({ groups, countIcon, windowed = false, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
+export function MyIssuesList({ groups, windowed = false, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
   const rowActions = useIssueRowActions()
   useFlowRowShortcuts(['⌘ ⇧ M'], Boolean(rowActions && rowActions.data.viewerRole !== 'guest'))
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
@@ -275,7 +274,7 @@ export function MyIssuesList({ groups, countIcon, windowed = false, loading = fa
   const identifiers = useMemo(() => groups.flatMap(group => group.issues.map(issue => issue.identifier)), [groups])
   const identifierColumn = useIdentifierColumnWidth(identifiers, identifierTarget)
   const listStyle = { '--issue-identifier-width': identifierColumn.width === undefined ? 'max-content' : `${identifierColumn.width}px` } as CSSProperties
-  const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
+  const groupEstimate = (group: MyIssuesGroupData) => sumEstimatePoints(group.issues, estimateSettingsFor)
   const groupMenuActions = (group: MyIssuesGroupData): IssueGroupMenuActions => ({
     onCollapseAll: onGroupCollapsedChange ? () => groups.forEach(item => onGroupCollapsedChange(item.id, true)) : undefined,
     onSelectAll: onSelectIssue ? () => group.issues.forEach(issue => onSelectIssue(issue.id, true, false)) : undefined,
@@ -285,9 +284,9 @@ export function MyIssuesList({ groups, countIcon, windowed = false, loading = fa
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
-    ? <div style={{ paddingBottom: entry.collapsed ? 4 : 2 }}><MyIssuesGroupHeader countIcon={countIcon} collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
+    ? <div style={{ paddingBottom: entry.collapsed ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : entry.kind === 'group'
-    ? <div style={{ paddingBottom: (entry.collapsed ? desktopList : !entry.group.issues.length) ? 4 : 2 }}><MyIssuesGroupHeader countIcon={countIcon} collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
+    ? <div style={{ paddingBottom: (entry.collapsed ? desktopList : !entry.group.issues.length) ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (virtual) return <>{identifierColumn.probe}<Virtuoso
     id={identifierTarget}
@@ -314,8 +313,8 @@ export function MyIssuesList({ groups, countIcon, windowed = false, loading = fa
       const parentGroup = parentHeader ? parentGroupOf(groups, group) : undefined
       if (parentCollapsed && !parentGroup) return null
       return <section className={styles.group} data-collapsed={collapsed || undefined} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
-        {parentGroup && <MyIssuesGroupHeader countIcon={countIcon} collapsed={parentCollapsed} createIssueLabel={createIssueLabel} group={parentGroup} estimateSum={groupEstimate(parentGroup)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(parentGroup)}/>}
-        {!parentCollapsed && !hideGroupHeaders && <MyIssuesGroupHeader countIcon={countIcon} collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
+        {parentGroup && <MyIssuesGroupHeader collapsed={parentCollapsed} createIssueLabel={createIssueLabel} group={parentGroup} estimateSum={groupEstimate(parentGroup)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(parentGroup)}/>}
+        {!parentCollapsed && !hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
         {!collapsed && !parentCollapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
@@ -333,10 +332,11 @@ function parentGroupOf(groups: MyIssuesGroupData[], group: MyIssuesGroupData): M
 }
 
 /** `estimateSum`: the group's estimate total ("Todo 2 △ 8"), shown when the issues' team uses estimates. */
-export function MyIssuesGroupHeader({ collapsed, countIcon, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange, ...menuActions }: IssueGroupMenuActions & { collapsed: boolean; /** Team issue lists draw the count beside the points icon, as the reference does without estimates. */ countIcon?: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
+export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange, ...menuActions }: IssueGroupMenuActions & { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
   const translate = useOptionalTranslate()
   const desktop = useDesktopLayout()
   const [hovered, setHovered] = useState(false)
+  const [countChoice, setCountChoice] = useListGroupCountMode()
   const toggle = onGroupCollapsedChange ? () => onGroupCollapsedChange(group.id, !collapsed) : undefined
   // The reference app's T: collapse or expand the group whose header the pointer is over.
   const latestToggle = useRef(toggle)
@@ -360,14 +360,17 @@ export function MyIssuesGroupHeader({ collapsed, countIcon, createIssueLabel, gr
   const labelGrouping = /^label(group)?-/.test(group.id.split('::').at(-1) ?? '')
   const label = translatable ? translate(group.label) : group.label
   const collapseButton = <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={event => { if (event.altKey && menuActions.onCollapseAll) menuActions.onCollapseAll(); else toggle?.() }}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
+  const issueCount = group.totalCount ?? group.issues.length
+  // The reference shows the estimate total beside the points icon when the team uses estimates, or just the count; clicking switches.
+  const countMode = estimateSum === undefined ? <span className={styles.groupCount}>{issueCount}</span> : countChoice === 'points'
+    ? <FlowTooltip key="points" raised label={<span className="flow-tooltip-rows"><span className="flow-tooltip-row">{translate('Estimate points')}</span><span className="flow-tooltip-row">{translate('Click to show issue counts')}</span></span>}><button type="button" className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`} data-my-issues-group-count="points" onClick={() => setCountChoice('issues')}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></button></FlowTooltip>
+    : <FlowTooltip key="issues" raised label={<span className="flow-tooltip-rows"><span className="flow-tooltip-row">{translate('Issue count')}</span><span className="flow-tooltip-row">{translate('Click to show estimate points')}</span></span>}><button type="button" className={styles.groupCountButton} aria-label={`${issueCount} issues`} data-my-issues-group-count="issues" onClick={() => setCountChoice('points')}>{issueCount}</button></FlowTooltip>
   return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-label-color={group.color ? true : undefined} data-label-grouping={labelGrouping || undefined} style={group.color ? { '--group-label-color': labelColors.dot(group.color), '--group-label-tint': labelColors.tint(group.color) } as CSSProperties : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
     {toggle ? <FlowTooltip raised label={<span className="flow-tooltip-rows">
       <span className="flow-tooltip-row"><TooltipShortcut value="T"/>{translate(collapsed ? 'to expand group' : 'to collapse group')}</span>
       {menuActions.onCollapseAll && <span className="flow-tooltip-row"><TooltipShortcut value="⌥ Click"/>{translate('to collapse all')}</span>}
     </span>}><span className={styles.collapseTip}>{collapseButton}</span></FlowTooltip> : collapseButton}
-    <GroupStateIcon state={group.state ?? (desktop || labelGrouping ? undefined : group.issues[0]?.state)} type={(desktop || labelGrouping) && !group.state && !group.id.startsWith('statustype-') ? undefined : group.stateType}/>{group.color && <span className={styles.groupDot} aria-hidden="true"/>}<span data-i18n-ignore={translatable ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title>{group.labelPrefix && <><span data-i18n-ignore className={styles.groupPrefix}>{group.labelPrefix}</span><GroupPathChevron/></>}<span className={styles.groupText}>{label}</span></span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
-    {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
-    {estimateSum === undefined && countIcon && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${group.totalCount ?? group.issues.length} issues`}><EstimateIcon size={14}/><span className="estimate-chip__value">{group.totalCount ?? group.issues.length}</span></span>}
+    <GroupStateIcon state={group.state ?? (desktop || labelGrouping ? undefined : group.issues[0]?.state)} type={(desktop || labelGrouping) && !group.state && !group.id.startsWith('statustype-') ? undefined : group.stateType}/>{group.color && <span className={styles.groupDot} aria-hidden="true"/>}<span data-i18n-ignore={translatable ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title>{group.labelPrefix && <><span data-i18n-ignore className={styles.groupPrefix}>{group.labelPrefix}</span><GroupPathChevron/></>}<span className={styles.groupText}>{label}</span></span>{countMode}
     {onCreateIssue && (group.createContext || group.stateType) && <FlowTooltip raised align="end" label={translate('Add issue…')}><button className={styles.createButton} aria-label={createIssueLabel} data-my-issues-group-add onClick={() => onCreateIssue(group)}><PlusIcon width={14} height={14}/></button></FlowTooltip>}
   </header></IssueGroupContextMenu>
 }
