@@ -292,3 +292,7 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 .team-estimate-options>.team-estimate-option:last-child:before{bottom:50%}
 .team-estimate-options>.team-estimate-option:after{content:"";position:absolute;left:23px;top:50%;width:10px;height:1px;background:var(--theme-border-strong)}
 :is(.settings-row,.personal-settings) .settings-select .settings-select-value span.settings-select-suffix{color:var(--set-desc);font:inherit}
+/* Group type submenu: Single-select / Multi-select, the current type checked at the right. */
+.domain-label-group-submenu.domain-label-group-type-submenu{width:174px;min-width:174px}
+.domain-label-group-type-option{justify-content:space-between}
+.domain-label-menu-check{width:16px;height:16px;flex:0 0 16px;margin-right:1px;fill:currentColor;color:var(--pk-muted)}

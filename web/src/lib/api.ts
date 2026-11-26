@@ -800,7 +800,7 @@ export function createLabelGroup(input: {
 export function updateLabelGroup(
   id: string,
   input: Partial<
-    Pick<LabelGroup, "name" | "color" | "description" | "archivedAt">
+    Pick<LabelGroup, "name" | "color" | "description" | "archivedAt" | "multiSelect">
   >,
 ): Promise<LabelGroup> {
   return request(`/api/label-groups/${id}`, jsonRequest("PATCH", input));
