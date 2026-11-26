@@ -491,8 +491,8 @@
   .columnHeader{box-sizing:border-box;height:50px;gap:2px;padding:4px 16px 0 22px}
   .columnHeader::before{left:8px;right:8px;height:auto;bottom:0}
   .columnHeader strong{margin-left:8px}
-  .count{gap:3px;margin-left:6px}
-  .headerButton{width:28px;height:28px}
+  .count{gap:3px;margin-left:6px;font-variant-numeric:normal}
+  .headerButton{width:28px;height:28px;color:var(--issue-fg)}
 }
 /* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
 .mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}

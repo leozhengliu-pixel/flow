@@ -192,11 +192,14 @@ export function IssueExplorerSurface({
   useLayoutEffect(() => {
     const nav = viewTabsRef.current
     if (!nav || !collapsibleTabs || typeof ResizeObserver === 'undefined') return
+    // Touch phones keep every tab in a scrolling row (the phone gate's measurements); only fine pointers collapse.
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches
     const measure = () => {
+      if (coarse) { setCollapsedFrom(undefined); return }
       const tabs = [...nav.querySelectorAll<HTMLElement>('[data-view-tab]')]
       if (tabs.every(tab => !tab.dataset.collapsed)) tabWidths.current = tabs.map(tab => tab.getBoundingClientRect().width)
       const widths = tabWidths.current
-      const GAP = 4, ADD_VIEW = (window.matchMedia?.('(pointer: coarse)').matches ? 32 : 28) + GAP, CHEVRON = 14
+      const GAP = 4, ADD_VIEW = 28 + GAP, CHEVRON = 14
       const sum = (count: number) => widths.slice(0, count).reduce((total, width) => total + width + GAP, 0)
       if (sum(widths.length) + ADD_VIEW <= nav.clientWidth) { setCollapsedFrom(undefined); return }
       const activeIndex = VIEWS.findIndex(view => view.id === activeView)
