@@ -7,7 +7,7 @@ import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useTimelineViewport } from '@/hooks/use-timeline-viewport'
 import { MILESTONE_SHAPE_PATH } from '@/components/issue/milestone-progress'
-import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
+import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import type { ProjectDataGroup, ProjectPageItem } from './projects-data-view'
 import {
   addTimelineDays,
@@ -177,7 +177,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
   const axis = useMemo(() => ({
     left: Math.max(0, viewport.left - OVERSCAN),
     right: Math.min(range.width, viewport.left + viewport.width - TIMELINE_LABEL_WIDTH + 2 * OVERSCAN),
-  }), [viewport.left, viewport.width, TIMELINE_LABEL_WIDTH, range.width])
+  }), [viewport.left, viewport.width, range.width])
   const visible = useMemo(() => ({
     ...axis,
     top: Math.max(0, viewport.top - OVERSCAN),
@@ -242,7 +242,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
       node.scrollLeft += daysBetween(previous.start, range.start) * -range.pxPerDay
     }
     measure()
-  }, [range, TIMELINE_LABEL_WIDTH, measure])
+  }, [range, measure])
 
   const centerDate = () => {
     const node = scrollerRef.current

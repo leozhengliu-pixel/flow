@@ -20,6 +20,14 @@ describe('desktop timeline axis', () => {
     for (let index = 1; index < labelled.length; index += 1) expect(labelled[index].x - labelled[index - 1].x).toBeCloseTo(14 * range.pxPerDay)
   })
 
+  it('numbers the other weeks on phones (Nov 2 on desktop, Nov 9 on a phone in 2026)', () => {
+    const range = { ...timelineRange([], new Date(2026, 10, 26), 'year'), pxPerDay: 2.5 }
+    const days = (phone: boolean) => desktopTimelineHeader(range, 'en-US', undefined, phone).minor.filter(segment => segment.key.startsWith('2026-11-') && segment.label).map(segment => segment.key)
+    expect(days(false)).toContain('2026-11-02')
+    expect(days(true)).toContain('2026-11-09')
+    expect(days(true)).not.toContain('2026-11-02')
+  })
+
   it('never packs numbered ticks closer than the label pitch at any zoom', () => {
     for (const zoom of ['week', 'month', 'quarter', 'year'] as const) {
       const range = timelineRange([], new Date(2026, 9, 30), zoom)
