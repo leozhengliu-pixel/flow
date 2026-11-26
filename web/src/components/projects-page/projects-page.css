@@ -37,7 +37,7 @@
 
 :root[data-theme="light"] .lp-projects__view { background: var(--theme-surface-1); color: var(--theme-text-secondary); }
 :root[data-theme="light"] .lp-projects__view:not([aria-current="page"]):hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-:root[data-theme="light"] .lp-projects__view[aria-current="page"] { background: var(--theme-surface-active); color: var(--theme-text-primary); }
+:root[data-theme="light"] .lp-projects__view[aria-current="page"] { background: var(--ui-pill-active-bg); color: var(--theme-text-primary); }
 :root[data-theme="light"] .lp-projects__view[aria-current="page"]:hover { background: lch(89.54% .5 282); color: var(--theme-text-primary); }
 
 :root[data-theme="light"] .lp-projects__header h1 {
@@ -842,9 +842,26 @@
 .lp-project-board__column {
   box-sizing: border-box;
   flex: 0 0 354px;
+  isolation: isolate;
   min-height: 100%;
+  min-width: 0;
   padding: 0;
+  position: relative;
   transition: background-color 120ms ease, flex-basis 120ms cubic-bezier(.2,.8,.2,1);
+}
+/* The column panel: a fading wash from the header down to the pane's bottom edge. */
+.lp-project-board__column::before {
+  background: linear-gradient(var(--board-band-top), var(--board-band-bottom));
+  border-radius: 5px 5px 0 0;
+  content: "";
+  inset: 4px 4px 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+/* Phones (the reference switches at 640px): 290px columns. */
+@media (max-width: 640px) {
+  .lp-project-board__column { flex-basis: 290px; }
 }
 .lp-project-board__column[data-drop-target=true] { background: color-mix(in lch, var(--accent-primary) 8%, transparent); }
 .lp-project-board__column[data-collapsed=true] { flex-basis: 210px; }
@@ -855,11 +872,11 @@
   gap: 12px;
   height: 50px;
   justify-content: space-between;
-  padding: 2px 12px 0 18px;
+  padding: 4px 12px 0 18px;
   position: relative;
 }
 .lp-project-board__column > header::before {
-  background: color-mix(in lch, var(--theme-text-primary) 6%, transparent);
+  background: var(--board-band-top);
   border-radius: 5px 5px 0 0;
   content: "";
   height: 46px;
@@ -910,7 +927,6 @@
 }
 .lp-project-board__menu { height: 32px !important; width: 32px !important; }
 .lp-project-board__column > header button:hover { background: var(--theme-control-hover); color: #fff; }
-:root[data-theme="light"] .lp-project-board__column > header::before { background: lch(94.44% .5 282 / .4); }
 :root[data-theme="light"] .lp-project-board__heading strong { color: var(--theme-text-primary); }
 :root[data-theme="light"] .lp-project-board__count { color: var(--theme-text-secondary); }
 :root[data-theme="light"] .lp-project-board__column > header button { color: var(--theme-text-primary); }
@@ -935,7 +951,7 @@
   outline: none;
   padding: 5px 6px;
   text-decoration: none;
-  width: 328px;
+  width: 100%;
 }
 .lp-project-card:hover { background: var(--theme-control); }
 .lp-project-card[data-dragging=true] { cursor: grabbing; opacity: .55; transform: scale(.985); }
@@ -1794,13 +1810,13 @@
   .lp-projects__top > .lp-projects__header { flex: none; gap: 0; height: 44px; padding: 0 8px; }
   html:root body .app .lp-projects .lp-projects__top > .lp-projects__header { padding: 0 8px; }
   .lp-projects__top > .lp-projects__header h1 { color: var(--text); border-style: none; font-size: 13px; font-weight: 500; line-height: normal; margin: 0 0 0 12px; }
-  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { display: grid; flex: 0 0 32px; height: 32px; min-width: 32px; width: 32px; place-items: center; margin: 0; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
-  html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { box-sizing: border-box; flex: 0 0 32px; height: 32px; width: 32px; justify-content: center; gap: 0; margin-left: auto; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--ui-pill-fg); font: 500 12px var(--font); }
+  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { display: grid; flex: 0 0 28px; height: 28px; min-width: 28px; width: 28px; place-items: center; margin: 0; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
+  html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { box-sizing: border-box; flex: 0 0 28px; height: 28px; width: 28px; justify-content: center; gap: 0; margin-left: auto; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--ui-pill-fg); font: 500 12px var(--font); }
   .lp-projects .lp-projects__new-project > span { display: none; }
   .lp-projects__top > .lp-projects__toolbar { border-style: none; flex: none; gap: 6px; height: 43.5px; padding: 0 8px; }
   .lp-projects__views { gap: 4px; }
   .lp-projects__actions { border-style: none; gap: 6px; }
-  .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 32px; height: 32px; width: 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
+  .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 28px; height: 28px; width: 28px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
   .lp-projects__toolbar .lp-projects__icon-button svg { color: var(--phone-icon-fg); }
   :root .lp-projects__toolbar .lp-projects__add-view { color: var(--project-toolbar-icon-fg); margin-left: 0; }
   .lp-projects__toolbar .lp-projects__add-view svg { color: var(--phone-icon-dim); }
@@ -1809,7 +1825,7 @@
   html:root body .app .lp-projects .lp-projects__header [data-sidebar-trigger] > svg { display: block; width: 14px; height: 14px; color: var(--phone-icon-fg); }
   .lp-projects__toolbar .lp-projects__desktop-sidebar-icon { display: none; }
   .lp-projects__toolbar .lp-projects__phone-sidebar-icon { display: block; }
-  .lp-projects__view { --ui-pill-ring: transparent; height: 32px; line-height: normal; }
+  .lp-projects__view { --ui-pill-ring: transparent; line-height: normal; }
   .lp-projects__view > span { border-style: none; font-size: 12px; font-weight: 500; line-height: normal; }
 
   .lp-projects :is(.lp-projects-filter, .lp-projects-display, .lp-projects-filter__nested, .lp-projects-display-select__menu) {
@@ -1941,6 +1957,14 @@
 /* "No label" (no dot or status icon) keeps the reference's 6px before its count. */
 .lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__count { margin-left: -6px; color: var(--group-plain-count); }
 .lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__toggle { color: var(--group-plain-caret); }
-/* Board columns keep the label path on one line: the group name ellipsizes first (2:1), as the reference. */
-.lp-project-board__column > header .lp-project-group__prefix { flex: 0 2 auto; min-width: 24.88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Label column headers: the group name and the label in the board's header inks, both regular weight. */
+.lp-project-board__column > header[data-label-color] .lp-project-group__prefix { color: var(--board-label-prefix); }
+.lp-project-board__column > header[data-label-color] .lp-project-group__path-chevron { color: var(--board-label-chevron); }
+.lp-project-board__column > header[data-label-color] .lp-project-board__heading strong { color: var(--board-label-name); font-weight: 450; }
+.lp-project-board__heading strong { line-height: normal; }
+.lp-project-board__column > header .lp-project-group__prefix { line-height: normal; margin-left: 2px; }
+.lp-project-board__column > header[data-label-color] .lp-project-board__heading strong { margin-left: 0; }
+.lp-project-board__count { font-variant-numeric: tabular-nums; line-height: normal; }
+/* Board columns keep the label path on one line: the group name takes all the shrinking until its 24.88px floor, then the label, as the reference. */
+.lp-project-board__column > header .lp-project-group__prefix { flex: 0 100000 auto; min-width: 24.88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-project-board__column > header .lp-project-group__prefix ~ :is(strong, span) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
