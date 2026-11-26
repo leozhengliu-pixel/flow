@@ -220,6 +220,7 @@ var workspacePurgeExempt = map[string]string{
 	"bounded_metadata_write_stage":  "transaction-local bounded metadata input; no committed rows",
 	"bounded_metadata_write_chunks": "transaction-local bounded metadata input chunks; no committed rows",
 	"record_journal_mode":           "database-wide journal activation generation",
+	"record_journal_capture":        "database-wide record journal capture mode (triggers or application)",
 	"record_journal_flush":          "transaction-local derived write input; no committed rows",
 	"record_journal_commit":         "SQLite input view; no stored rows",
 	"record_journal_commit_v2":      "SQLite input view; no stored rows",
