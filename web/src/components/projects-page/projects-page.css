@@ -1088,7 +1088,7 @@
   height: 28px;
   justify-content: center;
   padding: 6px 8px;
-  width: 326px;
+  width: calc(100% - 2px);
 }
 .lp-project-board__column:is(:hover, :focus-within) .lp-project-board__add {
   display: flex;
