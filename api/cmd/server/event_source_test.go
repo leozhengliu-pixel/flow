@@ -340,7 +340,8 @@ func TestScaleP12ConcurrentProjection(t *testing.T) {
 
 func TestScaleP12FlagsAndFallback(t *testing.T) {
 	s := &server{}
-	for value, want := range map[string]bool{"": false, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
+	// Unset follows the database default, which is on for every driver (a nil store is SQLite).
+	for value, want := range map[string]bool{"": true, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
 		t.Setenv("FLOW_SYNC_V2", value)
 		if s.store.SyncV2Enabled() != want {
 			t.Fatalf("flag %q", value)
