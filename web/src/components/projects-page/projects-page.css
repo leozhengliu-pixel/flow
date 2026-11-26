@@ -926,6 +926,7 @@
   width: 24px;
 }
 .lp-project-board__menu { height: 32px !important; width: 32px !important; }
+.lp-project-board__column > header button svg { color: var(--board-column-count); }
 .lp-project-board__column > header button:hover { background: var(--theme-control-hover); color: #fff; }
 :root[data-theme="light"] .lp-project-board__column > header button:hover {
   background: var(--ui-pill-hover-bg);

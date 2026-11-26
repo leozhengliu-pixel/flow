@@ -39,7 +39,8 @@
 .lp-project-timeline__names-backdrop::after { background: linear-gradient(to left, transparent, var(--bg-panel)); bottom: 0; content: ''; left: 100%; pointer-events: none; position: absolute; top: 0; width: 16px; }
 .lp-project-timeline__header-grid { bottom: 0; left: 0; pointer-events: none; position: absolute; top: 0; }
 .lp-project-timeline__grid > i, .lp-project-timeline__header-grid > i { border-left: 1px dashed var(--project-timeline-grid); bottom: 0; margin-left: -.5px; position: absolute; top: 0; }
-.lp-project-timeline__today-line { background: linear-gradient(var(--project-timeline-today-line), color-mix(in srgb, var(--project-timeline-today) 26%, transparent)); border-left: 0; width: 1px; }
+/* The line runs the pane's full height (up under the axis, which covers it), fading towards the bottom as the reference's. */
+.lp-project-timeline__today-line { background: linear-gradient(0deg, var(--project-timeline-today-fade), var(--project-timeline-today)); border-left: 0; opacity: .6; top: -32px; width: 1px; }
 
 .lp-project-timeline__label { box-sizing: border-box; width: var(--timeline-names-width); flex: 0 0 var(--timeline-names-width); padding: 0 18px 0 13px; border: 0; gap: 6px; }
 .lp-project-timeline__name { align-items: center; display: flex; flex: 1; gap: 4px; min-width: 0; }
