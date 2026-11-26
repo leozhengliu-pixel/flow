@@ -266,17 +266,9 @@ func (c chatMarkdownContext) block(node map[string]any, indent string) string {
 }
 
 func chatOrderedListStart(value float64) (int, bool) {
-	if value < 1 || math.IsInf(value, 0) || value != math.Trunc(value) {
-		return 0, false
-	}
-	maxInt := int(^uint(0) >> 1)
-	if strconv.IntSize == 32 {
-		if value > float64(maxInt) {
-			return 0, false
-		}
-	} else if value >= float64(maxInt) {
-		// float64(maxInt) rounds to 1<<63 on 64-bit systems. Keep that
-		// value out of the conversion because it is one past max int.
+	// A list starts at 1 or later; anything past the 32-bit range falls back
+	// to the default numbering, so the conversion fits int on every platform.
+	if value < 1 || value > math.MaxInt32 || math.IsInf(value, 0) || value != math.Trunc(value) {
 		return 0, false
 	}
 	return int(value), true
