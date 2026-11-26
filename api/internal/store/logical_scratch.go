@@ -68,12 +68,23 @@ func newMetadataLogicalRecordSpool(ctx context.Context) (*RecordSpool, error) {
 }
 
 // HoldMetadataLogicalDiskForTesting occupies the available quota without
-// allocating a physical file.
+// allocating a physical file, leaving free bytes of it. A hold leaving no
+// bytes charges the whole quota on top of what is in use: scratch that
+// concurrent work (a peer's background reload) held when the hold was taken
+// and releases while it lasts must not reopen room under a full disk.
 func HoldMetadataLogicalDiskForTesting(free int64) (func(), error) {
 	if !testing.Testing() || free < 0 {
 		return nil, ErrRecordSpoolBudget
 	}
 	limit := metadataLogicalDiskCap()
+	if free == 0 {
+		if limit <= 0 {
+			return nil, ErrRecordSpoolBudget
+		}
+		metadataLogicalDiskUsed.Add(limit)
+		var once sync.Once
+		return func() { once.Do(func() { metadataLogicalDiskUsed.Add(-limit) }) }, nil
+	}
 	for {
 		used := metadataLogicalDiskUsed.Load()
 		bytes := limit - used - free
