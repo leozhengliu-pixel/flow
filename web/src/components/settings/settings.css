@@ -296,3 +296,7 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 .domain-label-group-submenu.domain-label-group-type-submenu{width:175px;min-width:175px}
 .domain-label-group-type-option{justify-content:space-between}
 .domain-label-menu-check{width:16px;height:16px;flex:0 0 16px;margin-right:1px;fill:currentColor;color:var(--pk-muted)}
+/* Label group menus: 176px rows inset 14px (18px at the end) in both themes, as the design reference; the light menu defaults would inset 8px. */
+.domain-label-row-menu.is-group-menu{width:177px;min-width:177px;border-width:.5px}
+html:root[data-theme="light"] body .menu-content.domain-label-row-menu.is-group-menu .menu-item,html:root[data-theme="light"] body .menu-content.domain-label-group-submenu .menu-item{margin:0;padding:0 18px 0 14px;border-radius:0;font-weight:400}
+html:root[data-theme="light"] body .menu-content.domain-label-row-menu.is-group-menu .menu-item:is([data-highlighted],[data-state=open]),html:root[data-theme="light"] body .menu-content.domain-label-group-submenu .menu-item:is([data-highlighted],[data-state=open]){background:transparent}

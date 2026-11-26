@@ -528,7 +528,7 @@ function MenuShell({ label, kind, children }: { label: string; kind: 'group'|'la
 function GroupRowMenu({ group, canConvert, onEdit, onCreateLabel, onArchive, onGroupType, onConvert, onDelete }: { group: LabelGroup; canConvert: boolean; onEdit: () => void; onCreateLabel?: () => void; onArchive: () => Promise<void>; onGroupType: (multiSelect: boolean) => void; onConvert: () => void; onDelete: () => Promise<void> }) {
   const { t } = useI18n()
   return <MenuShell kind="group" label={group.name}>{group.archivedAt ? <><DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="restore"/><span>{t('Restore')}</span></DropdownMenuItem><DropdownMenuItem className="danger-item" onSelect={() => void onDelete()}><MenuIcon name="delete"/><span>{t('Delete')}</span></DropdownMenuItem></> : <>
-    <DropdownMenuItem onSelect={onEdit}><MenuIcon name="edit"/><span>{t('Edit label name')}</span><MenuShortcut>E</MenuShortcut></DropdownMenuItem>
+    <DropdownMenuItem onSelect={onEdit}><MenuIcon name="edit"/><span>{t('Edit label name…')}</span><MenuShortcut>E</MenuShortcut></DropdownMenuItem>
     <DropdownMenuItem onSelect={onCreateLabel}><MenuIcon name="add"/><span>{t('Add label to group')}</span></DropdownMenuItem>
     {/* Group type: single-select groups allow one of their labels per item, multi-select groups several. */}
     <DropdownMenuSub><DropdownMenuSubTrigger><MenuIcon name="grouptype"/><span>{t('Group type')}</span></DropdownMenuSubTrigger><DropdownMenuSubContent data-i18n-ignore className="domain-label-group-submenu domain-label-group-type-submenu" sideOffset={4} alignOffset={-7}>
@@ -536,7 +536,7 @@ function GroupRowMenu({ group, canConvert, onEdit, onCreateLabel, onArchive, onG
     </DropdownMenuSubContent></DropdownMenuSub>
     {canConvert && <DropdownMenuItem onSelect={onConvert}><MenuIcon name="label"/><span>{t('Convert to label')}</span></DropdownMenuItem>}
     <DropdownMenuSeparator/>
-    <DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="archive"/><span>{t('Archive…')}</span></DropdownMenuItem>
+    <DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="archive"/><span>{t('Archive')}</span></DropdownMenuItem>
     <DropdownMenuItem className="danger-item" onSelect={() => void onDelete()}><MenuIcon name="delete"/><span>{t('Delete')}</span></DropdownMenuItem>
   </>}</MenuShell>
 }
