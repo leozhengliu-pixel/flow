@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -39,7 +40,8 @@ func TestScaleP21SW553FacadeSharesWakersAndAPIKeyUses(t *testing.T) {
 		}
 	}
 	fixture.apiKeyUseMu.Lock()
-	_, recorded := fixture.apiKeyUseTimes[workspace+":sw553-key"]
+	// The use is kept for the store the facade reads (the view), on the owner's queue.
+	_, recorded := fixture.apiKeyUseTimes[fmt.Sprintf("%p:%s:sw553-key", view, workspace)]
 	started := fixture.apiKeyUseQueue != nil
 	fixture.apiKeyUseMu.Unlock()
 	if !started || !recorded {

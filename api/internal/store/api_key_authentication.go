@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -171,6 +172,10 @@ func (s *SQLiteStore) checkLiveKeyRecord(ctx context.Context, result APIKeyAuthe
 type apiKeyUse struct {
 	workspace, keyID, authorizationID string
 	at                                time.Time
+	// target is the store the use is recorded in: the store that served the
+	// request, or the live store behind a COLD facade. The owning store's
+	// queue and worker only carry it.
+	target *SQLiteStore
 }
 
 // Usage is telemetry, not an authentication dependency. A bounded worker queue
@@ -179,7 +184,13 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Facades and test views share the owning store's throttle and worker.
+	// A COLD facade records in the live store behind it. Facades and test
+	// views share the owning store's queue and worker (its shutdown joins
+	// them), but each store keeps its own uses: a test view records in itself.
+	target := s
+	for target.coldParent != nil {
+		target = target.coldParent
+	}
 	s = s.workerOwner()
 	s.workerMu.Lock()
 	defer s.workerMu.Unlock()
@@ -195,7 +206,7 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 		go s.runAPIKeyUses()
 	}
 	now := time.Now().UTC()
-	identity := workspace + ":" + keyID
+	identity := fmt.Sprintf("%p:%s:%s", target, workspace, keyID)
 	if at, ok := s.apiKeyUseTimes[identity]; ok && now.Sub(at) < time.Minute {
 		return nil
 	}
@@ -210,7 +221,7 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 		}
 	}
 	select {
-	case s.apiKeyUseQueue <- apiKeyUse{workspace, keyID, authorizationID, now}:
+	case s.apiKeyUseQueue <- apiKeyUse{workspace, keyID, authorizationID, now, target}:
 		s.apiKeyUseTimes[identity] = now
 	default:
 	}
@@ -226,11 +237,11 @@ func (s *SQLiteStore) runAPIKeyUses() {
 			return
 		case use := <-s.apiKeyUseQueue:
 			pass, cancel := context.WithTimeout(ctx, 2*time.Second)
-			err := s.writeAPIKeyUse(pass, use)
+			err := use.target.writeAPIKeyUse(pass, use)
 			cancel()
 			if err != nil {
 				s.apiKeyUseMu.Lock()
-				delete(s.apiKeyUseTimes, use.workspace+":"+use.keyID)
+				delete(s.apiKeyUseTimes, fmt.Sprintf("%p:%s:%s", use.target, use.workspace, use.keyID))
 				s.apiKeyUseMu.Unlock()
 			}
 		}
