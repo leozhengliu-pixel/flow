@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import base, { browserWebServers, timelinePerformanceSpec } from './playwright.config.ts'
+import base, { browserWebServers, desktopPerformanceSpecs } from './playwright.config.ts'
 
 const ports = { web: 4575, api: 4582, provider: 4591 }
 
@@ -7,7 +7,7 @@ const ports = { web: 4575, api: 4582, provider: 4591 }
 export default defineConfig({
   ...base,
   testIgnore: [],
-  testMatch: timelinePerformanceSpec,
+  testMatch: desktopPerformanceSpecs,
   outputDir: 'test-results-performance',
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github'], ['html', { open: 'never', outputFolder: 'playwright-report-performance' }]] : 'list',

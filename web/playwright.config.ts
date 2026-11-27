@@ -1,7 +1,7 @@
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test'
 
-export const timelinePerformanceSpec = '**/desktop-timeline-performance.spec.ts'
-const standaloneSpecs = ['**/security/**', '**/local-store/**', timelinePerformanceSpec]
+export const desktopPerformanceSpecs = ['**/desktop-timeline-performance.spec.ts', '**/desktop-document-first-paint.spec.ts']
+const standaloneSpecs = ['**/security/**', '**/local-store/**', ...desktopPerformanceSpecs]
 
 export function browserWebServers(
   ports: { web: number; api: number; provider: number },
