@@ -2,7 +2,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
-import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useSyncExternalStore } from 'react'
+import { memo, startTransition, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useSyncExternalStore } from 'react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useTimelineViewport } from '@/hooks/use-timeline-viewport'
@@ -50,6 +50,9 @@ const ROW_HEIGHT = 72
 const GROUP_HEIGHT = 32
 const DRAG_THRESHOLD = 3
 const OVERSCAN = 256
+// The first window after mount: twice this on the far side still covers the viewport hook's 128px
+// step, so the first paint is complete while the off-screen overscan follows in a transition.
+const FIRST_OVERSCAN = 64
 const milestoneDateFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' })
 
 type DateInput = { startDate?: string; targetDate?: string }
@@ -121,7 +124,13 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
   const suppressClick = useRef(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const { viewport, measure } = useTimelineViewport(scrollerRef)
+  // The first render only sizes the canvas: rows, ticks and links wait for the mount layout effect to
+  // measure the scroller and centre today, so they are built and styled once, for the real window.
+  const { viewport, measure, measured } = useTimelineViewport(scrollerRef)
+  const [overscan, setOverscan] = useState(FIRST_OVERSCAN)
+  useEffect(() => {
+    if (measured) startTransition(() => setOverscan(OVERSCAN))
+  }, [measured])
   const markerId = useId().replace(/:/g, '')
   // The timeline only cares which day it is, so a coarse clock keeps it from re-rendering every minute.
   const clock = useCurrentTime(15 * 60_000)
@@ -175,15 +184,16 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
   }, [dateBounds, today, zoom])
   // Coordinates stay on the full canvas, so sticky labels and scroll positions keep their geometry.
   const axis = useMemo(() => ({
-    left: Math.max(0, viewport.left - OVERSCAN),
-    right: Math.min(range.width, viewport.left + viewport.width - TIMELINE_LABEL_WIDTH + 2 * OVERSCAN),
-  }), [viewport.left, viewport.width, range.width])
+    left: Math.max(0, viewport.left - overscan),
+    right: Math.min(range.width, viewport.left + viewport.width - TIMELINE_LABEL_WIDTH + 2 * overscan),
+  }), [viewport.left, viewport.width, range.width, overscan])
   const visible = useMemo(() => ({
     ...axis,
-    top: Math.max(0, viewport.top - OVERSCAN),
-    bottom: viewport.top + viewport.height + 2 * OVERSCAN,
-  }), [axis, viewport.top, viewport.height])
-  const header = useMemo(() => desktopTimelineHeader(range, locale, axis, phone), [range, locale, axis, phone])
+    top: Math.max(0, viewport.top - overscan),
+    bottom: viewport.top + viewport.height + 2 * overscan,
+  }), [axis, viewport.top, viewport.height, overscan])
+  // Unmeasured, the first render builds no ticks (see `measured` above).
+  const header = useMemo(() => !measured ? { major: [], minor: [] } : desktopTimelineHeader(range, locale, axis, phone), [measured, range, locale, axis, phone])
   const gridLines = useMemo(() => header.major, [header])
   const todayX = timelineX(range, today) + range.pxPerDay / 2
 
@@ -205,10 +215,11 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
 
   const dependencyIndex = useMemo(() => indexTimelineDependencies(rows.rows.flatMap(row => row.kind === 'project'
     ? (row.project.blockedByIds ?? []).map(blockerId => ({ blockerId, blockedId: row.project.id })) : []), baseBoxes), [rows, baseBoxes])
-  const paths = useMemo(() => timelineWindowDependencies(dependencyIndex, visible, movedBox), [dependencyIndex, visible, movedBox])
+  const paths = useMemo(() => measured ? timelineWindowDependencies(dependencyIndex, visible, movedBox) : [], [measured, dependencyIndex, visible, movedBox])
   const pinnedDragRow = drag?.rowKey
   const focusedRowKey = focus?.rowKey
   const visibleRows = useMemo(() => {
+    if (!measured) return []
     const first = timelineLowerBound(rows.rows, row => row.y >= visible.top) - 1
     const end = timelineLowerBound(rows.rows, row => row.y >= visible.bottom)
     const start = Math.max(0, first)
@@ -223,7 +234,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
       if (typeof index === 'number' && (index < start || index >= end)) output.push(rows.rows[index])
     }
     return output.sort((a, b) => a.y - b.y)
-  }, [rows, visible.top, visible.bottom, pinnedDragRow, focusedRowKey])
+  }, [measured, rows, visible.top, visible.bottom, pinnedDragRow, focusedRowKey])
 
   // Keep the viewport anchored: centre today on mount, keep the centre date across zoom changes,
   // and compensate when the range start moves because data changed.

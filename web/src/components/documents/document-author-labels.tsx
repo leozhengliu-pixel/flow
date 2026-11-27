@@ -5,6 +5,7 @@
  * re-measured when the editor changes. Nothing runs while the toggle is off, and
  * the derivation is debounced and runs when the browser is idle.
  */
+import type { Editor } from '@tiptap/react'
 import { useEffect, useRef, useState } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 
@@ -36,8 +37,9 @@ const idle = (callback: () => void) => {
   return () => window.clearTimeout(handle)
 }
 
-export function DocumentAuthorLabels({ document, state, lastEditor, enabled, shell }: {
+export function DocumentAuthorLabels({ document, editor, state, lastEditor, enabled, shell }: {
   document: Pick<FlowDocument, 'id' | 'creator' | 'revisions'>
+  editor: Editor | null
   /** The editor's current ProseMirror JSON (string). */
   state: string | undefined
   lastEditor: User
@@ -74,7 +76,7 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
   useEffect(() => {
     authorsRef.current = authors
     if (!enabled || !shell || !authors.length) return
-    const root = shell.querySelector('.flow-prosemirror, .ProseMirror')
+    const root = editor && !editor.isDestroyed ? editor.view.dom : shell.querySelector('.flow-prosemirror, .ProseMirror')
     if (!root) { queueMicrotask(() => setLabels([])); return }
     const measure = () => {
       frame.current = 0
@@ -99,7 +101,7 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
     const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule)
     resize?.observe(root)
     return () => { observer.disconnect(); resize?.disconnect(); if (frame.current) cancelAnimationFrame(frame.current); frame.current = 0 }
-  }, [authors, enabled, shell])
+  }, [authors, editor, enabled, shell])
 
   if (!enabled) return null
   return <>{labels.map(label => <span className="document-author-name" data-i18n-ignore key={label.key} style={{ top: label.top, lineHeight: label.lineHeight }}>{label.name}</span>)}</>

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { ProjectTimeline, TIMELINE_LABEL_WIDTH } from './project-timeline'
@@ -134,5 +135,29 @@ describe('ProjectTimeline undated rows', () => {
     expect(onOpenProject).not.toHaveBeenCalled()
     fireEvent.click(row)
     expect(onOpenProject).toHaveBeenCalledWith(undated)
+  })
+})
+
+describe('ProjectTimeline first open', () => {
+  it('builds rows once, for the measured window, then widens to the overscan', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)
+    const many = Array.from({ length: 80 }, (_, index) => item({ id: `p${index}`, name: `Project ${index}`, rawStartDate: '2026-09-01', rawTargetDate: '2026-10-30' }))
+    const firstCommit: number[] = []
+    function Probe({ children }: { children: ReactNode }) {
+      const root = useRef<HTMLDivElement>(null)
+      // Runs after the timeline's own layout effects, before React applies the measured window.
+      useLayoutEffect(() => { firstCommit.push(root.current!.querySelectorAll('.lp-project-timeline__row').length) }, [])
+      return <div ref={root}>{children}</div>
+    }
+    try {
+      const { container } = render(<I18nProvider><Probe><ProjectTimeline groups={[{ id: 'g', name: 'In Progress', projects: many }]} today={today}/></Probe></I18nProvider>)
+      expect(firstCommit).toEqual([0])
+      // Rows are 72px (the reference's timeline row) below a 32px group header; the window is 300px plus 256px of
+      // overscan above and twice that below.
+      expect(container.querySelectorAll('.lp-project-timeline__row')).toHaveLength(Math.ceil((300 + 2 * 256 - 32) / 72))
+    } finally {
+      vi.restoreAllMocks()
+    }
   })
 })

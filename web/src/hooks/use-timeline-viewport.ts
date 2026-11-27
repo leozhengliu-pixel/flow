@@ -2,9 +2,14 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from '
 
 const STEP = 128
 
-/** One layout read per frame, with stable windows during small scrolls. */
+/**
+ * One layout read per frame, with stable windows during small scrolls. `measured` turns true in the
+ * mount layout effect, before the first paint, so callers can skip windowed content on the first
+ * (unmeasured) render instead of building and styling it for a guessed viewport and then again.
+ */
 export function useTimelineViewport(ref: RefObject<HTMLElement | null>) {
   const [viewport, setViewport] = useState({ left: 0, top: 0, width: 1600, height: 900 })
+  const [measured, setMeasured] = useState(false)
   const frame = useRef(0)
   const measure = useCallback(() => {
     const node = ref.current
@@ -30,6 +35,7 @@ export function useTimelineViewport(ref: RefObject<HTMLElement | null>) {
       })
     }
     measure()
+    setMeasured(true)
     node.addEventListener('scroll', schedule, { passive: true })
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule)
     observer?.observe(node)
@@ -41,5 +47,5 @@ export function useTimelineViewport(ref: RefObject<HTMLElement | null>) {
     }
   }, [measure, ref])
 
-  return { viewport, measure }
+  return { viewport, measure, measured }
 }

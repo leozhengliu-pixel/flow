@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -101,14 +101,34 @@ describe('DocumentPage header', () => {
     expect(props.onReload).not.toHaveBeenCalled()
   })
 
-  it('mounts the editor only once a document from a cached snapshot has its server body', () => {
+  it('leaves a frame for the editable title and shell before mounting the editor', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] })
+    try {
+      renderPage()
+      const title = screen.getByRole('textbox', { name: 'Document title' })
+      expect(title).toBeVisible()
+      expect(title).not.toHaveAttribute('readonly')
+      expect(screen.getByRole('status')).toHaveTextContent('Loading document')
+      fireEvent.change(title, { target: { value: 'First draft' } })
+      act(() => vi.advanceTimersToNextFrame())
+      expect(screen.queryByLabelText('Document content')).not.toBeInTheDocument()
+      act(() => vi.advanceTimersToNextFrame())
+      expect(screen.getByLabelText('Document content')).toBeInTheDocument()
+      expect(screen.queryByText('Loading document')).not.toBeInTheDocument()
+      expect(title).toHaveValue('First draft')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('mounts the editor only once a document from a cached snapshot has its server body', async () => {
     const cached = { ...flowDocument, content: '' }
     const { rerender, props } = renderPage({ document: cached, bodyPending: true })
     expect(screen.getByRole('status')).toHaveTextContent('Loading document')
     expect(screen.queryByLabelText('Document content')).not.toBeInTheDocument()
     const fresh = { ...flowDocument, content: 'Server body' }
     rerender(<I18nProvider><DocumentPage {...props} document={fresh} bodyPending={false}/></I18nProvider>)
-    expect(screen.getByLabelText('Document content')).toHaveTextContent('Server body')
+    expect(await screen.findByLabelText('Document content')).toHaveTextContent('Server body')
   })
 
   it('has no Activity panel and, no docked agent rail or header chat button', () => {
@@ -233,6 +253,19 @@ describe('DocumentPage header', () => {
     expect(rows.slice(0, 2).map(row => row.getAttribute('aria-label'))).toEqual(['Teammate', 'Viewer'])
     expect(rows[0]).toBeChecked()
     expect(rows[1]).not.toBeChecked()
+  })
+
+  it('resets the subscriber search when its popover closes', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const bell = screen.getByRole('button', { name: 'Change document subscribers' })
+    await user.click(bell)
+    await user.type(screen.getByRole('textbox', { name: 'Change subscribers…' }), 'Teammate')
+    expect(screen.queryByRole('checkbox', { name: 'Viewer' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(bell)
+    expect(screen.getByRole('textbox', { name: 'Change subscribers…' })).toHaveValue('')
+    expect(screen.getByRole('checkbox', { name: 'Viewer' })).toBeChecked()
   })
 
   it('lists the "…" menu in the reference app order and keeps People with access for owners', async () => {
@@ -447,7 +480,7 @@ describe('DocumentPage deleted state', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
   })
 
-  it('renders read-only with a Deleted badge, no star, bell, agent or template chip', () => {
+  it('renders read-only with a Deleted badge, no star, bell, agent or template chip', async () => {
     renderPage({ deletedEntry: entry })
     expect(screen.getByText(/Deleted|已删除/)).toBeVisible()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
@@ -455,7 +488,7 @@ describe('DocumentPage deleted state', () => {
     expect(screen.queryByRole('button', { name: /chat/i })).not.toBeInTheDocument()
     expect(screen.queryByTestId('template-chip')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Document title' })).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Read-only content')).toHaveAttribute('data-readonly', 'true')
+    expect(await screen.findByLabelText('Read-only content')).toHaveAttribute('data-readonly', 'true')
     expect(screen.queryByLabelText('Document content')).not.toBeInTheDocument()
   })
 

@@ -17,7 +17,7 @@ import type { EditorState } from '@tiptap/pm/state'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useStableCallback } from './editor/use-stable-callback'
 import { descriptionDocumentJSON, parseDescriptionContent, sameDocument, serializeDescription, type DescriptionSnapshot } from './editor/editor-content'
@@ -67,6 +67,7 @@ interface DescriptionEditorProps {
   selectionActions?: DescriptionSelectionActions
   value: string
   loading?: boolean
+  loadingFallback?: ReactNode
   state?: string
   onChange?: (snapshot: DescriptionSnapshot) => void
   onBlur?: () => void
@@ -105,12 +106,12 @@ const revokedDocumentMessage = 'You no longer have access to this document. Unsa
 const readOnlyEditsMessage = 'You can no longer edit this. Unsaved changes can still be downloaded.'
 
 export function IssueDescriptionEditor(props: DescriptionEditorProps) {
-  if (props.loading) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
+  if (props.loading) return props.loadingFallback ?? <div className="issue-description-skeleton" aria-label="Loading issue description"/>
   const sessionKey = props.collaboration ? JSON.stringify([props.collaboration.viewer.id, props.collaboration.workspaceKey, props.collaboration.issueId ?? '', props.collaboration.documentId]) : 'local'
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, onPersistReady, outline = false, readOnly = false, compactInsertMenu = false }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, onPersistReady, outline = false, readOnly = false, compactInsertMenu = false, loadingFallback }: DescriptionEditorProps) {
   const { t } = useI18n()
   const getPlaceholder = useStableCallback(() => t(placeholder))
   const getDocumentId = useStableCallback(() => collaboration?.issueId ?? collaboration?.documentId)
@@ -159,7 +160,6 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const [mention, setMention] = useState<MentionState>(closedMention)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [mentionAnchor, setMentionAnchor] = useState({ left: 14, top: 44, bottom: 44 })
-  const mentionUsers = useMemo(() => mentionableUsers(users), [users])
   const mentionRef = useRef<MentionState>(closedMention)
   const mentionSelectedRef = useRef(0)
   const getUploadImage = useStableCallback(() => onInsertImage)
@@ -201,7 +201,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const entityData = useAgentEntityData()
   const entityDataRef = useLatestRef(entityData)
   const getEntityData = useStableCallback(() => entityData)
-  const mentionOptionList = useMentionOptions({ active: mention.active, query: mention.query, users: mentionUsers })
+  const mentionOptionList = useMentionOptions({ active: mention.active, query: mention.query, users, mentionableOnly: true })
   const mentionOptionsRef = useLatestRef(mentionOptionList)
   const editor = useEditor({
     immediatelyRender: false,
@@ -631,7 +631,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     })
   }
 
-  if (!editor) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
+  if (!editor) return loadingFallback ?? <div className="issue-description-skeleton" aria-label="Loading issue description"/>
   return <div className={['issue-description-root', className].filter(Boolean).join(' ')} ref={rootRef}>
     {saveError && <div role="alert" className="issue-description-save-error">
       <span>{t(saveError)}</span>
@@ -765,8 +765,4 @@ function getMentionState(state: EditorState): MentionState {
   const query = match[1] ?? ''
   const from = $from.pos - query.length - 1
   return { active: true, query, range: { from, to: $from.pos } }
-}
-
-function mentionableUsers(users: User[]) {
-  return users.filter(user => user.active && !(user.app && !user.appScopes?.includes('app:mentionable')))
 }

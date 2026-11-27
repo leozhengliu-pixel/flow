@@ -13,9 +13,13 @@ const TYPED_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
  * The "@" menu's options for the text typed after the "@". Paged workspaces never hold every issue, so the menu asks the
  * server for matching (or, with nothing typed, recent) issues while it is open, and fetches a typed identifier by id.
  */
-export function useMentionOptions({ active, query, users }: { active: boolean; query: string; users: User[] }): MentionOption[] {
+export function useMentionOptions({ active, query, users, mentionableOnly = false }: { active: boolean; query: string; users: User[]; mentionableOnly?: boolean }): MentionOption[] {
   const data = useAgentEntityData()
   const people = useResourcePeople(users, active)
+  const mentionable = useMemo(() => {
+    if (!active || !mentionableOnly) return people
+    return people.filter(user => user.active && (!user.app || user.appScopes?.includes('app:mentionable')))
+  }, [active, mentionableOnly, people])
   const documents = useResourceMentionDocuments(data, active, query)
   const workspace = data?.workspace.urlKey
   const [fetched, setFetched] = useState<Issue[]>([])
@@ -50,6 +54,6 @@ export function useMentionOptions({ active, query, users }: { active: boolean; q
     if (!active) return []
     const pool = new Map<string, Issue>()
     for (const issue of [...(data?.issues ?? []), ...fetched, ...(byIdentifier ? [byIdentifier] : [])]) pool.set(issue.id, issue)
-    return mentionOptions(data ? { ...data, documents } : data, query, { users: people, issues: [...pool.values()] })
-  }, [active, byIdentifier, data, documents, fetched, people, query])
+    return mentionOptions(data ? { ...data, documents } : data, query, { users: mentionable, issues: [...pool.values()] })
+  }, [active, byIdentifier, data, documents, fetched, mentionable, query])
 }

@@ -1,10 +1,10 @@
-.lp-projects__content:has(> .scale-p19-project-pager) {
+.lp-projects__content[data-paged] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.lp-projects__content:has(> .scale-p19-project-pager) > .lp-projects__workspace {
+.lp-projects__content[data-paged] > .lp-projects__workspace {
   flex: 1 1 auto;
   height: auto;
   overflow: hidden;
