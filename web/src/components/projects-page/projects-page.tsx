@@ -234,7 +234,7 @@ export function ProjectsPage({
   const projectFilterQuery = useMemo(() => activeFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [activeFilters])
   const windowTeamIds = useMemo(() => scopeTeamId ? [...teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)] : undefined, [scopeTeamId, teamParents, teamSettings, teams])
   const [windowQuery, setWindowQuery] = useState<ScaleP19ServerQuery>({ schema: 1, display: DEFAULT_PROJECTS_DISPLAY, locale: navigator.language })
-  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
+  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
   const [pagedProjects, setPagedProjects] = useState<Project[]>(projectWindow.enabled ? [] : projects)
   const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
@@ -265,7 +265,7 @@ export function ProjectsPage({
       setDirectoryLoading(true)
       setDirectoryError(null)
       try {
-        const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100 }, controller.signal)
+        const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'false', filter: projectFilterQuery, limit: 100 }, controller.signal)
         if (!cancelled) startTransition(() => { setPagedProjects(page.items); mergeDirectoryCustomers(page, true) })
         if (!cancelled) { setDirectoryCursor(page.nextCursor); setDirectoryHasMore(page.hasMore) }
       } catch (error) {
@@ -287,7 +287,7 @@ export function ProjectsPage({
     directoryRequest.current = controller
     setDirectoryLoadingMore(true)
     try {
-      const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100, cursor: directoryCursor }, controller.signal)
+      const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'false', filter: projectFilterQuery, limit: 100, cursor: directoryCursor }, controller.signal)
       startTransition(() => { setPagedProjects(current => [...current, ...page.items.filter(item => !current.some(existing => existing.id === item.id))]); mergeDirectoryCustomers(page, false) })
       setDirectoryCursor(page.nextCursor)
       setDirectoryHasMore(page.hasMore)
@@ -307,10 +307,13 @@ export function ProjectsPage({
     return ids
   }, [currentViewerId, presence])
   const peopleChoices = useMemo(() => projectPeopleChoices(users, invitations, onlineUserIds), [invitations, onlineUserIds, users])
+  // The directory lists active projects only: archived ones live in the archive, where they can be restored.
+  // The server pages already exclude them; this also covers local data and a project archived while open.
   const scopedProjects = useMemo(() => {
-    if (!scopeTeamId) return projectCollection
+    const active = projectCollection.filter(project => !project.archivedAt)
+    if (!scopeTeamId) return active
     const ids = teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)
-    return projectCollection.filter(project => project.teamIds.some(id => ids.has(id)))
+    return active.filter(project => project.teamIds.some(id => ids.has(id)))
   }, [projectCollection, scopeTeamId, teamParents, teams, teamSettings])
   const projectLabels = useMemo(() => labelsForResource(labels, 'project', labelGroups), [labelGroups, labels])
   const projectLabelGroups = useMemo(() => labelGroups.filter(group => group.resourceType === 'project'), [labelGroups])
@@ -434,7 +437,7 @@ export function ProjectsPage({
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
   const localFilterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
-  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
+  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
   // The reference app's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
   const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
@@ -658,7 +661,7 @@ export function ProjectsPage({
     customerFilterOptions={customerOptions}
     onSearchFilterOptions={async (field, query) => {
       if (field !== 'Specific project') return []
-      const page = await listProjectRecords({ q: query, teamId: scopeTeamId, archived: 'all', limit: 100 })
+      const page = await listProjectRecords({ q: query, teamId: scopeTeamId, archived: 'false', limit: 100 })
       return page.items.map(project => ({ id: project.id, label: project.name, color: project.color, count: 1 }))
     }}
     onChangeDisplay={view.setDisplay}
