@@ -21,7 +21,7 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "f157c0fc7ac57b4167be8349bb308712498b09524b87579218fa2f129fff4d9e",
-		"issue_records.go":      "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
+		"issue_records.go":      "c2747e0ff45b2691659dac60831b7c8584cad78a3b0e9ec88766618de0925b00",
 		"issue_query.go":        "1e7cfc29bebf6e58999abc0cb7bf5924e563558b48d346f03865ee1be5c3a621",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.

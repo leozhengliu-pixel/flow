@@ -69,6 +69,10 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 	defer finish()
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	// The admitted work of the attempt whose event and realtime payload are
+	// held above; released once they are published (or abandoned).
+	releaseEvent := func() {}
+	defer func() { releaseEvent() }()
 	metadataWritten := false
 	traceStart(ctx, "issue_create")
 	apply := func(ctx context.Context, stopWorkRetry func()) error {
@@ -346,15 +350,22 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		}
 		defer merged.Release()
 		traceMark(ctx, "metadata")
-		if err := attempt.reserveIssueCreateEvent(ctx, payload, created); err != nil {
+		eventWork, err := attempt.reserveIssueCreateEvent(ctx, payload, created)
+		if err != nil {
 			return err
 		}
 		raw, err := json.Marshal(payload)
 		if err != nil {
+			eventWork()
 			return err
 		}
+		// A retried attempt replaces the earlier attempt's event, whose
+		// work ends with it.
+		previousEvent := releaseEvent
+		releaseEvent = eventWork
 		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
 		realtime = enrichRealtimePayload(raw, created, event.Type)
+		previousEvent()
 		candidate, err := metadataLogicalInstalledCandidate(ctx, merged)
 		if err != nil {
 			return err

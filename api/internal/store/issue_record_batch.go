@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -118,7 +119,8 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 	written := []string{}
 	for _, issue := range issues {
 		err := func() error {
-			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issue, previous[issue.ID])
+			admission := issueRecordWriteAdmission(ctx)
+			release, err := reserveIssueRecordColumns(ctx, admission, issue)
 			if err != nil {
 				return err
 			}
@@ -127,13 +129,32 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 			if err != nil {
 				return err
 			}
-			old := previous[issue.ID]
-			if equalIssueRecordData(old, values[len(values)-1].([]byte)) || len(old) > 0 && refs.equalOwned(old, issue) {
+			old, raw := previous[issue.ID], values[len(values)-1].([]byte)
+			if bytes.Equal(old, raw) {
 				return nil
 			}
 			if len(old) > 0 {
+				// The stored payload is decoded once, for both comparisons
+				// (equalIssueRecordData, then equalOwned) and its stats.
+				releaseDecoded, err := reserveIssueRecordDecoding(ctx, admission, old)
+				if err != nil {
+					return err
+				}
+				defer releaseDecoded()
 				var before domain.Issue
 				if err := json.Unmarshal(old, &before); err != nil {
+					return err
+				}
+				compare := &issueRecordComparisonAdmission{ctx: ctx, store: admission}
+				defer compare.close()
+				if err := compare.encode(before); err != nil {
+					return err
+				}
+				if equalDecodedIssueRecordData(before, raw) {
+					return nil
+				}
+				equal, err := refs.equalDecodedOwned(before, issue, compare)
+				if err != nil || equal {
 					return err
 				}
 				addIssueStats(deltas, issueStatsOf(before), -1)
@@ -158,11 +179,7 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 	}
 	for _, issue := range changed {
 		err := func() error {
-			release, err := reserveIssueRecordEncoding(ctx, issueRecordWriteAdmission(ctx), issue, previous[issue.ID])
-			if err != nil {
-				return err
-			}
-			defer release()
+			// syncApplicationTask admits its own decoding and encoding.
 			return syncApplicationTask(ctx, tx, workspace, issue, previous[issue.ID])
 		}()
 		if err != nil {

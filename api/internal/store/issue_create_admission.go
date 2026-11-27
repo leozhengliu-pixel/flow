@@ -49,22 +49,33 @@ func (r *boundedDiscussionAttempt) reserveIssueCreateCallback(ctx context.Contex
 	return reserveIssueBatchCallbackEncoding(ctx, r.owner.store, data, payload)
 }
 
-func (r *boundedDiscussionAttempt) reserveIssueCreateEvent(ctx context.Context, payload any, entity domain.Issue) error {
+// reserveIssueCreateEvent admits the event and realtime work of one attempt.
+// The returned release belongs to the writer holding that attempt's event and
+// realtime payload: those bytes end when the writer has published them (the
+// sinks account for whatever they keep), not when the containing response
+// closes. Holding them through the response would leave work that follows
+// the creation in the same request (triage suggestions) without the room
+// the creation no longer uses.
+func (r *boundedDiscussionAttempt) reserveIssueCreateEvent(ctx context.Context, payload any, entity domain.Issue) (func(), error) {
 	input, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(payload), 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	output, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(entity), 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The literal event retains the encoded input. Realtime decodes that
 	// input and encodes it again alongside the created entity. Two input
 	// encoding allowances cover the retained raw bytes and decoded tree as
 	// well as that input's part of the enriched encoding; the entity owns
-	// the other part of the encoding until the containing response closes.
+	// the other part of the encoding.
 	if uint64(output) > uint64(metadataWorkBytes())-(64<<10) || uint64(input) > (uint64(metadataWorkBytes())-uint64(output)-(64<<10))/2 {
-		return ErrMetadataWorkBudget
+		return nil, ErrMetadataWorkBudget
 	}
-	return r.owner.reserve(ctx, uint64(input)*2+uint64(output)+64<<10)
+	_, release, err := r.owner.store.tryAdmitAdditionalMetadataWork(ctx, int(uint64(input)*2+uint64(output)+64<<10))
+	if err != nil {
+		return nil, err
+	}
+	return release, nil
 }

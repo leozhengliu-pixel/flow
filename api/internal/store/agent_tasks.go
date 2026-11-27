@@ -24,9 +24,19 @@ func WithDelegationInstructions(ctx context.Context, instructions string) contex
 // The task and issue update share a commit: an accepted delegation cannot lose
 // its execution request when a process exits before sending a webhook.
 func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, previous []byte) error {
-	var old domain.Issue
+	// Only the stored task anchor is read from the previous payload.
+	var old struct {
+		AgentSessionID string `json:"agentSessionId,omitempty"`
+	}
 	if len(previous) > 0 {
-		if err := json.Unmarshal(previous, &old); err != nil {
+		admission := issueRecordWriteAdmission(ctx)
+		release, err := reserveIssueRecordDecoding(ctx, admission, previous)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(previous, &old)
+		release()
+		if err != nil {
 			return err
 		}
 	}
@@ -43,6 +53,17 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 	if err := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND user_id=?`, workspace, issue.Delegate.ID).Scan(&appRaw); err != nil {
 		return ErrAuthForbidden
 	}
+	if admission := issueRecordWriteAdmission(ctx); admission != nil {
+		work, err := metadataAggregatePayloadJSONWork(ctx, appRaw)
+		if err != nil {
+			return err
+		}
+		_, release, err := admission.tryAdmitAdditionalMetadataWork(ctx, int(work))
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	if err := json.Unmarshal(appRaw, &app); err != nil {
 		return err
 	}
@@ -56,6 +77,13 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 	task := domain.AgentTask{ID: issue.AgentSessionID, WorkspaceKey: workspace, IssueID: issue.ID, TeamID: issue.Team.ID, AppUserID: issue.Delegate.ID, CreatorID: actor.ID, Status: "pending", Trigger: "delegation", Prompt: issue.Title, Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if instructions, _ := ctx.Value(delegationInstructionsKey{}).(string); instructions != "" {
 		task.Prompt = issue.Title + "\n\n" + instructions
+	}
+	if admission := issueRecordWriteAdmission(ctx); admission != nil {
+		_, release, err := admission.reserveMetadataAggregatePayload(ctx, task)
+		if err != nil {
+			return err
+		}
+		defer release()
 	}
 	raw, err := json.Marshal(task)
 	if err != nil {

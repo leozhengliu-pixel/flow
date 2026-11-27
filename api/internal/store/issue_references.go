@@ -81,19 +81,41 @@ func (r issueReferences) equalOwned(previous []byte, next domain.Issue) bool {
 	if json.Unmarshal(previous, &old) != nil {
 		return false
 	}
+	equal, _ := r.equalDecodedOwned(old, next, nil)
+	return equal
+}
+
+// equalDecodedOwned is equalOwned for a stored payload its caller already
+// decoded. Only the data columns are compared, so only those are encoded.
+// A non-nil admit admits each encoding before it is made; its refusal is
+// returned (an encoding failure is an inequality, as in equalOwned).
+func (r issueReferences) equalDecodedOwned(old, next domain.Issue, admit *issueRecordComparisonAdmission) (bool, error) {
 	// Status type is an indexed issue dimension and must still be updated.
 	if old.State.Type != next.State.Type {
-		return false
+		return false, nil
 	}
-	before, err := issueRecordValues("", r.resolve(old))
+	resolved := r.resolve(old)
+	if err := admit.encode(resolved); err != nil {
+		return false, err
+	}
+	before, err := issueRecordDetail(resolved)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	after, err := issueRecordValues("", r.resolve(next))
+	// The first encoding stays live, by its own size, while the second is
+	// made.
+	if err := admit.retain(before); err != nil {
+		return false, err
+	}
+	resolved = r.resolve(next)
+	if err := admit.encode(resolved); err != nil {
+		return false, err
+	}
+	after, err := issueRecordDetail(resolved)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	return bytes.Equal(before[len(before)-1].([]byte), after[len(after)-1].([]byte))
+	return bytes.Equal(before, after), nil
 }
 
 func (r issueReferences) equalDisplayData(previous, next []byte) bool {

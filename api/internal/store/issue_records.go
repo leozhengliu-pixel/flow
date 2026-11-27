@@ -311,11 +311,19 @@ func equalIssueRecordData(previous, next []byte) bool {
 	if json.Unmarshal(previous, &issue) != nil {
 		return false
 	}
-	values, err := issueRecordValues("", issue)
-	return err == nil && bytes.Equal(values[len(values)-1].([]byte), next)
+	return equalDecodedIssueRecordData(issue, next)
 }
 
-func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
+// equalDecodedIssueRecordData is equalIssueRecordData's slow path for a
+// stored payload its caller already decoded: the stored issue, normalized and
+// encoded again, is the next payload.
+func equalDecodedIssueRecordData(previous domain.Issue, next []byte) bool {
+	raw, err := issueRecordDetail(previous)
+	return err == nil && bytes.Equal(raw, next)
+}
+
+// issueRecordStored is the value a record's data column encodes.
+func issueRecordStored(issue domain.Issue) domain.Issue {
 	normalizeIssueRecord(&issue)
 	// The agent session status is a read decoration of the task row.
 	issue.AgentSessionState = ""
@@ -325,6 +333,23 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	for i := range issue.Labels {
 		issue.Labels[i].IssueCount = 0
 	}
+	return issue
+}
+
+// issueRecordDetail is the data column issueRecordValues writes, without
+// the list projection.
+func issueRecordDetail(issue domain.Issue) ([]byte, error) {
+	raw, err := json.Marshal(issueRecordStored(issue))
+	if err != nil {
+		return nil, err
+	}
+	// Issue JSON is parsed in SQL (descriptions, attachments), where
+	// PostgreSQL refuses \u0000; title, description and the rest lose NUL.
+	return StripJSONNUL(raw), nil
+}
+
+func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
+	issue = issueRecordStored(issue)
 	raw, err := json.Marshal(issue)
 	if err != nil {
 		return nil, err
