@@ -42,7 +42,7 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 	if prepare {
 		ready, err := s.prepareStartupMetadata(ctx)
 		if err != nil || !ready {
-			slog.Warn("startup metadata preparation incomplete; using legacy reads")
+			boundedAdmissionFailure("startup metadata preparation incomplete; using legacy reads", err)
 			bounded = false
 		}
 	}
@@ -57,11 +57,12 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 			return nil
 		}
 		if !prepare && strings.TrimSpace(os.Getenv("FLOW_BOUNDED_METADATA")) != "" {
+			boundedAdmissionFailure("startup metadata: bounded workspace admission failed", err)
 			return err
 		}
 		s.releaseMetadataLogicalSources()
 		s.metadataResidency = nil
-		slog.Warn("startup metadata: bounded workspace admission failed; using legacy reads")
+		boundedAdmissionFailure("startup metadata: bounded workspace admission failed; using legacy reads", err)
 	}
 	return s.loadOrSeed(ctx)
 }

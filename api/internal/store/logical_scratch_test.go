@@ -63,7 +63,7 @@ func TestScaleP21LogicalScratchContention(t *testing.T) {
 	if _, err := newMetadataLogicalRecordSpool(ctx); !errors.Is(err, ErrRecordSpoolContended) {
 		t.Fatal("a fitting spool creation must report contention")
 	}
-	for _, size := range []int64{513, metadataLogicalDiskBytes + 1} {
+	for _, size := range []int64{513, metadataLogicalFileAddressBytes + 1} {
 		if err := spool.checkAppend(size); !errors.Is(err, ErrRecordSpoolBudget) || errors.Is(err, ErrRecordSpoolContended) {
 			t.Fatal("an append that cannot fit must retain its size refusal")
 		}

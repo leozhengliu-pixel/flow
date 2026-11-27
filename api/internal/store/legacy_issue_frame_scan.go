@@ -97,7 +97,7 @@ func (s *SQLiteStore) scanLegacyIssueFrames(ctx context.Context, tx *sqlTx, work
 	}
 	// maxStateBytes limits the root after Issues are removed, not these
 	// record rows. Body bytes use the existing logical-spool envelope.
-	if maxID < 0 || maxBody < 0 || maxBody > metadataLogicalDiskBytes || maxID > (metadataWorkBytes-4096)/8 {
+	if maxID < 0 || maxBody < 0 || maxBody > metadataLogicalFrameBytes || maxID > (metadataWorkBytes-4096)/8 {
 		return ErrMetadataWorkBudget
 	}
 	perHeader := uint64(maxID)*8 + 512
@@ -190,7 +190,7 @@ func (s *SQLiteStore) visitLegacyIssueFrame(ctx context.Context, tx *sqlTx, work
 	if err := work.reserve(ctx, logicalJSONStreamWork); err != nil {
 		return err
 	}
-	if header.size < 0 || header.size > metadataLogicalDiskBytes {
+	if header.size < 0 || header.size > metadataLogicalFrameBytes {
 		return ErrMetadataWorkBudget
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)

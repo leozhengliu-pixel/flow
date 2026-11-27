@@ -100,7 +100,7 @@ func (s *SQLiteStore) refreshMetadataLifecycleConflict(ctx context.Context, work
 			if err != nil {
 				return err
 			}
-			if size < 0 || size > metadataLogicalDiskBytes {
+			if size < 0 || size > metadataLogicalFrameBytes {
 				return ErrMetadataWorkBudget
 			}
 			err = func() error {

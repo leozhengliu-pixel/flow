@@ -44,7 +44,7 @@ func (s *SQLiteStore) readLargeRowRefresh(ctx context.Context, workspace string,
 	if err != nil {
 		return nil, false, err
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return nil, false, ErrMetadataWorkBudget
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)

@@ -95,7 +95,7 @@ func (s *SQLiteStore) refreshIntegrationDeliveryConflict(ctx context.Context, wo
 			if err != nil {
 				return err
 			}
-			if size < 0 || size > metadataLogicalDiskBytes {
+			if size < 0 || size > metadataLogicalFrameBytes {
 				return ErrMetadataWorkBudget
 			}
 			err = func() error {

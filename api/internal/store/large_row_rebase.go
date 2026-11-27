@@ -82,7 +82,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 	if remember {
 		p.tx.journalOrder = recordJournalOrder{p.workspace, name, row.id, order, true}
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	canonical, err := newMetadataLogicalRecordSpool(ctx)

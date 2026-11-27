@@ -406,7 +406,7 @@ func (p *legacyMetadataWritePlan) rebaseWorkflowRunStreamRow(ctx context.Context
 	if p.tx.dialect == "sqlite" && p.store.db.journalReady.Load() {
 		p.tx.journalOrder = recordJournalOrder{p.workspace, "workflowRuns", row.id, order, true}
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	if size <= MetadataRecordPageMaxBytes && row.before.cost <= 64<<10 && row.next.cost <= 64<<10 {

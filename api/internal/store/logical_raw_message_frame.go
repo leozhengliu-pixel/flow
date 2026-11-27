@@ -26,13 +26,13 @@ func (b *metadataLogicalBuilder) writeRawMessageFrame(ctx context.Context, reade
 	}
 	frameSize := int64(17)
 	if reader != nil {
-		if size > metadataLogicalDiskBytes-25 {
+		if size > metadataLogicalFrameBytes-25 {
 			return metadataLogicalNode{}, ErrMetadataWorkBudget
 		}
 		frameSize = 25 + size
 	}
-	if b.offset < 0 || frameSize > metadataLogicalDiskBytes-b.offset {
-		return metadataLogicalNode{}, ErrMetadataWorkBudget
+	if err := b.checkFileCapacity(frameSize); err != nil {
+		return metadataLogicalNode{}, err
 	}
 	typ := reflect.TypeFor[json.RawMessage]()
 	node := metadataLogicalNode{

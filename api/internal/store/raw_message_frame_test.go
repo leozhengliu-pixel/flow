@@ -132,7 +132,7 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 		{"negative", strings.NewReader(""), -1, ErrMetadataRecordQuery},
 		{"nil-positive", nil, 1, ErrMetadataRecordQuery},
 		{"size-overflow", strings.NewReader(""), math.MaxInt64, ErrMetadataWorkBudget},
-		{"frame-overflow", strings.NewReader(""), metadataLogicalDiskBytes - 24, ErrMetadataWorkBudget},
+		{"frame-overflow", strings.NewReader(""), metadataLogicalFrameBytes - 24, ErrMetadataWorkBudget},
 		{"short", strings.NewReader("abc"), 4, io.ErrUnexpectedEOF},
 		{"empty-short", strings.NewReader(""), 1, io.ErrUnexpectedEOF},
 		{"reader-error", scaleP21SW223RawReader(func([]byte) (int, error) { return 0, sentinel }), 1, sentinel},
@@ -163,7 +163,7 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 	t.Run("offset-overflow-before-write", func(t *testing.T) {
 		builder := scaleP21SW223Builder(t, t.Context())
 		before := builder.offset
-		builder.offset = metadataLogicalDiskBytes - 16
+		builder.offset = builder.fileLimit - 16
 		node, err := builder.writeRawMessageFrame(t.Context(), nil, 0)
 		builder.offset = before
 		if !errors.Is(err, ErrMetadataWorkBudget) || node != (metadataLogicalNode{}) || builder.storage.bytes != 0 {

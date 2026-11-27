@@ -630,8 +630,8 @@ func TestScaleP21SW27RawLogicalRecoveryCancellationAndQuotas(t *testing.T) {
 			if mode == "mid-recovery-cancel" {
 				request = &scaleP21SW27CancelAfterChecks{Context: ctx, limit: 20}
 			} else {
-				injected = metadataLogicalDiskBytes - metadataLogicalDiskUsed.Load()
-				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskBytes) {
+				injected = metadataLogicalDiskCap() - metadataLogicalDiskUsed.Load()
+				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskCap()) {
 					injected = 0
 					t.Fatal("could not reserve remaining logical disk quota")
 				}
@@ -873,8 +873,8 @@ func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 		}
 	})
 	t.Run("disk-admission", func(t *testing.T) {
-		reserved := int64(metadataLogicalDiskBytes) - metadataLogicalDiskUsed.Load()
-		if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, reserved, metadataLogicalDiskBytes) {
+		reserved := metadataLogicalDiskCap() - metadataLogicalDiskUsed.Load()
+		if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, reserved, metadataLogicalDiskCap()) {
 			t.Fatal("test could not reserve remaining disk quota")
 		}
 		defer metadataLogicalDiskUsed.Add(-reserved)

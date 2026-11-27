@@ -20,7 +20,21 @@ import (
 
 const metadataLogicalDepth = 128
 const metadataLogicalTypes = 256
-const metadataLogicalDiskBytes = 1 << 30
+
+// metadataLogicalFrameBytes is the largest single row or value frame a
+// reader of SQL rows or spooled records accepts (a sanity bound on one
+// record's declared size). It is not a limit on a logical file: a file holds
+// many frames, and a collection frame spans all of its records.
+const metadataLogicalFrameBytes = 1 << 30
+
+// metadataLogicalFileAddressBytes is the hard capacity of one logical file
+// (logical_capacity.go): the largest offset the frame encoding addresses
+// with headroom. A file's disk bytes are charged to the process spool disk
+// budget (metadataLogicalDiskCap) as they are written; this bound only keeps
+// offsets, offset+size sums and the 61-bit decode cost of a frame covering
+// the whole file far from overflow. Tests lower it.
+var metadataLogicalFileAddressBytes int64 = 1 << 48
+
 const metadataLogicalDescriptorBytes = 128 << 10
 const metadataLogicalDescriptorLimit = 64 << 20
 
@@ -149,6 +163,7 @@ type metadataLogicalBuilder struct {
 	source      *metadataLogicalSource
 	storage     *metadataLogicalStorage
 	diskLimit   int64
+	fileLimit   int64
 	offset      int64
 	active      int
 	count       uint64
@@ -187,7 +202,7 @@ func newMetadataLogicalBuilderIn(ctx context.Context, group *metadataLogicalSpoo
 	}
 	t := reflect.TypeFor[domain.Bootstrap]()
 	source := &metadataLogicalSource{refs: 1, fields: make([]metadataLogicalNode, t.NumField()), stores: []*metadataLogicalStorage{storage}}
-	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, diskLimit: metadataLogicalDiskCap(), active: -1}, nil
+	return &metadataLogicalBuilder{ctx: ctx, source: source, storage: storage, diskLimit: metadataLogicalDiskCap(), fileLimit: metadataLogicalFileAddressBytes, active: -1}, nil
 }
 
 func reserveMetadataLogicalBytes(used *atomic.Int64, size, limit int64) bool {
@@ -488,15 +503,15 @@ func (b *metadataLogicalBuilder) write(data []byte) error {
 	if err := b.ctx.Err(); err != nil {
 		return err
 	}
-	if int64(len(data)) > metadataLogicalDiskBytes-b.offset {
-		return ErrMetadataWorkBudget
+	if err := b.checkFileCapacity(int64(len(data))); err != nil {
+		return err
 	}
 	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, int64(len(data)), b.diskLimit) {
 		if metadataLogicalDiskContended(b.storage.diskDemand, int64(len(data)), b.diskLimit) {
 			// Disk pressure will not wake a waiter on the memory work budget.
 			return ErrRecordSpoolContended
 		}
-		return ErrMetadataWorkBudget
+		return b.capacityError(metadataLogicalCapacityProcessDisk, int64(len(data)))
 	}
 	count := len(data)
 	err := b.storage.append(data)
