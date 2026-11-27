@@ -12,8 +12,14 @@ description = "Synthetic test fixtures (Helm chart scenarios, scale differential
 # annotations. Nothing in these directories is a real credential.
 paths = [
   '''^deploy/helm/flow/tests/(scenarios|golden)/[^/]+\.yaml$''',
-  # Historical scale differential paths contain synthetic fixture values.
-  '''^api/(cmd/server|internal/store)/scale_p[0-9]+_[a-z0-9_]+_test\.go$''',
+  # Synthetic fixtures of the scale differential tests (fake OAuth client
+  # secrets and API keys, fixed workspace IDs) and inventory prose that the
+  # generic-api-key rule mistakes for keys. Listed by name, not by pattern.
+  '''^api/cmd/server/oauth_cold_test\.go$''',
+  '''^api/cmd/server/api_keys_cold_test\.go$''',
+  '''^api/internal/store/legacy_discussion_inputs_test\.go$''',
+  '''^api/internal/store/metadata_inventory/server/agent_runtime_connectors\.json$''',
+  '''^api/internal/store/metadata_inventory/server/code_webhooks\.json$''',
 ]
 # The same fake key, reused by the sandbox envtest RBAC test.
 regexes = [
