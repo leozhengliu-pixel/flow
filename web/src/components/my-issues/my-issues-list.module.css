@@ -126,8 +126,9 @@
 /* Phone rows: the reference app shows priority, status, title and the assignee only.
    A delegated session's state sits in a pill before (and around) the avatars. */
 @media(max-width:767px){
-  /* Phone rows leave label pills out, as the reference does (labels stay in the group headers and the issue). */
-  .labelsTrigger{display:none}
+  /* A narrow desktop window leaves label pills out of the rows, as the reference does there (labels stay in the
+     group headers and the issue); on a touch phone the reference keeps the pill. */
+  @media (pointer:fine){.labelsTrigger{display:none}}
   /* Keep the real selection control available to touch/automation users without
      taking a column in the compact phone row. It remains visually transparent
      until selected, matching the reference's uncluttered rows. */
