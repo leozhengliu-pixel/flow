@@ -96,6 +96,9 @@ func metadataLogicalFrameOrigin(node metadataLogicalNode) metadataLogicalNode {
 func (s *metadataLogicalStorage) dropFrameMemo(offset, end int64) {
 	s.memoMu.Lock()
 	defer s.memoMu.Unlock()
+	if len(s.copies) == 0 && len(s.indexes) == 0 && len(s.clones) == 0 && len(s.userIndexes) == 0 {
+		return
+	}
 	if len(s.copies) != 0 {
 		first := sort.Search(len(s.copies), func(i int) bool { return s.copies[i].offset+s.copies[i].size > offset })
 		last := first
@@ -107,21 +110,45 @@ func (s *metadataLogicalStorage) dropFrameMemo(offset, end int64) {
 			metadataLogicalCopies.Add(-int64(last - first))
 		}
 	}
-	for key, index := range s.indexes {
-		if key < end && offset < key+index.size {
-			metadataLogicalIndexBytes.Add(-int64(len(index.headers)) * metadataLogicalIndexEntry)
-			delete(s.indexes, key)
+	syncMetadataLogicalMemoRanges(&s.indexRanges, s.indexes, func(index metadataLogicalChildIndex) int64 { return index.size })
+	syncMetadataLogicalMemoRanges(&s.cloneRanges, s.clones, func(check metadataLogicalCloneCheck) int64 { return check.size })
+	syncMetadataLogicalMemoRanges(&s.userRanges, s.userIndexes, func(index metadataLogicalUserIndex) int64 { return index.size })
+	var keys []int64
+	if len(s.indexes) != 0 {
+		keys = s.indexRanges.drop(offset, end, keys[:0])
+		for _, key := range keys {
+			if index, found := s.indexes[key]; found {
+				metadataLogicalIndexBytes.Add(-metadataLogicalChildIndexBytes(len(index.headers)))
+				delete(s.indexes, key)
+			}
 		}
 	}
-	for key, check := range s.clones {
-		if key < end && offset < key+check.size {
+	if len(s.clones) != 0 {
+		keys = s.cloneRanges.drop(offset, end, keys[:0])
+		for _, key := range keys {
 			delete(s.clones, key)
 		}
 	}
-	for key, index := range s.userIndexes {
-		if key < end && offset < key+index.size {
+	if len(s.userIndexes) != 0 {
+		keys = s.userRanges.drop(offset, end, keys[:0])
+		for _, key := range keys {
 			delete(s.userIndexes, key)
 		}
+	}
+}
+
+// syncMetadataLogicalMemoRanges rebuilds ranges when they disagree with
+// memo. Every memo write keeps them in step, so this never runs (tests
+// assert metadataLogicalMemoRebuilds stays zero); it keeps a missed site
+// from leaving a stale memo entry behind a write.
+func syncMetadataLogicalMemoRanges[V any](ranges *metadataLogicalMemoRanges, memo map[int64]V, size func(V) int64) {
+	if ranges.count == len(memo) {
+		return
+	}
+	metadataLogicalMemoRebuilds.Add(1)
+	ranges.reset()
+	for key, value := range memo {
+		ranges.set(key, size(value))
 	}
 }
 
@@ -162,6 +189,7 @@ func (s *metadataLogicalStorage) storeCloneCheck(node metadataLogicalNode, chang
 		s.clones = map[int64]metadataLogicalCloneCheck{}
 	}
 	s.clones[node.offset] = metadataLogicalCloneCheck{size: node.size, typ: node.typ, changed: changed}
+	s.cloneRanges.set(node.offset, node.size)
 }
 
 // A large collection is scanned header by header: one read per record, and a
@@ -216,10 +244,16 @@ func (s *metadataLogicalStorage) childIndex(offset, size, start int64, count int
 	return index.headers, true
 }
 
+// metadataLogicalChildIndexBytes is the budget charge of a count-record
+// child index: its headers and its node in indexRanges.
+func metadataLogicalChildIndexBytes(count int) int64 {
+	return int64(count)*metadataLogicalIndexEntry + metadataLogicalMemoRangeBytes
+}
+
 // reserveMetadataLogicalChildIndex admits the headers of a count-record
 // collection.
 func reserveMetadataLogicalChildIndex(count int) bool {
-	return reserveMetadataLogicalBytes(&metadataLogicalIndexBytes, int64(count)*metadataLogicalIndexEntry, metadataLogicalIndexLimit)
+	return reserveMetadataLogicalBytes(&metadataLogicalIndexBytes, metadataLogicalChildIndexBytes(count), metadataLogicalIndexLimit)
 }
 
 // storeChildIndex keeps admitted headers; it releases them when the storage
@@ -230,11 +264,12 @@ func (s *metadataLogicalStorage) storeChildIndex(offset, size, start int64, head
 	s.memoMu.Lock()
 	defer s.memoMu.Unlock()
 	if _, found := s.indexes[offset]; found || s.closed || offset+size > s.logicalSizeLocked() {
-		metadataLogicalIndexBytes.Add(-int64(len(headers)) * metadataLogicalIndexEntry)
+		metadataLogicalIndexBytes.Add(-metadataLogicalChildIndexBytes(len(headers)))
 		return
 	}
 	if s.indexes == nil {
 		s.indexes = map[int64]metadataLogicalChildIndex{}
 	}
 	s.indexes[offset] = metadataLogicalChildIndex{size: size, start: start, headers: headers}
+	s.indexRanges.set(offset, size)
 }

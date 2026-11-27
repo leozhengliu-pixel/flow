@@ -257,6 +257,13 @@ func testLargeEventValuesColumnMigration(t *testing.T, dialect string, open func
 // for it.
 func scratchMySQLDatabase(t *testing.T, open func() *SQLiteStore) func() *SQLiteStore {
 	t.Helper()
+	return scratchMySQLDatabaseWith(t, open, nil)
+}
+
+// scratchMySQLDatabaseWith is scratchMySQLDatabase whose opener applies
+// configure to the database settings first.
+func scratchMySQLDatabaseWith(t *testing.T, open func() *SQLiteStore, configure func(*DatabaseConfig)) func() *SQLiteStore {
+	t.Helper()
 	ctx := context.Background()
 	parsed, err := url.Parse(os.Getenv("FLOW_TEST_DATABASE_URL"))
 	if err != nil || parsed.Scheme != "mysql" {
@@ -276,7 +283,11 @@ func scratchMySQLDatabase(t *testing.T, open func() *SQLiteStore) func() *SQLite
 	})
 	parsed.Path = "/" + name
 	return func() *SQLiteStore {
-		repository, err := OpenDatabase(DatabaseConfig{Driver: "mysql", URL: parsed.String(), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4, MaxIdleConns: 2})
+		config := DatabaseConfig{Driver: "mysql", URL: parsed.String(), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4, MaxIdleConns: 2}
+		if configure != nil {
+			configure(&config)
+		}
+		repository, err := OpenDatabase(config)
 		if err != nil {
 			t.Fatal(err)
 		}

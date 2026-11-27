@@ -109,13 +109,17 @@ type metadataLogicalStorage struct {
 	// with each one; a block read that overlapped one is never served.
 	patches atomic.Int64
 	// Frame memo (logical_frame_memo.go): verbatim copies by
-	// offset and child headers of scanned collections.
-	memoMu  sync.Mutex
-	copies  []metadataLogicalCopy
-	indexes map[int64]metadataLogicalChildIndex
-	clones  map[int64]metadataLogicalCloneCheck
+	// offset and child headers of scanned collections. Each memo map has
+	// its ranges (logical_memo_ranges.go), changed with it under memoMu.
+	memoMu      sync.Mutex
+	copies      []metadataLogicalCopy
+	indexes     map[int64]metadataLogicalChildIndex
+	indexRanges metadataLogicalMemoRanges
+	clones      map[int64]metadataLogicalCloneCheck
+	cloneRanges metadataLogicalMemoRanges
 	// userIndexes: the IDs of users frames (aggregate_user_index.go).
 	userIndexes map[int64]metadataLogicalUserIndex
+	userRanges  metadataLogicalMemoRanges
 
 	// borrows are the ranges whose bytes other storages hold
 	// (logical_borrowed_range.go), replaced whole under pendingMu;
