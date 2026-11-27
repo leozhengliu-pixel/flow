@@ -58,7 +58,10 @@ personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
 load_seed.go:SeedScaleP01Principals
 agent_session_sync.go:syncAgentSessionLifecycleCollection
-legacy_array_reorder.go:writeArrayReorderRow
+legacy_array_reorder.go:deleteArrayDropped
+legacy_array_reorder.go:flushUpserts
+legacy_array_reorder.go:move
+legacy_array_reorder.go:flushMoves
 legacy_record_base.go:persistIssues
 metadata_sql_stage_accounting.go:statementQuery
 project_update_parent_map.go:writeProjectUpdateScheduleParent
@@ -101,6 +104,7 @@ metadata_catalog_backfill.go:BackfillMetadataCatalog
 oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:DeleteAgentSessionRuns
 record_journal.go:maintainRecordSummary
+record_journal.go:flushIssueSuggestionJournal
 record_capture.go:captureDeleteKeys
 journal_schema.go:recordJournalTriggerSpecs
 journal_repair.go:pruneOrphanRecordCatalog

@@ -1531,6 +1531,8 @@ func (p *legacyMetadataWritePlan) orders(ctx context.Context, field string, keys
 func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetadataWriteField) error {
 	// Topology is ready before writing. Persist additions, changed surviving
 	// records and removals in the original fast-path sequence.
+	writes := legacyArrayWrites{plan: p, field: f.field.name}
+	defer writes.close()
 	before, after := f.skeleton(false, ""), f.skeleton(true, "")
 	positions := map[string]int{}
 	for i := 0; i < before.Len(); i++ {
@@ -1611,7 +1613,7 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 		if previous != nil && refs.equalDisplayData(previous, raw) {
 			return nil
 		}
-		return writeMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, row.id}, metadataRecord{data: raw, order: order}, previous)
+		return writes.upsert(ctx, row.id, metadataRecord{data: raw, order: order}, previous)
 	}
 	firstID, lastID := after.Index(first).FieldByName("ID").String(), after.Index(last).FieldByName("ID").String()
 	filtered := make([]int, 0, len(f.order))
@@ -1641,19 +1643,14 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 			}
 		}
 	}
+	if err := writes.flush(ctx); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	for _, index := range f.order {
 		seen[f.rows[index].id] = true
 	}
-	for _, index := range f.oldOrder {
-		row := f.rows[index]
-		if !row.deleted && !seen[row.id] {
-			if err := deleteMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, row.id}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return p.deleteArrayDropped(ctx, f, seen)
 }
 
 func (p *legacyMetadataWritePlan) writeUpdates(ctx context.Context, f *legacyMetadataWriteField) error {

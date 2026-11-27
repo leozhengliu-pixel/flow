@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"slices"
+	"strings"
 )
 
 type legacyMetadataStreamedOrderKey struct{}
@@ -45,6 +46,149 @@ func (p *legacyMetadataWritePlan) arrayReorderReady(f *legacyMetadataWriteField)
 // statement reads.
 const legacyArrayReorderChunk = 256
 
+// Suggestion records have no offloaded bodies or per-record application hooks.
+// Other collections still use the individual writer, including its hooks.
+type legacyArrayWrites struct {
+	plan  *legacyMetadataWritePlan
+	field string
+	work  *ResourceRead
+	args  []any
+	moves []legacyArrayMove
+}
+
+type legacyArrayMove struct {
+	id    string
+	order int
+}
+
+func (w *legacyArrayWrites) close() {
+	if w.work != nil {
+		w.work.Close()
+		w.work = nil
+	}
+}
+
+func (w *legacyArrayWrites) canBatch(id string) bool {
+	// PostgreSQL removes NULs from bound keys. Keep those exceptional writes
+	// separate, since two distinct keys can then target the same row.
+	return w.field == "issueSuggestions" && (w.plan.tx.dialect != "postgres" || strings.IndexByte(id, 0) < 0)
+}
+
+func (w *legacyArrayWrites) upsert(ctx context.Context, id string, value metadataRecord, previous []byte) error {
+	p := w.plan
+	if w.canBatch(id) && len(value.data) <= metadataRecordChunkBytes {
+		if w.work == nil {
+			w.work = &ResourceRead{store: p.store}
+		}
+		// Keep the encoded rows and driver arguments charged until execution.
+		if err := w.work.reserve(ctx, uint64(len(value.data))*3+512); err == nil {
+			w.args = append(w.args, p.workspace, w.field, id, value.order, StripJSONNUL(value.data))
+			if len(w.args) < MetadataRecordBatchMaxKeys*5 {
+				return nil
+			}
+			return w.flushUpserts(ctx)
+		}
+	}
+	if err := w.flush(ctx); err != nil {
+		return err
+	}
+	return writeMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{w.field, id}, value, previous)
+}
+
+func (w *legacyArrayWrites) flush(ctx context.Context) error {
+	if err := w.flushUpserts(ctx); err != nil {
+		return err
+	}
+	return w.flushMoves(ctx)
+}
+
+func (w *legacyArrayWrites) flushUpserts(ctx context.Context) error {
+	defer w.close()
+	if len(w.args) == 0 {
+		return nil
+	}
+	tuples := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?),", len(w.args)/5), ",")
+	_, err := w.plan.tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES`+
+		tuples+` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, w.args...)
+	clear(w.args)
+	w.args = w.args[:0]
+	w.plan.tx.metadataWritten = true
+	return err
+}
+
+func (w *legacyArrayWrites) move(ctx context.Context, id string, order int) error {
+	if w.canBatch(id) {
+		w.moves = append(w.moves, legacyArrayMove{id, order})
+		if len(w.moves) < MetadataRecordBatchMaxKeys {
+			return nil
+		}
+		return w.flushMoves(ctx)
+	}
+	if err := w.flush(ctx); err != nil {
+		return err
+	}
+	p := w.plan
+	_, err := p.tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`, order, p.workspace, w.field, id)
+	p.tx.metadataWritten = true
+	return err
+}
+
+func (w *legacyArrayWrites) flushMoves(ctx context.Context) error {
+	if len(w.moves) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(w.moves))
+	args := make([]any, 0, 3*len(w.moves)+2)
+	for _, move := range w.moves {
+		ids = append(ids, move.id)
+		args = append(args, move.id, move.order)
+	}
+	clause, keys := bindList("record_key", ids)
+	args = append(args, w.plan.workspace, w.field)
+	args = append(args, keys...)
+	_, err := w.plan.tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=CASE record_key`+
+		strings.Repeat(" WHEN ? THEN ?", len(w.moves))+
+		` ELSE collection_order END WHERE workspace_key=? AND field=? AND `+clause, args...)
+	clear(w.moves)
+	w.moves = w.moves[:0]
+	w.plan.tx.metadataWritten = true
+	return err
+}
+
+func (p *legacyMetadataWritePlan) deleteArrayDropped(ctx context.Context, f *legacyMetadataWriteField, seen map[string]bool) error {
+	var ids []string
+	flush := func() error {
+		if len(ids) == 0 {
+			return nil
+		}
+		clause, args := bindList("record_key", ids)
+		_, err := p.tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause,
+			append([]any{p.workspace, f.field.name}, args...)...)
+		p.tx.metadataWritten = true
+		ids = ids[:0]
+		return err
+	}
+	for _, index := range f.oldOrder {
+		row := f.rows[index]
+		if row.deleted || seen[row.id] {
+			continue
+		}
+		if f.field.name != "issueSuggestions" {
+			if err := deleteMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, row.id}); err != nil {
+				return err
+			}
+			continue
+		}
+		ids = append(ids, row.id)
+		if len(ids) == MetadataRecordBatchMaxKeys {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	return flush()
+}
+
 // writeArrayReorder persists a reordered array field as the materializing
 // writer's applyMetadataRecords does with known records, one chunk of records
 // at a time instead of both complete collections:
@@ -60,6 +204,8 @@ const legacyArrayReorderChunk = 256
 //   - known records the list dropped are deleted; stored records this writer
 //     did not know keep their rows and orders.
 func (p *legacyMetadataWritePlan) writeArrayReorder(ctx context.Context, f *legacyMetadataWriteField) error {
+	writes := legacyArrayWrites{plan: p, field: f.field.name}
+	defer writes.close()
 	wanted := make([]int, 0, len(f.order))
 	for _, index := range f.order {
 		if !f.rows[index].deleted {
@@ -128,7 +274,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorder(ctx context.Context, f *lega
 		for offset := range min(legacyArrayReorderChunk, len(wanted)-start) {
 			i, row := start+offset, &f.rows[wanted[start+offset]]
 			stored, present := orders[row.id]
-			if err := p.writeArrayReorderRow(ctx, f, row, stored, present, position(i, stored)); err != nil {
+			if err := p.writeArrayReorderRow(ctx, f, &writes, row, stored, present, position(i, stored)); err != nil {
 				return err
 			}
 		}
@@ -136,33 +282,24 @@ func (p *legacyMetadataWritePlan) writeArrayReorder(ctx context.Context, f *lega
 	}); err != nil {
 		return err
 	}
+	if err := writes.flush(ctx); err != nil {
+		return err
+	}
 	seen := make(map[string]bool, len(wanted))
 	for _, index := range wanted {
 		seen[f.rows[index].id] = true
 	}
-	for _, index := range f.oldOrder {
-		row := f.rows[index]
-		if !row.deleted && !seen[row.id] {
-			if err := deleteMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, row.id}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return p.deleteArrayDropped(ctx, f, seen)
 }
 
-func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *legacyMetadataWriteField, row *legacyMetadataWriteRow, stored int, present bool, order int) error {
+func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *legacyMetadataWriteField, writes *legacyArrayWrites, row *legacyMetadataWriteRow, stored int, present bool, order int) error {
 	known := row.before.typ != nil
 	key := metadataRecordKey{f.field.name, row.id}
 	moveOnly := func() error {
 		if stored == order {
 			return nil
 		}
-		if _, err := p.tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`, order, p.workspace, key.field, key.key); err != nil {
-			return err
-		}
-		p.tx.metadataWritten = true
-		return nil
+		return writes.move(ctx, row.id, order)
 	}
 	if known && !present {
 		// Another write deleted it; this write does not bring it back.
@@ -209,7 +346,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 	if present && storedRecordEqual(p.tx, refs, key.field, previous, raw) {
 		return moveOnly()
 	}
-	return writeMetadataRecordRow(ctx, p.tx, p.workspace, key, metadataRecord{data: raw, order: order}, previous)
+	return writes.upsert(ctx, row.id, metadataRecord{data: raw, order: order}, previous)
 }
 
 // arrayTransitionReady admits a collection stored inline in the root (its
@@ -253,10 +390,12 @@ func (p *legacyMetadataWritePlan) arrayTransitionReady(ctx context.Context, f *l
 
 // writeArrayTransition persists an arrayTransitionReady field as the
 // materializing writer does (splitWorkspaceMetadata, then syncMetadataRecords
-// over no stored or known rows, then the root patch), one record at a time:
-// every target record is written as a new row ordered by its list index, the
-// root keeps the field as [] and its collection manifest names it "array".
+// over no stored or known rows, then the root patch): every target record is
+// written as a new row ordered by its list index, the root keeps the field as
+// [] and its collection manifest names it "array".
 func (p *legacyMetadataWritePlan) writeArrayTransition(ctx context.Context, f *legacyMetadataWriteField) error {
+	writes := legacyArrayWrites{plan: p, field: f.field.name}
+	defer writes.close()
 	err := f.next.Children(ctx, func(key reflect.Value, item metadataLogicalNode) error {
 		work := &ResourceRead{store: p.store}
 		defer work.Close()
@@ -281,9 +420,12 @@ func (p *legacyMetadataWritePlan) writeArrayTransition(ctx context.Context, f *l
 		if entity.ID == "" || len(entity.ID) > 191 {
 			return ErrBoundedMetadataCoverage
 		}
-		return writeMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{f.field.name, entity.ID}, metadataRecord{data: raw, order: int(key.Int())}, nil)
+		return writes.upsert(ctx, entity.ID, metadataRecord{data: raw, order: int(key.Int())}, nil)
 	})
 	if err != nil {
+		return err
+	}
+	if err := writes.flush(ctx); err != nil {
 		return err
 	}
 	owner := &ResourceRead{store: p.store}

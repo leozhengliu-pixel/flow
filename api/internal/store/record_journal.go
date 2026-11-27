@@ -380,6 +380,22 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 	openMySQLCollections := tx.dialect == "mysql" && tx.database.boundedCatalog.Load()
 	var previousCollection catalogCollectionKey
 	var openedCollections []catalogCollectionKey
+	openCollection := func(dirty recordJournalDirty) error {
+		// Take checkpoint locks in collection order, including across pages.
+		key := catalogCollectionKey{dirty.workspace, dirty.field}
+		if !openMySQLCollections || key == previousCollection {
+			return nil
+		}
+		created, err := tx.openMySQLCatalogCollection(ctx, key)
+		if err != nil {
+			return err
+		}
+		if created {
+			openedCollections = append(openedCollections, key)
+		}
+		previousCollection = key
+		return nil
+	}
 	pending := map[string]*pendingRecordJournal{}
 	get := func(workspace string) *pendingRecordJournal {
 		if pending[workspace] == nil {
@@ -413,7 +429,8 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 		if len(batch) == 0 {
 			break
 		}
-		for _, dirty := range batch {
+		for i := 0; i < len(batch); i++ {
+			dirty := batch[i]
 			p := get(dirty.workspace)
 			if dirty.source == "workspace_metadata_records" || dirty.source == "workspace_states" {
 				tx.queueCacheRevision(dirty.workspace, cacheKindMetadata)
@@ -423,6 +440,26 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 			if dirty.field == "@authz" {
 				p.change.Invalidations = append(p.change.Invalidations, "authz")
 			} else {
+				if dirty.field == "issueSuggestions" && dirty.source == "workspace_metadata_records" && tx.database.journalCommitHook.Load() == nil {
+					end := i + 1
+					for end < min(i+MetadataRecordBatchMaxKeys, len(batch)) {
+						next := batch[end]
+						if next.workspace != dirty.workspace || next.field != dirty.field || next.source != dirty.source {
+							break
+						}
+						end++
+					}
+					if end > i+1 {
+						if err := openCollection(dirty); err != nil {
+							return err
+						}
+						if err := tx.flushIssueSuggestionJournal(ctx, dirty.workspace, batch[i:end], p); err != nil {
+							return err
+						}
+						i = end - 1
+						continue
+					}
+				}
 				var version int64
 				var deleted int
 				if err := tx.QueryRowContext(ctx, `SELECT version,deleted FROM record_versions WHERE workspace_key=? AND field=? AND record_key=?`, dirty.workspace, dirty.field, dirty.id).Scan(&version, &deleted); err != nil {
@@ -431,17 +468,8 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 				delta := RecordDelta{Key: RecordKey{dirty.field, dirty.id}, Version: strconv.FormatInt(version, 10), Deleted: deleted != 0}
 				p.add(delta)
 				if dirty.source == "workspace_metadata_records" {
-					// Open and maintain checkpoints in the same collection
-					// order, including across dirty-key batches.
-					if key := (catalogCollectionKey{dirty.workspace, dirty.field}); openMySQLCollections && key != previousCollection {
-						created, err := tx.openMySQLCatalogCollection(ctx, key)
-						if err != nil {
-							return err
-						}
-						if created {
-							openedCollections = append(openedCollections, key)
-						}
-						previousCollection = key
+					if err := openCollection(dirty); err != nil {
+						return err
 					}
 					if err := tx.maintainRecordSummary(ctx, dirty, deleted != 0); err != nil {
 						return fmt.Errorf("journal summary %s/%s/%s: %w", dirty.workspace, dirty.field, dirty.id, err)
@@ -552,6 +580,118 @@ func (tx *sqlTx) flushRecordJournalRows() error {
 	return err
 }
 
+// flushIssueSuggestionJournal reads versions and small canonical payloads
+// together, then maintains their catalog and drains their dirty keys in groups.
+// Oversized or non-object payloads keep the streaming per-record projector.
+func (tx *sqlTx) flushIssueSuggestionJournal(ctx context.Context, workspace string, batch []recordJournalDirty, pending *pendingRecordJournal) error {
+	field := batch[0].field
+	if _, err := tx.ExecContext(ctx, `UPDATE metadata_catalog_collections SET revision=? WHERE workspace_key=? AND field=?`,
+		tx.journalToken, workspace, field); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(batch))
+	for _, dirty := range batch {
+		keys = append(keys, dirty.id)
+	}
+	clause, args := bindList("v.record_key", keys)
+	data := "m.data"
+	if tx.dialect == "sqlite" {
+		data = "CAST(m.data AS BLOB)"
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT v.record_key,v.version,v.deleted,COALESCE(c.omitted,0),LENGTH(`+data+`),m.collection_order,
+		CASE WHEN LENGTH(`+data+`)<=? THEN `+data+` END
+		FROM record_versions v
+		LEFT JOIN workspace_metadata_records m ON m.workspace_key=v.workspace_key AND m.field=v.field AND m.record_key=v.record_key AND v.deleted=0
+		LEFT JOIN metadata_catalog c ON c.workspace_key=v.workspace_key AND c.field=v.field AND c.record_key=v.record_key
+		WHERE v.workspace_key=? AND v.field=? AND `+clause+` ORDER BY v.record_key`,
+		append([]any{metadataRecordChunkBytes, workspace, field}, args...)...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var catalog []metadataCatalogRow
+	var removed []string
+	var streamed []recordJournalDirty
+	type omissionDelta struct {
+		id    string
+		delta int
+	}
+	var omissions []omissionDelta
+	index := 0
+	for rows.Next() {
+		key := RecordKey{Kind: field}
+		var version int64
+		var deleted, oldOmitted int
+		var size, order sql.NullInt64
+		var raw []byte
+		if err := rows.Scan(&key.ID, &version, &deleted, &oldOmitted, &size, &order, &raw); err != nil {
+			return err
+		}
+		if index == len(batch) || key.ID != batch[index].id {
+			break
+		}
+		dirty := batch[index]
+		index++
+		pending.add(RecordDelta{Key: key, Version: strconv.FormatInt(version, 10), Deleted: deleted != 0})
+		newOmitted := 0
+		if deleted != 0 {
+			removed = append(removed, key.ID)
+		} else if prefix := bytes.TrimSpace(raw[:min(len(raw), 64)]); len(prefix) == 0 || prefix[0] != '{' || !size.Valid || !order.Valid {
+			streamed = append(streamed, dirty)
+			continue
+		} else {
+			record, err := projectCatalogRecord(ctx, &canonicalMetadataReader{
+				ctx: ctx, key: key, size: size.Int64, offset: size.Int64, buffer: raw,
+			})
+			if err != nil {
+				return fmt.Errorf("journal summary %s/%s/%s: %w", workspace, field, key.ID, err)
+			}
+			record.order = order.Int64
+			catalog = append(catalog, record)
+			if record.omitted {
+				newOmitted = 1
+			}
+		}
+		if newOmitted != oldOmitted {
+			omissions = append(omissions, omissionDelta{key.ID, newOmitted - oldOmitted})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if index != len(batch) {
+		dirty := batch[index]
+		return fmt.Errorf("journal version %s/%s/%s from %s: %w", workspace, field, dirty.id, dirty.source, sql.ErrNoRows)
+	}
+	if err := writeMetadataCatalogBatch(ctx, tx, workspace, field, catalog); err != nil {
+		return err
+	}
+	if len(removed) > 0 {
+		clause, args := bindList("record_key", removed)
+		for _, table := range []string{"metadata_catalog_relations", "metadata_catalog"} {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE workspace_key=? AND field=? AND `+clause,
+				append([]any{workspace, field}, args...)...); err != nil {
+				return err
+			}
+		}
+	}
+	for _, dirty := range streamed {
+		if err := tx.maintainRecordSummary(ctx, dirty, false); err != nil {
+			return fmt.Errorf("journal summary %s/%s/%s: %w", workspace, field, dirty.id, err)
+		}
+	}
+	for _, omission := range omissions {
+		if err := tx.updateCatalogOmissions(ctx, workspace, field, omission.id, omission.delta); err != nil {
+			return err
+		}
+	}
+	clause, args = bindList("record_key", keys)
+	_, err = tx.ExecContext(ctx, `DELETE FROM record_journal_dirty WHERE tx_id=? AND workspace_key=? AND field=? AND `+clause,
+		append([]any{tx.journalToken, workspace, field}, args...)...)
+	return err
+}
+
 func (tx *sqlTx) maintainRecordSummary(ctx context.Context, dirty recordJournalDirty, deleted bool) error {
 	// Backfill locks the checkpoint before catalog rows. Use the same order
 	// so a dual write cannot deadlock a backfill installing this record.
@@ -606,7 +746,11 @@ func (tx *sqlTx) maintainRecordSummary(ctx context.Context, dirty recordJournalD
 			return err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE metadata_catalog_collections SET omissions=omissions+? WHERE workspace_key=? AND field=? AND (phase>=1 OR (phase=0 AND started=1 AND last_record_key>=?))`, newOmitted-oldOmitted, dirty.workspace, dirty.field, dirty.id)
+	return tx.updateCatalogOmissions(ctx, dirty.workspace, dirty.field, dirty.id, newOmitted-oldOmitted)
+}
+
+func (tx *sqlTx) updateCatalogOmissions(ctx context.Context, workspace, field, id string, delta int) error {
+	_, err := tx.ExecContext(ctx, `UPDATE metadata_catalog_collections SET omissions=omissions+? WHERE workspace_key=? AND field=? AND (phase>=1 OR (phase=0 AND started=1 AND last_record_key>=?))`, delta, workspace, field, id)
 	return err
 }
 
