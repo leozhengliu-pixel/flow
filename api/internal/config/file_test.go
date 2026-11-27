@@ -313,6 +313,19 @@ func TestConfigFileUploadMaxBytes(t *testing.T) {
 	}
 }
 
+func TestConfigFileDocumentRequestBodyMaxBytes(t *testing.T) {
+	// A file-only setting: it lands in Settings and sets no variable.
+	file := mustParse(t, "server:\n  documents:\n    requestBodyMaxBytes: 134217728\n")
+	if file.Settings.DocumentRequestBodyMaxBytes != 128<<20 || len(file.Env) != 0 {
+		t.Fatalf("settings = %+v env = %v", file.Settings, file.Env)
+	}
+	for _, value := range []string{"1024", "64MB", "-5", "1073741825", `"134217728"`} {
+		if _, err := parse(t, "server:\n  documents:\n    requestBodyMaxBytes: "+value+"\n"); err == nil || !strings.Contains(err.Error(), "requestBodyMaxBytes") {
+			t.Fatalf("requestBodyMaxBytes %s accepted: %v", value, err)
+		}
+	}
+}
+
 func TestConfigFileRecordJournalCapture(t *testing.T) {
 	// A file-only setting: it lands in Settings and sets no variable.
 	file := mustParse(t, "server:\n  database:\n    recordJournalCapture: application\n")

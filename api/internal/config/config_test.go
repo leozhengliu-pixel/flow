@@ -178,6 +178,50 @@ func TestUploadMaxBytesConfig(t *testing.T) {
 	}
 }
 
+// The document request limit is a config-file-only setting: unset it is 0
+// (the server derives it), the file sets it, the environment cannot.
+func TestDocumentRequestBodyMaxBytesConfig(t *testing.T) {
+	t.Setenv(ConfigFileEnv, "")
+	t.Cleanup(func() { useFileSettings(FileSettings{}) })
+	loadWithFile := func(content string) (Config, error) {
+		t.Helper()
+		args := []string{}
+		if content != "" {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			args = []string{"--config", path}
+		}
+		if _, err := LoadFileFromArgs(args); err != nil {
+			return Config{}, err
+		}
+		return Load()
+	}
+	if loaded, err := loadWithFile(""); err != nil || loaded.DocumentRequestBodyMaxBytes != 0 {
+		t.Fatalf("unset document limit = %d err=%v, want 0 (automatic)", loaded.DocumentRequestBodyMaxBytes, err)
+	}
+	for value, want := range map[string]int64{"1048576": 1 << 20, "134217728": 128 << 20, "1073741824": 1 << 30} {
+		if loaded, err := loadWithFile("server:\n  documents:\n    requestBodyMaxBytes: " + value + "\n"); err != nil || loaded.DocumentRequestBodyMaxBytes != want {
+			t.Fatalf("requestBodyMaxBytes %s: limit=%d err=%v, want %d", value, loaded.DocumentRequestBodyMaxBytes, err, want)
+		}
+	}
+	t.Setenv("FLOW_DOCUMENT_REQUEST_BODY_MAX_BYTES", "5242880")
+	if loaded, err := loadWithFile(""); err != nil || loaded.DocumentRequestBodyMaxBytes != 0 {
+		t.Fatalf("environment set the document limit: limit=%d err=%v", loaded.DocumentRequestBodyMaxBytes, err)
+	}
+	for value, want := range map[string]string{"0": "must be between 1048576 and", "1073741825": "must be between 1048576 and", "64MB": "must be a whole number"} {
+		_, err := loadWithFile("server:\n  documents:\n    requestBodyMaxBytes: " + value + "\n")
+		if err == nil || !strings.Contains(err.Error(), "config.yaml:3: server.documents.requestBodyMaxBytes: "+want) {
+			t.Fatalf("requestBodyMaxBytes %s accepted: %v", value, err)
+		}
+	}
+	invalid := Config{UploadMaxBytes: DefaultUploadMaxBytes, DocumentRequestBodyMaxBytes: 1024}
+	if err := invalid.validateDocumentRequestBodyMaxBytes(); err == nil || !strings.Contains(err.Error(), "server.documents.requestBodyMaxBytes") {
+		t.Fatalf("out of bounds document limit accepted: %v", err)
+	}
+}
+
 func TestWorkspaceTutorialConfig(t *testing.T) {
 	for value, want := range map[string]bool{"": true, "on": true, "true": true, "off": false, "OFF": false, "false": false, "0": false} {
 		t.Setenv("FLOW_WORKSPACE_TUTORIAL", value)

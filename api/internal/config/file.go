@@ -70,6 +70,9 @@ type FileSettings struct {
 	// RecordJournalCapture is server.database.recordJournalCapture
 	// (Config.Database.RecordJournalCapture): auto, triggers or application.
 	RecordJournalCapture string
+	// DocumentRequestBodyMaxBytes is server.documents.requestBodyMaxBytes
+	// (Config.DocumentRequestBodyMaxBytes).
+	DocumentRequestBodyMaxBytes int64
 }
 
 // loadedFileSettings are the file-only settings of the file LoadFileFromArgs
@@ -455,6 +458,10 @@ var fileSchema = map[string]*field{
 				"maxEntryBytes": envInt("FLOW_REDIS_CACHE_MAX_ENTRY_BYTES", 1024, 64<<20),
 				"maxBytes":      envInt("FLOW_REDIS_CACHE_MAX_BYTES", 32<<10, 1<<30),
 			}),
+		}),
+		"documents": section(map[string]*field{
+			// File only (FileSettings): no environment variable.
+			"requestBodyMaxBytes": fileInt(MinDocumentRequestBodyMaxBytes, min(MaxDocumentRequestBodyMaxBytes, maxPlatformInt), func(s *FileSettings, value int64) { s.DocumentRequestBodyMaxBytes = value }),
 		}),
 		"storage": section(map[string]*field{
 			"driver":    envString("FLOW_STORAGE_DRIVER", "local", "s3"),

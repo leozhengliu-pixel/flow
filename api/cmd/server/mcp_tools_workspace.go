@@ -43,6 +43,11 @@ func (s *server) invokeMCPRoute(ctx context.Context, actor mcpActor, method, pat
 	for key, value := range pathValues {
 		request.SetPathValue(key, value)
 	}
+	if documentBodyRoute(request) {
+		// Authorization and the handler share one decode of a document body,
+		// as for an HTTP request (document_request_body.go).
+		request = withDocumentRequestBody(s, nil, request)
+	}
 	if err := s.internalAuthorizeRequester(request, actor); err != nil {
 		return nil, err
 	}

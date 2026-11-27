@@ -826,6 +826,11 @@ func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request
 	if writeRequestCanceled(w, r.Context().Err()) {
 		return false
 	}
+	// A document body is decoded here, once the caller is authenticated, so
+	// its errors (413, 400) answer as such rather than as a refused peek.
+	if !s.authDisabled && !decodeRequestDocumentBody(w, r) {
+		return false
+	}
 	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
 	// team-scoped resourceAllowed checks must not block local/dev fixtures.
 	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
@@ -2121,6 +2126,11 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 }
 
 func peekRequestJSON(r *http.Request, value any) bool {
+	if body := requestDocumentBody(r); body != nil {
+		// A document body is decoded once, whatever its size, and shared
+		// with the handler (document_request_body.go).
+		return body.peek(r.Context(), value)
+	}
 	if r.Body == nil {
 		return false
 	}

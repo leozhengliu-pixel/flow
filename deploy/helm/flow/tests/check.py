@@ -392,14 +392,15 @@ for name in ("default",):
     if find(docs, "ConfigMap", "flow-config") or "FLOW_CONFIG_FILE" in flow_env(docs) or "checksum/config-file" in pod["metadata"]["annotations"] or any(v["name"] == "config-file" for v in pod["spec"]["volumes"]):
         fail(name, "no config file unless config.file, config.fileConfigMap or a file-only value is set")
 
-# File-only settings (no environment variable): storage.uploadMaxBytes is
-# rendered into the chart's config file, never into the environment.
+# File-only settings (no environment variable): storage.uploadMaxBytes and
+# documents.requestBodyMaxBytes are rendered into the chart's config file,
+# never into the environment.
 docs = load("production-ha")
 file_maps = find(docs, "ConfigMap", "flow-config")
-if not file_maps or yaml.safe_load(file_maps[0]["data"]["config.yaml"]) != {"server": {"storage": {"uploadMaxBytes": 262144000}}}:
-    fail("production-ha", "storage.uploadMaxBytes must be rendered into config.yaml as server.storage.uploadMaxBytes")
-if flow_env(docs).get("FLOW_CONFIG_FILE") != "/etc/flow/config.yaml" or "FLOW_UPLOAD_MAX_BYTES" in flow_env(docs):
-    fail("production-ha", "the upload limit travels only in the config file")
+if not file_maps or yaml.safe_load(file_maps[0]["data"]["config.yaml"]) != {"server": {"storage": {"uploadMaxBytes": 262144000}, "documents": {"requestBodyMaxBytes": 134217728}}}:
+    fail("production-ha", "storage.uploadMaxBytes and documents.requestBodyMaxBytes must be rendered into config.yaml under server")
+if flow_env(docs).get("FLOW_CONFIG_FILE") != "/etc/flow/config.yaml" or "FLOW_UPLOAD_MAX_BYTES" in flow_env(docs) or any("DOCUMENT" in name for name in flow_env(docs)):
+    fail("production-ha", "the upload and document request limits travel only in the config file")
 
 # config.file server: settings win over the chart's own values for the same
 # variable; config.env still wins over the file; variables the chart does not

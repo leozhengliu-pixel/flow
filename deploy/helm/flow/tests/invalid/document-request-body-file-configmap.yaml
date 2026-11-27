@@ -1,0 +1,7 @@
+# documents.requestBodyMaxBytes is rendered into the chart's config file,
+# which an existing ConfigMap replaces: set the key in that file instead.
+documents:
+  requestBodyMaxBytes: 67108864
+config:
+  fileConfigMap:
+    name: flow-settings

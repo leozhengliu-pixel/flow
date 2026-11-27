@@ -93,6 +93,9 @@ const formerMemberMentions = "Rich text (bodyData, contentData or descriptionDat
 // formerMembers describes writes that name people who left the workspace.
 const formerMembers = "Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 (\"This person is no longer a member of the workspace\"); such people the resource already names stay as they are, and they get no new notifications. " + formerMemberMentions
 
+// documentBodyLimit describes the request size of document create and update.
+const documentBodyLimit = "The body may be as large as the server's document request limit (server.documents.requestBodyMaxBytes; at least 16 MiB, the limit of other JSON requests); a body declared larger is refused with 413 before it is read, and a body over 16 MiB needs Content-Length."
+
 // Operations is the documented public REST surface. Routes not listed here
 // still appear in the OpenAPI inventory with the generic error envelope.
 var Operations = []Operation{
@@ -178,8 +181,8 @@ var Operations = []Operation{
 	{Method: "DELETE", Path: "/api/issues/{id}/comments/{commentId}", Tag: "comments", Summary: "Delete a comment", Scopes: writeScopes},
 
 	// Documents.
-	{Method: "POST", Path: "/api/documents", Tag: "documents", Summary: "Create a document", Description: "Content is Markdown. An actor=app token may name the external author with createAsUser. " + formerMemberMentions, Request: DocumentCreateInput{}, Response: domain.Document{}, Status: 201, Scopes: writeScopes},
-	{Method: "PATCH", Path: "/api/documents/{id}", Tag: "documents", Summary: "Update a document", Description: "Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document. " + unchangedVersionedWrite + " " + formerMembers, Request: DocumentUpdateInput{}, Response: domain.Document{}, Scopes: writeScopes},
+	{Method: "POST", Path: "/api/documents", Tag: "documents", Summary: "Create a document", Description: "Content is Markdown. An actor=app token may name the external author with createAsUser. " + formerMemberMentions + " " + documentBodyLimit, Request: DocumentCreateInput{}, Response: domain.Document{}, Status: 201, Scopes: writeScopes},
+	{Method: "PATCH", Path: "/api/documents/{id}", Tag: "documents", Summary: "Update a document", Description: "Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document. " + unchangedVersionedWrite + " " + formerMembers + " " + documentBodyLimit, Request: DocumentUpdateInput{}, Response: domain.Document{}, Scopes: writeScopes},
 
 	// Project milestones.
 	{Method: "POST", Path: "/api/projects/{id}/milestones", Tag: "projects", Summary: "Create a project milestone", Request: domain.ProjectMilestoneMutationInput{}, Response: domain.ProjectMilestone{}, Status: 201, Scopes: writeScopes},

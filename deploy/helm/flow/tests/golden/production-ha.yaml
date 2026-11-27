@@ -402,6 +402,8 @@ metadata:
 data:
   config.yaml: |
     server:
+      documents:
+        requestBodyMaxBytes: 134217728
       storage:
         uploadMaxBytes: 262144000
 ---

@@ -1,0 +1,6 @@
+# server.documents.requestBodyMaxBytes takes plain bytes; a size with a unit is refused.
+config:
+  file:
+    server:
+      documents:
+        requestBodyMaxBytes: 64MB

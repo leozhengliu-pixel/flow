@@ -162,6 +162,16 @@
                     }
                   }
                 },
+                "documents": {
+                  "type": "object",
+                  "properties": {
+                    "requestBodyMaxBytes": {
+                      "type": "integer",
+                      "minimum": 1048576,
+                      "maximum": 1073741824
+                    }
+                  }
+                },
                 "storage": {
                   "type": "object",
                   "properties": {
@@ -468,6 +478,25 @@
               }
             }
           }
+        }
+      }
+    },
+    "documents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requestBodyMaxBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1048576,
+              "maximum": 1073741824
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]*$"
+            }
+          ]
         }
       }
     },

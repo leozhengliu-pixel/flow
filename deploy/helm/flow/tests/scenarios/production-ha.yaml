@@ -60,6 +60,8 @@ storage:
     region: eu-west-1
     existingSecret:
       name: flow-s3
+documents:
+  requestBodyMaxBytes: 134217728
 autoscaling:
   enabled: true
   minReplicas: 3

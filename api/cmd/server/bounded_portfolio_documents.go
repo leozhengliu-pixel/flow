@@ -46,7 +46,7 @@ func (s *server) createPortfolioDocument(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var input documentInput
-	if !decodeJSON(w, r, &input) {
+	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
 	var created domain.Document

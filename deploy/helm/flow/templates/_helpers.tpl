@@ -283,6 +283,10 @@ seccompProfile:
 {{- /* database.recordJournalCapture is rendered into the chart's config file, which config.fileConfigMap replaces. */ -}}
 {{- fail "database.recordJournalCapture cannot be combined with config.fileConfigMap.name: set server.database.recordJournalCapture in that file instead" -}}
 {{- end -}}
+{{- if and .fileConfigMap.name (default dict $v.documents).requestBodyMaxBytes -}}
+{{- /* documents.requestBodyMaxBytes is rendered into the chart's config file, which config.fileConfigMap replaces. */ -}}
+{{- fail "documents.requestBodyMaxBytes cannot be combined with config.fileConfigMap.name: set server.documents.requestBodyMaxBytes in that file instead" -}}
+{{- end -}}
 {{- if .file -}}
 {{- /* Secrets never go into the config file's ConfigMap (Flow also refuses them at startup). */ -}}
 {{- range $line := regexFindAll "(?m)^\\s*(- )?[A-Za-z0-9_.-]+\\s*:" (toYaml .file) -1 -}}

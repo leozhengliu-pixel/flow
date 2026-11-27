@@ -40,12 +40,19 @@ type Config struct {
 	// path. Only the config file sets it (server.storage.uploadMaxBytes, see
 	// FileSettings); DefaultUploadMaxBytes when the file does not.
 	UploadMaxBytes int64
-	Auth           AuthConfig
-	Agent          AgentConfig
-	TTS            TTSConfig
-	WebSearch      WebSearchConfig
-	Telemetry      TelemetryConfig
-	Retention      RetentionConfig
+	// DocumentRequestBodyMaxBytes is the largest request body the document
+	// create and update routes accept (POST /api/documents, PATCH
+	// /api/documents/{id}); other JSON routes keep 16 MiB. Only the config
+	// file sets it (server.documents.requestBodyMaxBytes, see FileSettings);
+	// 0 when the file does not, and the server then derives it from the
+	// metadata work budget.
+	DocumentRequestBodyMaxBytes int64
+	Auth                        AuthConfig
+	Agent                       AgentConfig
+	TTS                         TTSConfig
+	WebSearch                   WebSearchConfig
+	Telemetry                   TelemetryConfig
+	Retention                   RetentionConfig
 	// AuditLogIP is how the audit log keeps client addresses
 	// (FLOW_AUDIT_LOG_IP): truncated (default; IPv4 /24, IPv6 /48), full or
 	// off.
@@ -101,6 +108,15 @@ const (
 	DefaultUploadMaxBytes int64 = 100 << 20
 	MinUploadMaxBytes     int64 = 1 << 20
 	MaxUploadMaxBytes     int64 = 10 << 30
+)
+
+// Bounds of Config.DocumentRequestBodyMaxBytes
+// (server.documents.requestBodyMaxBytes): at least 1 MiB and at most 1 GiB.
+// Unset (0), the server uses the largest record the metadata work budget
+// admits, never less than the 16 MiB of other JSON requests.
+const (
+	MinDocumentRequestBodyMaxBytes int64 = 1 << 20
+	MaxDocumentRequestBodyMaxBytes int64 = 1 << 30
 )
 
 // DefaultAssetSharedKeepReleases is AssetsConfig.SharedKeepReleases' default.
@@ -327,6 +343,8 @@ func Load() (Config, error) {
 		},
 		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
 		UploadMaxBytes:       uploadMaxBytes(fileSettings()),
+		// File only (server.documents.requestBodyMaxBytes); 0 is automatic.
+		DocumentRequestBodyMaxBytes: fileSettings().DocumentRequestBodyMaxBytes,
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -489,6 +507,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("Redis multi-instance coordination requires PostgreSQL or MySQL; SQLite is single-instance only")
 	}
 	if err := c.validateUploadMaxBytes(); err != nil {
+		return err
+	}
+	if err := c.validateDocumentRequestBodyMaxBytes(); err != nil {
 		return err
 	}
 	storage := strings.ToLower(c.Storage.Driver)
@@ -723,6 +744,16 @@ func integer(name string, fallback int) int {
 func (c Config) validateUploadMaxBytes() error {
 	if c.UploadMaxBytes < MinUploadMaxBytes || c.UploadMaxBytes > MaxUploadMaxBytes {
 		return fmt.Errorf("server.storage.uploadMaxBytes must be a whole number of bytes between %d (1 MiB) and %d (10 GiB)", MinUploadMaxBytes, MaxUploadMaxBytes)
+	}
+	return nil
+}
+
+// validateDocumentRequestBodyMaxBytes bounds the document request limit when
+// it is set (0 is automatic); the file parser refuses an out-of-bounds value
+// first, so this guards a Config built another way.
+func (c Config) validateDocumentRequestBodyMaxBytes() error {
+	if value := c.DocumentRequestBodyMaxBytes; value != 0 && (value < MinDocumentRequestBodyMaxBytes || value > MaxDocumentRequestBodyMaxBytes) {
+		return fmt.Errorf("server.documents.requestBodyMaxBytes must be a whole number of bytes between %d (1 MiB) and %d (1 GiB)", MinDocumentRequestBodyMaxBytes, MaxDocumentRequestBodyMaxBytes)
 	}
 	return nil
 }

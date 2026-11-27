@@ -620,6 +620,7 @@ override them. The settings above keep their variables.
 | --- | --- | --- |
 | `storage.uploadMaxBytes` | number: 1048576 to 10737418240 | `104857600` (100 MiB) |
 | `database.recordJournalCapture` | text: auto, triggers, application | `auto` |
+| `documents.requestBodyMaxBytes` | number: 1048576 to 1073741824 | derived from the metadata work budget, at least 16 MiB |
 
 #### Record journal capture (MySQL)
 
@@ -673,6 +674,42 @@ A reverse proxy in front of Flow must accept request bodies of the same size
 (for example `client_max_body_size` in nginx, or the
 `nginx.ingress.kubernetes.io/proxy-body-size` annotation on an ingress-nginx
 Ingress) and allow the time a large upload takes.
+
+#### Document request size limit
+
+Creating and updating a document (`POST /api/documents`, `PATCH
+/api/documents/{id}`, and the MCP document tools) sends the document's whole
+content in the request body; a save from the collaborative editor carries the
+text three ways (Markdown, the rich-text tree and the collaborative state), so
+its body is about three times the text. These two routes accept bodies up to
+`server.documents.requestBodyMaxBytes`; every other JSON request keeps its
+16 MiB limit.
+
+```yaml
+server:
+  documents:
+    requestBodyMaxBytes: 134217728   # 128 MiB
+```
+
+Unset, the limit is the largest document one metadata operation admits under
+the work budget (`FLOW_METADATA_WORK_BYTES`, by default a quarter of the
+bounded-metadata memory ceiling), divided by the work a record reserves per
+byte, and never less than 16 MiB: 16 MiB with the smallest 1 GiB ceiling,
+more on larger replicas. A value must be a whole number between `1048576`
+(1 MiB) and `1073741824` (1 GiB). With the Helm chart, set
+`documents.requestBodyMaxBytes`; with `config.fileConfigMap`, put the key in
+that file instead.
+
+A body declared (`Content-Length`) over the limit is refused with `413`
+("Document request body is larger than this server accepts") before it is
+read; a body without `Content-Length` keeps 16 MiB. A body over 16 MiB reserves
+three times its size of the metadata work budget while it is decoded; when
+other work holds the budget the request answers `503` with `Retry-After` and
+nothing is written. The Markdown and collaborative state are decoded from the
+stream straight into the document, without another copy of the body. A
+document must still fit the store's own limits (the metadata work budget and
+`FLOW_DATABASE_MAX_TRANSACTION_BYTES`), and a reverse proxy in front of Flow
+must accept bodies this large.
 
 ### What stays out of the file
 
@@ -2994,7 +3031,8 @@ MySQL must provide the `ngram` parser. Search results use a bounded candidate
 set; candidate-derived facets and semantic ranking are not exhaustive global
 counts. Short terms can still require scans.
 
-JSON requests have a 16 MiB body limit. Realtime replay has a 256 KiB per-event
+JSON requests have a 16 MiB body limit, except document create and update
+(see [Document request size limit](#document-request-size-limit)). Realtime replay has a 256 KiB per-event
 limit, an 8 MiB per-workspace budget, and a 64 MiB process-wide budget; oversized
 events trigger resynchronization. Each collaboration socket has an 8 MiB
 outgoing queue budget and disconnects slow consumers. The browser event backlog

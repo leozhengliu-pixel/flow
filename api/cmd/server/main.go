@@ -239,6 +239,7 @@ func main() {
 	registerInternalErrorEndpoint(applicationConfig.Storage.Endpoint)
 	trashRetention = applicationConfig.Retention.Trash
 	uploadMaxBytes.Store(applicationConfig.UploadMaxBytes)
+	documentBodyMaxBytes.Store(applicationConfig.DocumentRequestBodyMaxBytes)
 	workspaceDeletionGrace = applicationConfig.Retention.WorkspaceDeletionGrace
 	repository.SetChangeLogMinRows(applicationConfig.Retention.ChangeLogMinRows)
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
@@ -1176,7 +1177,7 @@ func newHandler(s *server) http.Handler {
 	if s.securityHeaders != nil {
 		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
 	}
-	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(mux, s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(stripQueryNUL(handler))))))))))
+	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(mux, s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(s.documentRequestBodies(stripQueryNUL(handler)))))))))))
 }
 
 // serverRoute reports whether path is answered by the API rather than the
@@ -7437,7 +7438,7 @@ func priorityLabel(priority int) string {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
 	stripRequestJSONNUL(r)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
 		requestDecodeError(w, err)
@@ -7450,7 +7451,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 // not support is rejected with 400 instead of being silently ignored, so a
 // client never sees success for a change that was not made.
 func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
 	stripRequestJSONNUL(r)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()

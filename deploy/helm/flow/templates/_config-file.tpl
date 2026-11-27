@@ -52,6 +52,7 @@ wins over the chart's value. Empty when there is no file to render.
 
   storage.uploadMaxBytes -> server.storage.uploadMaxBytes
   database.recordJournalCapture -> server.database.recordJournalCapture
+  documents.requestBodyMaxBytes -> server.documents.requestBodyMaxBytes
 */ -}}
 {{- define "flow.config.file" -}}
 {{- $file := deepCopy (default dict .Values.config.file) -}}
@@ -71,6 +72,15 @@ wins over the chart's value. Empty when there is no file to render.
 {{- $_ := set $database "recordJournalCapture" . -}}
 {{- end -}}
 {{- $_ := set $server "database" $database -}}
+{{- $_ := set $file "server" $server -}}
+{{- end -}}
+{{- with (default dict .Values.documents).requestBodyMaxBytes -}}
+{{- $server := default dict $file.server -}}
+{{- $documents := default dict $server.documents -}}
+{{- if not (hasKey $documents "requestBodyMaxBytes") -}}
+{{- $_ := set $documents "requestBodyMaxBytes" (int64 .) -}}
+{{- end -}}
+{{- $_ := set $server "documents" $documents -}}
 {{- $_ := set $file "server" $server -}}
 {{- end -}}
 {{- if $file -}}

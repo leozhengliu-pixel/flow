@@ -117,7 +117,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 		pending := []string{
 			"withForwardingPolicy", "withSecurityHeaders", "recoverPanics", "requestLog",
 			"cors", "compressAPIResponses", "signedFileURLs", "apiErrorEnvelope",
-			"requestBodyBudget", "stripQueryNUL", "withStaticFiles", "boundedLegacyIssueWrites",
+			"requestBodyBudget", "documentRequestBodies", "stripQueryNUL", "withStaticFiles", "boundedLegacyIssueWrites",
 			"limitFailedAuthentication", "holdProjections", "withColdMetadataRouteMux", "authenticate",
 		}
 		seen := map[string]bool{}

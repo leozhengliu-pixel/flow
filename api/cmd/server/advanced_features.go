@@ -473,7 +473,7 @@ func refreshProjectDocuments(data *domain.Bootstrap, projectID string) {
 
 func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 	var input documentInput
-	if !decodeJSON(w, r, &input) {
+	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
 	var created domain.Document
@@ -606,7 +606,7 @@ func (s *server) documentEditRefused(r *http.Request, ref string) bool {
 
 func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	var input documentInput
-	if !decodeJSON(w, r, &input) {
+	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
 	id := r.PathValue("id")

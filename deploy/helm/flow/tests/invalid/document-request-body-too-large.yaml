@@ -1,0 +1,3 @@
+# documents.requestBodyMaxBytes is at most 1 GiB.
+documents:
+  requestBodyMaxBytes: 2147483648

@@ -319,7 +319,10 @@ func (s *server) oauthRequestAttribution(r *http.Request, key domain.APIKey) (*d
 		return nil, nil
 	}
 	var input oauthAttributionInput
-	if oauthAttributionRequest(r) && r.Body != nil {
+	if body := requestDocumentBody(r); body != nil && oauthAttributionRequest(r) {
+		// A document body is decoded once and shared (document_request_body.go).
+		body.peek(r.Context(), &input)
+	} else if oauthAttributionRequest(r) && r.Body != nil {
 		raw, err := io.ReadAll(io.LimitReader(r.Body, maxJSONRequestBytes+1))
 		if err != nil {
 			return nil, err

@@ -28,7 +28,11 @@ import (
 //   - with a budget too small for it, the start falls back to legacy reads
 //     and every route still serves the document (no 500, no lost access);
 //   - with the budget held by other work, an edit answers the retryable 503
-//     and writes nothing.
+//     and writes nothing;
+//   - a content edit sends the whole text in a body over the general JSON
+//     limit and the text comes
+//     back byte for byte; a body over the document limit gets 413, other
+//     routes keep the general limit.
 //
 // The document of #264 is 24 MB of text: eight times its decode cost passes
 // 256 MiB, the old fixed limit of one metadata operation. CI writes 3 MB and
@@ -146,8 +150,8 @@ func TestBoundedLargeDocumentRoutes(t *testing.T) {
 		expect(handler, http.MethodGet, "/api/documents/"+id+"/subscribers", nil, http.StatusOK, nil)
 		expect(handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK, nil)
 	}
-	// Title edits rewrite the whole record. A request body is limited to
-	// 16 MiB in every mode, so the content edit below shrinks the text.
+	// Title edits rewrite the whole record; content edits send the whole
+	// text, in a body over the general JSON limit (document_request_body.go).
 	edit := func(handler http.Handler, input map[string]any, title, content string) {
 		t.Helper()
 		var updated domain.Document
@@ -200,8 +204,73 @@ func TestBoundedLargeDocumentRoutes(t *testing.T) {
 		t.Fatal("a refused edit wrote")
 	}
 
-	// A content edit replaces the large text.
-	content := text[:min(len(text), 8_000_000)] + " edited"
+	// A content edit replaces the whole large text. Its body is over the
+	// general JSON limit: the full document's by itself (24 MB of text), the
+	// CI document's against a general limit lowered to a quarter of the text.
+	if size <= maxJSONRequestBytes {
+		jsonRequestLimitOverride.Store(size / 4)
+		defer jsonRequestLimitOverride.Store(0)
+	}
+	general := jsonRequestLimit()
+	documentLimit := 2*size + 1<<20
+	documentBodyMaxBytes.Store(documentLimit)
+	defer documentBodyMaxBytes.Store(0)
+	unit := "edited \"quoted\" \\ <tag> & é 文档 😀\n\t"
+	content := strings.Repeat(unit, int(size)/len(unit)+1)
+	body := func(content string) []byte {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{"content": content})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	if raw := body(content); int64(len(raw)) <= general || int64(len(raw)) > documentLimit {
+		t.Fatalf("the edit body of %d bytes does not exercise the limits %d and %d", len(raw), general, documentLimit)
+	}
 	edit(handler, map[string]any{"content": content}, "Edited bounded", content)
+	routes(handler, content)
+	if used := repo.MetadataWorkUsedForTesting(); used != 0 {
+		t.Fatalf("the body decode kept %d bytes of metadata work", used)
+	}
+
+	refused := func(method, path string, raw []byte, length int64, message string) {
+		t.Helper()
+		r := httptest.NewRequest(method, path, bytes.NewReader(raw))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-Workspace-Key", workspace)
+		r.ContentLength = length
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		var answer struct{ Error string }
+		if w.Code != http.StatusRequestEntityTooLarge || json.Unmarshal(w.Body.Bytes(), &answer) != nil || answer.Error != message {
+			t.Fatalf("%s %s with %d bytes: %d %.200s, want 413 %q", method, path, length, w.Code, w.Body.String(), message)
+		}
+	}
+	// Over the document limit: 413 with the fixed message, nothing written.
+	refused(http.MethodPatch, "/api/documents/"+id, []byte(`{"content":"x"}`), documentLimit+1, documentBodyTooLargeMessage)
+	// Without Content-Length a document body keeps the general limit.
+	over := body(strings.Repeat("x", int(general)))
+	refused(http.MethodPatch, "/api/documents/"+id, over, -1, documentBodyTooLargeMessage)
+	// Other routes keep the general limit, a document's comments included.
+	refused(http.MethodPost, "/api/documents/"+id+"/comments", over, int64(len(over)), "JSON request exceeds 16 MiB")
+	refused(http.MethodPost, "/api/projects", over, int64(len(over)), "JSON request exceeds 16 MiB")
+	routes(handler, content)
+
+	// The budget held by other work: the decode of a large body is not
+	// reserved and the edit answers the retryable 503, writing nothing.
+	release, err = repo.HoldMetadataWorkForTesting(repo.MetadataWorkLimitForTesting() - repo.MetadataWorkUsedForTesting() - int(documentBodyDecodeWork(int64(len(body(content)))))/2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPatch, "/api/documents/"+id, bytes.NewReader(body("not saved "+content)))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Workspace-Key", workspace)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	release()
+	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("a large body under a held budget answered %d %.200s, want a retryable 503", w.Code, w.Body.String())
+	}
 	routes(handler, content)
 }
