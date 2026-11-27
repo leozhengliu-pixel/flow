@@ -500,7 +500,7 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if p.tx.dialect == "sqlite" && p.store.db.journalReady.Load() {
 		p.tx.journalOrder = recordJournalOrder{p.workspace, "projects", row.id, order, true}
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	var input io.ReaderAt

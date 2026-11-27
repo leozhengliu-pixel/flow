@@ -16,7 +16,7 @@ func (p *legacyMetadataWritePlan) agentSessionCanonicalSpool(ctx context.Context
 		p.workspace, kind, key).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return nil, ErrMetadataWorkBudget
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)

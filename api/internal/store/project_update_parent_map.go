@@ -194,7 +194,7 @@ func (p *legacyMetadataWritePlan) scheduleParentHashNull(ctx context.Context, ke
 		}
 		return false, err
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return false, ErrMetadataWorkBudget
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)

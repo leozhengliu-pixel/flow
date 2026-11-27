@@ -194,8 +194,8 @@ func TestScaleP21SW27LogicalReloadFailureLeavesPublishedPair(t *testing.T) {
 			case "cancelled":
 				request = scaleP21SW27CancelledContext(t)
 			case "source-disk-budget":
-				injected = metadataLogicalDiskBytes - metadataLogicalDiskUsed.Load()
-				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskBytes) {
+				injected = metadataLogicalDiskCap() - metadataLogicalDiskUsed.Load()
+				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskCap()) {
 					injected = 0
 					t.Fatal("could not reserve remaining logical disk quota")
 				}

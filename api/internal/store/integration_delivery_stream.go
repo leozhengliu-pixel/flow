@@ -433,7 +433,7 @@ func (p *legacyMetadataWritePlan) rebaseIntegrationDeliveryRow(ctx context.Conte
 		p.tx.rebasedMetadata[key], row.deleted = true, true
 		return true, nil
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	if size <= MetadataRecordPageMaxBytes && row.before.cost <= 64<<10 && row.next.cost <= 64<<10 {

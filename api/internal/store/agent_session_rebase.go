@@ -264,7 +264,7 @@ func (p *legacyMetadataWritePlan) rebaseAgentSessionLifecycleRow(ctx context.Con
 	if p.tx.dialect == "sqlite" && p.store.db.journalReady.Load() {
 		p.tx.journalOrder = recordJournalOrder{p.workspace, "agentSessions", row.id, order, true}
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	// Keep the already-proven generic row kernel for small native and

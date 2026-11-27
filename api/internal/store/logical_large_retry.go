@@ -127,7 +127,7 @@ func (r *metadataLogicalLargeRetry) captureField(ctx context.Context, workspace,
 		if !physical.Valid || !slices.Contains(ids, physical.String) {
 			continue
 		}
-		if size > metadataLogicalDiskBytes {
+		if size > metadataLogicalFrameBytes {
 			rows.Close()
 			return ErrMetadataWorkBudget
 		}

@@ -236,7 +236,15 @@ budgets. These messages start with `metadata process work budget exceeded`:
 | `recover logical workspace "<key>": metadata process work budget exceeded: installed workspace sources use all of FLOW_METADATA_SOURCE_BYTES ...` | Sources outgrew the budget during recovery; raise `FLOW_METADATA_SOURCE_BYTES`. |
 
 Automatic startup falls back to legacy reads for the replica if preparation
-or bounded admission fails. Restart to retry admission. An explicit
+or bounded admission fails. The warning gives a `reason`, the `collection`
+being read when one applies, the spool capacities involved
+(`file_capacity_bytes`, `file_offset_bytes`, `spool_disk_budget_bytes`,
+`spool_disk_used_bytes`) and an `action`. A `process_spool_disk_budget`
+reason means the workspace sources need more than
+`FLOW_METADATA_SOURCE_DISK_BYTES`: raise it and check free space in the spool
+directory. One workspace's source may use the whole budget; the only
+per-file limit is the 256 TiB the spool encoding addresses
+(`logical_file_capacity`). Restart to retry admission. An explicit
 `FLOW_BOUNDED_METADATA=on` with `FLOW_METADATA_CATALOG=off` requires a prepared
 database and reports incomplete admission as a startup error. The journal
 opens checkpoints for new collections when their first records are written.

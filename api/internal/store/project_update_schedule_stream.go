@@ -136,7 +136,7 @@ func (p *legacyMetadataWritePlan) rebaseProjectUpdateScheduleRow(ctx context.Con
 	if p.tx.dialect == "sqlite" && p.store.db.journalReady.Load() {
 		p.tx.journalOrder = recordJournalOrder{p.workspace, f.field.name, key.key, order, true}
 	}
-	if size < 0 || size > metadataLogicalDiskBytes {
+	if size < 0 || size > metadataLogicalFrameBytes {
 		return true, ErrMetadataWorkBudget
 	}
 	spool, err := newMetadataLogicalRecordSpool(ctx)

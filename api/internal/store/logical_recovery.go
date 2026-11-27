@@ -166,13 +166,13 @@ func (s *SQLiteStore) recoverRawMetadataLogicalSource(ctx context.Context, tx *s
 		}
 		if value, ok := supplied[name]; ok {
 			if err := recovery.field(name, value); err != nil {
-				return nil, fmt.Errorf("recover logical %s: %w", name, err)
+				return nil, &metadataLogicalFieldError{field: name, err: err}
 			}
 			continue
 		}
 		if part != nil && !part[name] {
 			if err := builder.Field(name, reflect.Zero(field.Type)); err != nil {
-				return nil, fmt.Errorf("recover logical %s: %w", name, err)
+				return nil, &metadataLogicalFieldError{field: name, err: err}
 			}
 			continue
 		}
@@ -188,7 +188,7 @@ func (s *SQLiteStore) recoverRawMetadataLogicalSource(ctx context.Context, tx *s
 			err = recovery.scalar(name, field.Type)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("recover logical %s: %w", name, err)
+			return nil, &metadataLogicalFieldError{field: name, err: err}
 		}
 		recovery.releaseWork()
 	}

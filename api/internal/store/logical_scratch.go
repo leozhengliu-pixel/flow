@@ -53,7 +53,7 @@ func metadataLogicalDiskContended(demand *atomic.Int64, size, limit int64) bool 
 func newMetadataLogicalRecordSpool(ctx context.Context) (*RecordSpool, error) {
 	spool := &RecordSpool{
 		counter: &metadataLogicalDiskUsed, limit: metadataLogicalDiskCap(),
-		maxSize: metadataLogicalDiskBytes, demand: metadataLogicalDiskDemand(ctx),
+		maxSize: metadataLogicalFileAddressBytes, demand: metadataLogicalDiskDemand(ctx),
 	}
 	if err := spool.checkAppend(1); err != nil {
 		return nil, err
