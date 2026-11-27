@@ -264,7 +264,7 @@ func (s *SQLiteStore) webhookNeeded(ctx context.Context, workspaceKey string) bo
 		}
 		return false
 	}()
-	if needed {
+	if needed || s.labelAutomationLoopsNeedWebhook(ctx, workspaceKey) {
 		return true
 	}
 	// A setup interrupted before display metadata sync must not lose diffs,
