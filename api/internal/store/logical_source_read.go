@@ -492,7 +492,7 @@ func (n metadataLogicalNode) indexedChildren(ctx context.Context, c *metadataLog
 		}
 		if err != nil {
 			if headers != nil {
-				metadataLogicalIndexBytes.Add(-int64(cap(headers)) * metadataLogicalIndexEntry)
+				metadataLogicalIndexBytes.Add(-metadataLogicalChildIndexBytes(cap(headers)))
 			}
 			return err
 		}

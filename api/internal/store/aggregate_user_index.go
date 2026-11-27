@@ -61,6 +61,7 @@ func (s *metadataLogicalStorage) storeUserIndex(node metadataLogicalNode, index 
 		s.userIndexes = map[int64]metadataLogicalUserIndex{}
 	}
 	s.userIndexes[node.offset] = index
+	s.userRanges.set(node.offset, index.size)
 }
 
 // metadataLogicalPlainString reads a stored string node's value when it is
