@@ -91,7 +91,15 @@ func timeStartupHistoryOpen(t *testing.T, bounded bool, open func() *SQLiteStore
 func checkStartupHistoryBound(t *testing.T, projects, points int, legacy, bounded time.Duration) {
 	t.Helper()
 	t.Logf("history-heavy startup projects=%d points=%d flags_off=%s flags_on=%s", projects, points, legacy.Round(time.Millisecond), bounded.Round(time.Millisecond))
-	if bounded > legacy*10+10*time.Second {
+	limit := legacy*10 + 10*time.Second
+	if raceDetector {
+		// The race detector instruments every spool write (~45x slower here than a
+		// normal build: 1m21s on CI for 400 x 40). The quadratic frame-memo drop
+		// this guards against took 35 s in a normal build, far past this bound
+		// under race too.
+		limit = legacy*100 + 3*time.Minute
+	}
+	if bounded > limit {
 		t.Fatalf("bounded startup took %s against flags-off %s", bounded.Round(time.Millisecond), legacy.Round(time.Millisecond))
 	}
 }
