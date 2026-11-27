@@ -104,7 +104,7 @@ func (m *resourcePolicyMemo) remember(ctx context.Context, stamp copyStamp, epoc
 	if err != nil {
 		return err
 	}
-	if cost > metadataWorkBytes-(64<<10) {
+	if cost > uint64(metadataWorkBytes())-(64<<10) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := m.store.tryAdmitAdditionalMetadataWork(ctx, int(cost)+(64<<10))

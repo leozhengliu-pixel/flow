@@ -251,7 +251,7 @@ func TestScaleP21SW132RetainedUploadLargeAndFailures(t *testing.T) {
 			t.Fatal("partial admission/cancellation leaked")
 		}
 	}
-	raw := scaleP21SW132Gzip(t, []byte(strings.Repeat("x", metadataWorkBytes/16+1)))
+	raw := scaleP21SW132Gzip(t, []byte(strings.Repeat("x", metadataWorkBytes()/16+1)))
 	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {Trash: []domain.TrashEntry{{Payload: raw}}}})
 	if read, err := view.BeginRetainedUploadRead(t.Context(), "physical", []string{"free.pdf"}); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("gzip expansion exceeded work bound", read, err)

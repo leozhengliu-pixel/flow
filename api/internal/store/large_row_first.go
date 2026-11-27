@@ -159,7 +159,7 @@ func (p *legacyMetadataWritePlan) writeLargeRowFirstRecords(ctx context.Context,
 			if err := legacyActorWriteNodeWork(ctx, work, row.next, 64); err != nil {
 				return err
 			}
-			next, err := row.next.Value(ctx, metadataWorkBytes)
+			next, err := row.next.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}

@@ -88,8 +88,8 @@ func (r *issueEditorLookups) loadLegacyFormer() error {
 	if err != nil {
 		return err
 	}
-	if count < 0 || size < 0 || uint64(count) > (metadataWorkBytes-(64<<10))/512 ||
-		uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*512)/8 {
+	if count < 0 || size < 0 || uint64(count) > (uint64(metadataWorkBytes())-(64<<10))/512 ||
+		uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*512)/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := r.reserve(uint64(count)*512 + uint64(size)*8 + 64<<10); err != nil {
@@ -137,8 +137,8 @@ func (r *issueEditorLookups) legacyCollaborationUpdates(documentID string) ([][]
 	if err != nil {
 		return nil, r.legacyFailure(err)
 	}
-	if count < 0 || size < 0 || uint64(count) > (metadataWorkBytes-(64<<10))/256 ||
-		uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*256)/4 {
+	if count < 0 || size < 0 || uint64(count) > (uint64(metadataWorkBytes())-(64<<10))/256 ||
+		uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*256)/4 {
 		return nil, r.failure(ErrMetadataWorkBudget)
 	}
 	if err := r.reserve(uint64(count)*256 + uint64(size)*4 + 64<<10); err != nil {

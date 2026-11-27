@@ -93,7 +93,7 @@ func (r *issueHotInputs) completeField(ctx context.Context, name string) error {
 		return ErrMetadataRecordQuery
 	}
 	node := r.source.fields[index]
-	if node.cost > (metadataWorkBytes-4096)/8 {
+	if node.cost > (uint64(metadataWorkBytes())-4096)/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := r.reserve(ctx, node.cost*8+4096); err != nil {
@@ -149,7 +149,7 @@ func (s *SQLiteStore) loadIssueSuggestionInputs(ctx context.Context, source *met
 		if err != nil || !matched {
 			return err
 		}
-		if record.cost > (metadataWorkBytes-512)/8 {
+		if record.cost > (uint64(metadataWorkBytes())-512)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := read.reserve(ctx, record.cost*8+512); err != nil {
@@ -667,7 +667,7 @@ func (s *SQLiteStore) mutateBoundedIssueSuggestions(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		if callbackCost > (metadataWorkBytes-(64<<10))/3 {
+		if callbackCost > (uint64(metadataWorkBytes())-(64<<10))/3 {
 			return ErrMetadataWorkBudget
 		}
 		callbackWork := &ResourceRead{store: s}
@@ -1072,7 +1072,7 @@ func (s *SQLiteStore) issueSuggestionPatchNode(ctx context.Context, source *meta
 		if err != nil {
 			return metadataLogicalNode{}, err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return metadataLogicalNode{}, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, cost*8+4096); err != nil {
@@ -1118,7 +1118,7 @@ func decodeIssueSuggestionPreimages(ctx context.Context, owner *ResourceRead, ke
 		if err != nil {
 			return nil, err
 		}
-		if work > metadataWorkBytes-fixed {
+		if work > uint64(metadataWorkBytes())-fixed {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := owner.store.tryAdmitAdditionalMetadataWork(ctx, int(work+fixed))

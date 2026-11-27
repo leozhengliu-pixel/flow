@@ -46,7 +46,7 @@ func TestScaleP21JSONOutputBeginAndIndependentLease(t *testing.T) {
 	if read, err := view.BeginMetadataJSONRead(t.Context()); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("base admission failure leaked or returned an owner", read, err)
 	}
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if read, err := view.BeginMetadataJSONRead(cancelled); read != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
@@ -102,8 +102,8 @@ func TestScaleP21JSONOutputEncodedGrowth(t *testing.T) {
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("failed growth owner leaked old buffer work")
 	}
-	for _, size := range []int{-1, metadataWorkBytes/4 + 1} {
-		view.metadataResidency.work.limit = metadataWorkBytes
+	for _, size := range []int{-1, metadataWorkBytes()/4 + 1} {
+		view.metadataResidency.work.limit = metadataWorkBytes()
 		read := scaleP21JSONOwner(t, view, t.Context())
 		if err := read.ReserveEncoded(t.Context(), size); !errors.Is(err, ErrMetadataWorkBudget) || !errors.Is(read.Err(), err) {
 			t.Fatal("invalid absolute size did not latch", size, err, read.Err())

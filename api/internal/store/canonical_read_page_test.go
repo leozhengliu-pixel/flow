@@ -61,11 +61,10 @@ func TestScaleP21SW337CanonicalReadPages(t *testing.T) {
 			queries := 0
 			r := reader(observe(t.Context(), &queries, nil), page)
 			got, err := collect(r)
-			width := page
-			if width == 0 {
-				width = metadataRecordChunkBytes
+			expected := canonicalMetadataReadQueries(int64(len(raw)))
+			if page != 0 {
+				expected = (len(raw) + page - 1) / page
 			}
-			expected := (len(raw) + width - 1) / width
 			if err != io.EOF || !bytes.Equal(got, raw) || queries != expected {
 				t.Fatal("canonical page changed bytes, EOF or query count", page, len(got), queries, expected, err)
 			}
@@ -73,7 +72,7 @@ func TestScaleP21SW337CanonicalReadPages(t *testing.T) {
 			if n, err := r.Read(make([]byte, 3)); n != 0 || err != io.EOF || queries != before {
 				t.Fatal("EOF fetched an extra page", n, err, queries, before)
 			}
-			t.Logf("payload_bytes=%d page_bytes=%d caller_buffer_bytes=257 page_queries=%d", len(raw), width, queries)
+			t.Logf("payload_bytes=%d page_bytes=%d caller_buffer_bytes=257 page_queries=%d", len(raw), page, queries)
 		})
 		t.Run(fmt.Sprintf("capture/page=%d", page), func(t *testing.T) {
 			queries := 0

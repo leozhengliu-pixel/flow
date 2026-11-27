@@ -24,7 +24,7 @@ func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part l
 	defer work.leave()
 	cost := uint64(typ.Size())*2 + 128
 	add := func(size uint64) error {
-		if size > metadataWorkBytes || cost > metadataWorkBytes-size {
+		if size > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-size {
 			return ErrMetadataWorkBudget
 		}
 		cost += size

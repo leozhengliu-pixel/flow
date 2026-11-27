@@ -22,7 +22,7 @@ func metadataAggregatePayloadEncodingWork(ctx context.Context, value reflect.Val
 	}
 	cost := uint64(128)
 	add := func(part uint64) error {
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		cost += part
@@ -158,7 +158,7 @@ func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uin
 		case char == utf8.RuneError && size == 1, char == '\u2028', char == '\u2029':
 			width = 6
 		}
-		if width > metadataWorkBytes/4-encoded {
+		if width > uint64(metadataWorkBytes())/4-encoded {
 			return 0, ErrMetadataWorkBudget
 		}
 		encoded += width
@@ -174,7 +174,7 @@ func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uin
 // decodes its maps/interfaces and encodes the enriched envelope. Container
 // charges prevent many tiny JSON objects from defeating a byte-only bound.
 func metadataAggregatePayloadJSONWork(ctx context.Context, raw []byte) (uint64, error) {
-	if len(raw) > metadataWorkBytes/16 {
+	if len(raw) > metadataWorkBytes()/16 {
 		return 0, ErrMetadataWorkBudget
 	}
 	cost := uint64(len(raw)) * 16
@@ -204,7 +204,7 @@ func metadataAggregatePayloadJSONWork(ctx context.Context, raw []byte) (uint64, 
 		case ':', ',':
 			cost += 128
 		}
-		if cost > metadataWorkBytes {
+		if cost > uint64(metadataWorkBytes()) {
 			return 0, ErrMetadataWorkBudget
 		}
 	}

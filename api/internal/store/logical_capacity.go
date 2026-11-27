@@ -36,6 +36,7 @@ import (
 const (
 	metadataLogicalCapacityFile        = "logical_file_capacity"
 	metadataLogicalCapacityProcessDisk = "process_spool_disk_budget"
+	metadataRecordWorkLimitReason      = "record_work_limit"
 )
 
 // metadataLogicalCapacityError is a refused logical spool write. It is a
@@ -81,21 +82,102 @@ func (e *metadataLogicalFieldError) Error() string {
 
 func (e *metadataLogicalFieldError) Unwrap() error { return e.err }
 
+// Work of one record.
+//
+// Normalizing a logical source materializes one record at a time: the
+// decoded value, its normalized copy (normalize and display references run
+// on a one-record Bootstrap) and the frame encoder's buffers live together
+// with the dependency records it looks up. The normalizer reserves eight
+// times the record's logical decode cost (node.cost, itself about twice the
+// in-memory bytes of its strings and slices) plus 64 KiB for that, on top of
+// the base work it holds for the whole source, before it decodes the record.
+// The reservation goes through the process work budget like every other
+// admitted operation, so peak memory stays within that budget.
+//
+// The first bounded release also compared the cost with a fixed eighth of
+// metadataWorkBytes() (32 MiB) before it asked the budget, and capped the
+// operation at metadataWorkBytes(), so a document whose decode cost passed
+// 32 MiB (#264) was refused whatever FLOW_METADATA_WORK_BYTES allowed and the
+// replica fell back to legacy reads. A record may now use as much work as
+// the configured process work budget holds; a record that cannot fit it is
+// refused with metadataRecordWorkError.
+
+// metadataRecordWorkLimit is the most work one record's operation may
+// reserve: the process work budget of the store's residency. Without a
+// residency (preparation before bounded admission) nothing is reserved and
+// an operation keeps at least the metadataWorkBytes() it always had.
+func (s *SQLiteStore) metadataRecordWorkLimit() int {
+	if s != nil && s.metadataResidency != nil && s.metadataResidency.work != nil {
+		return s.metadataResidency.work.limit
+	}
+	return max(metadataWorkBytes(), metadataWorkBudgetBytes())
+}
+
+// metadataRecordWorkError is a record refused because the work it needs is
+// over the per-record limit, before any of it is reserved. It is a metadata
+// work budget refusal (errors.Is ErrMetadataWorkBudget) and keeps that
+// error's text; the startup diagnostic reads its sizes. It is distinct from
+// a record that fits the limit but finds the process budget in use by other
+// work (metadata_work_budget, work contention) and from spool exhaustion.
+type metadataRecordWorkError struct {
+	// collection is the static Bootstrap field name of the record.
+	collection string
+	// cost is the record's logical decode cost and costLimit the largest
+	// cost the limit admits beside the operation's base work.
+	cost, costLimit uint64
+	// work is what the record needs (base work included) and limit the
+	// per-record work limit (the process work budget).
+	work, limit uint64
+}
+
+func (e *metadataRecordWorkError) Error() string { return ErrMetadataWorkBudget.Error() }
+
+func (e *metadataRecordWorkError) Is(target error) bool { return target == ErrMetadataWorkBudget }
+
+// checkMetadataRecordWork refuses a record of decode cost cost whose work
+// (cost*factor+overhead beside base) does not fit limit.
+func checkMetadataRecordWork(collection string, cost uint64, factor, overhead, base, limit int) error {
+	room := uint64(max(limit-base-overhead, 0))
+	costLimit := room / uint64(factor)
+	if cost <= costLimit {
+		return nil
+	}
+	work := uint64(1<<64 - 1)
+	if cost <= (work-uint64(base)-uint64(overhead))/uint64(factor) {
+		work = cost*uint64(factor) + uint64(base) + uint64(overhead)
+	}
+	return &metadataRecordWorkError{collection: collection, cost: cost, costLimit: costLimit, work: work, limit: uint64(max(limit, 0))}
+}
+
 // boundedAdmissionFailure logs why bounded admission or startup preparation
 // failed and what an operator can change. It logs a reason from a fixed set,
 // static collection names and server capacities, never the error text
 // (which can carry database driver messages).
 func boundedAdmissionFailure(message string, err error) {
 	attrs := []any{"reason", boundedAdmissionReason(err)}
+	collection := ""
 	var field *metadataLogicalFieldError
 	if errors.As(err, &field) {
-		attrs = append(attrs, "collection", field.field)
+		collection = field.field
+	}
+	var record *metadataRecordWorkError
+	if errors.As(err, &record) && record.collection != "" {
+		// The refused record's own collection, also when a field
+		// recovery around it is reported.
+		collection = record.collection
+	}
+	if collection != "" {
+		attrs = append(attrs, "collection", collection)
 	}
 	var capacity *metadataLogicalCapacityError
 	if errors.As(err, &capacity) {
 		attrs = append(attrs,
 			"file_capacity_bytes", capacity.fileLimit, "file_offset_bytes", capacity.offset, "write_bytes", capacity.write,
 			"spool_disk_budget_bytes", capacity.processLimit, "spool_disk_used_bytes", capacity.processUsed)
+	} else if record != nil {
+		attrs = append(attrs,
+			"record_cost_bytes", record.cost, "record_cost_limit_bytes", record.costLimit,
+			"record_work_bytes", record.work, "record_work_limit_bytes", record.limit)
 	} else if errors.Is(err, ErrMetadataWorkBudget) {
 		attrs = append(attrs, "work_budget_bytes", metadataWorkBudgetBytes(), "spool_disk_budget_bytes", metadataLogicalDiskCap())
 	}
@@ -107,11 +189,14 @@ func boundedAdmissionFailure(message string, err error) {
 
 func boundedAdmissionReason(err error) string {
 	var capacity *metadataLogicalCapacityError
+	var record *metadataRecordWorkError
 	switch {
 	case err == nil:
 		return "not_ready"
 	case errors.As(err, &capacity):
 		return capacity.kind
+	case errors.As(err, &record):
+		return metadataRecordWorkLimitReason
 	case errors.Is(err, ErrRecordSpoolContended):
 		return "spool_disk_contended"
 	case errors.Is(err, ErrRecordSpoolBudget):
@@ -133,7 +218,10 @@ func boundedAdmissionReason(err error) string {
 
 func boundedAdmissionAction(err error) string {
 	var capacity *metadataLogicalCapacityError
+	var record *metadataRecordWorkError
 	switch {
+	case errors.As(err, &record):
+		return "one record needs more work than the per-record limit, which is FLOW_METADATA_WORK_BYTES (Helm config.env; defaults to a quarter of FLOW_METADATA_MEMORY_BYTES): raise it to at least record_work_bytes; until then bounded admission keeps falling back to legacy reads"
 	case errors.As(err, &capacity) && capacity.kind == metadataLogicalCapacityFile:
 		return "the workspace's logical source exceeds the hard per-file capacity of the spool encoding; it keeps legacy reads"
 	case errors.As(err, &capacity):

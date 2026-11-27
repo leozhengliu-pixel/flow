@@ -17,7 +17,7 @@ import (
 // complete. A panic in the callback itself is covered the same way.
 func TestScaleP21SW554PanickingColdWriteReleasesItsLocks(t *testing.T) {
 	_, view, workspace := scaleP21ColdReadFixture(t)
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	ctx := WithColdWork(t.Context(), "sw554")
 	write := func(id string) error {
 		return view.MutateWorkspace(ctx, workspace, "scale_p21_sw554.label", "", nil, func(data *domain.Bootstrap) error {

@@ -89,7 +89,7 @@ func (s *SQLiteStore) CreateChatRequestAsk(ctx context.Context, workspace string
 			if err != nil {
 				return err
 			}
-			if uint64(cost) > (metadataWorkBytes-(16<<10))/2 {
+			if uint64(cost) > (uint64(metadataWorkBytes())-(16<<10))/2 {
 				return ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, uint64(cost)*2+16<<10); err != nil {

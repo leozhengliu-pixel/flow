@@ -53,7 +53,7 @@ func (s *SQLiteStore) BeginRecurringNormalizationRead(ctx context.Context, works
 	if !s.BoundedMetadataEnabled() {
 		return nil, ErrBoundedMetadataCoverage
 	}
-	if uint64(len(workspace)) > (metadataWorkBytes-(128<<10))/8 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	ctx = context.WithValue(ctx, metadataWorkLeaseKey{}, nil)
@@ -83,8 +83,8 @@ func (s *SQLiteStore) BeginRecurringNormalizationRead(ctx context.Context, works
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+read.owner.byteLength("issue_id")+"),0) FROM ("+query+") recurring_normalization_ids", args...).Scan(&count, &size); err != nil {
 		return nil, err
 	}
-	if count < 0 || count > 10000 || size < 0 || size > metadataWorkBytes/8 ||
-		uint64(count)*64+uint64(size)*8 > metadataWorkBytes-(64<<10) {
+	if count < 0 || count > 10000 || size < 0 || size > int64(metadataWorkBytes())/8 ||
+		uint64(count)*64+uint64(size)*8 > uint64(metadataWorkBytes())-(64<<10) {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err = read.owner.reserve(ctx, uint64(count)*64+uint64(size)*8+64<<10); err != nil {
@@ -153,12 +153,12 @@ func (r *RecurringNormalizationRead) Page(ctx context.Context, ids []string) (_ 
 		}
 	}()
 	cost := uint64(len(ids))*32 + 128<<10
-	if uint64(len(r.workspace)) > (metadataWorkBytes-cost)/8 {
+	if uint64(len(r.workspace)) > (uint64(metadataWorkBytes())-cost)/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	cost += uint64(len(r.workspace)) * 8
 	for _, id := range ids {
-		if uint64(len(id)) > (metadataWorkBytes-cost)/8 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += uint64(len(id)) * 8
@@ -203,7 +203,7 @@ func (r *RecurringNormalizationRead) TeamTimezone(teamID string) (_ string, err 
 	if cached, found := r.timezones[teamID]; found {
 		return cached.value, nil
 	}
-	if uint64(len(teamID)) > (metadataWorkBytes-(128<<10))/8 {
+	if uint64(len(teamID)) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return "", ErrMetadataWorkBudget
 	}
 	ctx := context.Background()

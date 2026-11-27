@@ -95,7 +95,7 @@ func (s *SQLiteStore) prepareIntegrationDeliveryProfile(ctx context.Context, sou
 	if err != nil {
 		return nil, err
 	}
-	if cost > (metadataWorkBytes-4096)/2 {
+	if cost > (uint64(metadataWorkBytes())-4096)/2 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := p.comparison.reserve(ctx, cost*2+4096); err != nil {

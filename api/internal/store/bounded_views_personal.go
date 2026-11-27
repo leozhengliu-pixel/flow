@@ -304,7 +304,7 @@ func (r *ResourceRead) savedViewInputLimit(ctx context.Context, scope MetadataRe
 				if !ids[id] {
 					return nil
 				}
-				if node.cost > metadataWorkBytes/4-selected {
+				if node.cost > uint64(metadataWorkBytes())/4-selected {
 					return ErrMetadataWorkBudget
 				}
 				selected += node.cost

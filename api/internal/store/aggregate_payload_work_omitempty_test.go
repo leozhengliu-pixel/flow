@@ -32,7 +32,7 @@ func TestPayloadEncodingWorkSkipsOmittedFields(t *testing.T) {
 		t.Fatalf("encoding work %d for %d encoded bytes", work, len(raw))
 	}
 	// Rebasing the project row admits four times each side's work.
-	if uint64(work)*4*2 > metadataWorkBytes/4 {
+	if uint64(work)*4*2 > uint64(metadataWorkBytes())/4 {
 		t.Fatalf("a rebase of this project admits %d bytes", uint64(work)*8)
 	}
 

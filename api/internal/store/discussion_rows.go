@@ -71,7 +71,7 @@ func (r *issueMutationRows) beginDiscussion(ctx context.Context, inputs ...strin
 	}
 	cost := uint64(64 << 10)
 	for _, input := range inputs {
-		if uint64(len(input)) > (metadataWorkBytes-cost)/8 {
+		if uint64(len(input)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return ErrMetadataWorkBudget
 		}
 		cost += uint64(len(input)) * 8
@@ -96,12 +96,12 @@ func (r *issueMutationRows) discussionHeaders(ctx context.Context, where string,
 	if err := r.tx.QueryRowContext(ctx, query, args...).Scan(&count, &idSize, &resourceSize); err != nil {
 		return nil, err
 	}
-	if count < 0 || idSize < 0 || resourceSize < 0 || count > metadataWorkBytes/512 || idSize > metadataWorkBytes/8 || resourceSize > metadataWorkBytes/8 {
+	if count < 0 || idSize < 0 || resourceSize < 0 || count > int64(metadataWorkBytes())/512 || idSize > int64(metadataWorkBytes())/8 || resourceSize > int64(metadataWorkBytes())/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	slots := uint64(count) + 1
 	perRow := uint64(512) + uint64(idSize)*8 + uint64(resourceSize)*8
-	if slots > (metadataWorkBytes-(64<<10))/perRow {
+	if slots > (uint64(metadataWorkBytes())-(64<<10))/perRow {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, slots*perRow+64<<10); err != nil {
@@ -138,7 +138,7 @@ func (r *issueMutationRows) discussionHeaders(ctx context.Context, where string,
 			rows.Close()
 			return nil, io.ErrUnexpectedEOF
 		}
-		if size.Int64 > metadataWorkBytes/16 {
+		if size.Int64 > int64(metadataWorkBytes())/16 {
 			rows.Close()
 			return nil, ErrMetadataWorkBudget
 		}
@@ -155,7 +155,7 @@ func (r *issueMutationRows) discussionHeaders(ctx context.Context, where string,
 }
 
 func (r *issueMutationRows) discussionPayloads(ctx context.Context, kind string, headers []discussionRowHeader, size int64, visit func([]byte) error) error {
-	if len(headers) == 0 || len(headers) > issueMutationRowsBatchSize || size < 0 || uint64(size) > (metadataWorkBytes-(64<<10)-uint64(len(headers))*512)/3 {
+	if len(headers) == 0 || len(headers) > issueMutationRowsBatchSize || size < 0 || uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(len(headers))*512)/3 {
 		return ErrMetadataWorkBudget
 	}
 	sqlScratch := &ResourceRead{store: r.owner.store}
@@ -235,7 +235,7 @@ func discussionDecodeOwned[T any](ctx context.Context, r *issueMutationRows, raw
 		return err
 	}
 	fixed := uint64(reflect.TypeFor[T]().Size())*4 + 4096
-	if fixed > metadataWorkBytes || work > metadataWorkBytes-fixed {
+	if fixed > uint64(metadataWorkBytes()) || work > uint64(metadataWorkBytes())-fixed {
 		return ErrMetadataWorkBudget
 	}
 	decodeScratch := &ResourceRead{store: r.owner.store}
@@ -253,7 +253,7 @@ func discussionDecodeOwned[T any](ctx context.Context, r *issueMutationRows, raw
 		return err
 	}
 	native, nativeErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(value), 0)
-	if nativeErr == nil && native <= metadataWorkBytes-fixed {
+	if nativeErr == nil && native <= uint64(metadataWorkBytes())-fixed {
 		nativeErr = r.owner.reserve(ctx, native+fixed)
 	} else if nativeErr == nil {
 		nativeErr = ErrMetadataWorkBudget
@@ -404,12 +404,12 @@ func (r *issueMutationRows) issueNotificationDeliveries(ctx context.Context, not
 	if err := r.beginDiscussion(ctx, r.workspace); err != nil {
 		return nil, err
 	}
-	if uint64(len(notifications)) > metadataWorkBytes/64 {
+	if uint64(len(notifications)) > uint64(metadataWorkBytes())/64 {
 		return nil, ErrMetadataWorkBudget
 	}
 	cost := uint64(len(notifications))*64 + 4096
 	for _, notification := range notifications {
-		if cost > metadataWorkBytes || uint64(len(notification.ID)) > (metadataWorkBytes-cost)/8 {
+		if cost > uint64(metadataWorkBytes()) || uint64(len(notification.ID)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += uint64(len(notification.ID)) * 8

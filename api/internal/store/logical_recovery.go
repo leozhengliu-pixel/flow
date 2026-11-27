@@ -16,7 +16,25 @@ import (
 	"flow/api/internal/domain"
 )
 
+// metadataLogicalRecoveryRecordBytes is the largest record JSON recovery
+// reads under the default work limit (metadataWorkBytes()): its work, eight
+// times its bytes plus 128 KiB, fits that limit. A larger configured
+// process work budget raises it in proportion (recordLimits).
 const metadataLogicalRecoveryRecordBytes = 28 << 20
+
+// metadataRecoveryRecordBytes is the largest record JSON one operation reads
+// under the operation work limit (metadataWorkBytes).
+func metadataRecoveryRecordBytes() int64 {
+	return int64(metadataLogicalRecoveryRecordBytes) * int64(metadataWorkBytes()) / metadataWorkBytesDefault
+}
+
+// recordLimits are the largest record JSON recovery reads and the most work
+// one record's decode may hold: the per-record work limit
+// (metadataRecordWorkLimit, logical_capacity.go).
+func (r *metadataLogicalRecovery) recordLimits() (int64, int) {
+	work := r.store.metadataRecordWorkLimit()
+	return int64(metadataLogicalRecoveryRecordBytes) * int64(max(work, metadataWorkBytes())) / metadataWorkBytesDefault, work
+}
 
 type metadataLogicalRecovery struct {
 	store             *SQLiteStore
@@ -427,7 +445,7 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 		}
 		raw := make([]byte, int(size))
 		for offset := int64(0); offset < size; {
-			length := min(int64(metadataRecordChunkBytes), size-offset)
+			length := min(canonicalMetadataReadBytes(offset), size-offset)
 			var chunk []byte
 			err = r.tx.QueryRowContext(ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`,
 				offset+1, length, r.workspace, field, recordKey).Scan(&chunk)
@@ -445,8 +463,8 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 			err = r.store.inlineOffloadedRows(ctx, r.workspace, r.tx, row)
 			raw = row[0].Data
 		}
-		if err == nil && len(raw) > metadataLogicalRecoveryRecordBytes {
-			err = ErrMetadataWorkBudget
+		if recordBytes, work := r.recordLimits(); err == nil && int64(len(raw)) > recordBytes {
+			err = r.recordWorkError(int64(len(raw)), recordBytes, work)
 		}
 		if err == nil {
 			_, err = r.stage.exec(ctx, int64(len(raw)), `UPDATE canonical SET data=? WHERE seq=?`, raw, sequence)
@@ -460,14 +478,25 @@ func (r *metadataLogicalRecovery) readCanonical() error {
 }
 
 func (r *metadataLogicalRecovery) recordWork(size int64) (context.Context, func(), error) {
-	if size < 0 || size > metadataLogicalRecoveryRecordBytes {
+	recordBytes, work := r.recordLimits()
+	if size < 0 {
 		return r.ctx, nil, ErrMetadataWorkBudget
+	}
+	if size > recordBytes {
+		return r.ctx, nil, r.recordWorkError(size, recordBytes, work)
 	}
 	return r.holdWork(int(size)*8 + 128<<10)
 }
 
+// recordWorkError refuses a record of size JSON bytes over recordBytes. The
+// collection is named by the field error that wraps it.
+func (r *metadataLogicalRecovery) recordWorkError(size, recordBytes int64, work int) error {
+	return &metadataRecordWorkError{cost: uint64(size), costLimit: uint64(recordBytes),
+		work: uint64(size)*8 + 128<<10, limit: uint64(max(work, 0))}
+}
+
 func (r *metadataLogicalRecovery) holdWork(wanted int) (context.Context, func(), error) {
-	if wanted < 0 || wanted > metadataWorkBytes {
+	if _, limit := r.recordLimits(); wanted < 0 || wanted > limit {
 		return r.ctx, nil, ErrMetadataWorkBudget
 	}
 	if lease, ok := r.ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok {
@@ -519,7 +548,8 @@ func (r *metadataLogicalRecovery) decodeAt(input io.ReaderAt, part metadataColle
 }
 
 func (r *metadataLogicalRecovery) decodeBytes(ctx context.Context, raw []byte, destination reflect.Value, done func() error) error {
-	budget := metadataHydrationBudget{bytes: metadataLogicalRecoveryRecordBytes, work: metadataWorkBytes - 128<<10}
+	recordBytes, limit := r.recordLimits()
+	budget := metadataHydrationBudget{bytes: int(recordBytes), work: max(limit-128<<10, 0)}
 	initialWork := budget.work
 	if err := budget.consume(raw); err != nil {
 		return err
@@ -563,7 +593,7 @@ func (r *metadataLogicalRecovery) get(key string, ordinal int64, target reflect.
 	if err != nil {
 		return false, err
 	}
-	if cost < 0 || cost > metadataWorkBytes/2 {
+	if _, limit := r.recordLimits(); cost < 0 || cost > int64(limit/2) {
 		return true, ErrMetadataWorkBudget
 	}
 	node.cost = uint64(cost)

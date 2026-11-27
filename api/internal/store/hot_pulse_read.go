@@ -60,7 +60,7 @@ func (r *PulseRead) TransferOutput(ctx context.Context) error {
 }
 
 func (r *PulseRead) reserve(ctx context.Context, cost uint64) (func(), error) {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), int(cost))
@@ -68,7 +68,7 @@ func (r *PulseRead) reserve(ctx context.Context, cost uint64) (func(), error) {
 }
 
 func (r *PulseRead) value(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
-	if node.cost > (metadataWorkBytes-256)/8 {
+	if node.cost > (uint64(metadataWorkBytes())-256)/8 {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	release, err := r.reserve(ctx, node.cost*8+256)
@@ -584,7 +584,7 @@ func (r *PulseRead) MatchSearch(ctx context.Context, entry *PulseFeedEntry, sear
 	if search == "" {
 		return true, ctx.Err()
 	}
-	if len(search) > (metadataWorkBytes-64<<10)/16 {
+	if len(search) > (metadataWorkBytes()-64<<10)/16 {
 		return false, ErrMetadataWorkBudget
 	}
 	release, err := r.reserve(ctx, uint64(64<<10+len(search)*16))

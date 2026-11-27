@@ -24,7 +24,11 @@ import (
 const logicalJSONStreamWork = 2 << 20
 
 // Keys are admitted separately before decoding, binding and cursor retention.
-const logicalJSONMapKeyBytes = metadataWorkBytes
+const logicalJSONMapKeyBytes = metadataWorkBytesDefault
+
+// logicalJSONStringReadBytes is the read size of a streamed string: a string
+// of tens of megabytes takes one spool read per 64 KiB, not per 4 KiB.
+const logicalJSONStringReadBytes = 64 << 10
 
 // StreamFieldJSON writes one installed field as json.Marshal would, without
 // materializing its record bodies. The caller owns publication/error handling:
@@ -903,7 +907,7 @@ func (s *logicalJSONStream) stringContentBytes(value []byte) error {
 func (s *logicalJSONStream) stringContent(input io.Reader) error {
 	// One reader serves every string of the stream (strings do not nest).
 	if s.runes == nil {
-		s.runes = bufio.NewReaderSize(input, 4096)
+		s.runes = bufio.NewReaderSize(input, logicalJSONStringReadBytes)
 	} else {
 		s.runes.Reset(input)
 	}
@@ -912,6 +916,22 @@ func (s *logicalJSONStream) stringContent(input io.Reader) error {
 	for {
 		if err := s.ctx.Err(); err != nil {
 			return err
+		}
+		// Copy a buffered run of ASCII that needs no escape in one write.
+		if buffered, _ := reader.Peek(reader.Buffered()); len(buffered) > 0 {
+			plain := 0
+			for plain < len(buffered) && buffered[plain] < utf8.RuneSelf && logicalJSONASCIIQuotes[buffered[plain]] == "" {
+				plain++
+			}
+			if plain > 0 {
+				if _, err := s.out.Write(buffered[:plain]); err != nil {
+					return err
+				}
+				if _, err := reader.Discard(plain); err != nil {
+					return err
+				}
+				continue
+			}
 		}
 		char, size, err := reader.ReadRune()
 		if errors.Is(err, io.EOF) {

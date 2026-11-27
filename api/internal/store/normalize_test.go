@@ -253,7 +253,7 @@ func scaleP21SW28DecodeLogicalSource(t *testing.T, source *metadataLogicalSource
 		if !ok {
 			t.Fatalf("unregistered logical field %q", name)
 		}
-		value, err := node.Value(t.Context(), metadataWorkBytes)
+		value, err := node.Value(t.Context(), metadataWorkBytes())
 		if err == nil {
 			target.Field(index).Set(value)
 		}

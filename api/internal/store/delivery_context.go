@@ -206,7 +206,7 @@ func (s *SQLiteStore) deliveryDisplayColumns(ctx context.Context, owner *Resourc
 	if err := reader.QueryRowContext(ctx, "SELECT "+s.scaleP21SW22VisibilityLength(columns...)+" FROM "+table+" WHERE "+where, args...).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size < 0 || size > (metadataWorkBytes-8192)/32 {
+	if size < 0 || size > (int64(metadataWorkBytes())-8192)/32 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(size)*32+8192); err != nil {

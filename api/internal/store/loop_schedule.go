@@ -149,7 +149,7 @@ func (s *SQLiteStore) BeginLoopScheduleRead(ctx context.Context, workspace, mode
 }
 
 func (r *LoopScheduleRead) reserve(ctx context.Context, cost uint64) error {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -160,7 +160,7 @@ func (r *LoopScheduleRead) reserve(ctx context.Context, cost uint64) error {
 }
 
 func (r *LoopScheduleRead) reserveNode(ctx context.Context, node metadataLogicalNode) error {
-	if node.cost > (metadataWorkBytes-4096)/8 {
+	if node.cost > (uint64(metadataWorkBytes())-4096)/8 {
 		return ErrMetadataWorkBudget
 	}
 	return r.reserve(ctx, node.cost*8+4096)
@@ -186,7 +186,7 @@ func (r *LoopScheduleRead) project(ctx context.Context, record metadataLogicalNo
 	cost := uint64(4096)
 	if err := record.Children(ctx, func(key reflect.Value, node metadataLogicalNode) error {
 		if slices.Contains(fields, key.String()) {
-			if node.cost > (metadataWorkBytes-cost)/8 {
+			if node.cost > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += node.cost * 8
@@ -281,7 +281,7 @@ func (r *LoopScheduleRead) LoadTriggerContext(ctx context.Context, issue *domain
 			ID string `json:"id"`
 		}
 		if raw := previous["team"]; len(raw) != 0 {
-			if uint64(len(raw)) > (metadataWorkBytes-4096)/8 {
+			if uint64(len(raw)) > (uint64(metadataWorkBytes())-4096)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := r.reserve(ctx, uint64(len(raw))*8+4096); err != nil {
@@ -303,7 +303,7 @@ func (r *LoopScheduleRead) LoadTriggerContext(ctx context.Context, issue *domain
 			if key.cost > maxKeyCost {
 				return nil
 			}
-			if key.cost > (metadataWorkBytes-4096)/4 {
+			if key.cost > (uint64(metadataWorkBytes())-4096)/4 {
 				return ErrMetadataWorkBudget
 			}
 			_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(key.cost*4+4096))

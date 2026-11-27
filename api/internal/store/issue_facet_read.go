@@ -126,7 +126,7 @@ func (s *SQLiteStore) BeginIssueFacetRead(ctx context.Context, workspace, userID
 			if err != nil {
 				return nil, err
 			}
-			if cost > (metadataWorkBytes-4096)/8 {
+			if cost > (uint64(metadataWorkBytes())-4096)/8 {
 				return nil, ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, cost*8+4096); err != nil {
@@ -567,7 +567,7 @@ func (r *IssueFacetRead) walkIssueHeaders(ctx context.Context, authority bool, p
 		r.workspace).Scan(&maxID, &maxTeam, &maxRef); err != nil {
 		return err
 	}
-	if maxID < 0 || maxTeam < 0 || maxRef < 0 || maxID > (metadataWorkBytes-4096)/32 || maxTeam > (metadataWorkBytes-4096)/32 || maxRef > (metadataWorkBytes-4096)/32 {
+	if maxID < 0 || maxTeam < 0 || maxRef < 0 || maxID > (int64(metadataWorkBytes())-4096)/32 || maxTeam > (int64(metadataWorkBytes())-4096)/32 || maxRef > (int64(metadataWorkBytes())-4096)/32 {
 		return ErrMetadataWorkBudget
 	}
 	perHeader := uint64(maxID)*8 + 512

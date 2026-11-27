@@ -37,7 +37,7 @@ func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q Issue
 	if err != nil {
 		return err
 	}
-	if queryCost > (metadataWorkBytes-(64<<10))/8 {
+	if queryCost > (uint64(metadataWorkBytes())-(64<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := cursor.reserve(ctx, queryCost*8+64<<10); err != nil {
@@ -94,7 +94,7 @@ func (s *SQLiteStore) walkBoundedBootstrapIssueRows(ctx context.Context, q Issue
 		append(prefixArgs, args...)...).Scan(&maxID); err != nil {
 		return err
 	}
-	if maxID < 0 || maxID > (metadataWorkBytes-4096)/16 {
+	if maxID < 0 || maxID > (int64(metadataWorkBytes())-4096)/16 {
 		return ErrMetadataWorkBudget
 	}
 	perHeader := uint64(maxID)*8 + 512
@@ -166,7 +166,7 @@ func reserveBootstrapIssueReferences(ctx context.Context, owner *ResourceRead, d
 		// Root ownership already covers referenced strings and descendants.
 		// Allow map buckets, growth and copied value structs before allocation.
 		perEntry := uint64(family.size)*4 + 256
-		if uint64(family.count) > (metadataWorkBytes-cost)/perEntry {
+		if uint64(family.count) > (uint64(metadataWorkBytes())-cost)/perEntry {
 			return ErrMetadataWorkBudget
 		}
 		cost += uint64(family.count) * perEntry
@@ -213,7 +213,7 @@ func (s *SQLiteStore) visitBootstrapIssueWalkBatch(ctx context.Context, tx *sqlT
 	wire := &ResourceRead{store: s}
 	defer wire.Close()
 	fixed := uint64(64<<10) + uint64(len(headers))*512
-	if uint64(size) > (metadataWorkBytes-fixed)/3 {
+	if uint64(size) > (uint64(metadataWorkBytes())-fixed)/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, fixed+uint64(size)*3); err != nil {

@@ -88,7 +88,7 @@ func (s *SQLiteStore) scanLegacyIssueRows(ctx context.Context, tx *sqlTx, worksp
 	if visit == nil {
 		return ErrMetadataRecordQuery
 	}
-	if uint64(len(workspace)) > (metadataWorkBytes-(64<<10))/8 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(64<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	cursor := &ResourceRead{store: s}
@@ -101,7 +101,7 @@ func (s *SQLiteStore) scanLegacyIssueRows(ctx context.Context, tx *sqlTx, worksp
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+idLength+"),0),COALESCE(MAX("+bodyLength+"),0) FROM issue_records WHERE workspace_key=?", workspace).Scan(&maxID, &maxBody); err != nil {
 		return err
 	}
-	if maxID < 0 || maxBody < 0 || maxBody > metadataWorkBytes/16 || maxID > (metadataWorkBytes-4096)/8 {
+	if maxID < 0 || maxBody < 0 || maxBody > int64(metadataWorkBytes())/16 || maxID > (int64(metadataWorkBytes())-4096)/8 {
 		return ErrMetadataWorkBudget
 	}
 	// Large physical keys reduce page width instead of multiplying one key's
@@ -109,7 +109,7 @@ func (s *SQLiteStore) scanLegacyIssueRows(ctx context.Context, tx *sqlTx, worksp
 	perHeader := uint64(maxID)*8 + 512
 	pageRows := min(legacyIssueScanPageRows, max(1, int((256<<10)/perHeader)))
 	headerWork := uint64(pageRows)*perHeader + uint64(maxID)*8 + 4096
-	if headerWork > metadataWorkBytes {
+	if headerWork > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	if err := cursor.reserve(ctx, headerWork); err != nil {
@@ -191,7 +191,7 @@ func (s *SQLiteStore) legacyIssueScanHeaders(ctx context.Context, tx *sqlTx, wor
 }
 
 func (s *SQLiteStore) visitLegacyIssueBatch(ctx context.Context, tx *sqlTx, workspace string, headers []legacyIssueScanHeader, size int64, visit func(*legacyIssueRow) error) error {
-	if len(headers) == 0 || len(headers) > legacyIssueScanPageRows || size < 0 || uint64(size) > (metadataWorkBytes-(64<<10)-uint64(len(headers))*512)/3 {
+	if len(headers) == 0 || len(headers) > legacyIssueScanPageRows || size < 0 || uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(len(headers))*512)/3 {
 		return ErrMetadataWorkBudget
 	}
 	wire := &ResourceRead{store: s}
@@ -259,7 +259,7 @@ func (s *SQLiteStore) decodeLegacyIssueRow(ctx context.Context, header legacyIss
 	}
 	fixed := uint64(reflect.TypeFor[storedIssueRecord]().Size())*2 + 4096
 	cost := uint64(len(raw))*3 + uint64(len(header.id))*8 + fixed
-	if cost > metadataWorkBytes || work > metadataWorkBytes-cost {
+	if cost > uint64(metadataWorkBytes()) || work > uint64(metadataWorkBytes())-cost {
 		return nil, ErrMetadataWorkBudget
 	}
 	row := &legacyIssueRow{owner: &ResourceRead{store: s}, idBlob: header.blob}

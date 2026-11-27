@@ -125,7 +125,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP09Database(t)
-	if metadataWorkBytes != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
+	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
 		t.Fatal("SW420 sizes assume the production work and transaction budgets", f.db.maxTransactionBytes)
 	}
 	workspace := f.data.Workspace.URLKey

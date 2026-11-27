@@ -95,7 +95,7 @@ func (s *SQLiteStore) loadIssueReleaseInputs(ctx context.Context, source *metada
 			if err != nil {
 				return err
 			}
-			if copies > (metadataWorkBytes-(64<<10))/2 {
+			if copies > (uint64(metadataWorkBytes())-(64<<10))/2 {
 				return ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, copies*2+64<<10); err != nil {
@@ -254,7 +254,7 @@ func issueReleasePatch(ctx context.Context, source *metadataLogicalSource, input
 				if err != nil {
 					return err
 				}
-				if size > (metadataWorkBytes-(64<<10))/2 {
+				if size > (uint64(metadataWorkBytes())-(64<<10))/2 {
 					return ErrMetadataWorkBudget
 				}
 				if err := inputs.read.reserve(ctx, size+64<<10); err != nil {
@@ -267,7 +267,7 @@ func issueReleasePatch(ctx context.Context, source *metadataLogicalSource, input
 				if err != nil {
 					return err
 				}
-				if cost > (metadataWorkBytes-4096)/8 {
+				if cost > (uint64(metadataWorkBytes())-4096)/8 {
 					return ErrMetadataWorkBudget
 				}
 				if err := inputs.read.reserve(ctx, cost*8+4096); err != nil {

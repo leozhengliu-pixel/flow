@@ -211,7 +211,7 @@ func TestScaleP21WebhookJSONPinnedCancelAndConcurrent(t *testing.T) {
 	if view.metadataResidency.work.used != held {
 		t.Fatal("failed traversal retained partial work")
 	}
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	read.Close()
 	read.Close()
 	if _, err := read.TeamsAllowed(t.Context(), "target", nil); !errors.Is(err, errMetadataLogicalClosed) {

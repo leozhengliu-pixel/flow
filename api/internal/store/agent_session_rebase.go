@@ -42,7 +42,7 @@ func legacySessionSmallString(ctx context.Context, owner *ResourceRead, part leg
 	if part.input == nil {
 		return "", nil
 	}
-	if part.size < 0 || uint64(part.size) > (metadataWorkBytes-1024)/8 {
+	if part.size < 0 || uint64(part.size) > (uint64(metadataWorkBytes())-1024)/8 {
 		return "", ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(part.size)*8+1024); err != nil {

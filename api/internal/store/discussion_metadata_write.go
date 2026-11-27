@@ -90,7 +90,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		if err != nil {
 			return nil, err
 		}
-		if uint64(cost) > (metadataWorkBytes-(64<<10))/4 {
+		if uint64(cost) > (uint64(metadataWorkBytes())-(64<<10))/4 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, uint64(cost)*4+64<<10); err != nil {
@@ -276,8 +276,8 @@ func (s *SQLiteStore) discussionMetadataWriteWork(ctx context.Context, tx *sqlTx
 			rows.Close()
 			return err
 		}
-		if size < 0 || keyBytes < 0 || uint64(size) > (metadataWorkBytes-8192)/128 ||
-			uint64(keyBytes) > (metadataWorkBytes-8192-uint64(size)*128)/16 {
+		if size < 0 || keyBytes < 0 || uint64(size) > (uint64(metadataWorkBytes())-8192)/128 ||
+			uint64(keyBytes) > (uint64(metadataWorkBytes())-8192-uint64(size)*128)/16 {
 			rows.Close()
 			return ErrMetadataWorkBudget
 		}
@@ -298,7 +298,7 @@ func (s *SQLiteStore) discussionMetadataWriteWork(ctx context.Context, tx *sqlTx
 	if rootBytes > MetadataRecordPageMaxBytes {
 		return s.discussionStreamedRootWork(ctx, tx, workspace, work, rootBytes, changes)
 	}
-	if rootBytes < 0 || uint64(rootBytes) > (metadataWorkBytes-(64<<10))/128 {
+	if rootBytes < 0 || uint64(rootBytes) > (uint64(metadataWorkBytes())-(64<<10))/128 {
 		return ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(rootBytes)*128+64<<10); err != nil {

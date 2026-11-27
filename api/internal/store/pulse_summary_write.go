@@ -58,7 +58,7 @@ func (w *pulseSummaryWork) reserve(cost uint64) error {
 	if cost == 0 {
 		return nil
 	}
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := w.store.tryAdmitAdditionalMetadataWork(w.ctx, int(cost))
@@ -69,7 +69,7 @@ func (w *pulseSummaryWork) reserve(cost uint64) error {
 }
 
 func (w *pulseSummaryWork) native(node metadataLogicalNode, copies uint64) (reflect.Value, error) {
-	if node.cost > (metadataWorkBytes-256)/copies {
+	if node.cost > (uint64(metadataWorkBytes())-256)/copies {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := w.reserve(node.cost*copies + 256); err != nil {
@@ -492,7 +492,7 @@ func (w *pulseSummaryWork) canonicalCursor(tx *sqlTx, workspace, lock string) ([
 	if err != nil {
 		return nil, false, err
 	}
-	if size > (metadataWorkBytes-(64<<10))/32 {
+	if size > (uint64(metadataWorkBytes())-(64<<10))/32 {
 		return nil, true, ErrMetadataWorkBudget
 	}
 	if err := w.reserve(size*32 + 64<<10); err != nil {
@@ -518,7 +518,7 @@ func (w *pulseSummaryWork) wanted(key metadataLogicalNode, needed map[string]int
 	if err != nil || length > uint64(maxID) {
 		return 0, false, err
 	}
-	if key.cost > (metadataWorkBytes-256)/8 {
+	if key.cost > (uint64(metadataWorkBytes())-256)/8 {
 		return 0, false, ErrMetadataWorkBudget
 	}
 	_, release, err := w.store.tryAdmitAdditionalMetadataWork(w.ctx, int(key.cost)*8+256)

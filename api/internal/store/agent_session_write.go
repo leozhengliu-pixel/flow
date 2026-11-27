@@ -423,7 +423,7 @@ func (s *SQLiteStore) MutateAgentSessionLifecycle(ctx context.Context, workspace
 			if err := budget.reserveValue(ctx, session); err != nil {
 				return err
 			}
-			if uint64(len(session.Messages)) > (metadataWorkBytes-(64<<10))/(16<<10) {
+			if uint64(len(session.Messages)) > (uint64(metadataWorkBytes())-(64<<10))/(16<<10) {
 				return ErrMetadataWorkBudget
 			}
 			if err := inputs.owner.reserve(ctx, uint64(len(session.Messages))*(16<<10)+64<<10); err != nil {

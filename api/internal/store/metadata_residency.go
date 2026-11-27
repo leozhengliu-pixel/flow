@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"flow/api/internal/boundedcrdt"
@@ -23,8 +24,8 @@ var (
 
 const (
 	// Whole-policy operations admit up to this much work per workspace.
-	metadataPolicyBytes = 192 << 20
-	metadataWorkBytes   = 256 << 20
+	metadataPolicyBytes      = 192 << 20
+	metadataWorkBytesDefault = 256 << 20
 	// metadataSourceReloadHeadroom is the share of the installed source
 	// budget a bounded start keeps free for the work that runs beside the
 	// installed sources: requests' and publications' scratch spools (a
@@ -32,6 +33,30 @@ const (
 	// workspaces created at runtime.
 	metadataSourceReloadHeadroom = 16 << 20
 )
+
+// metadataOperationWorkBytes is the operation work limit set by the
+// bounded residency of the process (zero: unset).
+var metadataOperationWorkBytes atomic.Int64
+
+// metadataWorkBytes is the most work one metadata operation, or one record
+// of it, may admit: metadataWorkBytesDefault (256 MiB), or the process work
+// budget (FLOW_METADATA_WORK_BYTES) when that is larger. Every operation
+// still reserves its work from the process budget, so a larger limit lets a
+// record that bounded admission accepted (logical_capacity.go) be read and
+// written by requests within the same budget, and memory stays within it.
+func metadataWorkBytes() int {
+	if limit := metadataOperationWorkBytes.Load(); limit > 0 {
+		return int(limit)
+	}
+	return metadataWorkBytesDefault
+}
+
+// setMetadataOperationWork sets the operation work limit for a process work
+// budget of budget bytes. A bounded start sets it; zero (store closed or
+// fallen back to legacy reads) restores the default.
+func setMetadataOperationWork(budget int) {
+	metadataOperationWorkBytes.Store(int64(max(budget, metadataWorkBytesDefault)))
+}
 
 // boundedMetadataSize sums nonnegative sizes or counts without exceeding limit.
 func boundedMetadataSize(limit int, parts ...int) (int, error) {

@@ -267,7 +267,7 @@ func (r *workflowRunAttempt) admitCallback(ctx context.Context) error {
 	if len(data.WorkflowDefinitions) != 0 {
 		actions = len(data.WorkflowDefinitions[0].Actions)
 	}
-	if uint64(actions) > metadataWorkBytes/(16<<10) {
+	if uint64(actions) > uint64(metadataWorkBytes())/(16<<10) {
 		return ErrMetadataWorkBudget
 	}
 	return r.owner.reserve(ctx, uint64(actions)*(16<<10)+64<<10)

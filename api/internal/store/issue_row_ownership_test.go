@@ -147,7 +147,7 @@ func TestScaleP21SW347IssueRowOwnership(t *testing.T) {
 		// row, leaving no room for a second native replacement allowance.
 		limit := compactHeld - int(native+fixed) + int(decode+fixed)
 		baseline.Close()
-		if view.MetadataWorkUsedForTesting() != 0 || limit <= compactHeld || limit >= metadataWorkBytes {
+		if view.MetadataWorkUsedForTesting() != 0 || limit <= compactHeld || limit >= metadataWorkBytes() {
 			t.Fatal("pressure fixture cannot isolate the replacement admission", limit, compactHeld)
 		}
 		setLimit(t, limit)

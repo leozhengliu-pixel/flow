@@ -60,7 +60,7 @@ func largeRowCloneBytes(ctx context.Context, value reflect.Value, depth int) (ui
 		if err != nil {
 			return err
 		}
-		if part > metadataWorkBytes || own > metadataWorkBytes || total > metadataWorkBytes-part-own {
+		if part > uint64(metadataWorkBytes()) || own > uint64(metadataWorkBytes()) || total > uint64(metadataWorkBytes())-part-own {
 			return ErrMetadataWorkBudget
 		}
 		total += part + own

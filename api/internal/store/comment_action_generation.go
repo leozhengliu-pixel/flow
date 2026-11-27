@@ -42,7 +42,7 @@ func (s *SQLiteStore) AdmitMetadataOutputValue(ctx context.Context, value any) e
 	if err != nil {
 		return err
 	}
-	if uint64(cost) > (metadataWorkBytes-4096)/2 {
+	if uint64(cost) > (uint64(metadataWorkBytes())-4096)/2 {
 		return ErrMetadataWorkBudget
 	}
 	owner := &ResourceRead{store: s}

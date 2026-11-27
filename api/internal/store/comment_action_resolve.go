@@ -454,7 +454,7 @@ func (p *commentActionResolveProfile) reserveCallback(ctx context.Context, owner
 		if err != nil {
 			return err
 		}
-		if uint64(cost) > (metadataWorkBytes-(64<<10))/3 {
+		if uint64(cost) > (uint64(metadataWorkBytes())-(64<<10))/3 {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, uint64(cost)*3+64<<10); err != nil {
@@ -467,7 +467,7 @@ func (p *commentActionResolveProfile) reserveCallback(ctx context.Context, owner
 	}
 	unit := uint64(reflect.TypeFor[domain.Notification]().Size())*2 + uint64(reflect.TypeFor[domain.NotificationDelivery]().Size())*8 +
 		uint64(reflect.TypeFor[domain.ActivityEvent]().Size())*2 + uint64(reflect.TypeFor[domain.Issue]().Size())*2 + 8192
-	if recipients > (metadataWorkBytes-(64<<10))/unit {
+	if recipients > (uint64(metadataWorkBytes())-(64<<10))/unit {
 		return ErrMetadataWorkBudget
 	}
 	return owner.reserve(ctx, recipients*unit+64<<10)

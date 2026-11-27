@@ -29,7 +29,7 @@ func (s *SQLiteStore) prepareScopedInlineSelection(ctx context.Context, tx *sqlT
 	for _, name := range fields {
 		index, _, _ := metadataLogicalField(name)
 		cost := source.fields[index].cost
-		if cost > metadataWorkBytes/8 || limit > metadataWorkBytes/8-cost {
+		if cost > uint64(metadataWorkBytes())/8 || limit > uint64(metadataWorkBytes())/8-cost {
 			return scope, nil, 0, nil, ErrMetadataWorkBudget
 		}
 		limit += cost

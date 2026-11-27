@@ -81,7 +81,7 @@ func (r *ResourceRead) nativeEventPolicy(ctx context.Context) (domain.Bootstrap,
 			})
 		case "teamSettings":
 			return node.MapEntries(ctx, func(key, settings metadataLogicalNode) error {
-				if key.cost > (metadataWorkBytes-512)/8 {
+				if key.cost > (uint64(metadataWorkBytes())-512)/8 {
 					return ErrMetadataWorkBudget
 				}
 				cost := key.cost*8 + 512

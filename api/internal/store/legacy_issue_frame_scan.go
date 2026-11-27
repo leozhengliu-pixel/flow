@@ -82,7 +82,7 @@ func (s *SQLiteStore) scanLegacyIssueFrames(ctx context.Context, tx *sqlTx, work
 	if visit == nil {
 		return ErrMetadataRecordQuery
 	}
-	if uint64(len(workspace)) > (metadataWorkBytes-(64<<10))/8 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(64<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	cursor := &ResourceRead{store: s}
@@ -97,13 +97,13 @@ func (s *SQLiteStore) scanLegacyIssueFrames(ctx context.Context, tx *sqlTx, work
 	}
 	// maxStateBytes limits the root after Issues are removed, not these
 	// record rows. Body bytes use the existing logical-spool envelope.
-	if maxID < 0 || maxBody < 0 || maxBody > metadataLogicalFrameBytes || maxID > (metadataWorkBytes-4096)/8 {
+	if maxID < 0 || maxBody < 0 || maxBody > metadataLogicalFrameBytes || maxID > (int64(metadataWorkBytes())-4096)/8 {
 		return ErrMetadataWorkBudget
 	}
 	perHeader := uint64(maxID)*8 + 512
 	pageRows := min(legacyIssueScanPageRows, max(1, int((256<<10)/perHeader)))
 	headerWork := uint64(pageRows)*perHeader + uint64(maxID)*8 + 4096
-	if headerWork > metadataWorkBytes {
+	if headerWork > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	if err := cursor.reserve(ctx, headerWork); err != nil {
@@ -158,7 +158,7 @@ func (s *SQLiteStore) visitLegacyIssueNativeFrame(ctx context.Context, row *lega
 	if err != nil {
 		return err
 	}
-	if cost > (metadataWorkBytes-(64<<10))/2 {
+	if cost > (uint64(metadataWorkBytes())-(64<<10))/2 {
 		return ErrMetadataWorkBudget
 	}
 	work := &ResourceRead{store: s}

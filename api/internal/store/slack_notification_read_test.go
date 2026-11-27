@@ -201,7 +201,7 @@ func TestScaleP21SlackNotificationPostAdmission(t *testing.T) {
 	for _, test := range []struct {
 		count int
 		bytes uint64
-	}{{-1, 0}, {metadataWorkBytes/(64<<10) + 1, 0}, {1, metadataWorkBytes}} {
+	}{{-1, 0}, {metadataWorkBytes()/(64<<10) + 1, 0}, {1, uint64(metadataWorkBytes())}} {
 		if err := read.ReservePosts(t.Context(), test.count, test.bytes); !errors.Is(err, ErrMetadataWorkBudget) || view.metadataResidency.work.used != baseline {
 			t.Fatal("oversized Slack post batch escaped or partially admitted", err)
 		}

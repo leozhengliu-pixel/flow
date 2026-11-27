@@ -51,12 +51,12 @@ func reserveIssueRecordEncodingEnvelope(ctx context.Context, s *SQLiteStore, iss
 		if err != nil {
 			return nil, err
 		}
-		if before > metadataWorkBytes || cost > metadataWorkBytes-before {
+		if before > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-before {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += before
 	}
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	if columnsHeld {
@@ -87,8 +87,8 @@ func reserveIssueBatchCallbackEncoding(ctx context.Context, s *SQLiteStore, data
 	}
 	// Every edited field comes from payload. Include it in both sides of
 	// the live pair so an update increasing a description is admitted too.
-	if uint64(payloadWork) > metadataWorkBytes-maximum ||
-		maximum+uint64(payloadWork) > metadataWorkBytes/2 {
+	if uint64(payloadWork) > uint64(metadataWorkBytes())-maximum ||
+		maximum+uint64(payloadWork) > uint64(metadataWorkBytes())/2 {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int((maximum+uint64(payloadWork))*2))
@@ -130,7 +130,7 @@ func reserveIssueBatchContentEncoding(ctx context.Context, s *SQLiteStore, data 
 	}
 	// syncContentRecords writes one row at a time; row construction also
 	// encodes the actor/identity envelope while its initial JSON is live.
-	if maximum > metadataWorkBytes/4 {
+	if maximum > metadataWorkBytes()/4 {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, max(maximum*4, 64<<10))

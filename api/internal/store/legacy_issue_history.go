@@ -92,7 +92,7 @@ func (b *legacyRecordBase) issueHistoryPayloadBatch(ctx context.Context, tx *sql
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0),COALESCE(MAX("+idLength+"),0)"+from, args...).Scan(&maximum, &maxID); err != nil {
 		return err
 	}
-	if maximum < 0 || maxID < 0 || uint64(maximum) > metadataWorkBytes/4 || uint64(maxID) > metadataWorkBytes/16 || maxSelected > metadataWorkBytes/16 {
+	if maximum < 0 || maxID < 0 || uint64(maximum) > uint64(metadataWorkBytes())/4 || uint64(maxID) > uint64(metadataWorkBytes())/16 || maxSelected > uint64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maximum)*3+(uint64(maxID)+maxSelected)*8); err != nil {
@@ -143,7 +143,7 @@ func (h *legacyRecordIssueHistory) load(ctx context.Context, issueID string) (er
 	if err := h.base.stage.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(LENGTH(data)),0),COALESCE(MAX(LENGTH(resource)),0) FROM legacy_issue_history WHERE selected=?", []byte(issueID)).Scan(&maximum, &maxID); err != nil {
 		return err
 	}
-	if maximum < 0 || maxID < 0 || uint64(maximum) > metadataWorkBytes/4 || uint64(maxID) > metadataWorkBytes/16 {
+	if maximum < 0 || maxID < 0 || uint64(maximum) > uint64(metadataWorkBytes())/4 || uint64(maxID) > uint64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maximum)*3+uint64(maxID)*8+64<<10); err != nil {

@@ -196,7 +196,7 @@ func (r *DocumentDirectoryRead) header(ctx context.Context, node metadataLogical
 	cost := uint64(2048)
 	if err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if slices.Contains(fields, key.String()) {
-			if child.cost > (metadataWorkBytes-cost)/8 {
+			if child.cost > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += child.cost * 8
@@ -297,7 +297,7 @@ func (r *DocumentDirectoryRead) MatchSearch(ctx context.Context, ordinal int, se
 	if search == "" {
 		return true, ctx.Err()
 	}
-	if len(search) > (metadataWorkBytes-(64<<10))/16 {
+	if len(search) > (metadataWorkBytes()-(64<<10))/16 {
 		return false, ErrMetadataWorkBudget
 	}
 	scratch := &ResourceRead{store: r.owner.store}

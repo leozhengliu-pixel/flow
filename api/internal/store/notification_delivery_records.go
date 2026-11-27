@@ -108,7 +108,7 @@ func (s *SQLiteStore) MutateNotificationDelivery(ctx context.Context, workspace,
 		if err := tx.QueryRowContext(ctx, `SELECT `+s.scaleP21SW22VisibilityLength("data")+` FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`+lock, workspace, id).Scan(&size); err != nil {
 			return err
 		}
-		if size < 0 || size > (metadataWorkBytes-4096)/32 {
+		if size < 0 || size > (int64(metadataWorkBytes())-4096)/32 {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, uint64(size)*32+4096); err != nil {

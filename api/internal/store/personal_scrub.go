@@ -16,7 +16,7 @@ import (
 
 const scaleP21SW21ScrubFixedWork = 2 << 20
 const scaleP21SW21ScrubHeaderKeys = 8 << 10
-const scaleP21SW21ScrubRecordWork = metadataWorkBytes - scaleP21SW21ScrubFixedWork
+const scaleP21SW21ScrubRecordWork = metadataWorkBytesDefault - scaleP21SW21ScrubFixedWork
 
 type scaleP21SW21ScrubHeader struct {
 	keys      []string

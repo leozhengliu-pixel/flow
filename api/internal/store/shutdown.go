@@ -45,6 +45,10 @@ func (s *SQLiteStore) closeWithWorkerDeadline(ctx context.Context) error {
 			joinErr = ctx.Err()
 			slog.Warn("store shutdown timed out waiting for workers", "stacks", shutdownStacks())
 		}
+		if s.metadataResidency != nil {
+			// A bounded store set the process operation work limit at startup.
+			setMetadataOperationWork(0)
+		}
 		// Close the pools even if a worker still holds a workspace lock or
 		// borrows metadata. A slow driver must not hold up the other closers.
 		pools := make(chan error, 1)

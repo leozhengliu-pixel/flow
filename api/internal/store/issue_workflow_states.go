@@ -131,7 +131,7 @@ func (s *SQLiteStore) loadIssueWorkflowStates(ctx context.Context, workspace str
 		if err != nil || !wanted {
 			return err
 		}
-		if record.cost > (metadataWorkBytes-4096)/8 {
+		if record.cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := reserve(int(record.cost)*8 + 4096); err != nil {

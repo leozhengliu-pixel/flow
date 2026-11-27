@@ -61,7 +61,7 @@ func TestScaleP21SW352PublicationStoredFrame(t *testing.T) {
 			if !ok {
 				t.Fatal("captured fixture did not select the stored-frame path")
 			}
-			before, err := stored.value.Value(t.Context(), metadataWorkBytes)
+			before, err := stored.value.Value(t.Context(), metadataWorkBytes())
 			if name == "fixed-offset-time" {
 				if !errors.Is(err, ErrBoundedMetadataCoverage) {
 					t.Fatal("fresh named zone changed its native-read refusal", err)
@@ -114,7 +114,7 @@ func TestScaleP21SW352PublicationStoredFrame(t *testing.T) {
 					t.Fatal("result release changed the caller's existing ownership")
 				}
 			}
-			after, err := stored.value.Value(t.Context(), metadataWorkBytes)
+			after, err := stored.value.Value(t.Context(), metadataWorkBytes())
 			if name == "fixed-offset-time" {
 				nativeAfter, marshalErr := json.Marshal(native)
 				if !errors.Is(err, ErrBoundedMetadataCoverage) || marshalErr != nil || !bytes.Equal(nativeAfter, want) {

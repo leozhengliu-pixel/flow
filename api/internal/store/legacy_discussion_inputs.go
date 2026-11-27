@@ -58,7 +58,7 @@ func (r *legacyDiscussionInputs) ownedKey(ctx context.Context, keys map[string]b
 	if keys[id] {
 		return nil
 	}
-	if uint64(len(id)) > (metadataWorkBytes-1024)/8 {
+	if uint64(len(id)) > (uint64(metadataWorkBytes())-1024)/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := r.input.reserve(ctx, uint64(len(id))*8+1024); err != nil {
@@ -88,7 +88,7 @@ func (s *SQLiteStore) loadLegacyDiscussionInputs(ctx context.Context, source *me
 		}
 	}()
 	ctx = metadataLogicalSourceScratchContext(metadataLogicalUnpinnedContext(ctx), source)
-	if uint64(len(issueID)) > (metadataWorkBytes-(128<<10))/8 {
+	if uint64(len(issueID)) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := read.reserve(ctx, uint64(len(issueID))*8+128<<10); err != nil {
@@ -125,7 +125,7 @@ func (s *SQLiteStore) loadLegacyDiscussionInputs(ctx context.Context, source *me
 			id := value.Interface().(domain.User).ID
 			for _, category := range []string{"comments", "mentions"} {
 				length := uint64(len(id)) + uint64(len(issueID)) + uint64(len(category)) + 2
-				if length > (metadataWorkBytes-1024)/8 {
+				if length > (uint64(metadataWorkBytes())-1024)/8 {
 					return false, ErrMetadataWorkBudget
 				}
 				if err := read.reserve(ctx, length*8+1024); err != nil {
@@ -580,7 +580,7 @@ func (r *legacyDiscussionInputs) nativeFrame(ctx context.Context, frames *metada
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}
-	if cost > (metadataWorkBytes-4096)/8 {
+	if cost > (uint64(metadataWorkBytes())-4096)/8 {
 		return metadataLogicalNode{}, ErrMetadataWorkBudget
 	}
 	if err := r.input.reserve(ctx, cost*8+4096); err != nil {
@@ -611,7 +611,7 @@ func (r *legacyDiscussionInputs) deltaFrame(ctx context.Context, frames *metadat
 		if err != nil {
 			return metadataLogicalNode{}, err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return metadataLogicalNode{}, ErrMetadataWorkBudget
 		}
 		if err := r.input.reserve(ctx, cost*8+4096); err != nil {

@@ -61,12 +61,12 @@ func reserveAgentReplyOutput(ctx context.Context, owner *ResourceRead, data doma
 		uint64(reflect.TypeFor[domain.NotificationDelivery]().Size())*16 +
 		uint64(reflect.TypeFor[domain.NotificationPayload]().Size())*2 + 8192
 	recipients := uint64(len(audience)) + 1
-	if recipients > (metadataWorkBytes-(64<<10))/unit {
+	if recipients > (uint64(metadataWorkBytes())-(64<<10))/unit {
 		return ErrMetadataWorkBudget
 	}
 	slots := uint64(len(data.Notifications))*uint64(reflect.TypeFor[domain.Notification]().Size())*2 +
 		uint64(len(data.NotificationDeliveries))*uint64(reflect.TypeFor[domain.NotificationDelivery]().Size())*2
-	if slots > metadataWorkBytes-recipients*unit-(64<<10) {
+	if slots > uint64(metadataWorkBytes())-recipients*unit-(64<<10) {
 		return ErrMetadataWorkBudget
 	}
 	return owner.reserve(ctx, recipients*unit+slots+64<<10)

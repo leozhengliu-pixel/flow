@@ -159,7 +159,7 @@ func (s *SQLiteStore) BeginGeneralBootstrapRead(ctx context.Context, workspace, 
 	if err != nil {
 		return nil, err
 	}
-	if cost > (metadataWorkBytes-4096)/8 {
+	if cost > (uint64(metadataWorkBytes())-4096)/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := read.owner.reserve(ctx, cost*8+4096); err != nil {
@@ -187,7 +187,7 @@ func (s *SQLiteStore) BeginGeneralBootstrapRead(ctx context.Context, workspace, 
 		if err != nil {
 			return err
 		}
-		if cost > (metadataWorkBytes-1024)/3 {
+		if cost > (uint64(metadataWorkBytes())-1024)/3 {
 			return ErrMetadataWorkBudget
 		}
 		// Native cost already includes twice the struct and descendant sizes.

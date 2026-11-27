@@ -446,7 +446,7 @@ func TestScaleP21SW16TypedAttachmentAdmission(t *testing.T) {
 			transferred = true
 		}
 	})
-	err = f.probe.scaleP21SW16ReadAttachmentIssue(ctx, tx, f.data.Workspace.URLKey, scaleP21SW16AttachmentHeader{id: f.ids[0], size: metadataWorkBytes}, func(context.Context, domain.Issue) error {
+	err = f.probe.scaleP21SW16ReadAttachmentIssue(ctx, tx, f.data.Workspace.URLKey, scaleP21SW16AttachmentHeader{id: f.ids[0], size: int64(metadataWorkBytes())}, func(context.Context, domain.Issue) error {
 		visited = true
 		return nil
 	})

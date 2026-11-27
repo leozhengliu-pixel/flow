@@ -109,7 +109,7 @@ func (s *SQLiteStore) BeginWebhookDeliveryRead(ctx context.Context, workspace st
 }
 
 func (r *WebhookDeliveryRead) reserve(ctx context.Context, cost uint64) error {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -128,7 +128,7 @@ func (r *WebhookDeliveryRead) project(ctx context.Context, record metadataLogica
 	cost := uint64(4096)
 	if err := record.Children(ctx, func(key reflect.Value, node metadataLogicalNode) error {
 		if slices.Contains(fields, key.String()) {
-			if node.cost > (metadataWorkBytes-cost)/8 {
+			if node.cost > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += node.cost * 8
@@ -196,7 +196,7 @@ func (r *WebhookDeliveryRead) LoadUsers(ctx context.Context, actorID, subjectID 
 		}
 		var user domain.User
 		if wanted[matchID] {
-			if record.cost > (metadataWorkBytes-4096)/8 {
+			if record.cost > (uint64(metadataWorkBytes())-4096)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := r.reserve(ctx, record.cost*8+4096); err != nil {

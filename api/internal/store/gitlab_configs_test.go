@@ -167,7 +167,7 @@ func TestScaleP21SW19GitLabConfigsOwnershipAdmission(t *testing.T) {
 	if _, _, err := repo.BeginGitLabConnectionConfigsRead(t.Context(), ""); !errors.Is(err, ErrMetadataWorkBudget) || repo.metadataResidency.work.used != 0 {
 		t.Fatal("saturated admission did not reject before cloning", err)
 	}
-	repo.metadataResidency.work.limit = metadataWorkBytes
+	repo.metadataResidency.work.limit = metadataWorkBytes()
 	source.IntegrationConnections[0].Config = map[string]string{"over": strings.Repeat("x", scaleP21SW19GitLabConfigsMaxWork/33)}
 	repo.workspaces["physical"] = source
 	if _, _, err := repo.BeginGitLabConnectionConfigsRead(t.Context(), ""); !errors.Is(err, ErrMetadataWorkBudget) || repo.metadataResidency.work.used != 0 {

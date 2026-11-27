@@ -140,7 +140,7 @@ func (p *legacyProgressImage) ForEachProject(ctx context.Context, visit func(str
 		if err != nil {
 			return err
 		}
-		if size < 0 || uint64(size) > (metadataWorkBytes-4096)/8 {
+		if size < 0 || uint64(size) > (uint64(metadataWorkBytes())-4096)/8 {
 			return ErrMetadataWorkBudget
 		}
 		current := &ResourceRead{store: p.store}
@@ -296,7 +296,7 @@ func (g *legacyProgressGroup) project(ctx context.Context, node metadataLogicalN
 }
 
 func (g *legacyProgressGroup) scalar(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
-	if node.cost > (metadataWorkBytes-2048)/8 {
+	if node.cost > (uint64(metadataWorkBytes())-2048)/8 {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := g.inputs.reserve(ctx, node.cost*8+2048); err != nil {

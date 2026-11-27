@@ -48,7 +48,7 @@ func (s *SQLiteStore) BeginRetainedUploadRead(ctx context.Context, workspace str
 	cost := uint64(128 << 10)
 	for _, name := range names {
 		part := uint64(len(name))*8 + 256
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += part
@@ -163,7 +163,7 @@ func retainedUploadJSONWork(ctx context.Context, raw []byte) (uint64, error) {
 					cost += 128
 				}
 			}
-			if cost > metadataWorkBytes {
+			if cost > uint64(metadataWorkBytes()) {
 				return 0, ErrMetadataWorkBudget
 			}
 		}

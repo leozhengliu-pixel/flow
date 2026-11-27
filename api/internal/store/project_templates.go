@@ -247,7 +247,7 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 	if err := tx.QueryRowContext(ctx, query, args...).Scan(&count, &bytes); err != nil {
 		return nil, nil, err
 	}
-	if count < 0 || count > 64 || bytes < 0 || bytes > (metadataWorkBytes-count*256-(64<<10))/3 {
+	if count < 0 || count > 64 || bytes < 0 || bytes > (int64(metadataWorkBytes())-count*256-(64<<10))/3 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	if count == 0 {
@@ -289,7 +289,7 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 }
 
 func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRow(ctx context.Context, tx *sqlTx, source, length string, args []any, size int64, target func() any) error {
-	if size < 0 || size > (metadataWorkBytes-(64<<10))/3 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	rawCtx, releaseRaw, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size)*3+64<<10)
@@ -306,11 +306,11 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRow(ctx context.Conte
 	if len(raw) != int(size) {
 		return ErrMetadataWorkBudget
 	}
-	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes()}
 	if err := budget.consume(raw); err != nil {
 		return ErrMetadataWorkBudget
 	}
-	_, releaseTyped, err := s.tryAdmitAdditionalMetadataWork(rawCtx, metadataWorkBytes-budget.work+64<<10)
+	_, releaseTyped, err := s.tryAdmitAdditionalMetadataWork(rawCtx, metadataWorkBytes()-budget.work+64<<10)
 	if err != nil {
 		return err
 	}

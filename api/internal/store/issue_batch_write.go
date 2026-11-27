@@ -227,7 +227,7 @@ func (s *SQLiteStore) loadIssueBatchInputs(ctx context.Context, source *metadata
 		if err != nil || !matched {
 			return err
 		}
-		if record.cost > (metadataWorkBytes-512)/8 {
+		if record.cost > (uint64(metadataWorkBytes())-512)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := read.reserve(ctx, record.cost*8+512); err != nil {
@@ -326,7 +326,7 @@ func (r *boundedDiscussionAttempt) collectionValue(ctx context.Context, node met
 		return reflect.Zero(node.typ), nil
 	}
 	entry := func(child metadataLogicalNode) (reflect.Value, error) {
-		if child.cost > (metadataWorkBytes-4096)/8 {
+		if child.cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return reflect.Value{}, ErrMetadataWorkBudget
 		}
 		_, release, err := r.owner.store.tryAdmitAdditionalMetadataWork(ctx, int(child.cost*8+4096))
@@ -343,13 +343,13 @@ func (r *boundedDiscussionAttempt) collectionValue(ctx context.Context, node met
 			return reflect.Value{}, err
 		}
 		width := uint64(value.Type().Size())
-		if width > (metadataWorkBytes-512)/2 {
+		if width > (uint64(metadataWorkBytes())-512)/2 {
 			return reflect.Value{}, ErrMetadataWorkBudget
 		}
 		// Append/map growth copies entry slots, while nested containers and
 		// immutable bodies keep their already-owned backing allocations.
 		relocation := width*2 + 512
-		if retained > metadataWorkBytes-relocation {
+		if retained > uint64(metadataWorkBytes())-relocation {
 			return reflect.Value{}, ErrMetadataWorkBudget
 		}
 		return value, r.owner.reserve(ctx, retained+relocation)
@@ -628,7 +628,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		if err != nil {
 			return err
 		}
-		if callbackCost > metadataWorkBytes {
+		if callbackCost > uint64(metadataWorkBytes()) {
 			return ErrMetadataWorkBudget
 		}
 		// Collection/input owners already retain data and its growth-copy
@@ -648,12 +648,12 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			if err != nil {
 				return err
 			}
-			if extra > metadataWorkBytes-cloneCost {
+			if extra > uint64(metadataWorkBytes())-cloneCost {
 				return ErrMetadataWorkBudget
 			}
 			cloneCost += extra
 		}
-		if cloneCost > metadataWorkBytes-(64<<10) {
+		if cloneCost > uint64(metadataWorkBytes())-(64<<10) {
 			return ErrMetadataWorkBudget
 		}
 		if err := comparison.reserve(ctx, cloneCost+64<<10); err != nil {
@@ -1142,7 +1142,7 @@ func issueBatchSlicePatchNode[T any](ctx context.Context, s *SQLiteStore, source
 		if err != nil {
 			return metadataLogicalNode{}, err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return metadataLogicalNode{}, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, cost*8+4096); err != nil {

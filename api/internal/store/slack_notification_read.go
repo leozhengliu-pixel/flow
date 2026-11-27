@@ -190,7 +190,7 @@ func (r *SlackNotificationRead) LoadTeams(ctx context.Context, requests []SlackN
 			if !wanted {
 				return nil
 			}
-			if uint64(len(id)) > (metadataWorkBytes-4096)/8 {
+			if uint64(len(id)) > (uint64(metadataWorkBytes())-4096)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := r.owner.reserve(ctx, uint64(len(id))*8+4096); err != nil {
@@ -224,7 +224,7 @@ func (r *SlackNotificationRead) LoadTeams(ctx context.Context, requests []SlackN
 							}
 							continue
 						}
-						if uint64(len(request.Key)) > (metadataWorkBytes-256)/8 {
+						if uint64(len(request.Key)) > (uint64(metadataWorkBytes())-256)/8 {
 							return ErrMetadataWorkBudget
 						}
 						if err := r.owner.reserve(ctx, uint64(len(request.Key))*8+256); err != nil {
@@ -262,11 +262,11 @@ func (r *SlackNotificationRead) ReservePosts(ctx context.Context, count int, inp
 		return errMetadataLogicalClosed
 	}
 	const postWork = 64 << 10
-	if count < 0 || uint64(count) > metadataWorkBytes/postWork {
+	if count < 0 || uint64(count) > uint64(metadataWorkBytes())/postWork {
 		return ErrMetadataWorkBudget
 	}
 	cost := uint64(count) * postWork
-	if inputBytes > (metadataWorkBytes-cost)/8 {
+	if inputBytes > (uint64(metadataWorkBytes())-cost)/8 {
 		return ErrMetadataWorkBudget
 	}
 	return r.owner.reserve(ctx, cost+inputBytes*8)

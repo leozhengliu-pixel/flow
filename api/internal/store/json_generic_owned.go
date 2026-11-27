@@ -20,7 +20,7 @@ func (r *MetadataJSONRead) DecodeGeneric(ctx context.Context, raw []byte) (value
 		if err := r.check(ctx); err != nil {
 			return nil, err
 		}
-		if size > metadataWorkBytes {
+		if size > uint64(metadataWorkBytes()) {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(size))

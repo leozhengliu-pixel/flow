@@ -254,7 +254,7 @@ func (s *SQLiteStore) scaleP21SW16FormerMembershipRows(ctx context.Context, tx *
 }
 
 func scaleP21SW16MemberDecodeCost(record MetadataArrayRecord) (int, error) {
-	if record.EncodedBytes < 0 || record.EncodedBytes > (metadataWorkBytes-(128<<10))/8 {
+	if record.EncodedBytes < 0 || record.EncodedBytes > (int64(metadataWorkBytes())-(128<<10))/8 {
 		return 0, ErrMetadataWorkBudget
 	}
 	reader, err := ReplayMetadataReader(record.Reader, record.EncodedBytes)
@@ -286,7 +286,7 @@ func scaleP21SW16MemberDecodeCost(record MetadataArrayRecord) (int, error) {
 			case ':', ',':
 				cost += 128
 			}
-			if cost > metadataWorkBytes {
+			if cost > metadataWorkBytes() {
 				return 0, ErrMetadataWorkBudget
 			}
 		}

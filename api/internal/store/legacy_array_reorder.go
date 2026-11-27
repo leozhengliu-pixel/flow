@@ -313,7 +313,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 	if err := legacyActorWriteNodeWork(ctx, work, row.next, 64); err != nil {
 		return err
 	}
-	next, err := row.next.Value(ctx, metadataWorkBytes)
+	next, err := row.next.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return err
 	}
@@ -326,7 +326,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 		if err := legacyActorWriteNodeWork(ctx, work, row.before, 64); err != nil {
 			return err
 		}
-		old, err := row.before.Value(ctx, metadataWorkBytes)
+		old, err := row.before.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}
@@ -402,7 +402,7 @@ func (p *legacyMetadataWritePlan) writeArrayTransition(ctx context.Context, f *l
 		if err := legacyActorWriteNodeWork(ctx, work, item, 64); err != nil {
 			return err
 		}
-		value, err := item.Value(ctx, metadataWorkBytes)
+		value, err := item.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}

@@ -61,7 +61,7 @@ func (r *ResourceDirectoryRead) RetainSelection(ctx context.Context, size uint64
 	if r == nil || r.owner == nil || r.owner.source == nil {
 		return nil, errMetadataLogicalClosed
 	}
-	if size == 0 || size > metadataWorkBytes {
+	if size == 0 || size > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.owner.store.tryAdmitAdditionalMetadataWork(ctx, int(size))
@@ -516,7 +516,7 @@ func (r *ResourceDirectoryRead) SearchDocument(ctx context.Context, token Resour
 		if key.String() != "Content" {
 			return nil
 		}
-		if child.cost > (metadataWorkBytes-(128<<10))/32 {
+		if child.cost > (uint64(metadataWorkBytes())-(128<<10))/32 {
 			return ErrMetadataWorkBudget
 		}
 		if err := value.owner.reserve(ctx, child.cost*32+128<<10); err != nil {
@@ -697,11 +697,11 @@ func (r *ResourceDirectoryRead) load(ctx context.Context, token ResourceDirector
 
 func (v *ResourceDirectoryValue) copyIDs(ctx context.Context, target *[]string, source []string) error {
 	size := uint64(len(source))*32 + 256
-	if size > metadataWorkBytes {
+	if size > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	for _, id := range source {
-		if uint64(len(id)) > (metadataWorkBytes-size)/8 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-size)/8 {
 			return ErrMetadataWorkBudget
 		}
 		size += uint64(len(id)) * 8

@@ -136,7 +136,7 @@ func (r *WebhookAggregateRead) TeamsAllowed(ctx context.Context, id string, team
 var errWebhookJSONInvalid = errors.New("legacy webhook JSON round trip failed")
 
 func (r *WebhookAggregateRead) admit(ctx context.Context, cost uint64) (func(), error) {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -154,7 +154,7 @@ func (r *WebhookAggregateRead) decoded(ctx context.Context, value webhookJSONVal
 	if value.node.typ == nil {
 		return visit(value.value)
 	}
-	if value.node.cost > (metadataWorkBytes-(64<<10))/24 {
+	if value.node.cost > (uint64(metadataWorkBytes())-(64<<10))/24 {
 		return ErrMetadataWorkBudget
 	}
 	release, err := r.admit(ctx, 64<<10+value.node.cost*24)
@@ -530,7 +530,7 @@ func (r *WebhookAggregateRead) omitted(ctx context.Context, node metadataLogical
 }
 
 func (r *WebhookAggregateRead) native(ctx context.Context, node metadataLogicalNode, visit func(reflect.Value)) error {
-	if node.cost > (metadataWorkBytes-4096)/2 {
+	if node.cost > (uint64(metadataWorkBytes())-4096)/2 {
 		return ErrMetadataWorkBudget
 	}
 	release, err := r.admit(ctx, 4096+node.cost*2)

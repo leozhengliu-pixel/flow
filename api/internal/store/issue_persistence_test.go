@@ -128,7 +128,7 @@ func scaleP21IssueNative(t *testing.T, repo *SQLiteStore, workspace, name string
 	}
 	defer source.Release()
 	index, _, _ := metadataLogicalField(name)
-	value, err := source.fields[index].Value(t.Context(), metadataWorkBytes)
+	value, err := source.fields[index].Value(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

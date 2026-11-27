@@ -104,7 +104,7 @@ func TestScaleP21SW228OwnershipCancellationAndBudgetRecovery(t *testing.T) {
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("native admission refusal leaked")
 	}
-	repo.metadataResidency.work.limit = metadataWorkBytes
+	repo.metadataResidency.work.limit = metadataWorkBytes()
 	for _, target := range []string{"before", "metadataLogicalByteReader).Read"} {
 		t.Run(target, func(t *testing.T) {
 			cancelled, cancel := context.WithCancel(t.Context())
@@ -190,7 +190,7 @@ func TestScaleP21SW228TypedResultExactEncodingPreflight(t *testing.T) {
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("typed result preflight leaked")
 	}
-	repo.metadataResidency.work.limit = metadataWorkBytes
+	repo.metadataResidency.work.limit = metadataWorkBytes()
 }
 
 func TestScaleP21SW228ComparisonCloneReleasedAfterMerge(t *testing.T) {

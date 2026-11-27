@@ -112,7 +112,7 @@ func (r *CommentActionRead) LoadValidationHeaders(ctx context.Context) (err erro
 		validation.Data.TeamSettings = map[string]domain.TeamSettings{}
 	}
 	err = node.MapEntries(ctx, func(key, row metadataLogicalNode) error {
-		if key.cost > (metadataWorkBytes-256)/8 {
+		if key.cost > (uint64(metadataWorkBytes())-256)/8 {
 			return ErrMetadataWorkBudget
 		}
 		cost := key.cost*8 + 256

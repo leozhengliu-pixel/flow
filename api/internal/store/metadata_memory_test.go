@@ -56,13 +56,13 @@ func TestMetadataMemoryWorkConcurrency(t *testing.T) {
 	r := newMetadataResidency()
 	var releases []func()
 	for range 3 {
-		ctx, release, err := r.work.acquire(t.Context(), metadataWorkBytes)
+		ctx, release, err := r.work.acquire(t.Context(), metadataWorkBytes())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer release()
 		releases = append(releases, release)
-		_, nested, err := r.work.acquire(ctx, metadataWorkBytes)
+		_, nested, err := r.work.acquire(ctx, metadataWorkBytes())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -191,7 +191,7 @@ func TestScaleP21SW228GenericOwnershipCancellationAndBudgetRecovery(t *testing.T
 			if repo.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("partial generic allocation retained work after denial")
 			}
-			repo.metadataResidency.work.limit = metadataWorkBytes
+			repo.metadataResidency.work.limit = metadataWorkBytes()
 			read, err = repo.BeginMetadataJSONRead(t.Context())
 			if err != nil {
 				t.Fatal(err)

@@ -308,7 +308,7 @@ func (s *SQLiteStore) loadLoopRunStampInputs(ctx context.Context, source *metada
 	for _, loop := range r.data.Loops {
 		cost -= min(cost, largeRowSharedStrings(reflect.ValueOf(loop)))
 	}
-	if cost > (metadataWorkBytes-(64<<10))/3 {
+	if cost > (uint64(metadataWorkBytes())-(64<<10))/3 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, cost*3+64<<10); err != nil {

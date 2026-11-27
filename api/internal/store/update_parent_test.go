@@ -125,7 +125,7 @@ func scaleP21SW220Run(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, 
 		}
 		measuring = false
 		index, _, _ := metadataLogicalField("projectUpdates")
-		value, err := image.fields[index].Value(ctx, metadataWorkBytes)
+		value, err := image.fields[index].Value(ctx, metadataWorkBytes())
 		if err != nil {
 			image.Release()
 			t.Fatal(err)

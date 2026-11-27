@@ -27,7 +27,7 @@ func (s *SQLiteStore) persistMetadataLogicalInlinePostimage(ctx context.Context,
 		return nil, ErrBoundedMetadataCoverage
 	}
 	var candidate *metadataLogicalSource
-	err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, metadataWorkBytes, func(next domain.Bootstrap) error {
+	err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, uint64(metadataWorkBytes()), func(next domain.Bootstrap) error {
 		var err error
 		candidate, err = metadataLogicalReplaceFields(ctx, source, next, []string{name})
 		return err

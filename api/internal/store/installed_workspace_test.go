@@ -165,7 +165,7 @@ func TestScaleP21SW0InstalledWorkspaceOwnedAdmission(t *testing.T) {
 	if read, _, err := source.BeginInstalledWorkspaceIdentityRead(cancelled, ""); !errors.Is(err, context.Canceled) || read != nil || budget.used != 0 {
 		t.Fatal("cancelled read retained work", err)
 	}
-	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes)
+	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

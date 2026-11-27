@@ -20,7 +20,7 @@ func (p *legacyMetadataWritePlan) headerID(ctx context.Context, work *ResourceRe
 	if err := work.reserve(ctx, node.cost); err != nil {
 		return "", "", false, err
 	}
-	value, err := node.Value(ctx, metadataWorkBytes)
+	value, err := node.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return "", "", false, err
 	}
@@ -90,7 +90,7 @@ func (p *legacyMetadataWritePlan) headerParent(ctx context.Context, node metadat
 	if err := p.work.reserve(ctx, cost+legacyMetadataHeaderLeaseWork()); err != nil {
 		return "", err
 	}
-	key, err := node.Value(ctx, metadataWorkBytes)
+	key, err := node.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return "", err
 	}

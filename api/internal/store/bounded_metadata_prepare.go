@@ -51,6 +51,8 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 		// Admission must still account for every workspace and its viewer.
 		s.workspaces, s.copyRevisions = nil, nil
 		s.metadataResidency = newMetadataResidency()
+		// One operation (and one record) may use the whole work budget.
+		setMetadataOperationWork(s.metadataResidency.work.limit)
 		err := s.loadOrSeed(ctx)
 		if err == nil {
 			applyMetadataMemoryPlan()
@@ -62,6 +64,7 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 		}
 		s.releaseMetadataLogicalSources()
 		s.metadataResidency = nil
+		setMetadataOperationWork(0)
 		boundedAdmissionFailure("startup metadata: bounded workspace admission failed; using legacy reads", err)
 	}
 	return s.loadOrSeed(ctx)

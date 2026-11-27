@@ -196,7 +196,7 @@ func TestScaleP21SW209ProjectUpdateStreamDifferential(t *testing.T) {
 func TestScaleP21SW209StreamCounterIsPayloadLength(t *testing.T) {
 	var counter legacyProjectByteCounter
 	var chunk [metadataRecordChunkBytes]byte
-	wanted := metadataWorkBytes + len(chunk)
+	wanted := metadataWorkBytes() + len(chunk)
 	for counted := 0; counted < wanted; counted += len(chunk) {
 		if _, err := counter.Write(chunk[:]); err != nil {
 			t.Fatal("SQL length counter treated streamed bytes as retained heap", counted, err)

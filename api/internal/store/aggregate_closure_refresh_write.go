@@ -103,7 +103,7 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 			}
 			switch name {
 			case "members":
-				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, metadataWorkBytes, nil); err != nil {
+				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, after, uint64(metadataWorkBytes()), nil); err != nil {
 					return err
 				}
 				return errMetadataAggregateStop
@@ -115,7 +115,7 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 			}
 			if shapes[name] == "" {
 				index, _, _ := metadataLogicalField(name)
-				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, directory.fields[index], metadataWorkBytes, nil); err != nil {
+				if err := s.writeMetadataLogicalInlineField(ctx, tx, workspace, name, before, directory.fields[index], uint64(metadataWorkBytes()), nil); err != nil {
 					return err
 				}
 				return errMetadataAggregateStop
@@ -144,7 +144,7 @@ func (s *SQLiteStore) persistMetadataLogicalRefresh(ctx context.Context, tx *sql
 			key := id
 			parent := ""
 			if updateMetadataField(name) {
-				if parentNode.cost > metadataWorkBytes/8 {
+				if parentNode.cost > uint64(metadataWorkBytes())/8 {
 					return ErrMetadataWorkBudget
 				}
 				_, releaseParent, err := s.tryAdmitAdditionalMetadataWork(ctx, int(parentNode.cost)*8+1024)
@@ -216,7 +216,7 @@ func (s *SQLiteStore) metadataLogicalReferencesChanged(ctx context.Context, fiel
 			return err
 		}
 		required := (old.cost+cost)*8 + 32<<10
-		if required > metadataWorkBytes {
+		if required > uint64(metadataWorkBytes()) {
 			return ErrMetadataWorkBudget
 		}
 		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(required))
@@ -276,11 +276,11 @@ func (s *SQLiteStore) persistMetadataLogicalRefreshRecord(ctx context.Context, t
 		}
 		return err
 	}
-	if size < 0 || size > metadataWorkBytes || before.cost+after.cost > metadataWorkBytes {
+	if size < 0 || size > int64(metadataWorkBytes()) || before.cost+after.cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	required := (before.cost+after.cost+uint64(size))*16 + 128<<10
-	if required > metadataWorkBytes {
+	if required > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(required))

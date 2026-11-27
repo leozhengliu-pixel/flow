@@ -65,7 +65,7 @@ func (w *pulseSummaryWork) inlineCursor(tx *sqlTx, workspace, lock string) ([]by
 	if !exists {
 		return nil, false, nil
 	}
-	if part.size < 0 || uint64(part.size) > (metadataWorkBytes-(64<<10))/32 {
+	if part.size < 0 || uint64(part.size) > (uint64(metadataWorkBytes())-(64<<10))/32 {
 		return nil, false, ErrMetadataWorkBudget
 	}
 	if err := w.reserve(uint64(part.size)*32 + 64<<10); err != nil {

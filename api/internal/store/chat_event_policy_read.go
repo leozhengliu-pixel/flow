@@ -62,7 +62,7 @@ func (s *SQLiteStore) BeginChatEventPolicyRead(ctx context.Context, workspace st
 			r.Close()
 		}
 	}()
-	if len(request.TemplateIDs) > metadataWorkBytes/256 {
+	if len(request.TemplateIDs) > metadataWorkBytes()/256 {
 		return nil, true, ErrMetadataWorkBudget
 	}
 	if err = r.owner.reserve(ctx, 64<<10+uint64(len(request.TemplateIDs))*256); err != nil {

@@ -407,7 +407,7 @@ func (s *SQLiteStore) issueCreateFamilyIDs(ctx context.Context, tx *sqlTx, works
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(size),0) FROM (`+query+`) AS selected`, workspace, parent).Scan(&count, &size); err != nil {
 		return nil, err
 	}
-	if count < 0 || count > 1001 || size < 0 || uint64(size) > (metadataWorkBytes-4096)/8 {
+	if count < 0 || count > 1001 || size < 0 || uint64(size) > (uint64(metadataWorkBytes())-4096)/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(size)*8+uint64(count)*512+4096); err != nil {

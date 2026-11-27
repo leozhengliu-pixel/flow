@@ -248,7 +248,7 @@ func (s *SQLiteStore) workspaceStateBytesBounded(ctx context.Context, workspace 
 		}
 		total, count := 2, 0
 		err = node.Children(ctx, func(_ reflect.Value, record metadataLogicalNode) error {
-			cost := int(min(record.cost, uint64(metadataWorkBytes)))
+			cost := int(min(record.cost, uint64(metadataWorkBytes())))
 			recordCtx, release, err := s.admitMetadataWork(ctx, max(cost, 64<<10))
 			if err != nil {
 				return err

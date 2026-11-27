@@ -40,7 +40,7 @@ func (s *SQLiteStore) persistLegacyResourceCounts(ctx context.Context, tx *sqlTx
 	ctx = metadataLogicalSourceScratchContext(metadataLogicalUnpinnedContext(ctx), after)
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(256<<10))/16 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(256<<10))/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(len(workspace))*16+256<<10); err != nil {
@@ -226,7 +226,7 @@ func (f *legacyCountWriteField) readHeaders(ctx context.Context, work *ResourceR
 		if !equal {
 			return ErrMetadataRecordQuery
 		}
-		if cost > metadataWorkBytes-8192 || id.cost > (metadataWorkBytes-cost-8192)/64 {
+		if cost > uint64(metadataWorkBytes())-8192 || id.cost > (uint64(metadataWorkBytes())-cost-8192)/64 {
 			return ErrMetadataWorkBudget
 		}
 		cost += id.cost*64 + 8192
@@ -245,7 +245,7 @@ func (f *legacyCountWriteField) readHeaders(ctx context.Context, work *ResourceR
 		if err != nil {
 			return err
 		}
-		value, err := id.Value(ctx, metadataWorkBytes)
+		value, err := id.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}
@@ -318,11 +318,11 @@ func (s *SQLiteStore) legacyCountWriteRebasePart(ctx context.Context, tx *sqlTx,
 			return err
 		}
 	}
-	left, err := leftNode.Value(ctx, metadataWorkBytes)
+	left, err := leftNode.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return err
 	}
-	right, err := rightNode.Value(ctx, metadataWorkBytes)
+	right, err := rightNode.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (s *SQLiteStore) legacyCountWriteRebasePart(ctx context.Context, tx *sqlTx,
 		left, right = left.Index(0), right.Index(0)
 		id := right.FieldByName("ID").String()
 		if id != field.headers[ordinal].id {
-			if uint64(len(id)) > (metadataWorkBytes-8192)/64 {
+			if uint64(len(id)) > (uint64(metadataWorkBytes())-8192)/64 {
 				return ErrMetadataWorkBudget
 			}
 			if err := headers.reserve(ctx, uint64(len(id))*64+8192); err != nil {
@@ -437,7 +437,7 @@ func legacyCountWriteDirectory(ctx context.Context, work *ResourceRead, director
 				if err := legacyActorWriteNodeWork(ctx, work, node, 64); err != nil {
 					return nil, err
 				}
-				value, err := node.Value(ctx, metadataWorkBytes)
+				value, err := node.Value(ctx, metadataWorkBytes())
 				if err != nil {
 					return nil, err
 				}
@@ -460,11 +460,11 @@ func (s *SQLiteStore) legacyCountWriteReplay(ctx context.Context, tx *sqlTx, wor
 				}
 			}
 			var err error
-			left, err = field.before.Value(ctx, metadataWorkBytes)
+			left, err = field.before.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}
-			right, err = field.next.Value(ctx, metadataWorkBytes)
+			right, err = field.next.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}
@@ -481,11 +481,11 @@ func (s *SQLiteStore) legacyCountWriteReplay(ctx context.Context, tx *sqlTx, wor
 							return err
 						}
 					}
-					old, err := header.before.Value(ctx, metadataWorkBytes)
+					old, err := header.before.Value(ctx, metadataWorkBytes())
 					if err != nil {
 						return err
 					}
-					next, err := header.next.Value(ctx, metadataWorkBytes)
+					next, err := header.next.Value(ctx, metadataWorkBytes())
 					if err != nil {
 						return err
 					}
@@ -552,7 +552,7 @@ func (s *SQLiteStore) legacyCountWriteRoot(ctx context.Context, tx *sqlTx, works
 	if err := tx.QueryRowContext(ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (metadataWorkBytes-(64<<10))/128 {
+	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (uint64(metadataWorkBytes())-(64<<10))/128 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(size)*128+64<<10); err != nil {

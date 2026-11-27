@@ -131,7 +131,7 @@ func (s *SQLiteStore) readScopedMetadataResult(ctx context.Context, workspace st
 			return domain.Bootstrap{}, costErr
 		}
 		encodingWork := cost*8 + 64<<10
-		if encodingWork > metadataWorkBytes {
+		if encodingWork > uint64(metadataWorkBytes()) {
 			return domain.Bootstrap{}, ErrMetadataPageBudget
 		}
 		if encodingWork > 2<<20 {

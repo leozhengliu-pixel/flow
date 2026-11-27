@@ -19,7 +19,7 @@ const (
 )
 
 // errIssueMutationRowTooLarge: a stored issue row is larger than one point
-// read admits (metadataWorkBytes/16). Every caller sees ErrMetadataWorkBudget
+// read admits (metadataWorkBytes()/16). Every caller sees ErrMetadataWorkBudget
 // (same message, errors.Is matches); a writer with a full-image fallback can
 // tell this per-row refusal apart from budget pressure.
 var errIssueMutationRowTooLarge = fmt.Errorf("%w", ErrMetadataWorkBudget)
@@ -89,12 +89,12 @@ func (r *issueMutationRows) load(ctx context.Context, ids []string, lock bool) (
 	}
 	recordBytes := uint64(reflect.TypeFor[storedIssueRecord]().Size())*4 + 1024
 	cost := uint64(64<<10) + uint64(len(ids))*recordBytes
-	if cost > metadataWorkBytes || uint64(len(r.workspace)) > (metadataWorkBytes-cost)/8 {
+	if cost > uint64(metadataWorkBytes()) || uint64(len(r.workspace)) > (uint64(metadataWorkBytes())-cost)/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	cost += uint64(len(r.workspace)) * 8
 	for _, id := range ids {
-		if cost > metadataWorkBytes || uint64(len(id)) > (metadataWorkBytes-cost)/8 {
+		if cost > uint64(metadataWorkBytes()) || uint64(len(id)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += uint64(len(id)) * 8
@@ -153,7 +153,7 @@ func (r *issueMutationRows) headers(ctx context.Context, ids []string, lock bool
 	}
 	keySlots := uint64(len(ids)) * 8
 	cost := uint64(64<<10) + uint64(len(ids))*512
-	if uint64(maximum.Int64) > (metadataWorkBytes-cost)/keySlots {
+	if uint64(maximum.Int64) > (uint64(metadataWorkBytes())-cost)/keySlots {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, cost+uint64(maximum.Int64)*keySlots); err != nil {
@@ -182,7 +182,7 @@ func (r *issueMutationRows) headers(ctx context.Context, ids []string, lock bool
 			rows.Close()
 			return nil, io.ErrUnexpectedEOF
 		}
-		if size.Int64 > metadataWorkBytes/16 {
+		if size.Int64 > int64(metadataWorkBytes())/16 {
 			rows.Close()
 			return nil, errIssueMutationRowTooLarge
 		}
@@ -199,7 +199,7 @@ func (r *issueMutationRows) headers(ctx context.Context, ids []string, lock bool
 }
 
 func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutationRowHeader, size int64, result map[string]storedIssueRecord) error {
-	if len(headers) == 0 || len(headers) > issueMutationRowsBatchSize || size < 0 || uint64(size) > (metadataWorkBytes-(64<<10)-uint64(len(headers))*512)/3 {
+	if len(headers) == 0 || len(headers) > issueMutationRowsBatchSize || size < 0 || uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(len(headers))*512)/3 {
 		return ErrMetadataWorkBudget
 	}
 	// SQL guards every payload by its own captured size. This allowance covers
@@ -275,7 +275,7 @@ func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutatio
 				return err
 			}
 			fixed := uint64(reflect.TypeFor[storedIssueRecord]().Size())*2 + 4096
-			if work > metadataWorkBytes-fixed {
+			if work > uint64(metadataWorkBytes())-fixed {
 				return ErrMetadataWorkBudget
 			}
 			decodeScratch := &ResourceRead{store: r.owner.store}
@@ -294,7 +294,7 @@ func (r *issueMutationRows) payloads(ctx context.Context, headers []issueMutatio
 			}
 			normalizeIssueRecord(&record.issue)
 			native, nativeErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(record.issue), 0)
-			if nativeErr == nil && native <= metadataWorkBytes-fixed {
+			if nativeErr == nil && native <= uint64(metadataWorkBytes())-fixed {
 				nativeErr = r.owner.reserve(ctx, native+fixed)
 			} else if nativeErr == nil {
 				nativeErr = ErrMetadataWorkBudget

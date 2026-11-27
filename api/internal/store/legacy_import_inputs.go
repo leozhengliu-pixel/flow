@@ -47,7 +47,7 @@ func (s *SQLiteStore) prepareLegacyImportImage(ctx context.Context, workspace st
 func (s *SQLiteStore) prepareLegacyImportKind(ctx context.Context, workspace string, source *metadataLogicalSource, field, kind, payload string) (_ *metadataLogicalSource, err error) {
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(1<<20))/16 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(1<<20))/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(len(workspace))*16+1<<20); err != nil {
@@ -85,7 +85,7 @@ func (s *SQLiteStore) prepareLegacyImportKind(ctx context.Context, workspace str
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+keyLength+"),0),COALESCE(MAX("+bodyLength+"),0) FROM workspace_content_records WHERE workspace_key=? AND kind=?", workspace, kind).Scan(&maxKey, &maxBody); err != nil {
 		return nil, err
 	}
-	if maxKey < 0 || maxBody < 0 || maxKey > metadataWorkBytes/8 || maxBody > metadataWorkBytes/16 {
+	if maxKey < 0 || maxBody < 0 || maxKey > int64(metadataWorkBytes())/8 || maxBody > int64(metadataWorkBytes())/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(maxKey)*8+uint64(maxBody)*3+128<<10); err != nil {
@@ -168,7 +168,7 @@ func (n legacyImportJobsImage) nodeChildren(ctx context.Context, visit func(refl
 		if err != nil {
 			return err
 		}
-		if offset < 0 || size < 16 || cost < 0 || cost > metadataWorkBytes || size > n.frames.offset || offset > n.frames.offset-size {
+		if offset < 0 || size < 16 || cost < 0 || cost > int64(metadataWorkBytes()) || size > n.frames.offset || offset > n.frames.offset-size {
 			return ErrMetadataRecordQuery
 		}
 		input := metadataLogicalNode{source: n.frames.storage, offset: offset, size: size, cost: uint64(cost), typ: reflect.TypeFor[importInput]()}
@@ -213,7 +213,7 @@ func (s *SQLiteStore) persistLegacyImportInputs(ctx context.Context, tx *sqlTx, 
 	ctx = metadataLogicalSourceScratchContext(metadataLogicalUnpinnedContext(ctx), source)
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(1<<20))/16 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(1<<20))/16 {
 		return ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(len(workspace))*16+1<<20); err != nil {
@@ -324,7 +324,7 @@ func (s *SQLiteStore) persistLegacyImportInput(ctx context.Context, tx *sqlTx, w
 	if err != nil {
 		return err
 	}
-	if uint64(cost) > (metadataWorkBytes-(64<<10))/4 {
+	if uint64(cost) > (uint64(metadataWorkBytes())-(64<<10))/4 {
 		return ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(cost)*4+64<<10); err != nil {
@@ -359,7 +359,7 @@ func readLegacyContentBefore(ctx context.Context, tx *sqlTx, workspace, kind, re
 	}
 	// Driver bytes and the returned copy are admitted before transfer. The
 	// proven structural counter then admits parsing before the writer uses it.
-	if size < 0 || size > metadataWorkBytes/8 {
+	if size < 0 || size > int64(metadataWorkBytes())/8 {
 		return nil, 0, release, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(size)*4+64<<10); err != nil {
@@ -376,7 +376,7 @@ func readLegacyContentBefore(ctx context.Context, tx *sqlTx, workspace, kind, re
 		return nil, 0, release, ErrMetadataRecordQuery
 	}
 	if actual.Int64 > size {
-		if actual.Int64 > metadataWorkBytes/8 {
+		if actual.Int64 > int64(metadataWorkBytes())/8 {
 			return nil, 0, release, ErrMetadataWorkBudget
 		}
 		return nil, 0, release, ErrConcurrentWrite
@@ -406,7 +406,7 @@ func (s *SQLiteStore) pruneLegacyImportInputs(ctx context.Context, tx *sqlTx, wo
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0)"+where, workspace).Scan(&maximum); err != nil {
 		return err
 	}
-	if maximum < 0 || maximum > metadataWorkBytes/32 {
+	if maximum < 0 || maximum > int64(metadataWorkBytes())/32 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maximum)*3+64<<10); err != nil {
@@ -434,7 +434,7 @@ func (s *SQLiteStore) pruneLegacyImportInputs(ctx context.Context, tx *sqlTx, wo
 				}
 				if !kindSize.Valid || !idSize.Valid || kindSize.Int64 < 0 || kindSize.Int64 > 32 || idSize.Int64 < 0 ||
 					!kind.Valid || !id.Valid || idSize.Int64 > maximum || int64(len(id.String)) != idSize.Int64 {
-					if idSize.Valid && idSize.Int64 > maximum && idSize.Int64 <= metadataWorkBytes/32 {
+					if idSize.Valid && idSize.Int64 > maximum && idSize.Int64 <= int64(metadataWorkBytes())/32 {
 						return ErrConcurrentWrite
 					}
 					return ErrMetadataWorkBudget

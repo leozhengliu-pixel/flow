@@ -329,7 +329,7 @@ func TestScaleP21SW61DiscussionInputsOwnership(t *testing.T) {
 		ctx, workspace, want := t.Context(), "physical", error(ErrMetadataWorkBudget)
 		view.metadataResidency.work.limit = held - 1
 		if mode != "quota" {
-			view.metadataResidency.work.limit = metadataWorkBytes
+			view.metadataResidency.work.limit = metadataWorkBytes()
 		}
 		if mode == "canceled" {
 			var cancel context.CancelFunc

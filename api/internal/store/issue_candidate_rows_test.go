@@ -229,7 +229,7 @@ func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
 	}
 	view.metadataResidency.work.limit = baseline + 1
 	err = view.SearchIssueCandidateTerms(source.Context(t.Context()), IssueRecordQuery{Workspace: workspace}, []string{"Needle"}, nil, 100, func(domain.Issue) error { t.Fatal("exhausted visitor"); return nil })
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	if !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != baseline {
 		t.Fatalf("exhausted query retained work: err=%v work=%d", err, view.MetadataWorkUsedForTesting())
 	}

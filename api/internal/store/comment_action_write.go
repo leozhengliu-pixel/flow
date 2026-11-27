@@ -516,7 +516,7 @@ func (s *SQLiteStore) mutateBoundedCommentActionProposal(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
-		if inputCost > metadataWorkBytes/3 {
+		if inputCost > uint64(metadataWorkBytes())/3 {
 			return ErrMetadataWorkBudget
 		}
 		if err := attempt.owner.reserve(ctx, inputCost*3); err != nil {

@@ -527,7 +527,7 @@ func (s *SQLiteStore) canonicalProjectDirectoryQueryOwned(ctx context.Context, q
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0) FROM "+table+" WHERE workspace_key=? AND field='projects'", query.Workspace).Scan(&maxKey); err != nil {
 		return nil, err
 	}
-	if maxKey < 0 || maxKey > (metadataWorkBytes-4096)/16 {
+	if maxKey < 0 || maxKey > (int64(metadataWorkBytes())-4096)/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	width := min(50, max(1, int((256<<10)/(uint64(maxKey)*16+512))))

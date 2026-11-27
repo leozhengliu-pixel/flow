@@ -424,7 +424,7 @@ func (r *ApplicationTaskContextRead) rawIssueInputs(ctx context.Context, physica
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(`+idLength+`),0) FROM issue_records WHERE workspace_key=?`, workspace).Scan(&count, &size); err != nil {
 		return err
 	}
-	if count < 0 || size < 0 || count > metadataWorkBytes/256 || size > metadataWorkBytes/16 || count*256+size*16 > metadataWorkBytes-(8<<20) {
+	if count < 0 || size < 0 || count > int64(metadataWorkBytes())/256 || size > int64(metadataWorkBytes())/16 || count*256+size*16 > int64(metadataWorkBytes())-(8<<20) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := store.tryAdmitAdditionalMetadataWork(ctx, int(count*256+size*16)+(8<<20))
@@ -611,7 +611,7 @@ func (p taskIssueJSON) first(part metadataCollectionRange) (byte, error) {
 }
 
 func (p taskIssueJSON) scalar(part metadataCollectionRange, target any, retained bool) error {
-	if part.size < 0 || part.size > (metadataWorkBytes-4096)/16 {
+	if part.size < 0 || part.size > (int64(metadataWorkBytes())-4096)/16 {
 		return ErrMetadataWorkBudget
 	}
 	cost := uint64(part.size)*16 + 4096

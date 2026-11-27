@@ -87,7 +87,7 @@ func (s *SQLiteStore) persistLegacyMetadataImagePlan(ctx context.Context, tx *sq
 	ctx = metadataLogicalSourceScratchContext(metadataLogicalUnpinnedContext(ctx), target)
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(256<<10))/16 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(256<<10))/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(len(workspace))*16+256<<10); err != nil {
@@ -962,11 +962,11 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 			return err
 		}
 	}
-	left, err := row.before.Value(ctx, metadataWorkBytes)
+	left, err := row.before.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return err
 	}
-	right, err := row.next.Value(ctx, metadataWorkBytes)
+	right, err := row.next.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return err
 	}
@@ -1045,7 +1045,7 @@ func (p *legacyMetadataWritePlan) rebaseRow(ctx context.Context, f *legacyMetada
 	}
 	id := actualRight.FieldByName("ID").String()
 	if id != row.id {
-		if uint64(len(id)) > (metadataWorkBytes-8192)/64 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-8192)/64 {
 			return ErrMetadataWorkBudget
 		}
 		if err := p.work.reserve(ctx, uint64(len(id))*64+8192); err != nil {
@@ -1295,7 +1295,7 @@ func (p *legacyMetadataWritePlan) references(ctx context.Context, directory *met
 		if err := legacyActorWriteNodeWork(ctx, work, node, 64); err != nil {
 			return issueReferences{}, err
 		}
-		value, err := node.Value(ctx, metadataWorkBytes)
+		value, err := node.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return issueReferences{}, err
 		}
@@ -1341,18 +1341,18 @@ func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legac
 	for _, node := range []metadataLogicalNode{left, right} {
 		// Native decoding and the rebaser's shallow container copies stay
 		// live. JSON encoding work is measured from the decoded values below.
-		if node.cost > (metadataWorkBytes-(64<<10))/2 {
+		if node.cost > (uint64(metadataWorkBytes())-(64<<10))/2 {
 			return reflect.Value{}, reflect.Value{}, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, node.cost*2+64<<10); err != nil {
 			return reflect.Value{}, reflect.Value{}, err
 		}
 	}
-	a, err := left.Value(ctx, metadataWorkBytes)
+	a, err := left.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return reflect.Value{}, reflect.Value{}, err
 	}
-	b, err := right.Value(ctx, metadataWorkBytes)
+	b, err := right.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return reflect.Value{}, reflect.Value{}, err
 	}
@@ -1363,7 +1363,7 @@ func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legac
 		}
 		// The slow writer keeps both marshal results and split raw JSON,
 		// while rebasing may encode a before/after record pair.
-		if encoding > (metadataWorkBytes-(64<<10))/2 {
+		if encoding > (metadataWorkBytes()-(64<<10))/2 {
 			return reflect.Value{}, reflect.Value{}, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, uint64(encoding)*2+64<<10); err != nil {
@@ -1405,7 +1405,7 @@ func (p *legacyMetadataWritePlan) rootShapes(ctx context.Context) (map[string]st
 		}
 		return root.shapes()
 	}
-	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (metadataWorkBytes-(64<<10))/128 {
+	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (uint64(metadataWorkBytes())-(64<<10))/128 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := p.work.reserve(ctx, uint64(size)*128+64<<10); err != nil {
@@ -1597,7 +1597,7 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 		if err := legacyActorWriteNodeWork(ctx, work, row.next, 64); err != nil {
 			return err
 		}
-		next, err := row.next.Value(ctx, metadataWorkBytes)
+		next, err := row.next.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}
@@ -1610,7 +1610,7 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 			if err := legacyActorWriteNodeWork(ctx, work, row.before, 64); err != nil {
 				return err
 			}
-			old, err := row.before.Value(ctx, metadataWorkBytes)
+			old, err := row.before.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}
@@ -1702,11 +1702,11 @@ func (p *legacyMetadataWritePlan) writeUpdates(ctx context.Context, f *legacyMet
 						}
 					}
 				}
-				old, err := row.before.Value(ctx, metadataWorkBytes)
+				old, err := row.before.Value(ctx, metadataWorkBytes())
 				if err != nil {
 					return err
 				}
-				next, err := row.next.Value(ctx, metadataWorkBytes)
+				next, err := row.next.Value(ctx, metadataWorkBytes())
 				if err != nil {
 					return err
 				}

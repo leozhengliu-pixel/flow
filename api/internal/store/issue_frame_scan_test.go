@@ -177,7 +177,7 @@ func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 	if err != nil || count != len(oracle) || bodyQueries != 0 || batchQueries != expectedBatches || wholeQueries != 0 {
 		t.Fatal("small-row page batching changed or payloads were reread", err, count, len(oracle), bodyQueries, batchQueries, expectedBatches, wholeQueries)
 	}
-	if _, err := borrowed.Value(t.Context(), metadataWorkBytes); !errors.Is(err, errMetadataLogicalClosed) {
+	if _, err := borrowed.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, errMetadataLogicalClosed) {
 		t.Fatal("row frame escaped its borrowed callback lifetime", err)
 	}
 	if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 ||

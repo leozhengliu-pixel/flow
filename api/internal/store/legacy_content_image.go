@@ -23,7 +23,7 @@ func (s *SQLiteStore) prepareLegacyContentImage(ctx context.Context, tx *sqlTx, 
 	ctx = metadataLogicalSourceScratchContext(metadataLogicalUnpinnedContext(ctx), source)
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(1<<20))/8 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(1<<20))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	// Fixed work covers the stage's bounded cache and at most four prepared
@@ -210,7 +210,7 @@ func (n legacyContentImageNode) withCursor(ctx context.Context, visit func(*lega
 	if err := n.tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+keyLength+"),0),COALESCE(MAX("+bodyLength+"),0) FROM workspace_content_records WHERE workspace_key=? AND kind=?", n.workspace, n.kind).Scan(&maxKey, &maxBody); err != nil {
 		return err
 	}
-	if maxKey < 0 || maxBody < 0 || maxKey > metadataWorkBytes/8 || maxBody > metadataWorkBytes/16 {
+	if maxKey < 0 || maxBody < 0 || maxKey > int64(metadataWorkBytes())/8 || maxBody > int64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	cost := uint64(maxKey)*8 + uint64(maxBody)*3 + 128<<10
@@ -276,7 +276,7 @@ func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26Migrat
 		if err := n.tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+idLength+"),0) FROM workspace_content_records WHERE workspace_key=? AND kind=?", n.workspace, n.kind).Scan(&maxID); err != nil {
 			return err
 		}
-		if maxID < 0 || uint64(maxID) > (metadataWorkBytes-(64<<10))/8 {
+		if maxID < 0 || uint64(maxID) > (uint64(metadataWorkBytes())-(64<<10))/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := physical.reserve(ctx, uint64(maxID)*8+64<<10); err != nil {
@@ -361,7 +361,7 @@ func (c *legacyContentImageCursor) next() error {
 		return err
 	}
 	if !keySize.Valid || !resource.Valid || keySize.Int64 < 0 || keySize.Int64 > c.maxKey || int64(len(resource.String)) != keySize.Int64 ||
-		offset < 0 || size < 16 || cost < 0 || cost > metadataWorkBytes || size > c.frames.offset || offset > c.frames.offset-size {
+		offset < 0 || size < 16 || cost < 0 || cost > int64(metadataWorkBytes()) || size > c.frames.offset || offset > c.frames.offset-size {
 		return io.ErrUnexpectedEOF
 	}
 	c.frame = metadataLogicalNode{source: c.frames.storage, offset: offset, size: size, cost: uint64(cost), typ: c.typ}
@@ -377,7 +377,7 @@ func legacyContentImageFrame(ctx context.Context, store *SQLiteStore, frames *me
 		return metadataLogicalNode{}, err
 	}
 	fixed := uint64(typ.Size())*4 + 4096
-	if fixed > metadataWorkBytes || jsonWork > metadataWorkBytes-fixed {
+	if fixed > uint64(metadataWorkBytes()) || jsonWork > uint64(metadataWorkBytes())-fixed {
 		return metadataLogicalNode{}, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, jsonWork+fixed); err != nil {
@@ -392,7 +392,7 @@ func legacyContentImageFrame(ctx context.Context, store *SQLiteStore, frames *me
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}
-	if nativeWork > (metadataWorkBytes-(64<<10))/2 {
+	if nativeWork > (uint64(metadataWorkBytes())-(64<<10))/2 {
 		return metadataLogicalNode{}, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, nativeWork*2+64<<10); err != nil {

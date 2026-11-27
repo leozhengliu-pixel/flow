@@ -242,7 +242,7 @@ func TestScaleP21SW30LogicalNormalizationDifferential(t *testing.T) {
 					return nil
 				}
 				index, _, _ := metadataLogicalField(name)
-				value, err := node.Value(t.Context(), metadataWorkBytes)
+				value, err := node.Value(t.Context(), metadataWorkBytes())
 				if err == nil {
 					out.Field(index).Set(value)
 				}

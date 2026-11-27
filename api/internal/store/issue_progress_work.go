@@ -29,7 +29,7 @@ func (r *issueHotInputs) progressProjects(ctx context.Context, before, after []d
 	if count == 0 {
 		return nil, ctx.Err()
 	}
-	if count > (metadataWorkBytes-4096)/perIssue {
+	if count > (uint64(metadataWorkBytes())-4096)/perIssue {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.reserve(ctx, count*perIssue+4096); err != nil {
@@ -116,8 +116,8 @@ func (w *issueProgressWork) admitRows(ctx context.Context, reader progressReader
 	if err != nil {
 		return err
 	}
-	if count < 0 || bytes < 0 || uint64(count) > metadataWorkBytes/2048 ||
-		uint64(bytes) > (metadataWorkBytes-uint64(count)*2048)/8 {
+	if count < 0 || bytes < 0 || uint64(count) > uint64(metadataWorkBytes())/2048 ||
+		uint64(bytes) > (uint64(metadataWorkBytes())-uint64(count)*2048)/8 {
 		return ErrMetadataWorkBudget
 	}
 	return w.inputs.reserve(ctx, uint64(count)*2048+uint64(bytes)*8+4096)
@@ -224,7 +224,7 @@ func (w *issueProgressWork) admitGrid(ctx context.Context, start, now time.Time)
 	pointBytes := uint64(reflect.TypeFor[domain.ProjectProgressHistoryPoint]().Size())
 	// Five output series, previous/current copies and growth while rebuilding.
 	perPoint := pointBytes*5*4 + uint64(reflect.TypeFor[time.Time]().Size())*4
-	if points > (metadataWorkBytes-4096)/perPoint {
+	if points > (uint64(metadataWorkBytes())-4096)/perPoint {
 		return ErrMetadataWorkBudget
 	}
 	return w.inputs.reserve(ctx, points*perPoint+4096)

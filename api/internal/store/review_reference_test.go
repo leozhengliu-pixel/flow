@@ -164,7 +164,7 @@ func TestScaleP21HotReviewReferenceRegistryAndAdmission(t *testing.T) {
 	if got, err := source.InstalledReviewReferenceVisible(cancelled, "", "default-review", IssueRecordQuery{}); err != nil || !got {
 		t.Fatal("contextless unlinked-review decision changed after cancellation", got, err)
 	}
-	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes)
+	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

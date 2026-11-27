@@ -757,7 +757,7 @@ func TestLegacyRecordBaseReadsBorrowedIssueFrames(t *testing.T) {
 	if err != nil || len(headers) != 1 || headers[0].id != issue.ID {
 		t.Fatal("staged issue frame refused", len(headers), err)
 	}
-	value, err := headers[0].node.Value(ctx, metadataWorkBytes)
+	value, err := headers[0].node.Value(ctx, metadataWorkBytes())
 	if err != nil || !reflect.DeepEqual(value.Interface(), issue) {
 		t.Fatal("staged issue frame did not decode to the original issue", err)
 	}

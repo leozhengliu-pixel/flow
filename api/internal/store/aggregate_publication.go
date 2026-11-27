@@ -68,7 +68,7 @@ func (s *SQLiteStore) prepareMetadataAggregateOutputs(
 		}
 	}()
 	admit := func(size uint64) (func(), error) {
-		if size > metadataWorkBytes {
+		if size > uint64(metadataWorkBytes()) {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size))
@@ -158,7 +158,7 @@ func (s *SQLiteStore) metadataAggregateNormalizeOwned(ctx context.Context, node 
 	}
 	defer releaseRaw()
 	value, release, err := boundedcrdt.DecodeJSON(ctx, func(size uint64) (func(), error) {
-		if size > metadataWorkBytes {
+		if size > uint64(metadataWorkBytes()) {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size))
@@ -250,7 +250,7 @@ func (s *SQLiteStore) metadataAggregateEncodeOwned(ctx context.Context, node met
 		return raw, release, nil
 	}
 	spool := output.spool
-	if spool.bytes < 0 || spool.bytes > metadataWorkBytes {
+	if spool.bytes < 0 || spool.bytes > int64(metadataWorkBytes()) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	// Go's large byte allocations round to 8 KiB pages. Rounding every byte
@@ -383,7 +383,7 @@ func metadataAggregatePartialPayloadObject(ctx context.Context, admit boundedcrd
 }
 
 func newMetadataAggregateShallowMap(admit boundedcrdt.Admission, entries, extra int) (map[string]any, func(), error) {
-	size, err := boundedMetadataSize((metadataWorkBytes-1024)/512, entries, extra)
+	size, err := boundedMetadataSize((metadataWorkBytes()-1024)/512, entries, extra)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -400,7 +400,7 @@ func newMetadataAggregateShallowMap(admit boundedcrdt.Admission, entries, extra 
 // copy. The shallow/common path continues to stream directly into its spool.
 func (s *SQLiteStore) metadataAggregateEncodeNormalizedOwned(ctx context.Context, value any) (json.RawMessage, func(), error) {
 	work, err := beginMetadataAggregateTraversal(ctx, func(bytes uint64) (func(), error) {
-		if bytes > metadataWorkBytes {
+		if bytes > uint64(metadataWorkBytes()) {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(bytes))
@@ -428,7 +428,7 @@ func (s *SQLiteStore) metadataAggregateEncodeNormalizedOwned(ctx context.Context
 		return nil, nil, err
 	}
 	width := (size + 8191) &^ uint64(8191)
-	if width > metadataWorkBytes/6 || entries > (metadataWorkBytes-width*6)/64 {
+	if width > uint64(metadataWorkBytes())/6 || entries > (uint64(metadataWorkBytes())-width*6)/64 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	_, retain, err := s.tryAdmitAdditionalMetadataWork(ctx, int(width+64))
@@ -465,7 +465,7 @@ func metadataAggregateNormalizedSize(ctx context.Context, value any, work *metad
 	}
 	defer work.leave()
 	add := func(part uint64) error {
-		if part > metadataWorkBytes || size > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || size > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		size += part

@@ -294,12 +294,12 @@ func (cycleScheduleImageProfile) reserveCallback(ctx context.Context, owner *Res
 			wanted = 2
 		}
 		unit := uint64(reflect.TypeFor[domain.Cycle]().Size())*8 + 8192
-		if uint64(len(team.ID)) > (metadataWorkBytes-unit)/16 {
+		if uint64(len(team.ID)) > (uint64(metadataWorkBytes())-unit)/16 {
 			return ErrMetadataWorkBudget
 		}
 		unit += uint64(len(team.ID)) * 16
 		count := uint64(wanted) + 1 + uint64(len(data.Teams))
-		if count >= metadataWorkBytes/unit {
+		if count >= uint64(metadataWorkBytes())/unit {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, count*unit); err != nil {
@@ -312,7 +312,7 @@ func (cycleScheduleImageProfile) reserveCallback(ctx context.Context, owner *Res
 	// Appending may replace the existing header backing array. Strings are
 	// shared; charge the copied native slots rather than encoding cycle bodies.
 	cycleUnit := uint64(reflect.TypeFor[domain.Cycle]().Size()) * 2
-	if uint64(len(data.Cycles)) > (metadataWorkBytes-128)/cycleUnit {
+	if uint64(len(data.Cycles)) > (uint64(metadataWorkBytes())-128)/cycleUnit {
 		return ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(len(data.Cycles))*cycleUnit+128); err != nil {
@@ -327,7 +327,7 @@ func (cycleScheduleImageProfile) reserveCallback(ctx context.Context, owner *Res
 		events := data.Activities[issue.ID]
 		slots := uint64(len(events)) + transitions
 		eventSize := uint64(reflect.TypeFor[domain.ActivityEvent]().Size()) * 2
-		if slots > (metadataWorkBytes-unit)/eventSize {
+		if slots > (uint64(metadataWorkBytes())-unit)/eventSize {
 			return ErrMetadataWorkBudget
 		}
 		unit += slots * eventSize
@@ -336,22 +336,22 @@ func (cycleScheduleImageProfile) reserveCallback(ctx context.Context, owner *Res
 			metadataEntries = max(metadataEntries, uint64(len(event.Metadata))+2)
 			hashBytes = max(hashBytes, uint64(len(event.Metadata["descriptionBefore"])))
 		}
-		if metadataEntries > (metadataWorkBytes-unit)/1024 {
+		if metadataEntries > (uint64(metadataWorkBytes())-unit)/1024 {
 			return ErrMetadataWorkBudget
 		}
 		unit += metadataEntries * 1024
-		if uint64(len(issue.ID)) > (metadataWorkBytes-unit)/16 {
+		if uint64(len(issue.ID)) > (uint64(metadataWorkBytes())-unit)/16 {
 			return ErrMetadataWorkBudget
 		}
 		unit += uint64(len(issue.ID)) * 16
-		if transitions > metadataWorkBytes/unit {
+		if transitions > uint64(metadataWorkBytes())/unit {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, unit*transitions); err != nil {
 			return err
 		}
 	}
-	if hashBytes > metadataWorkBytes-256 {
+	if hashBytes > uint64(metadataWorkBytes())-256 {
 		return ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, hashBytes+256); err != nil {
@@ -372,7 +372,7 @@ func (cycleScheduleImageProfile) image(ctx context.Context, owner *ResourceRead,
 		}
 		return source, nil
 	}
-	if uint64(len(after.Cycles)) > (metadataWorkBytes-4096)/512 {
+	if uint64(len(after.Cycles)) > (uint64(metadataWorkBytes())-4096)/512 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(len(after.Cycles))*512+4096); err != nil {
@@ -438,7 +438,7 @@ func (cycleScheduleImageProfile) image(ctx context.Context, owner *ResourceRead,
 		if err != nil {
 			return nil, err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, cost*8+4096); err != nil {

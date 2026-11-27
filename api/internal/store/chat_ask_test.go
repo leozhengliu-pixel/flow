@@ -283,7 +283,7 @@ func TestScaleP21SW197ChatAskCancellationAndBudget(t *testing.T) {
 	if err := view.CreateChatRequestAsk(cancelled, f.data.Workspace.URLKey, input, callback); !errors.Is(err, context.Canceled) {
 		t.Fatal("Ask ignored cancellation", err)
 	}
-	_, release, err := view.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes)
+	_, release, err := view.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

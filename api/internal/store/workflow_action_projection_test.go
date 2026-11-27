@@ -140,7 +140,7 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 				issues, _, _ := metadataLogicalField("issues")
 				// This is the test oracle after measuring production-held
 				// work; the adapter above never materializes these bodies.
-				actual, err := image.fields[issues].Value(t.Context(), metadataWorkBytes)
+				actual, err := image.fields[issues].Value(t.Context(), metadataWorkBytes())
 				if err != nil || !reflect.DeepEqual(actual.Interface().([]domain.Issue), expected) {
 					t.Fatal("original body frames, duplicate order or closed action output changed", err)
 				}

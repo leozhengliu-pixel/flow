@@ -14,7 +14,7 @@ import (
 )
 
 func webhookDisableNative(w *webhookFailureWriteWork, node metadataLogicalNode, copies uint64) (reflect.Value, error) {
-	if node.cost > (metadataWorkBytes-4096)/copies {
+	if node.cost > (uint64(metadataWorkBytes())-4096)/copies {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := w.reserve(node.cost*copies + 4096); err != nil {

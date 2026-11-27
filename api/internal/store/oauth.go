@@ -238,7 +238,7 @@ func (s *SQLiteStore) scaleP21SW17OAuthClient(clientID string) (domain.OAuthClie
 	for {
 		limit, advanced := MetadataRecordPageMaxBytes, false
 		for attempt := 0; attempt < 3; attempt++ {
-			if limit > (metadataWorkBytes-(1<<20))/3 {
+			if limit > (metadataWorkBytes()-(1<<20))/3 {
 				return domain.OAuthClient{}, false
 			}
 			ctx, release, err := s.admitMetadataWork(context.Background(), max(2<<20, 3*limit+(1<<20)))
@@ -482,7 +482,7 @@ func (s *SQLiteStore) LookupAPIKey(ctx context.Context, secretHash string) (stri
 	for {
 		limit, advanced := MetadataRecordPageMaxBytes, false
 		for attempt := 0; attempt < 3; attempt++ {
-			if limit > (metadataWorkBytes-(1<<20))/3 {
+			if limit > (metadataWorkBytes()-(1<<20))/3 {
 				return "", domain.APIKey{}, false, ErrMetadataPageBudget
 			}
 			ctx, release, err := s.admitMetadataWork(ctx, max(2<<20, 3*limit+(1<<20)))

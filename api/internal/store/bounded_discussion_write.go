@@ -84,7 +84,7 @@ func (r *boundedDiscussionAttempt) reserveCallback(ctx context.Context, data dom
 	var issueBytes uint64
 	for _, issue := range data.Issues {
 		recipients += uint64(len(issue.SubscriberIDs))
-		if uint64(len(issue.ID)) > metadataWorkBytes-issueBytes {
+		if uint64(len(issue.ID)) > uint64(metadataWorkBytes())-issueBytes {
 			return ErrMetadataWorkBudget
 		}
 		issueBytes += uint64(len(issue.ID))
@@ -94,11 +94,11 @@ func (r *boundedDiscussionAttempt) reserveCallback(ctx context.Context, data dom
 	}
 	fixed := uint64(reflect.TypeFor[domain.Notification]().Size())*2 +
 		uint64(reflect.TypeFor[domain.NotificationDelivery]().Size())*8 + 8192
-	if issueBytes > (metadataWorkBytes-fixed)/32 {
+	if issueBytes > (uint64(metadataWorkBytes())-fixed)/32 {
 		return ErrMetadataWorkBudget
 	}
 	fixed += issueBytes * 32
-	if recipients > (metadataWorkBytes-(64<<10))/fixed {
+	if recipients > (uint64(metadataWorkBytes())-(64<<10))/fixed {
 		return ErrMetadataWorkBudget
 	}
 	return r.owner.reserve(ctx, recipients*fixed+64<<10)
@@ -312,7 +312,7 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
-		if inputCost > metadataWorkBytes/2 {
+		if inputCost > uint64(metadataWorkBytes())/2 {
 			return ErrMetadataWorkBudget
 		}
 		if err := attempt.owner.reserve(ctx, inputCost*2); err != nil {

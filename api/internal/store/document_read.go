@@ -291,7 +291,7 @@ func (r *DocumentRead) loadDocumentRecord(ctx context.Context, ordinal int, node
 		}
 		return value.Interface().(domain.Document), nil
 	}
-	if node.cost <= (metadataWorkBytes-(128<<10))/8 {
+	if node.cost <= (uint64(metadataWorkBytes())-(128<<10))/8 {
 		value, err := r.owner.residentRecord(ctx, "documents", ordinal, node, request.ReadOnly)
 		if err != nil {
 			return domain.Document{}, err
@@ -302,7 +302,7 @@ func (r *DocumentRead) loadDocumentRecord(ctx context.Context, ordinal int, node
 	// Rich document bodies have many small logical frames. Charge decoded
 	// values and their scratch first, then preflight actual JSON encoding work.
 	const scratch = 1 << 20
-	if node.cost > (metadataWorkBytes-scratch)/2 {
+	if node.cost > (uint64(metadataWorkBytes())-scratch)/2 {
 		return domain.Document{}, ErrMetadataWorkBudget
 	}
 	decodeWork := node.cost*2 + scratch
@@ -323,7 +323,7 @@ func (r *DocumentRead) loadDocumentRecord(ctx context.Context, ordinal int, node
 	if err != nil {
 		return domain.Document{}, err
 	}
-	if uint64(encodeWork) > metadataWorkBytes-decodeWork {
+	if uint64(encodeWork) > uint64(metadataWorkBytes())-decodeWork {
 		return domain.Document{}, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(encodeWork)); err != nil {
@@ -404,7 +404,7 @@ func (r *DocumentRead) documentProjectionRows(ctx context.Context, columns []str
 	if err := r.owner.store.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+length+"),0) "+from, args...).Scan(&count, &size); err != nil {
 		return err
 	}
-	if count < 0 || size < 0 || uint64(count) > metadataWorkBytes/4096 || uint64(size) > metadataWorkBytes/32 {
+	if count < 0 || size < 0 || uint64(count) > uint64(metadataWorkBytes())/4096 || uint64(size) > uint64(metadataWorkBytes())/32 {
 		return ErrMetadataWorkBudget
 	}
 	if count == 0 && size == 0 {
@@ -518,7 +518,7 @@ func (r *DocumentRead) documentMarkerWork(ctx context.Context, workspace string,
 			}
 		}
 		if count != 0 {
-			if uint64(size) > metadataWorkBytes/16/count {
+			if uint64(size) > uint64(metadataWorkBytes())/16/count {
 				return ErrMetadataWorkBudget
 			}
 			if err := r.owner.reserve(ctx, uint64(size)*16*count); err != nil {

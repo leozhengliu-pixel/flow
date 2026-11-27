@@ -148,7 +148,7 @@ func (s *SQLiteStore) BeginChatDisplayRead(ctx context.Context, workspace string
 					if matched {
 						selected = append(selected, fields...)
 					}
-					if key.cost > (metadataWorkBytes-256)/8 {
+					if key.cost > (uint64(metadataWorkBytes())-256)/8 {
 						return ErrMetadataWorkBudget
 					}
 					if err := r.owner.reserve(ctx, key.cost*8+256); err != nil {

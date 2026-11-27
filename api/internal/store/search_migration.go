@@ -23,7 +23,7 @@ func (s *SQLiteStore) sw17SearchCheckpoint(ctx context.Context, workspace, field
 	if err := tx.QueryRowContext(ctx, `SELECT `+s.sw17SearchByteLength("last_record_key")+`,completed FROM metadata_search_migration_checkpoints WHERE workspace_key=? AND field=?`, workspace, field).Scan(&size, &complete); err != nil {
 		return "", 0, nil, err
 	}
-	if size < 0 || size > (metadataWorkBytes-(64<<10))/3 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return "", 0, nil, ErrMetadataWorkBudget
 	}
 	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size)*3+64<<10)
@@ -50,11 +50,11 @@ func (s *SQLiteStore) sw17SearchKeyPage(ctx context.Context, workspace, field, l
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(key_bytes),0) FROM (SELECT `+s.sw17SearchByteLength("record_key")+` key_bytes`+page+`) sw17_search_keys`, args...).Scan(&count, &bytes); err != nil {
 		return nil, nil, err
 	}
-	if count < 0 || count > 128 || bytes < 0 || bytes > metadataWorkBytes/4 {
+	if count < 0 || count > 128 || bytes < 0 || bytes > int64(metadataWorkBytes())/4 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	cost := bytes*4 + count*128 + 64<<10
-	if cost > metadataWorkBytes {
+	if cost > int64(metadataWorkBytes()) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))

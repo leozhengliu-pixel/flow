@@ -29,7 +29,7 @@ func (r *ChatDisplayRead) LoadWorkflow(ctx context.Context, teamID string) error
 			}
 			return domain.TeamSettings{}, nil
 		}
-		if uint64(len(id)) > (metadataWorkBytes-8192)/8 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-8192)/8 {
 			return domain.TeamSettings{}, ErrMetadataWorkBudget
 		}
 		if err := r.owner.reserve(ctx, uint64(len(id))*8+8192); err != nil {

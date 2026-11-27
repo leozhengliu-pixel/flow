@@ -39,7 +39,7 @@ func scaleP21SW302Compare(t *testing.T, repo *SQLiteStore, node metadataLogicalN
 	if err := owner.reserve(t.Context(), node.cost*2+64<<10); err != nil {
 		t.Fatal(err)
 	}
-	actual, err := node.Value(t.Context(), metadataWorkBytes)
+	actual, err := node.Value(t.Context(), metadataWorkBytes())
 	if err != nil || !reflect.DeepEqual(actual.Interface(), want.Interface()) {
 		t.Fatal("canonical native output differs from standard typed JSON decode", err)
 	}
@@ -187,7 +187,7 @@ func TestScaleP21SW302RetryPrivateOriginalCarry(t *testing.T) {
 	if err := owner.reserve(t.Context(), node.cost*2+64<<10); err != nil {
 		t.Fatal(err)
 	}
-	actual, err := node.Value(t.Context(), metadataWorkBytes)
+	actual, err := node.Value(t.Context(), metadataWorkBytes())
 	if err != nil || actual.Interface().(domain.IntegrationConnection).SecretHash != previous.SecretHash {
 		t.Fatal("retry lost its original direct private field", err)
 	}

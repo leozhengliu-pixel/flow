@@ -264,8 +264,8 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency(), maxStateBytes: 1 << 20}
 			repo.metadataResidency.work.limit = 16 << 20
 			input, node, frames, source := scaleP21SW241Frames(t, repo, next, domain.Bootstrap{})
-			node.cost = uint64(metadataWorkBytes) + 1
-			if _, err := node.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {
+			node.cost = uint64(metadataWorkBytes()) + 1
+			if _, err := node.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, ErrMetadataWorkBudget) {
 				t.Fatal("whole native Issue decode witness did not refuse", err)
 			}
 			poisoned := 0
@@ -273,13 +273,13 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 				if key.String() != "Description" && key.String() != "DescriptionState" && key.String() != "DocumentContent" {
 					return nil
 				}
-				child.cost = uint64(metadataWorkBytes) + 1
+				child.cost = uint64(metadataWorkBytes()) + 1
 				var cost [8]byte
 				binary.LittleEndian.PutUint64(cost[:], child.cost)
 				if err := input.storage.writeAt(cost[:], child.offset+8); err != nil {
 					return err
 				}
-				if _, err := child.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {
+				if _, err := child.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, ErrMetadataWorkBudget) {
 					t.Fatal("native body decode witness did not refuse", key.String(), err)
 				}
 				poisoned++
@@ -353,7 +353,7 @@ func TestScaleP21SW241IssueFrameCompareFailureAndRelease(t *testing.T) {
 				t.Fatal("failure occurred at the wrong boundary", mode, reads, err)
 			}
 			if mode == "denial-and-recovery" {
-				repo.metadataResidency.work.limit = metadataWorkBytes
+				repo.metadataResidency.work.limit = metadataWorkBytes()
 				got, err = legacyIssueRecordFrameEqual(t.Context(), repo, output, part, node, source)
 				if err != nil || !got || repo.MetadataWorkUsedForTesting() != parent {
 					t.Fatal("same-store recovery after denial failed", got, err)

@@ -170,7 +170,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 				return err
 			}
 			expanded := uint64(bytes.Count(stored, documentMarkerBytes)+1) * uint64(len(stored))
-			if expanded > metadataWorkBytes/4 {
+			if expanded > uint64(metadataWorkBytes())/4 {
 				return ErrMetadataWorkBudget
 			}
 			if err := scratch.reserve(ctx, expanded*2+4096); err != nil {
@@ -260,7 +260,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 			ours = encoded
 		}
 	}
-	if total := uint64(len(baseRaw)) + uint64(len(ours)) + uint64(len(raw)); total > metadataWorkBytes/4 {
+	if total := uint64(len(baseRaw)) + uint64(len(ours)) + uint64(len(raw)); total > uint64(metadataWorkBytes())/4 {
 		return true, ErrMetadataWorkBudget
 	} else if err := owner.reserve(ctx, total*4+64<<10); err != nil {
 		return true, err
@@ -380,7 +380,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 		}
 	}
 	if id := actualRight.FieldByName("ID").String(); id != row.id {
-		if uint64(len(id)) > (metadataWorkBytes-8192)/64 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-8192)/64 {
 			return true, ErrMetadataWorkBudget
 		}
 		if err := p.work.reserve(ctx, uint64(len(id))*64+8192); err != nil {

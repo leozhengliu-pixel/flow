@@ -59,7 +59,7 @@ func (r *ResourceRead) Close() {
 }
 
 func (r *ResourceRead) reserve(ctx context.Context, size uint64) error {
-	if size > metadataWorkBytes {
+	if size > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(size))
@@ -191,7 +191,7 @@ func (r *ResourceRead) projectNode(ctx context.Context, node metadataLogicalNode
 	cost := uint64(2048)
 	err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if slices.Contains(names, key.String()) {
-			if child.cost > (metadataWorkBytes-cost)/8 {
+			if child.cost > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += child.cost * 8
@@ -239,7 +239,7 @@ func (r *ResourceRead) node(ctx context.Context, node metadataLogicalNode, wire 
 }
 
 func (r *ResourceRead) reserveNode(ctx context.Context, node metadataLogicalNode) error {
-	if node.cost > (metadataWorkBytes-(128<<10))/8 {
+	if node.cost > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	return r.reserve(ctx, node.cost*8+128<<10)
@@ -718,7 +718,7 @@ func (r *ResourceRead) preflight(ctx context.Context, expressions []string, wher
 	if err != nil {
 		return err
 	}
-	if size < 0 || count < 0 || uint64(count) > metadataWorkBytes/4096 || uint64(size) > metadataWorkBytes/32 {
+	if size < 0 || count < 0 || uint64(count) > uint64(metadataWorkBytes())/4096 || uint64(size) > uint64(metadataWorkBytes())/32 {
 		return ErrMetadataWorkBudget
 	}
 	return r.reserve(ctx, uint64(size)*32+uint64(count)*4096+4096)
@@ -733,7 +733,7 @@ func (r *ResourceRead) transientRows(ctx context.Context, expressions []string, 
 	if err := r.store.db.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0) FROM workspace_metadata_records WHERE "+where, args...).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size < 0 || size > (metadataWorkBytes-(16<<10))/32 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(16<<10))/32 {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(size)*32+16<<10)

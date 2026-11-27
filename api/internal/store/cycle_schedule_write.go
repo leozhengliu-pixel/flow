@@ -182,7 +182,7 @@ func (s *SQLiteStore) scopedImageIssueIDs(ctx context.Context, tx *sqlTx, worksp
 		if column.Column != "cycle_id" {
 			return nil, ErrBoundedMetadataCoverage
 		}
-		if uint64(len(column.Values)) > (metadataWorkBytes-4096)/64 {
+		if uint64(len(column.Values)) > (uint64(metadataWorkBytes())-4096)/64 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, uint64(len(column.Values))*64+4096); err != nil {
@@ -203,7 +203,7 @@ func (s *SQLiteStore) scopedImageIssueIDs(ctx context.Context, tx *sqlTx, worksp
 			if count > int64(maxScopedIssues-len(selected)) {
 				return nil, errScopeTooLarge
 			}
-			if uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*512)/8 {
+			if uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*512)/8 {
 				return nil, ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, uint64(size)*8+uint64(count)*512+64<<10); err != nil {
@@ -267,7 +267,7 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 			break
 		}
 		unit := uint64(reflect.TypeFor[storedIssueRecord]().Size())*2 + 512
-		if uint64(len(batch)) > (metadataWorkBytes-(64<<10))/unit {
+		if uint64(len(batch)) > (uint64(metadataWorkBytes())-(64<<10))/unit {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := r.owner.reserve(ctx, uint64(len(batch))*unit+64<<10); err != nil {
@@ -285,7 +285,7 @@ func (r *scopedImageAttempt) issueRecords(ctx context.Context, ids []string) (ma
 	// Order, two issue slices and the callback's lookup maps precede its
 	// independently admitted deep baseline clone.
 	unit := uint64(reflect.TypeFor[domain.Issue]().Size())*8 + 2048
-	if uint64(len(records)) > (metadataWorkBytes-(64<<10))/unit {
+	if uint64(len(records)) > (uint64(metadataWorkBytes())-(64<<10))/unit {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(len(records))*unit+64<<10); err != nil {

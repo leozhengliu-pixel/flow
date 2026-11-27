@@ -192,7 +192,7 @@ func TestScaleP21SW340IntegrationCatalogPages(t *testing.T) {
 		if _, err := view.projectCanonicalMetadata(ctx, tx, workspace, key, 1); !errors.Is(err, ErrBoundedMetadataCoverage) || queries != 0 {
 			t.Fatal("closed private owner reached SQL", err, queries)
 		}
-		pressure := metadataWorkBytes - integrationDeliveryPageWorkBytes + 1
+		pressure := metadataWorkBytes() - integrationDeliveryPageWorkBytes + 1
 		_, releasePressure, err := view.tryAdmitAdditionalMetadataWork(t.Context(), pressure)
 		if err != nil {
 			t.Fatal(err)

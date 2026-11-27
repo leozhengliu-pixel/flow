@@ -57,7 +57,7 @@ func (s *SQLiteStore) BeginTeamMaintenanceRead(ctx context.Context, workspace st
 		}
 	}()
 	reserve := func(cost uint64) error {
-		if cost > metadataWorkBytes {
+		if cost > uint64(metadataWorkBytes()) {
 			return ErrMetadataWorkBudget
 		}
 		_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -77,7 +77,7 @@ func (s *SQLiteStore) BeginTeamMaintenanceRead(ctx context.Context, workspace st
 			if key.String() != "ID" {
 				return nil
 			}
-			if node.cost > (metadataWorkBytes-4096)/8 {
+			if node.cost > (uint64(metadataWorkBytes())-4096)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := reserve(node.cost*8 + 4096); err != nil {
@@ -106,7 +106,7 @@ func (s *SQLiteStore) BeginTeamMaintenanceRead(ctx context.Context, workspace st
 		if key.cost > maxKeyCost {
 			return nil
 		}
-		if key.cost > (metadataWorkBytes-4096)/4 {
+		if key.cost > (uint64(metadataWorkBytes())-4096)/4 {
 			return ErrMetadataWorkBudget
 		}
 		_, releaseKey, err := s.tryAdmitAdditionalMetadataWork(ctx, int(key.cost)*4+4096)
@@ -124,7 +124,7 @@ func (s *SQLiteStore) BeginTeamMaintenanceRead(ctx context.Context, workspace st
 			if err := record.Children(ctx, func(key reflect.Value, node metadataLogicalNode) error {
 				for _, name := range fields {
 					if key.String() == name {
-						if node.cost > (metadataWorkBytes-cost)/8 {
+						if node.cost > (uint64(metadataWorkBytes())-cost)/8 {
 							return ErrMetadataWorkBudget
 						}
 						cost += node.cost * 8

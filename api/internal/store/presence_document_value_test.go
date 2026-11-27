@@ -266,7 +266,7 @@ func TestScaleP21SW105PresenceDocumentFailuresAndRelease(t *testing.T) {
 		t.Fatal("canceled/refused value leaked work")
 	}
 	cost := read.documentNode.cost
-	read.documentNode.cost = metadataWorkBytes
+	read.documentNode.cost = uint64(metadataWorkBytes())
 	if _, err := read.LoadDocument(t.Context()); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("oversized selected node escaped explicit bound", err)
 	}

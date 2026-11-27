@@ -384,7 +384,7 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 						!bytes.Equal(profiles[0].Input().IntegrationDeliveries[0].Payload, payload) {
 						t.Fatal("failed attempt closed its output before coordinator reload")
 					}
-					if used := repo.MetadataWorkUsedForTesting(); used <= metadataWorkBytes-(metadataPolicyBytes+2<<20) {
+					if used := repo.MetadataWorkUsedForTesting(); used <= metadataWorkBytes()-(metadataPolicyBytes+2<<20) {
 						t.Fatal("retry does not distinguish actual reload work from the former maximum allowance", used)
 					}
 				}

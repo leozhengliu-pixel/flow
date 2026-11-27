@@ -63,7 +63,7 @@ func (s *SQLiteStore) BeginApplicationWebhookReconcileRead(ctx context.Context, 
 			if err != nil {
 				return nil, err
 			}
-			if node.typ == nil || node.typ.Kind() != reflect.String || node.cost > metadataWorkBytes/4 {
+			if node.typ == nil || node.typ.Kind() != reflect.String || node.cost > uint64(metadataWorkBytes())/4 {
 				return nil, ErrMetadataRecordQuery
 			}
 			nodes[i] = node

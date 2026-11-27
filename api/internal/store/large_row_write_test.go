@@ -662,7 +662,7 @@ func scaleP21SW296LargeRowWrites(t *testing.T, part int, reloads ...bool) {
 	t.Helper()
 	f, view := scaleP21SW78Fixture(t)
 	f.db.SetMaxOpenConns(4)
-	if metadataWorkBytes != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
+	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
 		t.Fatal("SW296 sizes assume the production work and transaction budgets", f.db.maxTransactionBytes)
 	}
 	for index, test := range scaleP21SW296Cases() {

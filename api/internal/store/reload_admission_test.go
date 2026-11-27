@@ -302,7 +302,7 @@ func TestScaleP21SW216ReloadPolicyOnlyProbeKeepsLiteralAdmission(t *testing.T) {
 	if err := probe.reloadResidentWorkspace(ctx, fixture.data.Workspace.URLKey); !errors.Is(err, ErrMetadataWorkBudget) || queries != 0 {
 		t.Fatal("policy-only probe silently entered the installed-logical admission path", err, queries)
 	}
-	probe.metadataResidency.work.limit = metadataWorkBytes
+	probe.metadataResidency.work.limit = metadataWorkBytes()
 	if err := probe.reloadResidentWorkspace(t.Context(), fixture.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}

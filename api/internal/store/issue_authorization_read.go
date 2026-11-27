@@ -90,7 +90,7 @@ func (s *SQLiteStore) BeginIssueWriteAuthorizationRead(ctx context.Context, user
 	}
 	cost := uint64(len(request.IDs))*32 + 4096
 	for _, id := range request.IDs {
-		if uint64(len(id)) > (metadataWorkBytes-cost)/8 {
+		if uint64(len(id)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += uint64(len(id)) * 8

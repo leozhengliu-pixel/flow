@@ -41,7 +41,7 @@ func (r *issueHotInputs) issueMoveSnapshotMember(ctx context.Context, record met
 	if err != nil {
 		return domain.WorkspaceMember{}, err
 	}
-	if id.cost > (metadataWorkBytes-cost)/8 {
+	if id.cost > (uint64(metadataWorkBytes())-cost)/8 {
 		return domain.WorkspaceMember{}, ErrMetadataWorkBudget
 	}
 	cost += id.cost * 8

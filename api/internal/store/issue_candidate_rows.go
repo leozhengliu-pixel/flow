@@ -27,7 +27,7 @@ func (s *SQLiteStore) beginIssueCandidateQueryWork(ctx context.Context, q IssueR
 	if err != nil {
 		return nil, err
 	}
-	if work > (metadataWorkBytes-(128<<10))/8 {
+	if work > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, work*8+128<<10); err != nil {
@@ -70,11 +70,11 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 		return err
 	}
 	if count < 0 || count > 500 || listBytes < 0 || maximumList < 0 || maximumID < 0 ||
-		listBytes > metadataWorkBytes/3 || maximumID > metadataWorkBytes/16 {
+		listBytes > int64(metadataWorkBytes())/3 || maximumID > int64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	cost := uint64(listBytes)*3 + uint64(count)*512 + 64<<10
-	if cost > metadataWorkBytes || uint64(maximumID) > (metadataWorkBytes-cost)/uint64(max(count, 1))/8 {
+	if cost > uint64(metadataWorkBytes()) || uint64(maximumID) > (uint64(metadataWorkBytes())-cost)/uint64(max(count, 1))/8 {
 		return ErrMetadataWorkBudget
 	}
 	cost += uint64(maximumID) * uint64(count) * 8
@@ -142,7 +142,7 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 			defer work.Close()
 			raw := row.list
 			if !json.Valid(raw) {
-				if row.dataBytes > metadataWorkBytes/3 {
+				if row.dataBytes > int64(metadataWorkBytes())/3 {
 					return ErrMetadataWorkBudget
 				}
 				if err := work.reserve(ctx, uint64(row.dataBytes)*3+64<<10); err != nil {
@@ -178,7 +178,7 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 			}
 			issue = issueListProjection(issue)
 			native, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(issue), 0)
-			if err != nil || native > (metadataWorkBytes-512)/2 {
+			if err != nil || native > (uint64(metadataWorkBytes())-512)/2 {
 				if err == nil {
 					err = ErrMetadataWorkBudget
 				}
@@ -304,7 +304,7 @@ func (s *SQLiteStore) issueCandidateReferenceBatch(ctx context.Context, tx *sqlT
 		append([]any{taskIssueBatchBytes}, args...)...).Scan(&count, &keyBytes, &smallBytes); err != nil {
 		return err
 	}
-	if count < 0 || count > 1250 || keyBytes < 0 || keyBytes > metadataWorkBytes/16 || smallBytes < 0 || smallBytes > metadataWorkBytes/3 {
+	if count < 0 || count > 1250 || keyBytes < 0 || keyBytes > int64(metadataWorkBytes())/16 || smallBytes < 0 || smallBytes > int64(metadataWorkBytes())/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(count)*512+uint64(keyBytes)*16+uint64(smallBytes)*3+64<<10); err != nil {

@@ -244,7 +244,20 @@ reason means the workspace sources need more than
 `FLOW_METADATA_SOURCE_DISK_BYTES`: raise it and check free space in the spool
 directory. One workspace's source may use the whole budget; the only
 per-file limit is the 256 TiB the spool encoding addresses
-(`logical_file_capacity`). Restart to retry admission. An explicit
+(`logical_file_capacity`). A `record_work_limit` reason means one record (for
+example a document with tens of megabytes of content) needs more work to
+recover or normalize than one operation may hold: eight times its decode cost
+(`record_cost_bytes`, about twice its text) plus the workspace's base work
+(`record_work_bytes`), over `record_work_limit_bytes`, which is
+`FLOW_METADATA_WORK_BYTES`. `record_cost_limit_bytes` is the largest cost that
+fits. Raise `FLOW_METADATA_WORK_BYTES` (or `FLOW_METADATA_MEMORY_BYTES`, which
+it defaults to a quarter of) to at least `record_work_bytes`. The work is
+reserved from that budget, so a large record waits for or holds back other
+metadata work instead of growing memory past it. The reservation is
+conservative: admitting a workspace with a 24 MB document reserved 384 MB of
+work and peaked at about 52 MB of live heap. A `metadata_work_budget`
+reason without record sizes means the process budget was in use by other work.
+Restart to retry admission. An explicit
 `FLOW_BOUNDED_METADATA=on` with `FLOW_METADATA_CATALOG=off` requires a prepared
 database and reports incomplete admission as a startup error. The journal
 opens checkpoints for new collections when their first records are written.
@@ -304,7 +317,7 @@ overrides can spend additional headroom. Sizing is per replica.
 | Encoded bootstrap cache | 1/16 of the target | Memory shared by retained JSON and the active cache producer. The issue bootstrap reuses encoded project, initiative and document fields for the same generation and visibility scope after computing live authorization and decorations. Fields that depend on file URL signing are encoded per request. |
 | `FLOW_RECORD_SPOOL_MAX_BYTES` | `268435456` | See [Related settings](#related-settings). |
 | `FLOW_SLOW_MUTATION_MS` | `500` | Threshold for the `slow workspace mutation` log line. `0` disables it. |
-| `FLOW_METADATA_WORK_BYTES` | 25% of the target | Aggregate admission across concurrent metadata operations. The existing per-operation limits still apply. |
+| `FLOW_METADATA_WORK_BYTES` | 25% of the target | Aggregate admission across concurrent metadata operations. One operation, and one record in it, may use up to 256 MiB or the whole budget when it is larger, at startup and in requests alike, so a record that bounded admission accepts can also be read and edited. A bounded start needs at least 194 MiB (one whole-policy admission); with less it falls back to legacy reads with reason `metadata_work_budget`. |
 | `FLOW_METADATA_POLICY_BYTES` | 1/16 of the target | Resident policy of all workspaces together, in bytes. One workspace's policy may take at most 192 MiB. |
 | `FLOW_METADATA_SOURCE_BYTES` | 1/32 of the target | Memory budget for installed workspace sources. Each workspace uses a 128 KiB descriptor charge. At startup, 16 MiB must remain free for request work and new workspaces. |
 | `FLOW_METADATA_SOURCE_DISK_BYTES` | Same byte count as the target | Separate temporary-file space budget for workspace sources in the metadata spool directory. Check available disk space for your replica. |

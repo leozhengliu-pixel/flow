@@ -165,14 +165,14 @@ func sw17VisitCredentialFields(ctx context.Context, input io.ReaderAt, size int6
 func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type) (int, error) {
 	cost := int64(sw17CredentialFixedWork)
 	add := func(bytes int64) error {
-		if bytes < 0 || bytes > int64(metadataWorkBytes)-cost {
+		if bytes < 0 || bytes > int64(metadataWorkBytes())-cost {
 			return ErrMetadataWorkBudget
 		}
 		cost += bytes
 		return nil
 	}
 	err := sw17VisitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
-		if part.size > int64(metadataWorkBytes)/4 {
+		if part.size > int64(metadataWorkBytes())/4 {
 			return ErrMetadataWorkBudget
 		}
 		if err := add(part.size*4 + 512); err != nil {
@@ -182,7 +182,7 @@ func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64,
 		if err != nil {
 			return err
 		}
-		if encoded > int64(metadataWorkBytes)/3 {
+		if encoded > int64(metadataWorkBytes())/3 {
 			return ErrMetadataWorkBudget
 		}
 		if err := add(encoded * 3); err != nil {
@@ -241,7 +241,7 @@ func sw17CredentialEncodedBound(ctx context.Context, input io.ReaderAt, part met
 				encoded += 2
 			}
 		}
-		if encoded > int64(metadataWorkBytes) {
+		if encoded > int64(metadataWorkBytes()) {
 			return 0, ErrMetadataWorkBudget
 		}
 	}
@@ -289,7 +289,7 @@ func (s *SQLiteStore) sw17CredentialIDMatches(ctx context.Context, input io.Read
 			match = false
 			return nil
 		}
-		if part.size > (int64(metadataWorkBytes)-sw17CredentialFixedWork)/4 {
+		if part.size > (int64(metadataWorkBytes())-sw17CredentialFixedWork)/4 {
 			return ErrMetadataWorkBudget
 		}
 		_, release, err := s.admitMetadataWork(ctx, int(part.size*4)+sw17CredentialFixedWork)

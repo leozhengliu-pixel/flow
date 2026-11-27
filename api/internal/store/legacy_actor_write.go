@@ -32,7 +32,7 @@ func (s *SQLiteStore) persistLegacyActorImage(ctx context.Context, tx *sqlTx, wo
 	}()
 	work := &ResourceRead{store: s}
 	defer work.Close()
-	if uint64(len(workspace)) > (metadataWorkBytes-(256<<10))/16 {
+	if uint64(len(workspace)) > (uint64(metadataWorkBytes())-(256<<10))/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(len(workspace))*16+256<<10); err != nil {
@@ -67,7 +67,7 @@ func (s *SQLiteStore) persistLegacyActorImage(ctx context.Context, tx *sqlTx, wo
 	if err != nil {
 		return nil, err
 	}
-	if uint64(actorWork) > (metadataWorkBytes-(64<<10))/8 {
+	if uint64(actorWork) > (uint64(metadataWorkBytes())-(64<<10))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(actorWork)*8+64<<10); err != nil {
@@ -83,7 +83,7 @@ func (s *SQLiteStore) persistLegacyActorImage(ctx context.Context, tx *sqlTx, wo
 	if err := legacyActorWriteNodeWork(ctx, work, viewer, 64); err != nil {
 		return nil, err
 	}
-	oldViewer, err := viewer.Value(ctx, metadataWorkBytes)
+	oldViewer, err := viewer.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (s *SQLiteStore) persistLegacyActorImage(ctx context.Context, tx *sqlTx, wo
 		if err := legacyActorWriteNodeWork(ctx, work, users, 64); err != nil {
 			return nil, err
 		}
-		full, err := users.Value(ctx, metadataWorkBytes)
+		full, err := users.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +184,7 @@ func legacyActorWriteHeaders(ctx context.Context, work *ResourceRead, users meta
 		if err != nil {
 			return err
 		}
-		if cost > metadataWorkBytes-8192 || id.cost > (metadataWorkBytes-cost-8192)/64 {
+		if cost > uint64(metadataWorkBytes())-8192 || id.cost > (uint64(metadataWorkBytes())-cost-8192)/64 {
 			return ErrMetadataWorkBudget
 		}
 		cost += id.cost*64 + 8192
@@ -219,7 +219,7 @@ func legacyActorWriteHeaders(ctx context.Context, work *ResourceRead, users meta
 	}
 	err = users.Children(ctx, func(_ reflect.Value, user metadataLogicalNode) error {
 		if len(result) == actorOrdinal {
-			value, err := user.Value(ctx, metadataWorkBytes)
+			value, err := user.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}
@@ -230,7 +230,7 @@ func legacyActorWriteHeaders(ctx context.Context, work *ResourceRead, users meta
 		if err != nil {
 			return err
 		}
-		value, err := id.Value(ctx, metadataWorkBytes)
+		value, err := id.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}
@@ -244,7 +244,7 @@ func legacyActorWriteHeaders(ctx context.Context, work *ResourceRead, users meta
 }
 
 func legacyActorWriteNodeWork(ctx context.Context, work *ResourceRead, node metadataLogicalNode, copies uint64) error {
-	if node.cost > (metadataWorkBytes-(64<<10))/copies {
+	if node.cost > (uint64(metadataWorkBytes())-(64<<10))/copies {
 		return ErrMetadataWorkBudget
 	}
 	return work.reserve(ctx, node.cost*copies+64<<10)
@@ -276,7 +276,7 @@ func (s *SQLiteStore) legacyActorWriteRootWork(ctx context.Context, tx *sqlTx, w
 	if err := tx.QueryRowContext(ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&size); err != nil {
 		return "", err
 	}
-	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (metadataWorkBytes-(64<<10))/128 {
+	if size < 0 || size > MetadataRecordPageMaxBytes || uint64(size) > (uint64(metadataWorkBytes())-(64<<10))/128 {
 		return "", ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(size)*128+64<<10); err != nil {

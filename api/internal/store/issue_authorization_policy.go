@@ -84,12 +84,12 @@ func (r *IssueWriteAuthorizationRead) loadPolicy(ctx context.Context, userID str
 		return err
 	}
 	if borrowed {
-		if len(caller.ViewerTeamIDs) > (metadataWorkBytes-4096)/32 {
+		if len(caller.ViewerTeamIDs) > (metadataWorkBytes()-4096)/32 {
 			return ErrMetadataWorkBudget
 		}
 		cost := uint64(len(caller.ViewerTeamIDs))*32 + 4096
 		for _, id := range caller.ViewerTeamIDs {
-			if uint64(len(id)) > (metadataWorkBytes-cost)/8 {
+			if uint64(len(id)) > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += uint64(len(id)) * 8
@@ -260,7 +260,7 @@ func (r *IssueWriteAuthorizationRead) loadCommentActionPolicy(ctx context.Contex
 			}
 		}
 		if original, found := caller.UserSettings[data.Viewer.ID]; found {
-			if uint64(len(original.UserID)) > (metadataWorkBytes-8192)/8 {
+			if uint64(len(original.UserID)) > (uint64(metadataWorkBytes())-8192)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := r.owner.reserve(ctx, uint64(len(original.UserID))*8+8192); err != nil {

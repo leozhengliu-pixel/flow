@@ -1417,17 +1417,17 @@ func (s *SQLiteStore) readColdPublishRow(ctx context.Context, tx *sqlTx, workspa
 	var size int64
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN `+data+` ELSE NULL END FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`,
-		metadataLogicalRecoveryRecordBytes, workspace, name, recordKey).Scan(&size, &raw); err != nil {
+		metadataRecoveryRecordBytes(), workspace, name, recordKey).Scan(&size, &raw); err != nil {
 		return nil, err
 	}
-	if size > metadataLogicalRecoveryRecordBytes || int64(len(raw)) != size {
+	if size > metadataRecoveryRecordBytes() || int64(len(raw)) != size {
 		return nil, ErrMetadataWorkBudget
 	}
 	row := []metadataCacheRow{{Field: name, Key: key, Data: raw}}
 	if err := s.inlineOffloadedRows(ctx, workspace, tx, row); err != nil {
 		return nil, err
 	}
-	if len(row[0].Data) > metadataLogicalRecoveryRecordBytes {
+	if int64(len(row[0].Data)) > metadataRecoveryRecordBytes() {
 		return nil, ErrMetadataWorkBudget
 	}
 	return row[0].Data, nil
@@ -1436,7 +1436,7 @@ func (s *SQLiteStore) readColdPublishRow(ctx context.Context, tx *sqlTx, workspa
 // decodeColdPublishRow decodes one row into a fresh item (recovery's
 // decodeBytes).
 func decodeColdPublishRow(raw []byte, typ reflect.Type) (reflect.Value, error) {
-	budget := metadataHydrationBudget{bytes: metadataLogicalRecoveryRecordBytes, work: metadataWorkBytes - 128<<10}
+	budget := metadataHydrationBudget{bytes: int(metadataRecoveryRecordBytes()), work: metadataWorkBytes() - 128<<10}
 	if err := budget.consume(raw); err != nil {
 		return reflect.Value{}, err
 	}

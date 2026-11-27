@@ -77,7 +77,7 @@ func scaleP21SW248AssertValue(t *testing.T, repo *SQLiteStore, node metadataLogi
 		t.Fatal(err)
 	}
 	for _, read := range []func(context.Context, int) (reflect.Value, error){node.Value, node.WireValue} {
-		value, err := read(t.Context(), metadataWorkBytes)
+		value, err := read(t.Context(), metadataWorkBytes())
 		if err != nil || value.Type() != want.Type() || !reflect.DeepEqual(value.Interface(), want.Interface()) {
 			t.Fatal("generic JSON changed standard native type/null/container/value semantics", err, node.Type(), want.Type())
 		}
@@ -165,7 +165,7 @@ func scaleP21SW248Walk(t *testing.T, node metadataLogicalNode, expected reflect.
 				t.Fatal("generic string lookup changed normalized decoded bytes", err)
 			}
 		case reflect.Float64:
-			value, err := current.node.Value(t.Context(), metadataWorkBytes)
+			value, err := current.node.Value(t.Context(), metadataWorkBytes())
 			if err != nil || value.Float() != current.value.Float() || math.Signbit(value.Float()) != math.Signbit(current.value.Float()) {
 				t.Fatal("generic scalar lost standard float64 conversion/sign", err)
 			}
@@ -176,7 +176,7 @@ func scaleP21SW248Walk(t *testing.T, node metadataLogicalNode, expected reflect.
 		if current.value.Kind() == reflect.Map {
 			seen := map[string]bool{}
 			if err := current.node.MapEntries(t.Context(), func(key, child metadataLogicalNode) error {
-				value, err := key.Value(t.Context(), metadataWorkBytes)
+				value, err := key.Value(t.Context(), metadataWorkBytes())
 				if err != nil {
 					return err
 				}
@@ -255,11 +255,11 @@ func TestScaleP21SW248GenericJSONSupportedLargeDeepSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal("supported HTTP ContentData must marshal completely", err)
 	}
-	if metadataLogicalDepth != 128 || metadataWorkBytes != 256<<20 {
+	if metadataLogicalDepth != 128 || metadataWorkBytes() != 256<<20 {
 		t.Fatal("large/deep support changed an ordinary depth or production work quota")
 	}
 	repo := scaleP21SW248Repo(t)
-	if repo.metadataResidency.work.limit != metadataWorkBytes {
+	if repo.metadataResidency.work.limit != metadataWorkBytes() {
 		t.Fatal("large/deep default-success fixture changed the process work limit")
 	}
 	origin := scaleP21SW248Builder(t)
@@ -448,7 +448,7 @@ func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
 	if err := firstOwner.reserve(t.Context(), pinned.fields[index].cost); err != nil {
 		t.Fatal(err)
 	}
-	first, err := pinned.fields[index].Value(t.Context(), metadataWorkBytes)
+	first, err := pinned.fields[index].Value(t.Context(), metadataWorkBytes())
 	if err != nil {
 		firstOwner.Close()
 		t.Fatal(err)
@@ -509,7 +509,7 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 			if err := json.Unmarshal(expectedRaw, &expectedJSON); err != nil {
 				t.Fatal(err)
 			}
-			got, err := metadataAggregateJSONValue(t.Context(), metadataAggregateImage{Source: source}, test.target, metadataWorkBytes)
+			got, err := metadataAggregateJSONValue(t.Context(), metadataAggregateImage{Source: source}, test.target, metadataWorkBytes())
 			if err != nil || !reflect.DeepEqual(got, expectedJSON) {
 				t.Fatal("typed nested aggregate/own-ID/prefix precedence changed", err)
 			}
@@ -544,7 +544,7 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 			t.Fatal(err)
 		}
 		image := metadataAggregateImage{Source: source, Selected: &selected, Scope: scope}
-		got, err := metadataAggregateJSONValue(t.Context(), image, "sw248-overlay", metadataWorkBytes)
+		got, err := metadataAggregateJSONValue(t.Context(), image, "sw248-overlay", metadataWorkBytes())
 		if err != nil || !reflect.DeepEqual(got, selected.Settings["slot"]) {
 			t.Fatal("selected overlay lost own-ID precedence or searched the retained replaced record", err)
 		}
@@ -630,7 +630,7 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || visits != 1 {
 			t.Fatal("generic traversal ignored cancellation between children", visits, err)
 		}
-		if _, err := node.Value(ctx, metadataWorkBytes); !errors.Is(err, context.Canceled) || repo.MetadataWorkUsedForTesting() != 0 {
+		if _, err := node.Value(ctx, metadataWorkBytes()); !errors.Is(err, context.Canceled) || repo.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("cancelled generic value leaked decoded ownership", err)
 		}
 		if _, err := node.Value(t.Context(), int(node.cost)-1); !errors.Is(err, ErrMetadataWorkBudget) || repo.MetadataWorkUsedForTesting() != 0 {

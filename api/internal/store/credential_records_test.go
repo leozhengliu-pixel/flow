@@ -169,7 +169,7 @@ func TestScaleP21SW17CredentialEscapingAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cost < len(encoded)*3 || cost >= metadataWorkBytes {
+	if cost < len(encoded)*3 || cost >= metadataWorkBytes() {
 		t.Fatal("preflight lost encoded growth/copy allowance", cost, len(encoded))
 	}
 	got, err := sw17DecodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
@@ -296,7 +296,7 @@ func TestScaleP21SW17CredentialCanonicalVisitor(t *testing.T) {
 	if !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("selected record bypassed process admission", err)
 	}
-	probe.metadataResidency.work.limit = metadataWorkBytes
+	probe.metadataResidency.work.limit = metadataWorkBytes()
 	callbackErr := errors.New("sw17 callback fixture")
 	_, err = probe.VisitCanonicalCredentialSettings(t.Context(), workspace, "oauthApplications", &ref, func(context.Context, domain.Bootstrap) error { return callbackErr })
 	if !errors.Is(err, callbackErr) {

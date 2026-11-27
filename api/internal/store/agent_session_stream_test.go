@@ -250,7 +250,7 @@ func TestScaleP21SW198SessionFullFieldSmallRowRebase(t *testing.T) {
 	if err != nil || !handled {
 		t.Fatal("small full-field rebase", handled, err)
 	}
-	got, err := selected.next.Value(ctx, metadataWorkBytes)
+	got, err := selected.next.Value(ctx, metadataWorkBytes())
 	expected := oracleNext.AgentSessions
 	if err != nil || !reflect.DeepEqual(got.Interface(), expected) {
 		t.Fatal("small canonical row skipped generic rebase or changed later duplicate", err, got)
@@ -393,7 +393,7 @@ func TestScaleP21SW198SessionAggregateFrames(t *testing.T) {
 			t.Fatal(err)
 		}
 		work, err := beginMetadataAggregateTraversal(t.Context(), func(bytes uint64) (func(), error) {
-			if bytes > metadataWorkBytes {
+			if bytes > uint64(metadataWorkBytes()) {
 				return nil, ErrMetadataWorkBudget
 			}
 			_, release, err := repo.tryAdmitAdditionalMetadataWork(t.Context(), int(bytes))

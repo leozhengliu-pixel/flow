@@ -403,7 +403,7 @@ func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
 			if repo.MetadataWorkUsedForTesting() != baseline {
 				t.Fatal("failure/release consumed the independent parent owner", mode)
 			}
-			repo.metadataResidency.work.limit = metadataWorkBytes
+			repo.metadataResidency.work.limit = metadataWorkBytes()
 			fresh, err := newMetadataLogicalBuilder(t.Context())
 			if err != nil {
 				t.Fatal(err)
@@ -530,8 +530,8 @@ func TestScaleP21SW238IssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
 	frames, node := scaleP21SW238Frames(t, repo, issue, false)
 	// The frame bytes remain valid. A bounded full-root Value call and any
 	// bounded native body Value call must fail under these poisoned receipts.
-	node.cost = uint64(metadataWorkBytes) + 1
-	if _, err := node.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {
+	node.cost = uint64(metadataWorkBytes()) + 1
+	if _, err := node.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("whole-Issue native decode witness did not refuse", err)
 	}
 	poisoned := 0
@@ -539,13 +539,13 @@ func TestScaleP21SW238IssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
 		if key.String() != "Description" && key.String() != "DescriptionState" && key.String() != "DocumentContent" {
 			return nil
 		}
-		child.cost = uint64(metadataWorkBytes) + 1
+		child.cost = uint64(metadataWorkBytes()) + 1
 		var cost [8]byte
 		binary.LittleEndian.PutUint64(cost[:], child.cost)
 		if err := frames.storage.writeAt(cost[:], child.offset+8); err != nil {
 			return err
 		}
-		if _, err := child.Value(t.Context(), metadataWorkBytes); !errors.Is(err, ErrMetadataWorkBudget) {
+		if _, err := child.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, ErrMetadataWorkBudget) {
 			t.Fatal("native body decode witness did not refuse", key.String(), err)
 		}
 		poisoned++

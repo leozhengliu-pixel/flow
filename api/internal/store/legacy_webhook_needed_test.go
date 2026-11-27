@@ -133,7 +133,7 @@ func TestScaleP21SW97LegacyWebhookIdentityPinsAndFailures(t *testing.T) {
 	if _, err := view.boundedLegacyWebhookNeeded(ctx, workspace); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("admission refusal lost: %v", err)
 	}
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	scaleP21SW97WebhookReleased(t, view, source, 1)
 	view.metadataResidency.mu.Lock()
 	delete(view.metadataResidency.logical, workspace)

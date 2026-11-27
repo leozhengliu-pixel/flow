@@ -65,7 +65,7 @@ func scaleP21SW234CompareFrame(t *testing.T, repo *SQLiteStore, node metadataLog
 	if native {
 		// Small-table oracle only. The large body success never materializes
 		// a complete native Issue from the bounded canonical frame.
-		value, err := node.Value(t.Context(), metadataWorkBytes)
+		value, err := node.Value(t.Context(), metadataWorkBytes())
 		if err != nil || !reflect.DeepEqual(value.Interface(), oracle) {
 			t.Fatal("typed native Issue differs, including null/default/container state", err)
 		}

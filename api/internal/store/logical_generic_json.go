@@ -78,7 +78,7 @@ func metadataGenericJSONWork(ctx context.Context, store *SQLiteStore, visit func
 		return err
 	}
 	work, err := beginMetadataAggregateTraversal(ctx, func(size uint64) (func(), error) {
-		if size > metadataWorkBytes {
+		if size > uint64(metadataWorkBytes()) {
 			return nil, ErrMetadataWorkBudget
 		}
 		_, release, err := store.tryAdmitAdditionalMetadataWork(ctx, int(size))
@@ -160,7 +160,7 @@ func (m *metadataGenericJSONMeasure) value(typ reflect.Type, top bool) (uint64, 
 	defer m.work.leave()
 	cost := uint64(typ.Size())*2 + 128
 	add := func(size uint64) error {
-		if size > metadataWorkBytes || cost > metadataWorkBytes-size {
+		if size > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-size {
 			return ErrMetadataWorkBudget
 		}
 		cost += size
@@ -344,7 +344,7 @@ func metadataGenericJSONDecodeError(ctx context.Context, store *SQLiteStore, par
 					return err
 				}
 				defer owner.Close()
-				if part.size < 0 || part.size > metadataWorkBytes/4 {
+				if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 					return ErrMetadataWorkBudget
 				}
 				if err := owner.ReserveEncoded(ctx, int(part.size)); err != nil {
@@ -381,7 +381,7 @@ func (b *metadataLogicalBuilder) writeGenericJSON(ctx context.Context, s *SQLite
 		return metadataLogicalNode{}, err
 	}
 	defer input.Close()
-	if part.size < 0 || part.size > metadataWorkBytes/4 {
+	if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 		return metadataLogicalNode{}, ErrMetadataWorkBudget
 	}
 	if err := input.ReserveEncoded(ctx, int(part.size)); err != nil {
@@ -456,7 +456,7 @@ func (b *metadataLogicalBuilder) writeGenericJSON(ctx context.Context, s *SQLite
 
 func (b *metadataLogicalBuilder) writeGenericJSONPart(typ reflect.Type, part legacySessionJSONPart, cost uint64) (metadataLogicalNode, error) {
 	node := metadataLogicalNode{source: b.storage, offset: b.offset, typ: typ, cost: cost, generic: true}
-	if !metadataGenericJSONType(typ) || cost > metadataWorkBytes || part.size < 0 {
+	if !metadataGenericJSONType(typ) || cost > uint64(metadataWorkBytes()) || part.size < 0 {
 		return metadataLogicalNode{}, ErrMetadataRecordQuery
 	}
 	if err := b.write(make([]byte, 16)); err != nil {
@@ -483,7 +483,7 @@ func (n metadataLogicalNode) genericValue(ctx context.Context) (reflect.Value, e
 		return reflect.Value{}, err
 	}
 	defer input.Close()
-	if part.size < 0 || part.size > metadataWorkBytes/4 {
+	if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := input.ReserveEncoded(ctx, int(part.size)); err != nil {
@@ -853,7 +853,7 @@ func (n metadataLogicalNode) genericMapValues(ctx context.Context, visit func(me
 		return err
 	}
 	slot := uint64(reflect.TypeFor[metadataLogicalNode]().Size()) * 2
-	if uint64(count) > (metadataWorkBytes-1024)/(512+slot) {
+	if uint64(count) > (uint64(metadataWorkBytes())-1024)/(512+slot) {
 		return ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(count)*(512+slot)+metadataAggregateTraversalFrame*3); err != nil {
@@ -865,7 +865,7 @@ func (n metadataLogicalNode) genericMapValues(ctx context.Context, visit func(me
 		if err := owner.reserve(ctx, key.cost); err != nil {
 			return err
 		}
-		name, err := key.Value(ctx, metadataWorkBytes)
+		name, err := key.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}

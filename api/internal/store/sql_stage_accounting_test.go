@@ -243,7 +243,7 @@ func TestScaleP21SW200SQLStageLargeDeclaredBytesUseTransactionBudget(t *testing.
 	ctx := WithSQLStatementObserver(t.Context(), func(_ string) { statements++ })
 	_, err = beginMetadataSQLWriteStage(ctx, tx, metadataSQLStageTarget{
 		workspace: fixture.data.Workspace.URLKey, field: "agentSessions", key: "sw200-large-declaration",
-		dataBytes: metadataWorkBytes + 1, searchBytes: -1,
+		dataBytes: metadataWorkBytes() + 1, searchBytes: -1,
 	})
 	if !errors.Is(err, ErrTransactionWriteBudget) || statements != 0 {
 		t.Fatal("streamed SQL size was confused with heap admission or grew before billing", statements, err)

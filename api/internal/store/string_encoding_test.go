@@ -129,12 +129,12 @@ func TestScaleP21SW195StringEncodingCancellation(t *testing.T) {
 }
 
 func TestScaleP21SW195StringEncodingBudgetBoundary(t *testing.T) {
-	encodedLimit := metadataWorkBytes / 4
+	encodedLimit := metadataWorkBytes() / 4
 	repeated := strings.Repeat("<", (encodedLimit-2)/6)
 	atLimit := repeated + strings.Repeat("a", encodedLimit-2-len(repeated)*6)
 	work, err := metadataAggregateStringEncodingWork(t.Context(), atLimit)
-	if err != nil || work != metadataWorkBytes {
-		t.Fatalf("exact limit: work=%d limit=%d err=%v", work, metadataWorkBytes, err)
+	if err != nil || work != uint64(metadataWorkBytes()) {
+		t.Fatalf("exact limit: work=%d limit=%d err=%v", work, metadataWorkBytes(), err)
 	}
 	if work, err := metadataAggregateStringEncodingWork(t.Context(), atLimit+"x"); work != 0 || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("one encoded byte over budget: work=%d err=%v", work, err)

@@ -114,7 +114,7 @@ func applicationSLAWebhookProject(ctx context.Context, owner *WebhookDeliveryRea
 		// Read-only SLA comparisons and JSON use the supported wire time
 		// receipt; a fixed floor keeps native/reloaded time admission stable.
 		cost := max(node.cost, 4096)
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, cost*8+4096); err != nil {

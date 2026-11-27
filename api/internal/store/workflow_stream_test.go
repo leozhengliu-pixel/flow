@@ -386,7 +386,7 @@ func TestScaleP21SW219WorkflowLargeConflictRefresh(t *testing.T) {
 			t.Fatal(err)
 		}
 		index, _, _ := metadataLogicalField("workflowRuns")
-		value, err := source.fields[index].Value(t.Context(), metadataWorkBytes)
+		value, err := source.fields[index].Value(t.Context(), metadataWorkBytes())
 		source.Release()
 		expected := []domain.WorkflowRun{peer, before.WorkflowRuns[1]}
 		if deleted {
@@ -490,7 +490,7 @@ func TestScaleP21SW219WorkflowLargeConflictRetrySuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	index, _, _ := metadataLogicalField("workflowRuns")
-	value, err := source.fields[index].Value(t.Context(), metadataWorkBytes)
+	value, err := source.fields[index].Value(t.Context(), metadataWorkBytes())
 	source.Release()
 	if err != nil || !reflect.DeepEqual(value.Interface(), expected) {
 		t.Fatal("successful large retry changed the installed publication", err)

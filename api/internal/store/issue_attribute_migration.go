@@ -48,7 +48,7 @@ func (b *sw17AttributeBatch) retain(ctx context.Context, id string, rows [][]str
 			bytes += int64(len(value)) * 22
 		}
 	}
-	if bytes > metadataWorkBytes {
+	if bytes > int64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(bytes))
@@ -76,11 +76,11 @@ func (s *SQLiteStore) sw17AttributeHeaders(ctx context.Context, tx *sqlTx, works
 	if err := tx.QueryRowContext(ctx, query, args...).Scan(&count, &keyBytes); err != nil {
 		return nil, nil, err
 	}
-	if keyBytes < 0 || keyBytes > metadataWorkBytes/3 || count < 0 || count > 250 {
+	if keyBytes < 0 || keyBytes > int64(metadataWorkBytes())/3 || count < 0 || count > 250 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	cost := keyBytes*3 + count*128 + 64<<10
-	if cost > metadataWorkBytes {
+	if cost > int64(metadataWorkBytes()) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	headerCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -120,7 +120,7 @@ func (s *SQLiteStore) sw17AttributeHeaders(ctx context.Context, tx *sqlTx, works
 }
 
 func (s *SQLiteStore) sw17ReadAttributeIssue(ctx context.Context, tx *sqlTx, workspace string, header sw17AttributeHeader, visit func(context.Context, domain.Issue) error) error {
-	if header.size > (metadataWorkBytes-(64<<10))/3 {
+	if header.size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	rawCost := int(header.size)*3 + 64<<10
@@ -143,11 +143,11 @@ func (s *SQLiteStore) sw17ReadAttributeIssue(ctx context.Context, tx *sqlTx, wor
 func (s *SQLiteStore) sw17DecodeAttributeIssue(ctx context.Context, raw []byte, rawCost int, visit func(context.Context, domain.Issue) error) error {
 	// The existing P15 token model accounts for typed maps/slices as well
 	// as strings. Only one full Issue is decoded, never a 250-body slice.
-	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes()}
 	if err := budget.consume(raw); err != nil {
 		return fmt.Errorf("%w: issue attribute decode", ErrMetadataWorkBudget)
 	}
-	typedCost := metadataWorkBytes - budget.work
+	typedCost := metadataWorkBytes() - budget.work
 	typedCtx := ctx
 	if extra := typedCost - rawCost; extra > 0 {
 		var releaseTyped func()
@@ -176,11 +176,11 @@ func (b *sw17AttributeBatch) write(ctx context.Context, tx *sqlTx, workspace str
 	if err := tx.QueryRowContext(ctx, query, append([]any{workspace}, ids...)...).Scan(&count, &bytes); err != nil {
 		return err
 	}
-	if bytes < 0 || bytes > metadataWorkBytes/22 || count < 0 || count > metadataWorkBytes/1024 {
+	if bytes < 0 || bytes > int64(metadataWorkBytes())/22 || count < 0 || count > int64(metadataWorkBytes())/1024 {
 		return ErrMetadataWorkBudget
 	}
 	cost := bytes*22 + count*1024 + 64<<10
-	if cost > metadataWorkBytes {
+	if cost > int64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	writeCtx, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -206,7 +206,7 @@ func (s *SQLiteStore) sw17AttributeCheckpoint(ctx context.Context, workspace str
 	if complete >= issueAttributeVersion {
 		return "", complete, func() {}, nil
 	}
-	if size < 0 || size > (metadataWorkBytes-(64<<10))/3 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return "", 0, nil, ErrMetadataWorkBudget
 	}
 	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size)*3+64<<10)
@@ -349,11 +349,11 @@ func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace str
 			return err
 		}
 		size, count := binary.LittleEndian.Uint64(header[:8]), binary.LittleEndian.Uint64(header[8:])
-		if size > metadataWorkBytes/4 || count > metadataWorkBytes/1024 {
+		if size > uint64(metadataWorkBytes())/4 || count > uint64(metadataWorkBytes())/1024 {
 			return ErrMetadataWorkBudget
 		}
 		cost := size*4 + count*1024 + 64<<10
-		if cost > metadataWorkBytes {
+		if cost > uint64(metadataWorkBytes()) {
 			return ErrMetadataWorkBudget
 		}
 		if err := func() error {
@@ -409,7 +409,7 @@ func (s *SQLiteStore) sw17StageRecurrenceAttributes(ctx context.Context, tx *sql
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+s.sw17AttributeLength("data")+"),0)"+where, workspace, pattern).Scan(&maximum); err != nil {
 		return err
 	}
-	if maximum < 0 || maximum > (metadataWorkBytes-(64<<10))/3 {
+	if maximum < 0 || maximum > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	rawCost := int(maximum)*3 + 64<<10

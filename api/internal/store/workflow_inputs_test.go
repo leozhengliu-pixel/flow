@@ -421,7 +421,7 @@ func TestScaleP21SW201WorkflowRunFailureBoundaries(t *testing.T) {
 				cancel()
 			case "budget":
 				want = ErrMetadataWorkBudget
-				_, release, err = view.tryAdmitAdditionalMetadataWork(ctx, metadataWorkBytes)
+				_, release, err = view.tryAdmitAdditionalMetadataWork(ctx, metadataWorkBytes())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -529,7 +529,7 @@ func TestScaleP21SW201WorkflowCallbackNativeOwnership(t *testing.T) {
 	}
 	// Keep less than the new graph's native allowance available. This is
 	// pressure on the real per-replica limit, not a smaller test-only limit.
-	pressure := int(metadataWorkBytes) - held - (int(grownNative) - 1)
+	pressure := int(metadataWorkBytes()) - held - (int(grownNative) - 1)
 	if pressure <= 0 {
 		t.Fatal("native growth fixture does not create admission pressure")
 	}

@@ -70,7 +70,7 @@ func (s *SQLiteStore) BeginTeamResourceAuthorizationRead(ctx context.Context, wo
 	policy.Viewer, policy.ViewerRole = access.policy.metadata.Viewer, access.policy.metadata.ViewerRole
 	members := access.policy.metadata.TeamMembers
 	memberSize := uint64(reflect.TypeFor[domain.TeamMember]().Size())
-	if uint64(len(members)) > metadataWorkBytes/(memberSize*2) {
+	if uint64(len(members)) > uint64(metadataWorkBytes())/(memberSize*2) {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := read.reserve(ctx, uint64(len(members))*memberSize*2+2048); err != nil {

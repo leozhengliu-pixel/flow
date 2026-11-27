@@ -229,7 +229,7 @@ func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
 			t.Logf("legacy accepts key-bytes=%d; bounded limit=%d failed before raw-key/checkpoint transfer=%v", len(key), probe.metadataResidency.work.limit, checkpoint)
 		})
 	}
-	probe.metadataResidency.work.limit = metadataWorkBytes
+	probe.metadataResidency.work.limit = metadataWorkBytes()
 	// The legacy run above completed under the current rules; recover the
 	// bounded repair as a reconciliation required by changed rules.
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM metadata_search_index_rules WHERE workspace_key=?`, workspace); err != nil {

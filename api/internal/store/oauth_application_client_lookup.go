@@ -45,7 +45,7 @@ func (s *SQLiteStore) scaleP21OAuthApplicationByClientID(clientID string) (domai
 	for {
 		need, advanced := 2<<20, false
 		for attempt := 0; attempt < 3; attempt++ {
-			if need > metadataWorkBytes-(1<<20) {
+			if need > metadataWorkBytes()-(1<<20) {
 				return domain.OAuthApplication{}, false
 			}
 			ctx, release, err := s.admitMetadataWork(context.Background(), need)

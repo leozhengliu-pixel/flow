@@ -95,7 +95,7 @@ func (s *SQLiteStore) beginCollaborationDocumentRead(ctx context.Context, worksp
 			read.Close()
 		}
 	}()
-	if uint64(len(ref)) > (metadataWorkBytes-(2<<20))/8 {
+	if uint64(len(ref)) > (uint64(metadataWorkBytes())-(2<<20))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err = read.owner.reserve(ctx, 2<<20+uint64(len(ref))*8); err != nil {
@@ -175,7 +175,7 @@ func (s *SQLiteStore) beginCollaborationDocumentRead(ctx context.Context, worksp
 
 	selectHeader := func(header domain.Document, conflict bool, candidate *ResourceRead, body func(*domain.Document) error) error {
 		cost := uint64(len(policy.data.Teams)) + uint64(len(header.TeamIDs)) + uint64(len(header.InheritedTeamIDs))
-		if cost > (metadataWorkBytes-(64<<10))/4096 {
+		if cost > (uint64(metadataWorkBytes())-(64<<10))/4096 {
 			candidate.Close()
 			return ErrMetadataWorkBudget
 		}
@@ -329,7 +329,7 @@ func (r *collaborationProjectionCapture) capture(ctx context.Context, data domai
 		{len(data.TeamMembers), 512},
 		{len(data.TeamSettings), 1024},
 	} {
-		if uint64(part.count) > (metadataWorkBytes-cost)/part.bytes {
+		if uint64(part.count) > (uint64(metadataWorkBytes())-cost)/part.bytes {
 			return ErrMetadataWorkBudget
 		}
 		cost += uint64(part.count) * part.bytes
@@ -562,7 +562,7 @@ func collaborationCloneIDs(ctx context.Context, owner *ResourceRead, ids []strin
 	}
 	cost := uint64(4096)
 	for _, id := range ids {
-		if uint64(len(id))+32 > (metadataWorkBytes-cost)/8 {
+		if uint64(len(id))+32 > (uint64(metadataWorkBytes())-cost)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		cost += (uint64(len(id)) + 32) * 8
@@ -580,14 +580,14 @@ func collaborationCloneIDs(ctx context.Context, owner *ResourceRead, ids []strin
 func collaborationCallerDocument(ctx context.Context, owner *ResourceRead, source domain.Document) (domain.Document, error) {
 	cost := uint64(4096)
 	for _, value := range []string{source.ID, source.SlugID, source.CollaborationID, source.Creator.ID} {
-		if uint64(len(value)) > (metadataWorkBytes-cost)/8 {
+		if uint64(len(value)) > (uint64(metadataWorkBytes())-cost)/8 {
 			return domain.Document{}, ErrMetadataWorkBudget
 		}
 		cost += uint64(len(value)) * 8
 	}
 	for _, permission := range source.Permissions {
 		for _, value := range []string{permission.SubjectType, permission.SubjectID, permission.Role} {
-			if uint64(len(value))+128 > (metadataWorkBytes-cost)/8 {
+			if uint64(len(value))+128 > (uint64(metadataWorkBytes())-cost)/8 {
 				return domain.Document{}, ErrMetadataWorkBudget
 			}
 			cost += (uint64(len(value)) + 128) * 8
@@ -625,7 +625,7 @@ func collaborationCallerPolicy(ctx context.Context, owner *ResourceRead, source 
 	cost := uint64(4096)
 	add := func(values ...string) error {
 		for _, value := range values {
-			if uint64(len(value))+1024 > (metadataWorkBytes-cost)/8 {
+			if uint64(len(value))+1024 > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += (uint64(len(value)) + 1024) * 8

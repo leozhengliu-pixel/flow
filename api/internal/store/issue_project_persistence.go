@@ -36,7 +36,7 @@ func (s *SQLiteStore) admitIssueMetadataRows(ctx context.Context, tx *sqlTx, wor
 			rows.Close()
 			return err
 		}
-		if size < 0 || uint64(size) > (metadataWorkBytes-2048)/8 {
+		if size < 0 || uint64(size) > (uint64(metadataWorkBytes())-2048)/8 {
 			rows.Close()
 			return ErrMetadataWorkBudget
 		}

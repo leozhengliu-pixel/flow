@@ -59,7 +59,7 @@ func (s *SQLiteStore) readOAuthIdentityValue(ctx context.Context, workspace, ref
 	}
 	limit := MetadataRecordPageMaxBytes
 	for attempt := 0; attempt < 3; attempt++ {
-		if limit > (metadataWorkBytes-(1<<20))/3 {
+		if limit > (metadataWorkBytes()-(1<<20))/3 {
 			return "", false, noop, ErrMetadataPageBudget
 		}
 		ctx, release, err := s.admitMetadataWork(ctx, max(2<<20, 3*limit+(1<<20)))

@@ -163,7 +163,7 @@ func TestScaleP21SW24ApplicationIdentityIDsBounds(t *testing.T) {
 		t.Fatal("oversized ID copied before admission", err)
 	}
 	source.workspaces["workspace"] = domain.Bootstrap{OAuthApplications: []domain.OAuthApplication{{ClientID: "small"}}}
-	full, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes)
+	full, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

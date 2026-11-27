@@ -57,7 +57,7 @@ func (s *SQLiteStore) cacheGetProjectQueryOwned(ctx context.Context, query Proje
 	if err != nil || size == 0 {
 		return ProjectRecordPage{}, key, false, nil
 	}
-	if size < 0 || size > metadataWorkBytes/32 {
+	if size < 0 || size > int64(metadataWorkBytes())/32 {
 		return ProjectRecordPage{}, key, false, ErrMetadataWorkBudget
 	}
 	// Redis's reply string and the returned byte slice coexist. The

@@ -127,7 +127,7 @@ func (p *recurringOccurrenceImageProfile) issueFamily(ctx context.Context, tx *s
 		if count > int64(maxScopedIssues-len(filtered)) {
 			return nil, errScopeTooLarge
 		}
-		if uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*512)/8 {
+		if uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*512)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, uint64(size)*8+uint64(count)*512+64<<10); err != nil {

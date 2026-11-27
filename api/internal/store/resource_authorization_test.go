@@ -257,7 +257,7 @@ func TestScaleP21SW308CanonicalHeadersAndLargeOwnership(t *testing.T) {
 			}
 			wantSQL := 1
 			if large {
-				wantSQL += (len(raw) + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes
+				wantSQL += canonicalMetadataReadQueries(int64(len(raw)))
 			}
 			if statements != wantSQL {
 				t.Fatalf("small/large row query bound changed: got=%d want=%d", statements, wantSQL)

@@ -523,11 +523,11 @@ func (s *SQLiteStore) readResidentWorkspacePolicy(ctx context.Context, tx *sqlTx
 	if reserve != nil {
 		// A page-sized root uses the original map decoder. A larger root
 		// has already streamed unrelated fields out of this projection.
-		budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+		budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes()}
 		if err := budget.consume(raw); err != nil {
 			return data, stamp, 0, err
 		}
-		if err := reserve(uint64(metadataWorkBytes - budget.work)); err != nil {
+		if err := reserve(uint64(metadataWorkBytes() - budget.work)); err != nil {
 			return data, stamp, 0, err
 		}
 	}

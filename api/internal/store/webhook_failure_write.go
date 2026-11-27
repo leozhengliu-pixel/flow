@@ -28,7 +28,7 @@ func (w *webhookFailureWriteWork) close() {
 }
 
 func (w *webhookFailureWriteWork) reserve(cost uint64) error {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := w.store.tryAdmitAdditionalMetadataWork(w.ctx, int(cost))
@@ -103,7 +103,7 @@ type webhookFailureWritePlan struct {
 }
 
 func (w *webhookFailureWriteWork) encoded(node metadataLogicalNode) ([]byte, error) {
-	if node.cost > (metadataWorkBytes-4096)/16 {
+	if node.cost > (uint64(metadataWorkBytes())-4096)/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := w.reserve(node.cost*16 + 4096); err != nil {
@@ -160,7 +160,7 @@ func (w *webhookFailureWriteWork) plan(tx *sqlTx, workspace string, source *meta
 		if !ok || node.value.typ.Kind() != reflect.String {
 			return ErrMetadataRecordQuery
 		}
-		if node.value.cost > (metadataWorkBytes-2048)/8 {
+		if node.value.cost > (uint64(metadataWorkBytes())-2048)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := w.reserve(node.value.cost*8 + 4096); err != nil {

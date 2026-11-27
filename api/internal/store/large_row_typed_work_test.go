@@ -47,7 +47,7 @@ func TestScaleP21SW482LargeRowTypedWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if work < uint64(len(body))*2*3 || work > metadataWorkBytes/4 {
+	if work < uint64(len(body))*2*3 || work > uint64(metadataWorkBytes())/4 {
 		t.Fatal("long string decode work is not charged at its copies", work)
 	}
 	if _, err := largeRowTypedJSONWork(t.Context(), owner, []byte(`{"content":"`+strings.Repeat("y", 64<<10)), kind); err == nil {

@@ -13,7 +13,7 @@ import (
 // worker, which a facade alone would not start or shut down.
 func TestScaleP21SW553FacadeSharesWakersAndAPIKeyUses(t *testing.T) {
 	fixture, view, workspace := scaleP21ColdReadFixture(t)
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	runs, cancels := view.AgentRunWake(), view.AgentRunCancelWake()
 	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(ctx context.Context, facade *SQLiteStore) error {
 		if facade == view || facade.coldParent != view {

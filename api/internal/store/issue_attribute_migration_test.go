@@ -342,7 +342,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 			if len(state.Rows) != 0 || state.Recurrence || state.Last != "" || probe.metadataResidency.work.used != 0 {
 				t.Fatal("failed admission committed partial work or leaked leases")
 			}
-			probe.metadataResidency.work.limit = metadataWorkBytes
+			probe.metadataResidency.work.limit = metadataWorkBytes()
 			if err := job.run(probe, t.Context()); err != nil {
 				t.Fatal("migration failed to resume after admission failure", err)
 			}

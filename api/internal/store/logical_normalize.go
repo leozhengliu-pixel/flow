@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sync/atomic"
 
 	"flow/api/internal/domain"
 )
@@ -18,7 +19,17 @@ type metadataLogicalNormalizer struct {
 	base     domain.Bootstrap
 	work     *metadataLogicalNormalizeWork
 	baseWork int
-	values   *metadataLogicalBuilder
+	// limit is the per-record work limit (metadataRecordWorkLimit); zero
+	// reads it from the store.
+	limit  int
+	values *metadataLogicalBuilder
+}
+
+func (n *metadataLogicalNormalizer) workLimit() int {
+	if n.limit > 0 {
+		return n.limit
+	}
+	return n.store.metadataRecordWorkLimit()
 }
 
 // Cold normalization runs the original normalizer on one owned record and its
@@ -97,14 +108,14 @@ func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *
 			return nil, ctx, nil, err
 		}
 	}
-	n := &metadataLogicalNormalizer{store: s, source: source, stage: stage}
+	n := &metadataLogicalNormalizer{store: s, source: source, stage: stage, limit: s.metadataRecordWorkLimit()}
 	baseCost := uint64(64 << 10)
 	if err := source.VisitFields(ctx, func(name string, node metadataLogicalNode) error {
 		if name == "workspace" || name == "viewer" || name == "viewerRole" || name == "workspaceSettings" {
+			if err := checkMetadataRecordWork(name, node.cost, 4, 0, int(baseCost), n.limit); err != nil {
+				return err
+			}
 			baseCost += node.cost * 4
-		}
-		if baseCost > metadataWorkBytes {
-			return ErrMetadataWorkBudget
 		}
 		return nil
 	}); err != nil {
@@ -147,7 +158,7 @@ func (n *metadataLogicalNormalizer) field(ctx context.Context, builder *metadata
 		// The normalizer only modifies workspaceSettings among scalar
 		// metadata fields. Keep all other actual stored scalar values.
 		if name != "workspaceSettings" {
-			owned, release, err := n.value(ctx, node)
+			owned, release, err := n.value(ctx, name, node)
 			if err != nil {
 				return err
 			}
@@ -230,7 +241,7 @@ func (n *metadataLogicalNormalizer) field(ctx context.Context, builder *metadata
 // ordinal. release ends the record's work allowance; the caller holds it
 // until the normalized value is written.
 func (n *metadataLogicalNormalizer) item(ctx context.Context, name string, key reflect.Value, item metadataLogicalNode, ordinal int) (reflect.Value, func(), error) {
-	owned, release, err := n.value(ctx, item)
+	owned, release, err := n.value(ctx, name, item)
 	if err != nil {
 		return reflect.Value{}, nil, err
 	}
@@ -242,11 +253,35 @@ func (n *metadataLogicalNormalizer) item(ctx context.Context, name string, key r
 	return normalized, release, nil
 }
 
-func (n *metadataLogicalNormalizer) value(ctx context.Context, node metadataLogicalNode) (reflect.Value, func(), error) {
-	if node.cost > uint64(metadataWorkBytes/8) {
-		return reflect.Value{}, nil, ErrMetadataWorkBudget
+// metadataRecordWorkFactor is the work a normalized record reserves per
+// byte of decode cost (logical_capacity.go): eight. Tests raise it to give a
+// record of a few megabytes the work of one of tens of megabytes.
+var metadataRecordWorkFactorOverride atomic.Int64
+
+func metadataRecordWorkFactor() int {
+	if factor := metadataRecordWorkFactorOverride.Load(); factor > 0 {
+		return int(factor)
 	}
-	operation, err := startMetadataLogicalNormalizeWork(ctx, n.store, n.baseWork, int(node.cost)*8+64<<10)
+	return 8
+}
+
+// SetMetadataRecordWorkFactorForTesting sets the work a normalized record
+// reserves per byte of decode cost and returns the function that restores
+// it.
+func SetMetadataRecordWorkFactorForTesting(factor int) func() {
+	previous := metadataRecordWorkFactorOverride.Swap(int64(factor))
+	return func() { metadataRecordWorkFactorOverride.Store(previous) }
+}
+
+// value decodes the record node of collection name under its own work
+// operation: eight times its decode cost plus 64 KiB beside the base work,
+// checked against the per-record limit before any of it is reserved.
+func (n *metadataLogicalNormalizer) value(ctx context.Context, name string, node metadataLogicalNode) (reflect.Value, func(), error) {
+	factor := metadataRecordWorkFactor()
+	if err := checkMetadataRecordWork(name, node.cost, factor, 64<<10, n.baseWork, n.workLimit()); err != nil {
+		return reflect.Value{}, nil, err
+	}
+	operation, err := startMetadataLogicalNormalizeWork(ctx, n.store, n.baseWork, int(node.cost)*factor+64<<10)
 	if err != nil {
 		return reflect.Value{}, nil, err
 	}
@@ -302,7 +337,7 @@ func (n *metadataLogicalNormalizer) index(ctx context.Context) error {
 		}
 		ordinal := 0
 		err := node.Children(ctx, func(_ reflect.Value, item metadataLogicalNode) error {
-			owned, release, err := n.value(ctx, item)
+			owned, release, err := n.value(ctx, name, item)
 			if err != nil {
 				return err
 			}

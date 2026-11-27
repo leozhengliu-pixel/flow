@@ -136,7 +136,7 @@ func TestScaleP21ColdReadInstalledSourceAndReload(t *testing.T) {
 			if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
-			view.metadataResidency.work.limit = metadataWorkBytes
+			view.metadataResidency.work.limit = metadataWorkBytes()
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -173,7 +173,7 @@ func (w scaleP21ColdBlockingWriter) Write(data []byte) (int, error) {
 func TestScaleP21ColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
 	f, view, workspace := scaleP21ColdReadFixture(t)
 	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-second-")).Workspace.URLKey
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 func TestScaleP21ColdReadRefreshBoundariesAndInheritedSnapshot(t *testing.T) {
 	f, parent, workspace := scaleP21ColdReadFixture(t)
 	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-refresh-")).Workspace.URLKey
-	parent.metadataResidency.work.limit = metadataWorkBytes
+	parent.metadataResidency.work.limit = metadataWorkBytes()
 	if err := parent.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
 	}

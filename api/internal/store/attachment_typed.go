@@ -52,7 +52,7 @@ func (s *SQLiteStore) scaleP21SW16MigrateTypedAttachmentIndex(ctx context.Contex
 		keyBytes += int64(len(key))*3 + 128
 	}
 	s.mu.RUnlock()
-	if keyBytes > metadataWorkBytes {
+	if keyBytes > int64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, releaseKeys, err := s.tryAdmitAdditionalMetadataWork(ctx, int(keyBytes)+64<<10)
@@ -151,7 +151,7 @@ func (s *SQLiteStore) scaleP21SW16AttachmentCheckpoint(ctx context.Context, work
 	if complete != 0 {
 		return "", complete, func() {}, nil
 	}
-	if size < 0 || size > (metadataWorkBytes-(64<<10))/3 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return "", 0, nil, ErrMetadataWorkBudget
 	}
 	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size)*3+64<<10)
@@ -177,7 +177,7 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentHeaders(ctx context.Context, tx
 	if err := tx.QueryRowContext(ctx, query, workspace, last).Scan(&count, &bytes); err != nil {
 		return nil, nil, err
 	}
-	if count < 0 || count > 64 || bytes < 0 || bytes > (metadataWorkBytes-(64<<10)-count*128)/3 {
+	if count < 0 || count > 64 || bytes < 0 || bytes > (int64(metadataWorkBytes())-(64<<10)-count*128)/3 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	headerCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(bytes)*3+int(count)*128+64<<10)
@@ -216,7 +216,7 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentHeaders(ctx context.Context, tx
 }
 
 func (s *SQLiteStore) scaleP21SW16ReadAttachmentIssue(ctx context.Context, tx *sqlTx, workspace string, header scaleP21SW16AttachmentHeader, visit func(context.Context, domain.Issue) error) error {
-	if header.size < 0 || header.size > (metadataWorkBytes-(64<<10))/3 {
+	if header.size < 0 || header.size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	rawCtx, releaseRaw, err := s.tryAdmitAdditionalMetadataWork(ctx, int(header.size)*3+64<<10)
@@ -232,11 +232,11 @@ func (s *SQLiteStore) scaleP21SW16ReadAttachmentIssue(ctx context.Context, tx *s
 	if int64(len(raw)) != header.size {
 		return ErrMetadataWorkBudget
 	}
-	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes()}
 	if err := budget.consume(raw); err != nil {
 		return fmt.Errorf("%w: complete attachment source issue", ErrMetadataWorkBudget)
 	}
-	typedCost := metadataWorkBytes - budget.work + 128<<10
+	typedCost := metadataWorkBytes() - budget.work + 128<<10
 	typedCtx, releaseTyped, err := s.tryAdmitAdditionalMetadataWork(rawCtx, typedCost)
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func (b *scaleP21SW16AttachmentBatch) add(ctx context.Context, issue domain.Issu
 	// desired and prior rows; charge those temporary representations too.
 	cost := int64(len(issue.ID))*22 + 1024
 	cost += int64(len(issue.Attachments)) * (1024 + 22*(int64(len(issue.ID))+64))
-	if cost > metadataWorkBytes {
+	if cost > int64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -280,7 +280,7 @@ func (b *scaleP21SW16AttachmentBatch) write(ctx context.Context, tx *sqlTx, work
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+length+"),0) FROM issue_attachment_records WHERE workspace_key=? AND "+where, append([]any{workspace}, ids...)...).Scan(&count, &bytes); err != nil {
 		return err
 	}
-	if count < 0 || bytes < 0 || count > metadataWorkBytes/1024 || bytes > (metadataWorkBytes-count*1024-(64<<10))/22 {
+	if count < 0 || bytes < 0 || count > int64(metadataWorkBytes())/1024 || bytes > (int64(metadataWorkBytes())-count*1024-(64<<10))/22 {
 		return ErrMetadataWorkBudget
 	}
 	writeCtx, release, err := b.store.tryAdmitAdditionalMetadataWork(ctx, int(bytes)*22+int(count)*1024+64<<10)

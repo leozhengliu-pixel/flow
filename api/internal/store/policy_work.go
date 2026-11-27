@@ -51,7 +51,7 @@ func reserveMetadataPolicyDirectory(ctx context.Context, data domain.Bootstrap, 
 		part := byID + byKey + children + uint64(len(team.ID))*6 +
 			keyBytes*4 + uint64(utf8.UTFMax) + 128 +
 			uint64(len(data.TeamSettings[team.ID].ParentTeamID))*2
-		if part > metadataWorkBytes || work > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || work > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		work += part

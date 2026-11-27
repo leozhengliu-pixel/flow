@@ -75,7 +75,7 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 			if err != nil || len(document.Content) != 512<<10 || len(legalRequest) >= 1<<20 {
 				t.Fatal("large document stopped fitting the supported plain-content request", len(legalRequest), err)
 			}
-			if metadataWorkBytes != 256<<20 {
+			if metadataWorkBytes() != 256<<20 {
 				t.Fatal("legal-large retry witness changed the production work quota")
 			}
 
@@ -127,7 +127,7 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 							t.Fatal(err)
 						}
 						defer source.releaseMetadataLogicalSources()
-						if source.metadataResidency.work.limit != metadataWorkBytes {
+						if source.metadataResidency.work.limit != metadataWorkBytes() {
 							t.Fatal("large retry witness is not using the default work allowance")
 						}
 					}

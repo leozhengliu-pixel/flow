@@ -318,7 +318,7 @@ func (r *IssueSuggestionScores) Keep(ctx context.Context, issue domain.Issue) er
 	if err != nil {
 		return err
 	}
-	if cost > (metadataWorkBytes-1024)/2 {
+	if cost > (uint64(metadataWorkBytes())-1024)/2 {
 		return ErrMetadataWorkBudget
 	}
 	return r.owner.reserve(ctx, cost*2+1024)
@@ -346,7 +346,7 @@ func (r *IssueSuggestionScores) Project(ctx context.Context, issue domain.Issue)
 	}
 	cost := uint64(reflect.TypeFor[domain.Issue]().Size())*2 + 1024
 	add := func(n uint64) error {
-		if n > metadataWorkBytes || cost > metadataWorkBytes-n {
+		if n > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-n {
 			return ErrMetadataWorkBudget
 		}
 		cost += n

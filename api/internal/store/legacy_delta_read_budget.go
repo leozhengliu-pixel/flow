@@ -102,9 +102,9 @@ func (b *legacyMetadataDeltaReadBudget) record(ctx context.Context, tx *sqlTx, w
 		workspace, key.field, key.key).Scan(&size); err != nil {
 		return nil, err
 	}
-	limit := int64(metadataWorkBytes / 4)
+	limit := int64(metadataWorkBytes() / 4)
 	if decode {
-		limit = metadataWorkBytes / 16
+		limit = int64(metadataWorkBytes()) / 16
 	}
 	if size < 0 || size > limit {
 		return nil, ErrMetadataWorkBudget
@@ -136,7 +136,7 @@ func (b *legacyMetadataDeltaReadBudget) record(ctx context.Context, tx *sqlTx, w
 		if err != nil {
 			return nil, err
 		}
-		if work > (metadataWorkBytes-4096)/8 {
+		if work > (uint64(metadataWorkBytes())-4096)/8 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := b.reserve(ctx, work*8+4096); err != nil {
@@ -174,7 +174,7 @@ func (b *legacyMetadataDeltaReadBudget) lockRecords(ctx context.Context, tx *sql
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0)"+where, values...).Scan(&maximum); err != nil {
 			return nil, err
 		}
-		if maximum < 0 || maximum > metadataWorkBytes/16 {
+		if maximum < 0 || maximum > int64(metadataWorkBytes())/16 {
 			return nil, ErrMetadataWorkBudget
 		}
 		bodyWire := &ResourceRead{store: b.owner.store}
@@ -207,7 +207,7 @@ func (b *legacyMetadataDeltaReadBudget) lockRecords(ctx context.Context, tx *sql
 				}
 				if !actual.Valid || actual.Int64 < 0 || actual.Int64 > maximum || int64(len(raw)) != actual.Int64 {
 					rows.Close()
-					if actual.Valid && actual.Int64 > metadataWorkBytes/16 {
+					if actual.Valid && actual.Int64 > int64(metadataWorkBytes())/16 {
 						return ErrMetadataWorkBudget
 					}
 					return ErrConcurrentWrite
@@ -217,7 +217,7 @@ func (b *legacyMetadataDeltaReadBudget) lockRecords(ctx context.Context, tx *sql
 					rows.Close()
 					return err
 				}
-				if work > (metadataWorkBytes-uint64(len(raw))*3-4096)/8 {
+				if work > (uint64(metadataWorkBytes())-uint64(len(raw))*3-4096)/8 {
 					rows.Close()
 					return ErrMetadataWorkBudget
 				}

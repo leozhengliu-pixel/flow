@@ -176,7 +176,7 @@ func newMetadataJSONStringSource(ctx context.Context, owner *ResourceRead, input
 	if mode == metadataJSONStringCompactRaw {
 		cost += logicalJSONStreamWork
 	}
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	owner.mu.Lock()

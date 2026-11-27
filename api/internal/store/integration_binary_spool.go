@@ -40,7 +40,7 @@ func integrationDeliveryBinarySpool(ctx context.Context, owner *ResourceRead, sp
 			}
 		}
 		if !utf8.Valid(buffer[:end]) {
-			if spool.bytes < 0 || uint64(spool.bytes) > (metadataWorkBytes-(64<<10))/4 {
+			if spool.bytes < 0 || uint64(spool.bytes) > (uint64(metadataWorkBytes())-(64<<10))/4 {
 				return nil, false, ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, uint64(spool.bytes)*4+64<<10); err != nil {

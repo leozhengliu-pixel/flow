@@ -238,7 +238,7 @@ func (p *bootstrapBodyProjection) Close() {
 }
 
 func (p *bootstrapBodyProjection) reserve(ctx context.Context, cost uint64) error {
-	if cost > metadataWorkBytes-p.work {
+	if cost > uint64(metadataWorkBytes())-p.work {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := p.owner.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -271,7 +271,7 @@ const bootstrapBodyAdmissionStep = 1 << 20
 // alone came to more than the whole process work budget, so every bootstrap
 // of it was refused although its headers take tens of MiB.
 func (p *bootstrapBodyProjection) decode(ctx context.Context, node metadataLogicalNode) (reflect.Value, error) {
-	if node.cost > metadataWorkBytes-p.committed {
+	if node.cost > uint64(metadataWorkBytes())-p.committed {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := p.admitCommitted(ctx, p.committed+node.cost); err != nil {
@@ -285,7 +285,7 @@ func (p *bootstrapBodyProjection) decode(ctx context.Context, node metadataLogic
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	if retained > metadataWorkBytes-p.committed {
+	if retained > uint64(metadataWorkBytes())-p.committed {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	p.committed += retained
@@ -297,10 +297,10 @@ func (p *bootstrapBodyProjection) admitCommitted(ctx context.Context, need uint6
 	if need <= p.work {
 		return nil
 	}
-	if need > metadataWorkBytes {
+	if need > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
-	return p.reserve(ctx, min(max(need-p.work, bootstrapBodyAdmissionStep), metadataWorkBytes-p.work))
+	return p.reserve(ctx, min(max(need-p.work, bootstrapBodyAdmissionStep), uint64(metadataWorkBytes())-p.work))
 }
 
 // bootstrapNativeBytes bounds the heap a decoded value retains beyond its own
@@ -319,7 +319,7 @@ func bootstrapNativeBytes(ctx context.Context, value reflect.Value, depth int) (
 	}
 	total := uint64(0)
 	add := func(part uint64) error {
-		if part > metadataWorkBytes || total > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || total > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		total += part
@@ -351,7 +351,7 @@ func bootstrapNativeBytes(ctx context.Context, value reflect.Value, depth int) (
 			return 0, nil
 		}
 		element := value.Type().Elem()
-		if uint64(value.Cap()) > metadataWorkBytes/max(uint64(element.Size()), 1) {
+		if uint64(value.Cap()) > uint64(metadataWorkBytes())/max(uint64(element.Size()), 1) {
 			return 0, ErrMetadataWorkBudget
 		}
 		if err := add(bootstrapNativeAllocation(uint64(value.Cap()) * uint64(element.Size()))); err != nil {
@@ -390,7 +390,7 @@ func bootstrapNativeBytes(ctx context.Context, value reflect.Value, depth int) (
 			slots *= 2
 		}
 		slot := uint64(value.Type().Key().Size()+value.Type().Elem().Size()) + 1
-		if slots > metadataWorkBytes/slot {
+		if slots > uint64(metadataWorkBytes())/slot {
 			return 0, ErrMetadataWorkBudget
 		}
 		if err := add(bootstrapNativeAllocation(slots*slot) + 128 + (slots/1024+1)*64); err != nil {
@@ -468,7 +468,7 @@ func bootstrapNativeFlat(t reflect.Type) bool {
 }
 
 func bootstrapBodyAddWork(total *uint64, part uint64) error {
-	if part > metadataWorkBytes || *total > metadataWorkBytes-part {
+	if part > uint64(metadataWorkBytes()) || *total > uint64(metadataWorkBytes())-part {
 		return ErrMetadataWorkBudget
 	}
 	*total += part
@@ -501,7 +501,7 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 		// A header subtree is admitted where it is decoded (decode): its
 		// frame cost while decoding, then the native bytes it retains. Its
 		// inline bytes are its parent's.
-		if node.cost > metadataWorkBytes {
+		if node.cost > uint64(metadataWorkBytes()) {
 			return ErrMetadataWorkBudget
 		}
 		return nil
@@ -518,7 +518,7 @@ func (p *bootstrapBodyProjection) projectedWork(ctx context.Context, node metada
 		}
 		ordinal := 0
 		return node.MapEntries(ctx, func(key, child metadataLogicalNode) error {
-			if key.cost > (metadataWorkBytes-512)/8 {
+			if key.cost > (uint64(metadataWorkBytes())-512)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := bootstrapBodyAddWork(total, key.cost*8+512); err != nil {
@@ -1140,11 +1140,11 @@ func (p *bootstrapBodyProjection) bind(ctx context.Context, projected domain.Boo
 		return nil, nil, err
 	}
 	occurrences := uint64(len(p.origins) + len(p.rawOrigins))
-	if cost > metadataWorkBytes || occurrences > (metadataWorkBytes-cost)/(2048+256) {
+	if cost > uint64(metadataWorkBytes()) || occurrences > (uint64(metadataWorkBytes())-cost)/(2048+256) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	cost += occurrences*(2048+256) + uint64(reflect.TypeFor[domain.Bootstrap]().Size()) + 2<<20 + 512<<10
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	p.Data = domain.Bootstrap{}

@@ -185,7 +185,7 @@ func TestScaleP21SW94ProjectQueryCacheReadGuards(t *testing.T) {
 				if pageCalls == 1 {
 					switch mode {
 					case "oversize-header":
-						return nil, metadataWorkBytes/32 + 1, nil
+						return nil, int64(metadataWorkBytes())/32 + 1, nil
 					case "negative-header":
 						return nil, -1, nil
 					case "preflight-error":

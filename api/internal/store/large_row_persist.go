@@ -150,7 +150,7 @@ func (p *legacyMetadataWritePlan) largeRowDisplayEqualInMemory(ctx context.Conte
 
 // largeRowPartBytes loads one encoded part with its decode work admitted.
 func largeRowPartBytes(ctx context.Context, owner *ResourceRead, part legacySessionJSONPart, copies uint64) ([]byte, error) {
-	if part.size < 0 || uint64(part.size) > (metadataWorkBytes-4096)/copies {
+	if part.size < 0 || uint64(part.size) > (uint64(metadataWorkBytes())-4096)/copies {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(part.size)*copies+4096); err != nil {

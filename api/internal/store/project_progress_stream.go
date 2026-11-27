@@ -171,7 +171,7 @@ func legacyProjectFrameString(ctx context.Context, builder *metadataLogicalBuild
 	}
 	length := uint64(0)
 	null, err := VisitMetadataJSONStringChunks(ctx, input, func(part []byte) error {
-		if uint64(len(part)) > (metadataWorkBytes-node.cost)/2 {
+		if uint64(len(part)) > (uint64(metadataWorkBytes())-node.cost)/2 {
 			return ErrMetadataWorkBudget
 		}
 		if err := builder.write(part); err != nil {

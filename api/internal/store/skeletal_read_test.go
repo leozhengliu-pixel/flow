@@ -60,7 +60,7 @@ func TestScaleP21SW531LegacyReadsAnswerTheInstalledImage(t *testing.T) {
 		t.Fatalf("observed %q, want %q", observed, want)
 	}
 	// The registered COLD facade reads the complete image.
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	view.metadataResidency.requireCoverage = false
 	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(_ context.Context, repo *SQLiteStore) error {
 		data, found := repo.WorkspaceMetadata(workspace)

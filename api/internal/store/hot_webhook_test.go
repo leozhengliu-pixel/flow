@@ -177,7 +177,7 @@ func TestScaleP21HotWebhookIdentityAndLifetime(t *testing.T) {
 	if _, err := view.residentWebhookNeeded(t.Context(), ""); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("descriptor admission bypassed", err)
 	}
-	view.metadataResidency.work.limit = metadataWorkBytes
+	view.metadataResidency.work.limit = metadataWorkBytes()
 	checkReleased()
 	view.metadataResidency.mu.Lock()
 	delete(view.metadataResidency.logical, physical)

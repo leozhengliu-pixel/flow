@@ -191,7 +191,7 @@ func TestScaleP21SW23TeamProjectionLargeIgnoredAndAdmission(t *testing.T) {
 	if read, err := scaleP21SW23TeamProjected(t, source, large); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || source.metadataResidency.work.used != 0 {
 		t.Fatal("selected string budget did not reject atomically", err)
 	}
-	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes)
+	_, releaseFull, err := source.admitMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

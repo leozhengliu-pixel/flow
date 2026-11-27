@@ -221,13 +221,13 @@ func (b *legacyRecordBase) visit(ctx context.Context, source *metadataLogicalSou
 		item := func(resource string, value metadataLogicalNode) error {
 			work := &ResourceRead{store: b.store}
 			defer work.Close()
-			if value.cost > (metadataWorkBytes-(64<<10))/4 {
+			if value.cost > (uint64(metadataWorkBytes())-(64<<10))/4 {
 				return ErrMetadataWorkBudget
 			}
 			if err := work.reserve(ctx, value.cost*4+64<<10); err != nil {
 				return err
 			}
-			native, err := value.Value(ctx, metadataWorkBytes)
+			native, err := value.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}
@@ -247,13 +247,13 @@ func (b *legacyRecordBase) visit(ctx context.Context, source *metadataLogicalSou
 			return node.MapEntries(ctx, func(key, list metadataLogicalNode) error {
 				keyWork := &ResourceRead{store: b.store}
 				defer keyWork.Close()
-				if key.cost > (metadataWorkBytes-4096)/8 {
+				if key.cost > (uint64(metadataWorkBytes())-4096)/8 {
 					return ErrMetadataWorkBudget
 				}
 				if err := keyWork.reserve(ctx, key.cost*8+4096); err != nil {
 					return err
 				}
-				value, err := key.Value(ctx, metadataWorkBytes)
+				value, err := key.Value(ctx, metadataWorkBytes())
 				if err != nil {
 					return err
 				}
@@ -335,7 +335,7 @@ func (b *legacyRecordBase) scanCurrent(ctx context.Context, tx *sqlTx, workspace
 	if err != nil {
 		return err
 	}
-	if maxID < 0 || maxResource < 0 || maxBody < 0 || maxID > metadataWorkBytes/16 || maxResource > metadataWorkBytes/16 || maxBody > metadataWorkBytes/16 {
+	if maxID < 0 || maxResource < 0 || maxBody < 0 || maxID > int64(metadataWorkBytes())/16 || maxResource > int64(metadataWorkBytes())/16 || maxBody > int64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maxID+maxResource)*8+uint64(maxBody)*3+128<<10); err != nil {
@@ -398,8 +398,8 @@ func (b *legacyRecordBase) currentBody(ctx context.Context, tx *sqlTx, workspace
 		}
 		return nil, false, err
 	}
-	if size < 0 || kind != "issue" && size > metadataWorkBytes/16 ||
-		uint64(size) > (metadataWorkBytes-(64<<10))/4 {
+	if size < 0 || kind != "issue" && size > int64(metadataWorkBytes())/16 ||
+		uint64(size) > (uint64(metadataWorkBytes())-(64<<10))/4 {
 		return nil, false, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(size)*4+64<<10); err != nil {
@@ -621,7 +621,7 @@ func (b *legacyRecordBase) unseen(ctx context.Context, kind string, visit func(s
 	if err := b.stage.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(LENGTH(resource)),0),COALESCE(MAX(LENGTH(id)),0) FROM legacy_current WHERE kind=? AND seen=0`, kind).Scan(&maxResource, &maxID); err != nil {
 		return err
 	}
-	if maxResource < 0 || maxID < 0 || uint64(maxResource+maxID) > (metadataWorkBytes-(128<<10))/8 {
+	if maxResource < 0 || maxID < 0 || uint64(maxResource+maxID) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maxResource+maxID)*8+128<<10); err != nil {
@@ -714,7 +714,7 @@ func (b *legacyRecordBase) writeContent(ctx context.Context, tx *sqlTx, workspac
 	if kind == "notification" {
 		notification := value.Interface().(domain.Notification)
 		size := uint64(len(workspace)) + uint64(len(notification.ID)) + uint64(len(notification.RecipientID)) + uint64(len(notification.Actor.ID))
-		if size > (metadataWorkBytes-1024)/8 {
+		if size > (uint64(metadataWorkBytes())-1024)/8 {
 			return ErrMetadataWorkBudget
 		}
 		var err error
@@ -756,13 +756,13 @@ func (b *legacyRecordBase) prepareIssueOrder(ctx context.Context, target *metada
 		if err != nil {
 			return err
 		}
-		if idNode.cost > (metadataWorkBytes-4096)/8 {
+		if idNode.cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, idNode.cost*8+4096); err != nil {
 			return err
 		}
-		id, err := idNode.Value(ctx, metadataWorkBytes)
+		id, err := idNode.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}
@@ -819,7 +819,7 @@ func (b *legacyRecordBase) prepareIssueOrder(ctx context.Context, target *metada
 	if err := b.stage.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(LENGTH(id)),0) FROM legacy_issue_order`).Scan(&maxID); err != nil {
 		return err
 	}
-	if maxID < 0 || uint64(maxID) > (metadataWorkBytes-(128<<10))/8 {
+	if maxID < 0 || uint64(maxID) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maxID)*8+128<<10); err != nil {
@@ -877,7 +877,7 @@ func (b *legacyRecordBase) issueBatch(ctx context.Context, source *metadataLogic
 	if err := b.stage.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(id)),0) FROM legacy_issue_order WHERE seq>=? AND seq<?`, start, start+64).Scan(&bytes); err != nil {
 		return nil, err
 	}
-	if bytes < 0 || uint64(bytes) > (metadataWorkBytes-(128<<10))/8 {
+	if bytes < 0 || uint64(bytes) > (uint64(metadataWorkBytes())-(128<<10))/8 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(bytes)*8+128<<10); err != nil {
@@ -898,7 +898,7 @@ func (b *legacyRecordBase) issueBatch(ctx context.Context, source *metadataLogic
 			return nil, err
 		}
 		// The collection's logical range includes frames borrowed from other spools.
-		if cost < 0 || cost > metadataWorkBytes || header.node.size < 16 ||
+		if cost < 0 || cost > int64(metadataWorkBytes()) || header.node.size < 16 ||
 			header.node.offset < field.offset || header.node.offset-field.offset > field.size-header.node.size {
 			return nil, ErrMetadataRecordQuery
 		}
@@ -930,7 +930,7 @@ func (b *legacyRecordBase) issuePayloadBatch(ctx context.Context, tx *sqlTx, wor
 	}
 	// Preserve the one-SELECT 64-target preimage snapshot and the existing
 	// three-copy row transfer allowance. Validate before multiplication.
-	if maximum < 0 || uint64(maximum) > (metadataWorkBytes-(64<<10))/3 {
+	if maximum < 0 || uint64(maximum) > (uint64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := wire.reserve(ctx, uint64(maximum)*3+64<<10); err != nil {
@@ -970,7 +970,7 @@ func (b *legacyRecordBase) issuePayload(ctx context.Context, id string, work *Re
 	if err != nil {
 		return nil, false, err
 	}
-	if bytes < 0 || uint64(bytes) > (metadataWorkBytes-(64<<10))/4 {
+	if bytes < 0 || uint64(bytes) > (uint64(metadataWorkBytes())-(64<<10))/4 {
 		return nil, false, ErrMetadataWorkBudget
 	}
 	if err := work.reserve(ctx, uint64(bytes)*4+64<<10); err != nil {
@@ -1148,13 +1148,13 @@ func (b *legacyRecordBase) issueReferences(ctx context.Context, target *metadata
 				refs.projects[matched] = domain.ProjectSummary{ID: project.ID, Name: project.Name, Icon: project.Icon, Color: project.Color}
 				return nil
 			}
-			if node.cost > (metadataWorkBytes-(64<<10))/4 {
+			if node.cost > (uint64(metadataWorkBytes())-(64<<10))/4 {
 				return ErrMetadataWorkBudget
 			}
 			if err := work.reserve(ctx, node.cost*4+64<<10); err != nil {
 				return err
 			}
-			value, err := node.Value(ctx, metadataWorkBytes)
+			value, err := node.Value(ctx, metadataWorkBytes())
 			if err != nil {
 				return err
 			}

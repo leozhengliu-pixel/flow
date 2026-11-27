@@ -40,7 +40,7 @@ func TestScaleP21SW184IssueBatchEncodingOwnership(t *testing.T) {
 				t.Fatal("released encoding work remained charged")
 			}
 		}
-		_, exhausted, err := s.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes)
+		_, exhausted, err := s.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes())
 		if err != nil {
 			t.Fatal(err)
 		}

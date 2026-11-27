@@ -133,7 +133,7 @@ func (r *metadataLogicalLargeRetry) captureField(ctx context.Context, workspace,
 		}
 		// Fund retained SQL byte copies separately from the reusable Scan
 		// envelope. Each field has at most the original bounded key count.
-		if uint64(len(raw)) > (metadataWorkBytes-512)/2 {
+		if uint64(len(raw)) > (uint64(metadataWorkBytes())-512)/2 {
 			rows.Close()
 			return ErrMetadataWorkBudget
 		}
@@ -211,7 +211,7 @@ func (r *metadataRetryBlobReader) Read(output []byte) (int, error) {
 		if base.offset >= base.size {
 			return 0, io.EOF
 		}
-		count := min(int64(metadataRecordChunkBytes), base.size-base.offset)
+		count := min(canonicalMetadataReadBytes(base.offset), base.size-base.offset)
 		if err := base.tx.QueryRowContext(base.ctx,
 			`SELECT SUBSTR(CAST(data AS BLOB),?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`,
 			base.offset+1, count, base.workspace, base.key.Kind, []byte(base.key.ID)).Scan(&base.buffer); err != nil {
@@ -322,7 +322,7 @@ func metadataRetryResolveDocument(ctx context.Context, s *SQLiteStore, part lega
 	if !found {
 		return part, close, nil
 	}
-	if part.size < 0 || uint64(part.size) > (metadataWorkBytes-(64<<10))/2 {
+	if part.size < 0 || uint64(part.size) > (uint64(metadataWorkBytes())-(64<<10))/2 {
 		return legacySessionJSONPart{}, nil, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(part.size)*2+64<<10); err != nil {
@@ -359,12 +359,12 @@ func metadataRetryResolveDocument(ctx context.Context, s *SQLiteStore, part lega
 		if json.Unmarshal(revision[offloadMarker], &marker) != nil || jsonString(marker["body"]) != "document" {
 			continue
 		}
-		if bodyBytes > metadataWorkBytes || expanded > metadataWorkBytes-bodyBytes {
+		if bodyBytes > uint64(metadataWorkBytes()) || expanded > uint64(metadataWorkBytes())-bodyBytes {
 			return legacySessionJSONPart{}, nil, ErrMetadataWorkBudget
 		}
 		expanded += bodyBytes
 	}
-	if expanded > (metadataWorkBytes-(64<<10))/16 {
+	if expanded > (uint64(metadataWorkBytes())-(64<<10))/16 {
 		return legacySessionJSONPart{}, nil, ErrMetadataWorkBudget
 	}
 	fields, revisions = nil, nil

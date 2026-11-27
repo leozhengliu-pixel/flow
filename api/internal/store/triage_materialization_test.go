@@ -275,7 +275,7 @@ func TestScaleP21SW185InlineFieldMaterializationOwnership(t *testing.T) {
 	f := &legacyMetadataWriteField{field: field, full: true, before: left.fields[field.index], next: right.fields[field.index]}
 	s := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	plan := &legacyMetadataWritePlan{store: s}
-	if (f.before.cost+f.next.cost)*64 <= metadataWorkBytes {
+	if (f.before.cost+f.next.cost)*64 <= uint64(metadataWorkBytes()) {
 		t.Fatal("fixture does not exceed the previous full-field blanket admission")
 	}
 	work := &ResourceRead{store: s}
@@ -287,7 +287,7 @@ func TestScaleP21SW185InlineFieldMaterializationOwnership(t *testing.T) {
 	if !reflect.DeepEqual(a.Interface(), before.IssueSuggestions) || !reflect.DeepEqual(b.Interface(), after.IssueSuggestions) {
 		t.Fatal("materialization changed duplicate IDs, escaping, or native metadata values")
 	}
-	if held := s.MetadataWorkUsedForTesting(); held == 0 || held >= metadataWorkBytes {
+	if held := s.MetadataWorkUsedForTesting(); held == 0 || held >= metadataWorkBytes() {
 		t.Fatalf("materialized values lost their allowance: %d", held)
 	} else {
 		t.Logf("old_blanket_bytes=%d live_admitted_bytes=%d", (f.before.cost+f.next.cost)*64, held)

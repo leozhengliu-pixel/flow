@@ -281,6 +281,28 @@ type canonicalMetadataReader struct {
 	captureExceeded bool
 }
 
+// canonicalMetadataReadBytes is the chunk a reader at offset fetches: 16 KiB,
+// growing with the offset to 1 MiB. Each chunk is one SUBSTR query, and the
+// database walks a large BLOB from its start for each (SQLite follows the
+// overflow page chain), so 16 KiB chunks made reading a record of tens of
+// megabytes take thousands of walks of up to its whole length (over a
+// minute for 72 MB). Chunks of a sixteenth of the offset in whole 16 KiB
+// windows, at most 1 MiB, take up to 64 times fewer walks within a bounded
+// buffer; readers still see the same 16 KiB windows.
+func canonicalMetadataReadBytes(offset int64) int64 {
+	return min(max(1, offset/16/metadataRecordChunkBytes), 64) * metadataRecordChunkBytes
+}
+
+// canonicalMetadataReadQueries is the number of chunks a reader fetches for
+// a record of size bytes.
+func canonicalMetadataReadQueries(size int64) int {
+	queries := 0
+	for offset := int64(0); offset < size; offset += canonicalMetadataReadBytes(offset) {
+		queries++
+	}
+	return queries
+}
+
 func (r *canonicalMetadataReader) Read(p []byte) (int, error) {
 	pageBytes := r.pageBytes
 	if pageBytes == 0 {
@@ -306,30 +328,41 @@ func (r *canonicalMetadataReader) Read(p []byte) (int, error) {
 		if r.boundedCapture {
 			n = min(n, int64(r.captureLeft))
 		}
-		if r.pageBytes == 0 || len(r.readAhead) == 0 {
+		if r.pageBytes == 0 && len(r.readAhead) != 0 {
+			// A window cut from a fetched chunk stops on cancellation as
+			// the query for it would.
+			if err := r.ctx.Err(); err != nil {
+				return 0, err
+			}
+		}
+		if r.pageBytes == 0 && int64(len(r.readAhead)) < n {
+			// Every window is the one a 16 KiB read at this offset returns:
+			// a remainder shorter than that is fetched again with the rest.
+			r.readAhead = nil
+		}
+		if len(r.readAhead) == 0 {
 			fetch := n
-			target := &r.buffer
 			if r.pageBytes != 0 {
 				fetch = min(int64(pageBytes), r.size-r.offset)
-				target = &r.readAhead
+			} else if !r.boundedCapture {
+				fetch = min(canonicalMetadataReadBytes(r.offset), r.size-r.offset)
 			}
 			data := "data"
 			if r.tx.dialect == "sqlite" {
 				data = "CAST(data AS BLOB)"
 			}
-			if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, fetch, r.workspace, r.key.Kind, r.key.ID).Scan(target); err != nil {
+			if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, fetch, r.workspace, r.key.Kind, r.key.ID).Scan(&r.readAhead); err != nil {
 				return 0, err
 			}
-			if r.pageBytes != 0 && int64(len(r.readAhead)) != fetch {
+			if (r.pageBytes != 0 || fetch != n) && int64(len(r.readAhead)) != fetch {
 				return 0, io.ErrUnexpectedEOF
 			}
 		}
-		if r.pageBytes != 0 {
-			// Keep the catalog's original logical capture windows even when
-			// SQL reads ahead under a separately owned larger page.
-			n = min(n, int64(len(r.readAhead)))
-			r.buffer, r.readAhead = r.readAhead[:n], r.readAhead[n:]
-		}
+		// Keep the catalog's original logical capture windows (16 KiB, or
+		// what the capture has left) even when SQL reads ahead a larger
+		// chunk or page.
+		n = min(n, int64(len(r.readAhead)))
+		r.buffer, r.readAhead = r.readAhead[:n], r.readAhead[n:]
 		if len(r.buffer) == 0 {
 			return 0, io.ErrUnexpectedEOF
 		}

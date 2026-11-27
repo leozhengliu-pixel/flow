@@ -125,7 +125,7 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 	workspace := f.data.Workspace.URLKey
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
-	if metadataRecoveryPageRows != 32 || MetadataRecordPageMaxBytes != 256<<10 || metadataWorkBytes != 256<<20 {
+	if metadataRecoveryPageRows != 32 || MetadataRecordPageMaxBytes != 256<<10 || metadataWorkBytes() != 256<<20 {
 		t.Fatal("transport regression must retain the production limits")
 	}
 

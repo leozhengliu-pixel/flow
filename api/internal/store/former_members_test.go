@@ -230,7 +230,7 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 	if _, err := scaleP21SW16CanonicalFormerResult(probe, t.Context(), workspace); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("result allowance bypassed the process budget", err)
 	}
-	probe.metadataResidency.work.limit = metadataWorkBytes
+	probe.metadataResidency.work.limit = metadataWorkBytes()
 	if _, err := scaleP21SW16CanonicalFormerResult(probe, t.Context(), workspace); err != nil || probe.metadataResidency.work.used != 0 || probe.metadataResidency.work.waiting != 0 || probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("former-member read failed recovery or leaked work/full decode", err)
 	}

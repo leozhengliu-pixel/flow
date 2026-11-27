@@ -357,7 +357,7 @@ func (s *SQLiteStore) mysqlMetadataSearchPageContent(ctx context.Context, pageAr
 		return plain, nil, func() {}, nil
 	}
 	cost := int64(64<<10) + count*512 + size*4
-	if size > metadataWorkBytes || cost > metadataWorkBytes {
+	if size > int64(metadataWorkBytes()) || cost > int64(metadataWorkBytes()) {
 		return plain, nil, func() {}, nil
 	}
 	readCtx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(cost))

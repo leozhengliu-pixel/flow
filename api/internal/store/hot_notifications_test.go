@@ -223,7 +223,7 @@ func TestScaleP21HotNotificationsSourceChoiceAndBudgets(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, release, err := view.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes-view.metadataResidency.work.used-(1<<20))
+		_, release, err := view.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes()-view.metadataResidency.work.used-(1<<20))
 		if err != nil {
 			t.Fatal(err)
 		}

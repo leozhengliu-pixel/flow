@@ -18,6 +18,7 @@ import (
 type metadataLogicalNormalizeWork struct {
 	ctx          context.Context
 	store        *SQLiteStore
+	limit        int
 	total        int
 	credit       int
 	extra        int
@@ -32,10 +33,16 @@ func startMetadataLogicalNormalizeWork(ctx context.Context, store *SQLiteStore, 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if store == nil || baseWork < 0 || currentWork < 0 || baseWork > metadataWorkBytes-currentWork {
+	if store == nil {
 		return nil, ErrMetadataWorkBudget
 	}
-	work := &metadataLogicalNormalizeWork{ctx: ctx, store: store}
+	// One operation may hold up to the per-record work limit (the process
+	// work budget), reserved through it (logical_capacity.go).
+	limit := store.metadataRecordWorkLimit()
+	if baseWork < 0 || currentWork < 0 || baseWork > limit-currentWork {
+		return nil, ErrMetadataWorkBudget
+	}
+	work := &metadataLogicalNormalizeWork{ctx: ctx, store: store, limit: limit}
 	if store.metadataResidency != nil {
 		if lease, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && lease.budget == store.metadataResidency.work {
 			lease.budget.mu.Lock()
@@ -77,7 +84,7 @@ func (w *metadataLogicalNormalizeWork) setTotal(total int) error {
 	if err := w.live(); err != nil {
 		return err
 	}
-	if total < 0 || total > metadataWorkBytes {
+	if total < 0 || total > w.limit {
 		return ErrMetadataWorkBudget
 	}
 	required := max(0, total-w.credit)
@@ -100,7 +107,7 @@ type metadataLogicalNormalizeDependency struct {
 }
 
 func (w *metadataLogicalNormalizeWork) dependency(bytes int) (*metadataLogicalNormalizeDependency, error) {
-	if bytes < 0 || bytes > metadataWorkBytes-w.total {
+	if bytes < 0 || bytes > w.limit-w.total {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := w.setTotal(w.total + bytes); err != nil {
@@ -111,7 +118,7 @@ func (w *metadataLogicalNormalizeWork) dependency(bytes int) (*metadataLogicalNo
 }
 
 func (d *metadataLogicalNormalizeDependency) resize(bytes int) error {
-	if d.released || bytes < 0 || bytes > metadataWorkBytes || d.work.total-d.bytes > metadataWorkBytes-bytes {
+	if d.released || bytes < 0 || bytes > d.work.limit || d.work.total-d.bytes > d.work.limit-bytes {
 		return ErrMetadataWorkBudget
 	}
 	if err := d.work.setTotal(d.work.total - d.bytes + bytes); err != nil {
@@ -230,8 +237,9 @@ func (n *metadataLogicalNormalizer) getAdmitted(ctx context.Context, kind, key s
 	if !rawBytes.Valid {
 		return false, nil, ErrMetadataRecordQuery
 	}
+	limit := n.workLimit()
 	bytes := rawBytes.Int64
-	if bytes < 0 || bytes > metadataWorkBytes/2 {
+	if bytes < 0 || bytes > int64(limit/2) {
 		return false, nil, ErrMetadataWorkBudget
 	}
 	work := n.work
@@ -274,13 +282,13 @@ func (n *metadataLogicalNormalizer) getAdmitted(ctx context.Context, kind, key s
 		release()
 		return false, nil, ErrConcurrentWrite
 	}
-	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes}
+	budget := metadataHydrationBudget{bytes: len(raw), work: limit}
 	if err := budget.consume(raw); err != nil {
 		release()
 		return false, nil, ErrMetadataWorkBudget
 	}
-	cost := metadataWorkBytes - budget.work
-	if uint64(t.Elem().Size()) > uint64(metadataWorkBytes/2) {
+	cost := limit - budget.work
+	if uint64(t.Elem().Size()) > uint64(limit/2) {
 		release()
 		return false, nil, ErrMetadataWorkBudget
 	}
@@ -313,8 +321,8 @@ func (n *metadataLogicalNormalizer) getTypedAdmitted(ctx context.Context, kind s
 		(blocked.Int64 != 0 && blocked.Int64 != 1) {
 		return false, nil, ErrMetadataRecordQuery
 	}
-	if cost.Int64 > metadataWorkBytes/4 {
-		return false, nil, ErrMetadataWorkBudget
+	if err := checkMetadataRecordWork(kind, uint64(cost.Int64), 4, 64<<10, n.work.total, n.work.limit); err != nil {
+		return false, nil, err
 	}
 	token, err := n.work.dependency(int(cost.Int64)*4 + 64<<10)
 	if err != nil {

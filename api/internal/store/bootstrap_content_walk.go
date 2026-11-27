@@ -55,7 +55,7 @@ func (s *SQLiteStore) walkBoundedBootstrapContentRecords(ctx context.Context, wo
 	fixed := &ResourceRead{store: s}
 	defer fixed.Close()
 	bytes := uint64(len(workspace)) + uint64(len(kind))
-	if bytes > (metadataWorkBytes-(64<<10))/8 {
+	if bytes > (uint64(metadataWorkBytes())-(64<<10))/8 {
 		return ErrMetadataWorkBudget
 	}
 	if err := fixed.reserve(ctx, bytes*8+(64<<10)); err != nil {
@@ -215,7 +215,7 @@ func (s *SQLiteStore) bootstrapContentBodies(ctx context.Context, reader bootstr
 		}
 		wire.Close()
 	}()
-	if len(headers) == 0 || len(headers) > bootstrapContentBodyRows || size < 0 || size > metadataWorkBytes/16 ||
+	if len(headers) == 0 || len(headers) > bootstrapContentBodyRows || size < 0 || size > int64(metadataWorkBytes())/16 ||
 		len(headers) > 1 && size > bootstrapContentBodyBytes {
 		return ErrMetadataWorkBudget
 	}
@@ -293,7 +293,7 @@ func (s *SQLiteStore) bootstrapContentVisit(ctx context.Context, kind, resource 
 			return err
 		}
 	}
-	if work > (metadataWorkBytes-(64<<10))/3 {
+	if work > (uint64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := row.reserve(ctx, work*3+(64<<10)); err != nil {

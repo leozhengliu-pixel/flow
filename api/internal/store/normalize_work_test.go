@@ -84,13 +84,13 @@ func TestScaleP21SW31NormalizerLargeDependencyUsesParentCredit(t *testing.T) {
 	}
 	n.work.keep(release)
 	if n.work.total <= 128<<20 || n.work.total > 194<<20 || n.work.extra != 0 ||
-		n.store.metadataResidency.work.used != metadataWorkBytes {
+		n.store.metadataResidency.work.used != metadataWorkBytes() {
 		t.Fatalf("parent credit was duplicated or a covered dependency acquired extra work: total=%d extra=%d used=%d",
 			n.work.total, n.work.extra, n.store.metadataResidency.work.used)
 	}
 	n.work.Close()
 	n.work = nil
-	if n.store.metadataResidency.work.used != metadataWorkBytes {
+	if n.store.metadataResidency.work.used != metadataWorkBytes() {
 		t.Fatal("record cleanup released another operation's parent or blocker lease")
 	}
 }
@@ -136,7 +136,7 @@ func TestScaleP21SW31NormalizerActualLargeUserDependency(t *testing.T) {
 	}); err != nil || !matched {
 		t.Fatal("actual normalizer changed the old full-hydration user dependency", matched, err)
 	}
-	if n.store.metadataResidency.work.used != metadataWorkBytes {
+	if n.store.metadataResidency.work.used != metadataWorkBytes() {
 		t.Fatal("actual normalizer leaked children or released unrelated parent work")
 	}
 }
@@ -194,7 +194,7 @@ func TestScaleP21SW31NormalizerTypedDependencyNativeOffset(t *testing.T) {
 		got.OutOfOfficeUntil.Location() == time.UTC || got.AppScopes == nil {
 		t.Fatalf("typed dependency lost native location identity or empty slice: got=%#v want=%#v", got, want)
 	}
-	if n.store.metadataResidency.work.used != metadataWorkBytes {
+	if n.store.metadataResidency.work.used != metadataWorkBytes() {
 		t.Fatal("typed dependency retained extra work after the record ended")
 	}
 }
@@ -237,7 +237,7 @@ func TestScaleP21SW31NormalizerDenseDependenciesRejectBeforeDecode(t *testing.T)
 	}
 	n.work.Close()
 	n.work = nil
-	if n.store.metadataResidency.work.used != metadataWorkBytes {
+	if n.store.metadataResidency.work.used != metadataWorkBytes() {
 		t.Fatal("dependency cleanup released unrelated admission")
 	}
 }

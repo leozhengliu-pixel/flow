@@ -91,7 +91,7 @@ func metadataMemoryCount(perBytes int64, most int) int {
 
 // metadataWorkBudgetBytes is the process work budget: how much admitted
 // work concurrent operations may hold together. Individual operations
-// retain their existing metadataWorkBytes checks.
+// retain their existing metadataWorkBytes() checks.
 func metadataWorkBudgetBytes() int {
 	return int(min(metadataBudgetBytes("FLOW_METADATA_WORK_BYTES", metadataMemoryShare(1, 4)), 1<<46))
 }

@@ -74,7 +74,7 @@ func (r *issueHotInputs) loadIssueDocuments(ctx context.Context, issueIDs map[st
 		_, err = r.withHeader(ctx, record, []string{"ID"}, func(value reflect.Value) (bool, error) {
 			id := value.Interface().(domain.Document).ID
 			if !documents[id] {
-				if uint64(len(id)) > (metadataWorkBytes-512)/8 {
+				if uint64(len(id)) > (uint64(metadataWorkBytes())-512)/8 {
 					return false, ErrMetadataWorkBudget
 				}
 				if err := r.reserve(ctx, uint64(len(id))*8+512); err != nil {

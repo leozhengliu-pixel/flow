@@ -35,7 +35,7 @@ func (s *SQLiteStore) VisitOAuthLogoInstallations(ctx context.Context, clientID 
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+length+"),0) FROM application_installations WHERE client_id=?", clientID).Scan(&size); err != nil {
 		return false, err
 	}
-	if size < 0 || size > (metadataWorkBytes-(128<<10))/4 {
+	if size < 0 || size > (int64(metadataWorkBytes())-(128<<10))/4 {
 		return false, ErrMetadataWorkBudget
 	}
 	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(size)*4+128<<10)
@@ -124,7 +124,7 @@ func (m OAuthApplicationLogoMatch) WithClientID(visit func(string) error) error 
 	if err := m.ctx.Err(); err != nil {
 		return err
 	}
-	if m.client.cost > metadataWorkBytes-(64<<10) {
+	if m.client.cost > uint64(metadataWorkBytes())-(64<<10) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := m.store.tryAdmitAdditionalMetadataWork(m.ctx, int(m.client.cost)+64<<10)
@@ -167,7 +167,7 @@ func (s *SQLiteStore) VisitOAuthApplicationLogos(ctx context.Context, logoURL st
 			if workspace != nil && key != *workspace {
 				continue
 			}
-			if len(key) > (metadataWorkBytes-cost-256)/8 {
+			if len(key) > (metadataWorkBytes()-cost-256)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += 256 + len(key)*8

@@ -25,7 +25,7 @@ func (r *MetadataJSONRead) ReserveIntegrationDeliveryEncoding(ctx context.Contex
 	release()
 	const page = uint64(64 << 10)
 	width := (size + page - 1) / page * page
-	if width > (metadataWorkBytes-(64<<10))/6 {
+	if width > (uint64(metadataWorkBytes())-(64<<10))/6 {
 		return r.fail(ErrMetadataWorkBudget)
 	}
 	return r.reserve(ctx, width*6+(64<<10))

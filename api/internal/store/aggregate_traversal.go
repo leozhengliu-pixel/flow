@@ -36,7 +36,7 @@ func (w *metadataAggregateTraversal) reserve(bytes uint64) error {
 	}
 	// Each independent allowance also owns its lease, closure and release-
 	// slice growth, rather than hiding bookkeeping outside the stack bound.
-	if bytes > metadataWorkBytes-256 {
+	if bytes > uint64(metadataWorkBytes())-256 {
 		return ErrMetadataWorkBudget
 	}
 	release, err := w.admit(bytes + 256)
@@ -55,7 +55,7 @@ func (w *metadataAggregateTraversal) enter() error {
 	}
 	next := w.active + metadataAggregateTraversalFrame
 	ahead := next + 2*metadataAggregateTraversalFrame
-	if ahead > metadataWorkBytes {
+	if ahead > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	if ahead > w.high {
@@ -81,7 +81,7 @@ func (w *metadataAggregateTraversal) encoding(depth int) error {
 	entries := uint64(depth - 1000 + 1)
 	// The existing shallow-map bound covers larger string/interface slots;
 	// it also covers these interface/empty-value slots and boxed slice keys.
-	if entries > (metadataWorkBytes-1024)/512 {
+	if entries > (uint64(metadataWorkBytes())-1024)/512 {
 		return ErrMetadataWorkBudget
 	}
 	return w.reserve(entries*512 + 1024)

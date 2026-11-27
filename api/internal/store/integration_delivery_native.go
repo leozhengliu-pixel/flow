@@ -78,7 +78,7 @@ func (r *ResourceRead) integrationDeliveryRawMessage(ctx context.Context, node m
 	if node.size < 25 || size != uint64(node.size-25) {
 		return nil, ErrMetadataRecordQuery
 	}
-	if size > metadataWorkBytes-8192 {
+	if size > uint64(metadataWorkBytes())-8192 {
 		return nil, ErrMetadataWorkBudget
 	}
 	// Cover Go's allocation classes, byte-slice header and owner bookkeeping.

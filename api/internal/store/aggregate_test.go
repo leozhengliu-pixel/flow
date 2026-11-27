@@ -623,7 +623,7 @@ func TestScaleP21SW28AggregatePublicationAdmission(t *testing.T) {
 	}
 	// The nonblocking child reservation must fail before allocation if all
 	// process work is already held, rather than wait while holding SQL locks.
-	_, exhaust, err := probe.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes)
+	_, exhaust, err := probe.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -358,7 +358,7 @@ func (s *SQLiteStore) mutateBoundedScopedIssuePoint(ctx context.Context, workspa
 		if err != nil {
 			return err
 		}
-		if callbackCost > (metadataWorkBytes-(64<<10))/3 {
+		if callbackCost > (uint64(metadataWorkBytes())-(64<<10))/3 {
 			return ErrMetadataWorkBudget
 		}
 		if err := attempt.owner.reserve(ctx, callbackCost*3+64<<10); err != nil {

@@ -343,7 +343,7 @@ func largeRowDirectoryUser(ctx context.Context, directory *metadataLogicalSource
 		return domain.User{}, false, err
 	}
 	node := found.(metadataAggregateStoredNode).value
-	if node.cost > metadataWorkBytes/4 {
+	if node.cost > uint64(metadataWorkBytes())/4 {
 		return domain.User{}, false, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, node.cost*4+1024); err != nil {
@@ -513,7 +513,7 @@ func largeRowTypedJSONWork(ctx context.Context, owner *ResourceRead, raw []byte,
 		return resourceWindowTypedJSONWork(ctx, raw, kind)
 	}
 	size := uint64(len(raw)) - long
-	if size > metadataWorkBytes-4096 || uint64(len(spans)) > (metadataWorkBytes-4096-size)/16 {
+	if size > uint64(metadataWorkBytes())-4096 || uint64(len(spans)) > (uint64(metadataWorkBytes())-4096-size)/16 {
 		return 0, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, size+uint64(len(spans))*16+4096); err != nil {
@@ -530,7 +530,7 @@ func largeRowTypedJSONWork(ctx context.Context, owner *ResourceRead, raw []byte,
 	if err != nil {
 		return 0, err
 	}
-	if long > (metadataWorkBytes-typed)/3 {
+	if long > (uint64(metadataWorkBytes())-typed)/3 {
 		return 0, ErrMetadataWorkBudget
 	}
 	return typed + long*3, nil

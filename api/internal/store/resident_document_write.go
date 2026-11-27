@@ -1045,7 +1045,7 @@ func residentContentCopy(loaded domain.Bootstrap) domain.Bootstrap {
 func residentRecordWork(value any) uint64 {
 	cost, err := metadataAggregatePayloadEncodingWork(context.Background(), reflect.ValueOf(value), 0)
 	if err != nil || cost < 0 {
-		return metadataWorkBytes
+		return uint64(metadataWorkBytes())
 	}
 	return uint64(cost)*2 + 4096
 }

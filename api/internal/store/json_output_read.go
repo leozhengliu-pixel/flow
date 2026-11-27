@@ -91,7 +91,7 @@ func (r *MetadataJSONRead) reserve(ctx context.Context, cost uint64) error {
 	if r.err != nil {
 		return r.err
 	}
-	if cost == 0 || cost > metadataWorkBytes {
+	if cost == 0 || cost > uint64(metadataWorkBytes()) {
 		r.err = ErrMetadataWorkBudget
 		return r.err
 	}
@@ -113,7 +113,7 @@ func (r *MetadataJSONRead) ReserveEncoding(ctx context.Context, value any) error
 	if err != nil {
 		return r.fail(err)
 	}
-	if cost > metadataWorkBytes-(64<<10) {
+	if cost > metadataWorkBytes()-(64<<10) {
 		return r.fail(ErrMetadataWorkBudget)
 	}
 	return r.reserve(ctx, uint64(cost)+(64<<10))
@@ -125,7 +125,7 @@ func (r *MetadataJSONRead) ReserveEncoded(ctx context.Context, size int) error {
 	if r == nil {
 		return ErrBoundedMetadataCoverage
 	}
-	if size < 0 || size > metadataWorkBytes/4 {
+	if size < 0 || size > metadataWorkBytes()/4 {
 		return r.fail(ErrMetadataWorkBudget)
 	}
 	const page = 64 << 10
@@ -173,12 +173,12 @@ func (r *MetadataJSONRead) ReserveDecode(ctx context.Context, raw []byte, previo
 		if err != nil {
 			return r.fail(err)
 		}
-		if retained > metadataWorkBytes-cost {
+		if retained > uint64(metadataWorkBytes())-cost {
 			return r.fail(ErrMetadataWorkBudget)
 		}
 		cost += retained
 	}
-	if cost > metadataWorkBytes-(64<<10) {
+	if cost > uint64(metadataWorkBytes())-(64<<10) {
 		return r.fail(ErrMetadataWorkBudget)
 	}
 	return r.reserve(ctx, cost+(64<<10))

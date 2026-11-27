@@ -180,12 +180,12 @@ func (r *IssueWriteAuthorizationRead) applyReleaseScope(ctx context.Context, que
 	if len(query.ReleaseIDs) == 0 {
 		return nil
 	}
-	if len(query.ReleaseIDs) > metadataWorkBytes/128 {
+	if len(query.ReleaseIDs) > metadataWorkBytes()/128 {
 		return ErrMetadataWorkBudget
 	}
 	cost := uint64(len(query.ReleaseIDs))*128 + 4096
 	for _, id := range query.ReleaseIDs {
-		if cost > metadataWorkBytes || uint64(len(id)) > (metadataWorkBytes-cost)/16 {
+		if cost > uint64(metadataWorkBytes()) || uint64(len(id)) > (uint64(metadataWorkBytes())-cost)/16 {
 			return ErrMetadataWorkBudget
 		}
 		cost += uint64(len(id)) * 16
@@ -303,7 +303,7 @@ func (r *IssueWriteAuthorizationRead) issuePageRows(ctx context.Context, tx *sql
 	if err := tx.QueryRowContext(ctx, prefix+"SELECT COUNT(*),COALESCE(SUM(header_bytes),0) FROM (SELECT "+sizeExpression+" AS header_bytes"+selected+") issue_authorization_headers", values...).Scan(&count, &size); err != nil {
 		return nil, err
 	}
-	if count < 0 || count > 501 || size < 0 || size > metadataWorkBytes/16 || uint64(count)*512+uint64(size)*16 > metadataWorkBytes-(64<<10) {
+	if count < 0 || count > 501 || size < 0 || size > int64(metadataWorkBytes())/16 || uint64(count)*512+uint64(size)*16 > uint64(metadataWorkBytes())-(64<<10) {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(count)*512+uint64(size)*16+64<<10); err != nil {
@@ -536,7 +536,7 @@ func (r *IssueWriteAuthorizationRead) pointIssueRow(ctx context.Context, tx *sql
 	if err := tx.QueryRowContext(ctx, "SELECT "+r.owner.byteLength("i.id")+query, args...).Scan(&size); err != nil {
 		return header, err
 	}
-	if !size.Valid || size.Int64 < 0 || size.Int64 > metadataWorkBytes/16 {
+	if !size.Valid || size.Int64 < 0 || size.Int64 > int64(metadataWorkBytes())/16 {
 		return header, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(size.Int64)*16+4096); err != nil {
@@ -554,7 +554,7 @@ func (r *IssueWriteAuthorizationRead) pointIssueRow(ctx context.Context, tx *sql
 }
 
 func (r *IssueWriteAuthorizationRead) loadCommentHeader(ctx context.Context, issueID, commentID string) error {
-	if len(issueID) > metadataWorkBytes/32 || len(commentID) > metadataWorkBytes/32 || len(issueID)+len(commentID) > metadataWorkBytes/32 {
+	if len(issueID) > metadataWorkBytes()/32 || len(commentID) > metadataWorkBytes()/32 || len(issueID)+len(commentID) > metadataWorkBytes()/32 {
 		return ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(len(issueID)+len(commentID))*32+4096); err != nil {
@@ -575,7 +575,7 @@ func (r *IssueWriteAuthorizationRead) loadCommentHeader(ctx context.Context, iss
 	if err != nil {
 		return err
 	}
-	if idSize < 0 || resourceSize < 0 || idSize > metadataWorkBytes/16 || resourceSize > metadataWorkBytes/16 || idSize+resourceSize > metadataWorkBytes/16 {
+	if idSize < 0 || resourceSize < 0 || idSize > int64(metadataWorkBytes())/16 || resourceSize > int64(metadataWorkBytes())/16 || idSize+resourceSize > int64(metadataWorkBytes())/16 {
 		return ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(ctx, uint64(idSize+resourceSize)*16+4096); err != nil {
@@ -666,7 +666,7 @@ func (r *IssueWriteAuthorizationRead) refreshReferences(ctx context.Context, tx 
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+r.owner.byteLength("record_key")+"),0) FROM workspace_metadata_records WHERE "+where, values...).Scan(&count, &size); err != nil {
 			return err
 		}
-		if count < 0 || size < 0 || count > metadataWorkBytes/512 || size > metadataWorkBytes/16 || uint64(count)*512+uint64(size)*16 > metadataWorkBytes-(64<<10) {
+		if count < 0 || size < 0 || count > int64(metadataWorkBytes())/512 || size > int64(metadataWorkBytes())/16 || uint64(count)*512+uint64(size)*16 > uint64(metadataWorkBytes())-(64<<10) {
 			return ErrMetadataWorkBudget
 		}
 		if err := r.owner.reserve(ctx, uint64(count)*512+uint64(size)*16+64<<10); err != nil {

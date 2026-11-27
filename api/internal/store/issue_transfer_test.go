@@ -108,7 +108,7 @@ func scaleP21SW254ScriptTx(t *testing.T, script *scaleP21SW254SizeScript) *sqlTx
 }
 
 func TestScaleP21SW254IssuePayloadTransferEnvelope(t *testing.T) {
-	bound := int64((metadataWorkBytes - (64 << 10)) / 3)
+	bound := int64((metadataWorkBytes() - (64 << 10)) / 3)
 	for _, test := range []struct {
 		name string
 		size int64
@@ -148,7 +148,7 @@ func TestScaleP21SW254IssuePayloadTransferEnvelope(t *testing.T) {
 }
 
 func TestScaleP21SW254IssueCurrentBodyEnvelope(t *testing.T) {
-	bound := int64((metadataWorkBytes - (64 << 10)) / 4)
+	bound := int64((metadataWorkBytes() - (64 << 10)) / 4)
 	reached := errors.New("SW254 admitted payload read")
 	for _, test := range []struct {
 		name, kind string
@@ -158,8 +158,8 @@ func TestScaleP21SW254IssueCurrentBodyEnvelope(t *testing.T) {
 		{"issue-below", "issue", bound - 1, true}, {"issue-at", "issue", bound, true},
 		{"issue-above", "issue", bound + 1, false}, {"issue-negative", "issue", -1, false},
 		{"issue-minimum-signed", "issue", math.MinInt64, false}, {"issue-maximum-signed", "issue", math.MaxInt64, false},
-		{"other-at-old-bound", "comment", metadataWorkBytes / 16, true},
-		{"other-above-old-bound", "comment", metadataWorkBytes/16 + 1, false},
+		{"other-at-old-bound", "comment", int64(metadataWorkBytes()) / 16, true},
+		{"other-above-old-bound", "comment", int64(metadataWorkBytes())/16 + 1, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}

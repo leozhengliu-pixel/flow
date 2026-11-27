@@ -148,7 +148,7 @@ func (r *issueHotInputs) prepareIssueTeamMove(ctx context.Context, issues []doma
 		if slices.ContainsFunc(move.names, func(item string) bool { return strings.EqualFold(item, name) }) {
 			return nil
 		}
-		if uint64(len(name)) > (metadataWorkBytes-512)/2 {
+		if uint64(len(name)) > (uint64(metadataWorkBytes())-512)/2 {
 			return ErrMetadataWorkBudget
 		}
 		if err := r.reserve(ctx, uint64(len(name))*2+512); err != nil {
@@ -237,7 +237,7 @@ func (r *issueHotInputs) selectIssueTeamMoveDocuments(ctx context.Context, move 
 		if err != nil || !matched {
 			return err
 		}
-		if record.cost > (metadataWorkBytes-4096)/8 {
+		if record.cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := r.reserve(ctx, record.cost*8+4096); err != nil {
@@ -367,7 +367,7 @@ func (s *SQLiteStore) issueTeamMoveDocumentPatch(ctx context.Context, source *me
 		if err != nil {
 			return nil, release, err
 		}
-		if cost > (metadataWorkBytes-4096)/8 {
+		if cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return nil, release, ErrMetadataWorkBudget
 		}
 		if err := work.reserve(ctx, cost*8+4096); err != nil {

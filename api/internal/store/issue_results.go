@@ -28,7 +28,7 @@ func (s *SQLiteStore) KeepIssueResults(ctx context.Context, issues []domain.Issu
 			return err
 		}
 	}
-	if cost > metadataWorkBytes-4096 || extra > metadataWorkBytes-4096-cost {
+	if cost > uint64(metadataWorkBytes())-4096 || extra > uint64(metadataWorkBytes())-4096-cost {
 		return ErrMetadataWorkBudget
 	}
 	owner := &ResourceRead{store: s}

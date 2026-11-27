@@ -38,7 +38,7 @@ func (r *issueHotInputs) close() {
 }
 
 func (r *issueHotInputs) reserve(ctx context.Context, cost uint64) error {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, int(cost))
@@ -96,7 +96,7 @@ func issueHotMatches(ctx context.Context, record metadataLogicalNode, name strin
 
 func issueHotProjectionCost(ctx context.Context, record metadataLogicalNode, names []string) (uint64, error) {
 	if len(names) == 0 {
-		if record.cost > (metadataWorkBytes-4096)/8 {
+		if record.cost > (uint64(metadataWorkBytes())-4096)/8 {
 			return 0, ErrMetadataWorkBudget
 		}
 		return record.cost*8 + 4096, nil
@@ -104,7 +104,7 @@ func issueHotProjectionCost(ctx context.Context, record metadataLogicalNode, nam
 	cost := uint64(4096)
 	err := record.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if slices.Contains(names, key.String()) {
-			if child.cost > (metadataWorkBytes-cost)/8 {
+			if child.cost > (uint64(metadataWorkBytes())-cost)/8 {
 				return ErrMetadataWorkBudget
 			}
 			cost += child.cost * 8
@@ -406,7 +406,7 @@ func (read *issueHotInputs) selectIssueInputs(ctx context.Context, data *domain.
 			if input.Description != nil {
 				text = *input.Description
 			}
-			if uint64(len(text)) > (metadataWorkBytes-4096)/8 {
+			if uint64(len(text)) > (uint64(metadataWorkBytes())-4096)/8 {
 				return ErrMetadataWorkBudget
 			}
 			if err := read.reserve(ctx, uint64(len(text))*8+4096); err != nil {

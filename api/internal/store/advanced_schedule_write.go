@@ -146,7 +146,7 @@ func advancedScheduleRuleMultiplicity(ctx context.Context, owner *ResourceRead, 
 			return 0, err
 		}
 		if counts[rule.ID] == 0 {
-			if uint64(len(rule.ID)) > (metadataWorkBytes-1024)/8 {
+			if uint64(len(rule.ID)) > (uint64(metadataWorkBytes())-1024)/8 {
 				return 0, ErrMetadataWorkBudget
 			}
 			if err := scratch.reserve(ctx, uint64(len(rule.ID))*8+1024); err != nil {
@@ -175,11 +175,11 @@ func advancedScheduleCallbackWork(ctx context.Context, owner *ResourceRead, data
 		if count == 0 {
 			return nil
 		}
-		if width > metadataWorkBytes/64 {
+		if width > uint64(metadataWorkBytes())/64 {
 			return ErrMetadataWorkBudget
 		}
 		unit += width * 64
-		if unit > metadataWorkBytes || count > (metadataWorkBytes-cost)/unit {
+		if unit > uint64(metadataWorkBytes()) || count > (uint64(metadataWorkBytes())-cost)/unit {
 			return ErrMetadataWorkBudget
 		}
 		cost += count * unit

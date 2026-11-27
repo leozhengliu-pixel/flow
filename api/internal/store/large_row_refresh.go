@@ -153,7 +153,7 @@ func metadataLogicalRetryLargeRecord(ctx context.Context, builder *metadataLogic
 			// content; the resolver's maps, the expansion and the typed
 			// decode are admitted together.
 			expanded := uint64(bytes.Count(raw, documentMarkerBytes)+1) * uint64(len(raw))
-			if expanded > metadataWorkBytes/4 {
+			if expanded > uint64(metadataWorkBytes())/4 {
 				return nil, ErrMetadataWorkBudget
 			}
 			if err := owner.reserve(ctx, expanded*4+4096); err != nil {

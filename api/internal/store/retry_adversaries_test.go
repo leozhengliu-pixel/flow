@@ -67,7 +67,7 @@ func scaleP21SW301Read(t *testing.T, source *SQLiteStore, workspace string) scal
 			result.Close()
 			t.Fatal(err)
 		}
-		value, err := node.Value(t.Context(), metadataWorkBytes)
+		value, err := node.Value(t.Context(), metadataWorkBytes())
 		if err != nil {
 			result.Close()
 			t.Fatal(err)
@@ -186,7 +186,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	if metadataWorkBytes != 256<<20 {
+	if metadataWorkBytes() != 256<<20 {
 		t.Fatal("retry adversaries changed the production work allowance")
 	}
 	for driver, pair := range peerStoreSets(t) {
@@ -290,7 +290,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 									if err != nil {
 										t.Fatal(err)
 									}
-									if source.metadataResidency.work.limit != metadataWorkBytes {
+									if source.metadataResidency.work.limit != metadataWorkBytes() {
 										t.Fatal("required retry success is not using the default work allowance")
 									}
 									defer func() {
@@ -374,7 +374,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 											run := func() error { return source.refreshConflictedLogicalMetadata(ctx, workspace)(conflict) }
 											var err error
 											if exit == "denied" {
-												_, release, holdErr := source.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes-(1<<20))
+												_, release, holdErr := source.tryAdmitAdditionalMetadataWork(t.Context(), metadataWorkBytes()-(1<<20))
 												if holdErr != nil {
 													t.Fatal(holdErr)
 												}

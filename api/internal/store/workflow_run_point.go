@@ -500,13 +500,13 @@ func workflowRunPatchedIssue(ctx context.Context, owner *ResourceRead, image *me
 		if int(key.Int()) != ordinal {
 			return nil
 		}
-		if node.cost > (metadataWorkBytes-(64<<10))/4 {
+		if node.cost > (uint64(metadataWorkBytes())-(64<<10))/4 {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, node.cost*4+64<<10); err != nil {
 			return err
 		}
-		value, err := node.Value(ctx, metadataWorkBytes)
+		value, err := node.Value(ctx, metadataWorkBytes())
 		if err != nil {
 			return err
 		}

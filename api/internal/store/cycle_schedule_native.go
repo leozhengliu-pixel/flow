@@ -8,7 +8,7 @@ import (
 )
 
 func cycleScheduleNativeValue(ctx context.Context, owner *ResourceRead, node metadataLogicalNode) (reflect.Value, error) {
-	if node.cost > metadataWorkBytes {
+	if node.cost > uint64(metadataWorkBytes()) {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, node.cost); err != nil {
@@ -25,7 +25,7 @@ func cycleScheduleProjectNode(ctx context.Context, owner *ResourceRead, node met
 	cost := uint64(node.typ.Size())*2 + 128
 	if err := node.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		if selected[key.String()] {
-			if child.cost > metadataWorkBytes-cost {
+			if child.cost > uint64(metadataWorkBytes())-cost {
 				return ErrMetadataWorkBudget
 			}
 			cost += child.cost
@@ -65,7 +65,7 @@ func cycleScheduleCloneValueWork(ctx context.Context, value reflect.Value, inPla
 	}
 	cost := uint64(0)
 	add := func(part uint64) error {
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		cost += part
@@ -104,7 +104,7 @@ func cycleScheduleCloneValueWork(ctx context.Context, value reflect.Value, inPla
 			return 0, nil
 		}
 		unit := uint64(value.Type().Elem().Size()) * 2
-		if unit != 0 && uint64(value.Len()) > (metadataWorkBytes-128)/unit {
+		if unit != 0 && uint64(value.Len()) > (uint64(metadataWorkBytes())-128)/unit {
 			return 0, ErrMetadataWorkBudget
 		}
 		if err := add(uint64(value.Len())*unit + 128); err != nil {
@@ -122,7 +122,7 @@ func cycleScheduleCloneValueWork(ctx context.Context, value reflect.Value, inPla
 			return 0, nil
 		}
 		unit := (uint64(value.Type().Key().Size()) + uint64(value.Type().Elem().Size()) + 64) * 4
-		if uint64(value.Len()) > (metadataWorkBytes-512)/unit {
+		if uint64(value.Len()) > (uint64(metadataWorkBytes())-512)/unit {
 			return 0, ErrMetadataWorkBudget
 		}
 		if err := add(uint64(value.Len())*unit + 512); err != nil {
@@ -177,7 +177,7 @@ func reserveCycleScheduleClone(ctx context.Context, owner *ResourceRead, data do
 		if err != nil {
 			return err
 		}
-		if part > metadataWorkBytes-cost {
+		if part > uint64(metadataWorkBytes())-cost {
 			return ErrMetadataWorkBudget
 		}
 		cost += part
@@ -207,7 +207,7 @@ func reserveCycleScheduleClone(ctx context.Context, owner *ResourceRead, data do
 			}
 		}
 	}
-	if cost > metadataWorkBytes-(64<<10) {
+	if cost > uint64(metadataWorkBytes())-(64<<10) {
 		return ErrMetadataWorkBudget
 	}
 	return owner.reserve(ctx, cost+64<<10)

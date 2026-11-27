@@ -20,7 +20,7 @@ type agentSessionLifecycleWriteKey struct{}
 // legacySessionJSONMaxBytes bounds one message read by legacySessionJSONBytes:
 // its allowance (32 bytes of work per input byte plus 128 KiB) must fit the
 // metadata work budget.
-const legacySessionJSONMaxBytes = int64(metadataWorkBytes-(128<<10)) / 32
+const legacySessionJSONMaxBytes = int64(metadataWorkBytesDefault-(128<<10)) / 32
 
 type legacySessionJSONPart struct {
 	input io.ReaderAt
@@ -65,7 +65,7 @@ func legacySessionJSONObject(ctx context.Context, owner *ResourceRead, part lega
 	}
 	fields := map[string]legacySessionJSONPart{}
 	err := scanner.object(func(key, value metadataCollectionRange) error {
-		if key.size < 0 || uint64(key.size) > (metadataWorkBytes-1024)/8 {
+		if key.size < 0 || uint64(key.size) > (uint64(metadataWorkBytes())-1024)/8 {
 			return ErrMetadataWorkBudget
 		}
 		if err := owner.reserve(ctx, uint64(key.size)*8+1024); err != nil {

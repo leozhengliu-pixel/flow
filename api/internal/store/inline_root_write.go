@@ -424,7 +424,7 @@ func (s *SQLiteStore) writeStreamedMetadataRootPatch(ctx context.Context, tx *sq
 	if err := stripped.Finish(); err != nil {
 		return err
 	}
-	if written.size < 0 || written.size > (metadataWorkBytes-(64<<10))/3 {
+	if written.size < 0 || written.size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
 	if err := owner.reserve(ctx, uint64(written.size)*3+64<<10); err != nil {

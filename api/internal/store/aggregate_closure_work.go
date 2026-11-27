@@ -19,7 +19,7 @@ type metadataAggregatePlan struct {
 }
 
 func planMetadataAggregate(ctx context.Context, before, after metadataAggregateImage, id string, previous bool, payloadBytes int) (*metadataAggregatePlan, error) {
-	if payloadBytes < 0 || payloadBytes > metadataWorkBytes/16 {
+	if payloadBytes < 0 || payloadBytes > metadataWorkBytes()/16 {
 		return nil, ErrMetadataWorkBudget
 	}
 	return planMetadataAggregateWork(ctx, before, after, id, previous, uint64(payloadBytes)*16)
@@ -60,11 +60,11 @@ func planMetadataAggregateWork(ctx context.Context, before, after metadataAggreg
 	// decode, diff maps and the separately encoded publication envelopes.
 	const copies = uint64(16)
 	base := uint64(128 << 10)
-	if oldCost > metadataWorkBytes || nextCost > metadataWorkBytes || payloadWork > metadataWorkBytes {
+	if oldCost > uint64(metadataWorkBytes()) || nextCost > uint64(metadataWorkBytes()) || payloadWork > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	cost := base + (oldCost+nextCost)*copies + payloadWork
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	plan.RequiredBytes = int(cost)
@@ -145,7 +145,7 @@ func metadataAggregateChildrenCost(ctx context.Context, node metadataAggregateNo
 		if err != nil {
 			return err
 		}
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		cost += part
@@ -175,7 +175,7 @@ func metadataAggregateNativeCost(ctx context.Context, value reflect.Value, depth
 	cost := uint64(value.Type().Size())*2 + 128
 	add := func(child reflect.Value) error {
 		part, err := metadataAggregateNativeCost(ctx, child, depth+1)
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return ErrMetadataWorkBudget
 		}
 		cost += part
@@ -208,7 +208,7 @@ func metadataAggregateNativeCost(ctx context.Context, value reflect.Value, depth
 			if value.Kind() == reflect.Slice {
 				length = value.Cap()
 			}
-			if cost > metadataWorkBytes || uint64(length) > (metadataWorkBytes-cost)/2 {
+			if cost > uint64(metadataWorkBytes()) || uint64(length) > (uint64(metadataWorkBytes())-cost)/2 {
 				return 0, ErrMetadataWorkBudget
 			}
 			cost += uint64(length) * 2
@@ -225,7 +225,7 @@ func metadataAggregateNativeCost(ctx context.Context, value reflect.Value, depth
 	case reflect.Struct:
 		return metadataAggregateNativeStructCost(ctx, value, "", depth)
 	}
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return 0, ErrMetadataWorkBudget
 	}
 	return cost, nil
@@ -242,7 +242,7 @@ func metadataAggregateNativeStructCost(ctx context.Context, value reflect.Value,
 		if err != nil {
 			return 0, err
 		}
-		if part > metadataWorkBytes || cost > metadataWorkBytes-part {
+		if part > uint64(metadataWorkBytes()) || cost > uint64(metadataWorkBytes())-part {
 			return 0, ErrMetadataWorkBudget
 		}
 		cost += part

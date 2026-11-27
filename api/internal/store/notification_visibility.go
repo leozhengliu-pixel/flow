@@ -496,7 +496,7 @@ func (r *NotificationVisibilityRead) boundedBody(table, expression, where string
 	if err := r.store.db.QueryRowContext(r.ctx, "SELECT "+length+" FROM "+table+" WHERE workspace_key=? AND "+where, bindings...).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size < 0 || size > (metadataWorkBytes-4096)/32 {
+	if size < 0 || size > (int64(metadataWorkBytes())-4096)/32 {
 		return nil, ErrMetadataWorkBudget
 	}
 	if err := r.owner.reserve(r.ctx, uint64(size)*32+4096); err != nil {

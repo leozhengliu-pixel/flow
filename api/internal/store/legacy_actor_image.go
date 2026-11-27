@@ -67,7 +67,7 @@ func (s *SQLiteStore) prepareLegacyActorImage(ctx context.Context, source *metad
 		if err != nil {
 			return nil, err
 		}
-		if uint64(cost) > (metadataWorkBytes-4096)/2 {
+		if uint64(cost) > (uint64(metadataWorkBytes())-4096)/2 {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err := result.owner.reserve(ctx, uint64(cost)*2+4096); err != nil {

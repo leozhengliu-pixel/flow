@@ -106,7 +106,7 @@ func (r *issueEditorLookups) close() {
 }
 
 func (r *issueEditorLookups) reserve(cost uint64) error {
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(r.ctx, int(cost))
@@ -130,7 +130,7 @@ func (r *issueEditorLookups) admitCollaboration(cost uint64) (func(), error) {
 	if err := r.check(); err != nil {
 		return nil, err
 	}
-	if cost > metadataWorkBytes {
+	if cost > uint64(metadataWorkBytes()) {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.tryAdmitAdditionalMetadataWork(r.ctx, int(cost))
@@ -218,8 +218,8 @@ func (r *issueEditorLookups) loadFormer() error {
 	if err != nil {
 		return err
 	}
-	if count < 0 || size < 0 || uint64(count) > (metadataWorkBytes-(64<<10))/512 ||
-		uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*512)/8 {
+	if count < 0 || size < 0 || uint64(count) > (uint64(metadataWorkBytes())-(64<<10))/512 ||
+		uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*512)/8 {
 		return ErrMetadataWorkBudget
 	}
 	// Buckets, retained strings, driver copies and transient result frames are
@@ -267,7 +267,7 @@ func (r *issueEditorLookups) loadNativeFormer() error {
 		if err != nil {
 			return err
 		}
-		if idNode.cost > (metadataWorkBytes-512)/4 {
+		if idNode.cost > (uint64(metadataWorkBytes())-512)/4 {
 			return ErrMetadataWorkBudget
 		}
 		cost := idNode.cost*4 + 512
@@ -338,8 +338,8 @@ func (r *issueEditorLookups) loadUpdates(documentID string) (updates [][]byte, t
 	if err != nil {
 		return nil, 0, err
 	}
-	if count < 0 || size < 0 || uint64(count) > (metadataWorkBytes-(64<<10))/256 ||
-		uint64(size) > (metadataWorkBytes-(64<<10)-uint64(count)*256)/4 {
+	if count < 0 || size < 0 || uint64(count) > (uint64(metadataWorkBytes())-(64<<10))/256 ||
+		uint64(size) > (uint64(metadataWorkBytes())-(64<<10)-uint64(count)*256)/4 {
 		return nil, 0, ErrMetadataWorkBudget
 	}
 	if err := r.reserve(uint64(count)*256 + uint64(size)*4 + 64<<10); err != nil {
