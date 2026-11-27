@@ -34,7 +34,7 @@ describe('timeline zoom scale', () => {
     expect(stepTimelineZoom('week', -1)).toBe('week')
     expect(stepTimelineZoom('quarter', 1)).toBe('year')
     expect(stepTimelineZoom('year', 1)).toBe('year')
-    expect(normalizeTimelineZoom('bogus')).toBe('quarter')
+    expect(normalizeTimelineZoom('bogus')).toBe('year')
     expect(normalizeTimelineZoom('week')).toBe('week')
   })
 

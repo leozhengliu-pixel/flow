@@ -1,4 +1,6 @@
-import { useEffect, type ComponentPropsWithRef, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentPropsWithRef, type ReactElement, type ReactNode } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
 import { FlowTooltip, ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
@@ -181,6 +183,38 @@ export function IssueExplorerSurface({
     </ContentViewHeader>
   )
 
+  // Team view tabs collapse like the design reference's when the toolbar is too narrow: the leading tabs that fit,
+  // then one pill with the current (or next) view and a chevron opening the rest.
+  const viewTabsRef = useRef<HTMLElement>(null)
+  const tabWidths = useRef<number[]>([])
+  const [collapsedFrom, setCollapsedFrom] = useState<number>()
+  const collapsibleTabs = !resourceHeader && !savedView && !savedViews.length
+  useLayoutEffect(() => {
+    const nav = viewTabsRef.current
+    if (!nav || !collapsibleTabs || typeof ResizeObserver === 'undefined') return
+    // Touch phones keep every tab in a scrolling row (the phone gate's measurements); only fine pointers collapse.
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches
+    const measure = () => {
+      if (coarse) { setCollapsedFrom(undefined); return }
+      const tabs = [...nav.querySelectorAll<HTMLElement>('[data-view-tab]')]
+      if (tabs.every(tab => !tab.dataset.collapsed)) tabWidths.current = tabs.map(tab => tab.getBoundingClientRect().width)
+      const widths = tabWidths.current
+      const GAP = 4, ADD_VIEW = 28 + GAP, CHEVRON = 14
+      const sum = (count: number) => widths.slice(0, count).reduce((total, width) => total + width + GAP, 0)
+      if (sum(widths.length) + ADD_VIEW <= nav.clientWidth) { setCollapsedFrom(undefined); return }
+      const activeIndex = VIEWS.findIndex(view => view.id === activeView)
+      for (let from = widths.length - 1; from >= 1; from--) {
+        const shown = activeIndex >= from ? activeIndex : from
+        if (sum(from) + widths[shown] + CHEVRON + ADD_VIEW <= nav.clientWidth) { setCollapsedFrom(from); return }
+      }
+      setCollapsedFrom(1)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(nav)
+    return () => observer.disconnect()
+  }, [activeView, collapsibleTabs])
+
   const toolbar = (
     <ContentViewSubheader
       borderless
@@ -192,12 +226,14 @@ export function IssueExplorerSurface({
         ) : savedView || resourceHeader ? (
           <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>
         ) : (
-          <nav className={styles.tabs} aria-label={t('{name} issue views').replace('{name}', () => scopeName)}>
-            {VIEWS.map(view => (
+          <nav ref={viewTabsRef} className={styles.tabs} aria-label={t('{name} issue views').replace('{name}', () => scopeName)}>
+            {VIEWS.map((view, index) => (
               <a
                 key={view.id}
                 href={viewHref(view.id)}
                 className={`${styles.tab} ui-pill`}
+                data-view-tab
+                data-collapsed={collapsedFrom !== undefined && index >= collapsedFrom ? true : undefined}
                 data-active={activeView === view.id}
                 aria-current={activeView === view.id ? 'page' : undefined}
                 onClick={event => {
@@ -209,6 +245,7 @@ export function IssueExplorerSurface({
                 <span>{t(view.label)}</span>
               </a>
             ))}
+            {collapsedFrom !== undefined && <ViewTabsOverflow views={VIEWS.slice(collapsedFrom)} activeView={activeView} onNavigateView={onNavigateView}/>}
             {savedViews.length > SAVED_VIEW_VIRTUALIZATION_THRESHOLD ? (
               <Virtuoso
                 horizontalDirection
@@ -278,4 +315,22 @@ function isMacPlatform() {
 function ToolbarButton({ children, label, pressed, className, tooltip, shortcut, tooltipAlign, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean; tooltip?: string; shortcut?: string; tooltipAlign?: 'start' | 'center' | 'end' }) {
   const button = <button type="button" className={`${styles.iconButton} ui-pill ${className ?? ''}`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
   return tooltip ? <FlowTooltip label={tooltip} shortcut={shortcut} align={tooltipAlign} disabled={props['aria-expanded'] === true || props['aria-expanded'] === 'true'}>{button}</FlowTooltip> : button
+}
+
+/** The collapsed view tabs: the current view's label (or the first hidden one) with a chevron; the menu lists them all. */
+function ViewTabsOverflow({ views, activeView, onNavigateView }: { views: { id: TeamIssuesRouteView; label: string }[]; activeView: TeamIssuesRouteView; onNavigateView: (view: TeamIssuesRouteView) => void }) {
+  const { t } = useI18n()
+  const shown = views.find(view => view.id === activeView) ?? views[0]
+  const rest = views.filter(view => view.id !== shown.id).length
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild>
+      <button type="button" className={`${styles.tab} ${styles.tabOverflow} ui-pill`} data-active={shown.id === activeView} aria-label={t('{count} more').replace('{count}', () => String(rest))}>
+        <span>{t(shown.label)}</span>
+        <svg aria-hidden="true" width="8" height="9" viewBox="0 0 8 9" fill="none"><path d="M1.25 3.25 4 6l2.75-2.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Views')} align="start" sideOffset={4}>
+      {views.map(view => <FlowMenuItem key={view.id} label={view.label} onSelect={() => onNavigateView(view.id)}/>)}
+    </FlowDropdownMenuContent></DropdownMenu.Portal>
+  </DropdownMenu.Root>
 }

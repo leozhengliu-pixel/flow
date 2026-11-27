@@ -525,14 +525,17 @@ type IssueLabel struct {
 }
 
 type LabelGroup struct {
-	ID           string     `json:"id"`
-	Name         string     `json:"name"`
-	Color        string     `json:"color"`
-	Description  string     `json:"description,omitempty"`
-	Scope        string     `json:"scope,omitempty"`
-	ResourceType string     `json:"resourceType"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Color        string `json:"color"`
+	Description  string `json:"description,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+	ResourceType string `json:"resourceType"`
+	// MultiSelect lets an issue or project carry several of the group's
+	// labels; a single-select group (the default) allows one.
+	MultiSelect bool       `json:"multiSelect,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ArchivedAt  *time.Time `json:"archivedAt,omitempty"`
 }
 
 type ProjectSummary struct {

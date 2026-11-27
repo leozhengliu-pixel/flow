@@ -1,12 +1,10 @@
 import { FilterGlyph } from '@/components/issue/filter-glyph'
+import type { LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
 import type { MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
 import { ProjectCustomerFilterValues } from './project-customer-filter'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown } from 'lucide-react'
-import { TIMELINE_ZOOMS, TIMELINE_ZOOM_LABELS, normalizeTimelineZoom, type TimelineZoom } from './project-timeline-model'
 import { AlignLeft, BarChart3, CalendarDays, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Tags, UserRound, Users } from 'lucide-react'
 import {
   AddViewIcon,
@@ -72,6 +70,8 @@ export type ProjectsPageSurfaceProps = {
   /** The reference app's Customers blocks for the Customers filter sub-menu. */
   customerFilterOptions?: MyIssuesFilterOption[]
   displayLabelGroups?: Array<{ id: string; name: string }>
+  /** The project label groups the "Label group" grouping offers, with their headings. */
+  groupingLabelGroups?: LabelGroupOption[]
   sidebarOpen?: boolean
   views: ProjectsView[]
   onAddFilter?: (filter: string, option?: ProjectFilterOption) => void
@@ -116,6 +116,7 @@ export function ProjectsPageSurface({
   onFilterOpenChange,
   customerFilterOptions = [],
   displayLabelGroups = [],
+  groupingLabelGroups = [],
   sidebarOpen = true,
   views,
   onAddFilter,
@@ -162,18 +163,8 @@ export function ProjectsPageSurface({
   const toggleSurface = (kind: 'filter' | 'display', origin: 'toolbar' | 'editor') => {
     setOpenSurface(current => current?.kind === kind && current.origin === origin ? null : { kind, origin })
   }
-  // The reference's timeline layout carries Today and the zoom picker in the view toolbar, between Filter and Display.
-  const timelineControls = settings.layout === 'timeline' ? <>
-    <button aria-label="Center the timeline on today’s date" className="lp-projects__timeline-pill" onClick={() => window.dispatchEvent(new Event('flow:timeline-today'))} type="button">Today</button>
-    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Zoom" className="lp-projects__timeline-pill lp-projects__timeline-zoom" type="button">{TIMELINE_ZOOM_LABELS[normalizeTimelineZoom(settings.timelineZoom)]}<ChevronDown size={8}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="lp-project-timeline__zoom-options" data-flow-motion="floating" align="end" sideOffset={4}>
-      <DropdownMenu.RadioGroup value={normalizeTimelineZoom(settings.timelineZoom)} onValueChange={value => { if (TIMELINE_ZOOMS.includes(value as TimelineZoom)) updateSettings({ ...settings, timelineZoom: value as TimelineZoom }) }}>
-        {TIMELINE_ZOOMS.map(option => <DropdownMenu.RadioItem key={option} value={option}>{TIMELINE_ZOOM_LABELS[option]}</DropdownMenu.RadioItem>)}
-      </DropdownMenu.RadioGroup>
-    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-  </> : null
   const editorActions = <>
     <IconButton active={openSurface?.kind === 'filter' && openSurface.origin === 'editor'} buttonRef={editorFilterTriggerRef} label="Add filter" onClick={() => toggleSurface('filter', 'editor')}><FilterIcon /></IconButton>
-    {timelineControls}
     <IconButton active={openSurface?.kind === 'display' && openSurface.origin === 'editor'} badge={filterCount > 0} buttonRef={editorDisplayTriggerRef} label="Display options" onClick={() => toggleSurface('display', 'editor')}><DisplayIcon /></IconButton>
   </>
   const surfaceMenu = (origin: 'toolbar' | 'editor') => <>
@@ -184,6 +175,7 @@ export function ProjectsPageSurface({
     {openSurface?.origin === origin && openSurface.kind === 'display' && <ProjectsDisplayMenu
       defaultSettings={displayDefault ?? DEFAULT_PROJECTS_DISPLAY}
       labelGroups={displayLabelGroups}
+      groupingLabelGroups={groupingLabelGroups}
       onChange={updateSettings}
       onReset={() => {
         if (onResetDisplay) onResetDisplay()
@@ -231,8 +223,7 @@ export function ProjectsPageSurface({
             label="Add filter"
             onClick={() => toggleSurface('filter', 'toolbar')}
           ><FilterIcon /></IconButton>
-          {timelineControls}
-          <IconButton
+                <IconButton
             active={openSurface?.kind === 'display' && openSurface.origin === 'toolbar'}
             badge={filterCount > 0}
             buttonRef={displayTriggerRef}

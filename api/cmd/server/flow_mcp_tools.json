@@ -108,6 +108,7 @@
         "color": { "type": "string", "description": "Hex color code" },
         "description": { "type": "string", "description": "Label description" },
         "isGroup": { "type": "boolean", "description": "Is label group (not directly applicable)" },
+        "multiSelect": { "type": "boolean", "description": "With isGroup: issues may carry several of the group's labels (multi-select group type); default single-select" },
         "name": { "type": "string", "description": "Label name" },
         "parent": { "type": "string", "description": "Parent label group name" },
         "teamId": { "type": "string", "description": "Team UUID (omit for workspace label)" }

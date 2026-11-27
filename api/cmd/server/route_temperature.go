@@ -703,6 +703,7 @@ var scaleP21RouteTemperature = map[string]string{
 	"POST /api/issues/{id}/suggestions/{suggestionId}/dismiss":                   "hot",
 	"POST /api/jira/links":                                                       "cold: server/server.createJiraLink",
 	"POST /api/label-groups":                                                     "hot",
+	"POST /api/label-groups/{id}/move-to-teams":                                  "cold: server/server.moveWorkspaceLabelGroupToTeams",
 	"POST /api/labels":                                                           "hot",
 	"POST /api/labels/merge":                                                     "cold: server/server.mergeLabels",
 	"POST /api/labels/{id}/move-to-teams":                                        "cold: server/server.moveWorkspaceLabelToTeams",

@@ -3,12 +3,12 @@ import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
 import { CompactSelectChevron, DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
-import { useRef, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
-import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
+import { GROUPING_LABELS, ORDERING_LABELS, chooseLabelGroup, defaultOrderDirection, defaultSubLabelGroupId, type LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
 import styles from './my-issues-display-menu.module.css'
 
 export interface MyIssuesDisplayMenuProps {
@@ -30,7 +30,7 @@ export interface MyIssuesDisplayMenuProps {
   /** Current groups for the Group ordering panel (the reference app ViewOptionsGroupsPanel): hide / show each group. */
   groups?: { id: string; label: string; count: number }[]
   /** Parent labels offered by the "Label group" grouping; the grouping is hidden without any. */
-  labelGroupOptions?: { id: string; name: string }[]
+  labelGroupOptions?: LabelGroupOption[]
   /** Footer actions (the reference app "Reset to view default" / "Save as default for view"). */
   onReset?: () => void
   resetLabel?: string
@@ -49,7 +49,8 @@ export interface MyIssuesDisplayMenuProps {
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
 
-const GROUPING_ORDER: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'agent', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'parent', 'sla', 'customer', 'release', 'releaseDate', 'labelGroup', 'activityDate']
+/** The design reference order; each surface narrows it with `availableGroupings`. */
+const GROUPING_ORDER: MyIssuesGrouping[] = ['none', 'focus', 'status', 'statusType', 'assignee', 'agent', 'project', 'milestone', 'priority', 'cycle', 'label', 'labelGroup', 'team', 'customer', 'release', 'parent', 'sla', 'releaseDate', 'activityDate']
 const groupingOptions: { value: MyIssuesGrouping; label: string }[] = GROUPING_ORDER.map(value => ({ value, label: GROUPING_LABELS[value] }))
 const ORDERING_ORDER: MyIssuesOrdering[] = ['importance', 'title', 'status', 'assignee', 'priority', 'estimate', 'created', 'updated', 'myActivity', 'dueDate', 'linkCount', 'timeInStatus', 'customerCount', 'customerRevenue', 'customerImportantCount']
 const orderingOptions: { value: MyIssuesOrdering; label: string }[] = ORDERING_ORDER.map(value => ({ value, label: ORDERING_LABELS[value] }))
@@ -93,6 +94,31 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const popoverRef = useRef<HTMLDivElement>(null)
+  // The design reference sizes every select of the menu to the widest one's text (116px at least, 160px on a board,
+  // 144px at most); a label group's select stops at 142px and truncates its name.
+  const selectTexts = [options.grouping, options.subGrouping, options.ordering, options.labelGroupId, options.subLabelGroupId, options.layout, open].join('|')
+  useLayoutEffect(() => {
+    if (!open) return
+    const size = () => {
+      const popover = popoverRef.current
+      if (!popover) return false
+      const triggers = [...popover.querySelectorAll<HTMLElement>(`.${styles.selectTrigger}`)]
+      const natural = Math.max(0, ...triggers.map(trigger => Math.ceil((trigger.firstElementChild as HTMLElement | null)?.scrollWidth ?? 0) + 27))
+      popover.style.setProperty('--display-select-width', `${Math.max(options.layout === 'board' ? 160 : 116, Math.min(natural, 144))}px`)
+      return true
+    }
+    // The portal content mounts a frame after the menu opens, and a select shows its value text once its items register:
+    // size again whenever the menu's text changes.
+    let observer: MutationObserver | undefined
+    const watch = () => {
+      if (!size() || !popoverRef.current) return false
+      observer = new MutationObserver(() => { size() })
+      observer.observe(popoverRef.current, { subtree: true, childList: true, characterData: true })
+      return true
+    }
+    const frame = watch() ? 0 : requestAnimationFrame(() => { watch() })
+    return () => { cancelAnimationFrame(frame); observer?.disconnect() }
+  }, [open, options.layout, selectTexts])
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
     const properties = new Set(options.properties)
@@ -104,7 +130,18 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const visibleGroupingOptions = (availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions)
     .filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
     .map(option => phone && phoneIssueMenu && option.value === 'activityDate' ? { ...option, label: t('My activity') } : option)
-  const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
+  // The sub-grouping offers the same list (Label group included); picking the primary grouping swaps the two levels.
+  const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions)
+    .filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
+  const labelGroupSelectOptions = labelGroupOptions.map(group => ({ value: group.id, label: group.name, heading: group.heading, translatableHeading: group.translatableHeading }))
+  const changeGrouping = (grouping: MyIssuesGrouping) => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout, ...(grouping === 'labelGroup' && !options.labelGroupId ? { labelGroupId: labelGroupOptions[0]?.id } : {}), ...(grouping === options.subGrouping && grouping !== 'labelGroup' ? { subGrouping: 'none' as const } : {}) })
+  const changeSubGrouping = (subGrouping: MyIssuesGrouping) => {
+    if (subGrouping !== 'none' && subGrouping === options.grouping && subGrouping !== 'labelGroup') {
+      change(options.subGrouping === 'none' ? { grouping: subGrouping, subGrouping: 'none' } : { grouping: options.subGrouping, subGrouping })
+      return
+    }
+    change({ subGrouping, ...(subGrouping === 'labelGroup' && !options.subLabelGroupId ? { subLabelGroupId: defaultSubLabelGroupId(options, labelGroupOptions) } : {}) })
+  }
   const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
   const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
   const issueNesting = (desktopIssueMenu || phoneIssueMenu) && !myIssuesPhoneMenu
@@ -139,11 +176,12 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 data-order={options.groupOrder ?? 'asc'}
                 onClick={() => change({ groupOrder: options.groupOrder === 'desc' ? 'asc' : 'desc' })}
               ><span className={styles.desktopSortIcon}><ArrowDownUp size={14} /></span><PhoneSortIcon kind="group" /></button>
-              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout, ...(grouping === 'labelGroup' && !options.labelGroupId ? { labelGroupId: labelGroupOptions[0]?.id } : {}) })} />
+              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={changeGrouping} />
             </div>
           </div>
-          {options.grouping === 'labelGroup' && labelGroupOptions.length > 0 && <SelectField label="Label group" value={options.labelGroupId ?? labelGroupOptions[0].id} options={labelGroupOptions.map(group => ({ value: group.id, label: group.name }))} onChange={labelGroupId => change({ labelGroupId })} />}
-          {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={subGrouping => change({ subGrouping })} />}
+          {options.grouping === 'labelGroup' && labelGroupOptions.length > 0 && <SelectField className={styles.labelGroupField} label="Label group" value={options.labelGroupId ?? labelGroupOptions[0].id} options={labelGroupSelectOptions} onChange={labelGroupId => onChange(chooseLabelGroup(options, 'grouping', labelGroupId, labelGroupOptions))} />}
+          {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={changeSubGrouping} />}
+          {!hideSubGrouping && options.subGrouping === 'labelGroup' && labelGroupOptions.length > 0 && <SelectField className={styles.labelGroupField} label="Label group" value={options.subLabelGroupId ?? defaultSubLabelGroupId(options, labelGroupOptions) ?? labelGroupOptions[0].id} options={labelGroupSelectOptions} onChange={labelGroupId => onChange(chooseLabelGroup(options, 'subGrouping', labelGroupId, labelGroupOptions))} />}
           <div className={styles.groupingControl}>
             <span className={styles.rowLabel}>{t('Ordering')}</span>
             <div className={styles.groupingActions}>
@@ -177,6 +215,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
+          {options.layout === 'board' && !hideSubGrouping && options.subGrouping !== 'none' && <SwitchRow label="Show empty rows" checked={Boolean(options.showEmptyRows)} onChange={showEmptyRows => change({ showEmptyRows })} />}
           {options.layout === 'list' && <>
             {!issueNesting && (!phone || !phoneIssueMenu) && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
             <div className={styles.nestedSelectRow}>
@@ -241,25 +280,29 @@ function PhoneSortIcon({ kind }: { kind: 'group' | 'ordering' }) {
   </svg>
 }
 
-function SelectField<T extends string>({ disabled = false, label, onChange, options, value }: {
+function SelectField<T extends string>({ className, disabled = false, label, onChange, options, value }: {
+  className?: string
   disabled?: boolean
   label: string
   onChange: (value: T) => void
-  options: { value: T; label: string }[]
+  options: SelectOption<T>[]
   value: T
 }) {
   const { t } = useI18n()
-  return <label className={styles.selectField}>
+  return <label className={`${styles.selectField} ${className ?? ''}`}>
     <span>{t(label)}</span>
     <SelectControl ariaLabel={label} disabled={disabled} value={value} options={options} onChange={onChange} />
   </label>
 }
 
+/** A select choice; `heading` starts a captioned section ("Workspace", a team name) when it changes between options. */
+type SelectOption<T extends string> = { value: T; label: string; heading?: string; translatableHeading?: boolean }
+
 function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange, options, value }: {
   ariaLabel: string
   disabled?: boolean
   onChange: (value: T) => void
-  options: { value: T; label: string }[]
+  options: SelectOption<T>[]
   value: T
 }) {
   const { t } = useI18n()
@@ -270,14 +313,30 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
     <Select.Portal>
       <Select.Content data-flow-motion="floating" className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
         <Select.Viewport className={styles.selectViewport}>
-          {options.map(option => <Select.Item className={`menu-option ${styles.selectItem}`} key={option.value} value={option.value}>
-            <Select.ItemText>{t(option.label)}</Select.ItemText>
-            <Select.ItemIndicator className={styles.selectIndicator}><Check size={13} aria-hidden="true" /></Select.ItemIndicator>
-          </Select.Item>)}
+          {selectSections(options).map((section, index) => {
+            const items = section.options.map(option => <Select.Item className={`menu-option ${styles.selectItem}`} key={option.value} value={option.value}>
+              <Select.ItemText>{section.heading === undefined ? t(option.label) : <span data-i18n-ignore>{option.label}</span>}</Select.ItemText>
+              <Select.ItemIndicator className={styles.selectIndicator}><Check size={13} aria-hidden="true" /></Select.ItemIndicator>
+            </Select.Item>)
+            return section.heading === undefined ? <Fragment key={`plain:${index}`}>{items}</Fragment> : <Select.Group key={`heading:${section.heading}`}>
+              <Select.Label className={styles.selectHeading} data-i18n-ignore={section.translatable ? undefined : true}>{section.translatable ? t(section.heading) : section.heading}</Select.Label>
+              {items}
+            </Select.Group>
+          })}
         </Select.Viewport>
       </Select.Content>
     </Select.Portal>
   </Select.Root>
+}
+
+function selectSections<T extends string>(options: SelectOption<T>[]) {
+  const sections: { heading?: string; translatable?: boolean; options: SelectOption<T>[] }[] = []
+  for (const option of options) {
+    const last = sections.at(-1)
+    if (last && last.heading === option.heading) last.options.push(option)
+    else sections.push({ heading: option.heading, translatable: option.translatableHeading, options: [option] })
+  }
+  return sections
 }
 
 function SwitchRow({ checked, label, onChange, className }: { checked: boolean; label: string; onChange: (checked: boolean) => void; className?: string }) {

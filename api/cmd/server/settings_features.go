@@ -617,6 +617,7 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 	moved := []domain.IssueLabel{}
 	// Only issues carrying the label change.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{LabelIssues: []string{id}})
+	ctx = store.WithLabelAutomationScope(ctx, func(domain.Bootstrap) []string { return []string{id} })
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
@@ -626,40 +627,24 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 		if labelResourceType(source) != "issue" {
 			return "", errInvalid
 		}
-		usedByTeam := map[string]bool{}
-		for _, issue := range data.Issues {
-			if slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return label.ID == id }) {
-				usedByTeam[issue.Team.ID] = true
-			}
+		// The copies are ungrouped; see moveLabelsToTeams.
+		move, err := moveLabelsToTeams(data, []domain.IssueLabel{source}, nil)
+		if err != nil {
+			return "", err
 		}
-		if len(usedByTeam) == 0 {
-			return "", errInvalid
+		moved = []domain.IssueLabel{}
+		for _, teamID := range move.receiving {
+			moved = append(moved, move.copies[teamID][id])
 		}
-		for teamIndex, team := range data.Teams {
-			if !usedByTeam[team.ID] {
-				continue
-			}
-			teamLabel := source
-			teamLabel.ID = fmt.Sprintf("label_%s_%d", idgen.Stamp(), teamIndex)
-			teamLabel.Scope = team.ID
-			teamLabel.GroupID = ""
-			moved = append(moved, teamLabel)
-			data.Labels = append(data.Labels, teamLabel)
-			for issueIndex := range data.Issues {
-				if data.Issues[issueIndex].Team.ID != team.ID {
-					continue
-				}
-				for labelIndex := range data.Issues[issueIndex].Labels {
-					if data.Issues[issueIndex].Labels[labelIndex].ID == id {
-						data.Issues[issueIndex].Labels[labelIndex] = teamLabel
-					}
-				}
-			}
-		}
-		data.Labels = slices.Delete(data.Labels, index, index+1)
+		appendAudit(data, "moved_to_teams", "label", id, map[string]any{"name": source.Name, "teamIds": move.receiving})
 		return id, nil
 	})
-	respondMutation(w, err, http.StatusOK, moved)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	s.pruneMovedLabelSuggestions(r, map[string]struct{}{id: {}})
+	writeJSON(w, http.StatusOK, moved)
 }
 
 func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
@@ -692,6 +677,9 @@ type labelGroupInput struct {
 	ArchivedAt   *string `json:"archivedAt,omitempty"`
 	// Scope is a team ID for team-owned groups; empty means workspace.
 	Scope *string `json:"scope,omitempty"`
+	// MultiSelect is the group type: true lets an item carry several of the
+	// group's labels.
+	MultiSelect *bool `json:"multiSelect,omitempty"`
 }
 
 func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
@@ -725,6 +713,9 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Description != nil {
 			created.Description = strings.TrimSpace(*input.Description)
+		}
+		if input.MultiSelect != nil {
+			created.MultiSelect = *input.MultiSelect
 		}
 		data.LabelGroups = append(data.LabelGroups, created)
 		return created.ID, nil
@@ -765,6 +756,9 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Description != nil {
 			data.LabelGroups[index].Description = strings.TrimSpace(*input.Description)
+		}
+		if input.MultiSelect != nil {
+			data.LabelGroups[index].MultiSelect = *input.MultiSelect
 		}
 		if input.ArchivedAt != nil {
 			value := strings.TrimSpace(*input.ArchivedAt)
@@ -879,6 +873,10 @@ func removeLabelReferences(data *domain.Bootstrap, ids map[string]struct{}) {
 	for index := range data.SavedViews {
 		data.SavedViews[index].Filters = removeLabelReferencesFromJSON(data.SavedViews[index].Filters, ids)
 	}
+	rewriteWorkflowLabelReferences(data, func(id string) (string, bool) {
+		_, ok := ids[id]
+		return "", ok
+	})
 }
 
 func removeLabelReferencesFromJSON(raw json.RawMessage, ids map[string]struct{}) json.RawMessage {

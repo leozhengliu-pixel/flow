@@ -14,6 +14,8 @@ export const labelSettingsZhCN: Record<string, string> = {
   "Created {date}": "创建于 {date}",
   "Created by {name}": "由 {name} 创建",
   "Archived on {date}": "归档于 {date}",
+  "Edit label name…": "编辑标签名称…",
+  "Move to teams": "移动到团队",
   "Show team labels": "显示团队标签",
   "Show archived": "显示已归档",
   "Used by {count} team": "被 {count} 个团队使用",
@@ -35,4 +37,13 @@ export const labelSettingsZhCN: Record<string, string> = {
   "These labels will be merged into": "这些标签将合并到",
   "The merged label will be applied to": "合并后的标签将应用到",
   "Labels merged": "标签已合并",
+  // Label group type and label groupings (display menus, group headers, board rows).
+  "Group type": "组类型",
+  "Single-select": "单选",
+  "Multi-select": "多选",
+  "No label": "无标签",
+  "No customer": "无客户",
+  "Rows": "行",
+  "Show empty rows": "显示空行",
+  "Show empty columns": "显示空列",
 }

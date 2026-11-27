@@ -1,0 +1,19 @@
+{
+  "source": "server/label_group_move.go",
+  "unmigrated": 1,
+  "consumers": {
+    "moveWorkspaceLabelGroupToTeams": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ],
+      "temperature": "cold",
+      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "callers": [
+        "POST /api/label-groups/{id}/move-to-teams (server/main.go:682)"
+      ]
+    }
+  }
+}

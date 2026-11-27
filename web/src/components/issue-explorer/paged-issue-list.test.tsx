@@ -41,13 +41,29 @@ describe('server-backed issue groups', () => {
     expect(show).toHaveBeenCalledWith(started.id)
     expect(screen.queryByRole('region', { name: 'Hidden columns' })).not.toBeInTheDocument()
   })
-  it('uses complete estimate buckets for board totals rather than issue counts or the loaded cards', async () => {
-    vi.mocked(listIssueRecordGroups).mockImplementation(async query => ({ groups: query.groupBy === 'estimate' ? [{ value: '5', count: 100 }, { value: '', count: 1 }] : [{ value: 'state-backlog', count: 101 }] }))
+  it('uses the server estimate totals for board columns rather than issue counts or the loaded cards', async () => {
+    vi.mocked(listIssueRecordGroups).mockImplementation(async query => ({ groups: [{ value: 'state-backlog', count: 101, ...('aggregate' in query ? { estimatePoints: 501 } : {}) }] }))
     vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ estimate: 5 })], hasMore: true, nextCursor: 'next', total: -1 })
     const data = makeBootstrap({ teamSettings: { 'team-1': { teamId: 'team-1', estimateType: 'fibonacci' } } } as never)
     render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status', teamId: 'team-1' }} layout="board" displayProperties={new Set(['estimate'])} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
     expect(await screen.findByLabelText('501 estimate points')).toHaveTextContent('501')
-    expect(listIssueRecordGroups).toHaveBeenCalledWith(expect.objectContaining({ groupBy: 'estimate', filter: { and: [{ and: [] }, { field: 'status', operator: 'in', values: ['state-backlog'] }, { field: 'teamId', values: ['team-1'] }] } }), expect.any(AbortSignal))
+    expect(listIssueRecordGroups).toHaveBeenCalledTimes(2)
+    expect(listIssueRecordGroups).toHaveBeenCalledWith({ groupBy: 'status', teamId: 'team-1', aggregate: 'estimatePoints' }, expect.any(AbortSignal))
+  })
+  it('shows estimate totals in list headers without the Estimate property, from one request for every group', async () => {
+    vi.mocked(listIssueRecordGroups).mockImplementation(async query => ({ groups: 'aggregate' in query
+      ? [{ value: backlog.id, count: 2, estimatePoints: 8 }, { value: started.id, count: 1, estimatePoints: 0 }, { value: completed.id, count: 4 }]
+      : [{ value: backlog.id, count: 2 }, { value: started.id, count: 1 }, { value: completed.id, count: 4 }] }))
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [], hasMore: false, total: 0 })
+    const data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true, teamSettings: { 'team-1': { teamId: 'team-1', estimateType: 'fibonacci' } } } as never)
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} displayProperties={new Set()} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByLabelText('8 estimate points')).toHaveTextContent('8')
+    expect(screen.getByLabelText('0 estimate points')).toBeInTheDocument()
+    // A group without issues of an estimating team keeps its plain count.
+    const done = screen.getByText(completed.name).closest('header')!
+    expect(done.querySelector('[data-my-issues-group-count="points"]')).toBeNull()
+    expect(done).toHaveTextContent('4')
+    expect(vi.mocked(listIssueRecordGroups).mock.calls.filter(([query]) => 'aggregate' in query)).toHaveLength(1)
   })
   it('selects all cursor pages in a group, not just the loaded viewport', async () => {
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 101 }] })

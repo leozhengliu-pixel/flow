@@ -180,7 +180,7 @@ func (s *SQLiteStore) loadWorkflowRunInputs(ctx context.Context, source *metadat
 	}
 	if err := read.selectSlice(ctx, "labelGroups", func(node metadataLogicalNode) (bool, error) {
 		return issueHotMatches(ctx, node, "ID", groups)
-	}, "ID", "ArchivedAt"); err != nil {
+	}, "ID", "ArchivedAt", "MultiSelect"); err != nil {
 		return nil, err
 	}
 	stateData := read.data

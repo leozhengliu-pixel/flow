@@ -55,6 +55,8 @@
   background:transparent;
   cursor:pointer;
 }
+/* Fine pointers at phone widths (a desktop browser window) use the reference's 28px buttons; touch devices keep 32px. */
+@media (pointer: fine){.mobileSidebarButton{width:28px;height:28px;flex-basis:28px;padding:6px}}
 .mobileSidebarButton span{
   display:block;
   width:14px;

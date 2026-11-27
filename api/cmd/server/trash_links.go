@@ -409,6 +409,30 @@ func restoreIssueLinks(data *domain.Bootstrap, id string, links *domain.TrashLin
 	restoreResourcePreferences(data, links)
 }
 
+// restoreCurrentIssueLabels gives a restored issue the current version of its
+// labels and drops (with its suggestions) those deleted, merged or moved
+// while it was in the trash.
+func restoreCurrentIssueLabels(data *domain.Bootstrap, issue *domain.Issue) {
+	if len(issue.Labels) == 0 && len(issue.SuggestedLabelIDs) == 0 {
+		return
+	}
+	current := make(map[string]domain.IssueLabel, len(data.Labels))
+	for _, label := range data.Labels {
+		current[label.ID] = label
+	}
+	labels := make([]domain.IssueLabel, 0, len(issue.Labels))
+	for _, label := range issue.Labels {
+		if label, ok := current[label.ID]; ok {
+			labels = append(labels, label)
+		}
+	}
+	issue.Labels = labels
+	issue.SuggestedLabelIDs = slices.DeleteFunc(issue.SuggestedLabelIDs, func(id string) bool {
+		_, ok := current[id]
+		return !ok
+	})
+}
+
 // restoreTrashedIssue puts a trashed issue back with its content and
 // re-attaches its links. The caller removes the trash entry.
 func restoreTrashedIssue(data *domain.Bootstrap, entry domain.TrashEntry) (domain.Issue, error) {
@@ -419,6 +443,7 @@ func restoreTrashedIssue(data *domain.Bootstrap, entry domain.TrashEntry) (domai
 	if issueIndexByID(data, value.Issue.ID) >= 0 {
 		return domain.Issue{}, errConflict
 	}
+	restoreCurrentIssueLabels(data, &value.Issue)
 	data.Issues = append([]domain.Issue{value.Issue}, data.Issues...)
 	data.Comments[value.Issue.ID], data.Activities[value.Issue.ID] = value.Comments, value.Activities
 	restoreIssueLinks(data, value.Issue.ID, entry.Links)

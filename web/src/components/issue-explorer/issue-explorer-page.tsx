@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
-import { unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
+import { availableIssueGroupings, unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
@@ -45,7 +45,7 @@ import {
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 import { MyIssuesSummaryCard } from '@/components/my-issues/my-issues-summary-card'
-import { labelGroups, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
+import { labelGroupOptions, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 import { isActiveSubscription } from '@/lib/subscription-records'
 import { BacklogEmptyState } from './backlog-empty-state'
 
@@ -196,12 +196,12 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const summaryRows = useMemo(() => [...new Map(groups.flatMap(group => group.issues).map(row => [row.id, row])).values()], [groups])
   const buildPagedQuery = useCallback((list: MyIssuesAppliedFilter[]) => {
     const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data)
+    const { sort, direction, groupBy, groupCases, labelGroupId, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data, labelGroupOptions(data, 'issue', scopeTeamIds ? [...scopeTeamIds] : undefined)[0]?.id)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
-  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, labelGroupId, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
+  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, scopeTeamIds, view])
   const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
   // Compare the same scope and display settings, clearing only personal filters, never the saved view's filters.
   const clearableFilters = bandActive ? extraFilters : filters
@@ -347,8 +347,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     hiddenProperties: desktop ? unavailableDisplayProperties(data, scopeTeamIds ? [...scopeTeamIds] : undefined) : undefined,
     hideCompletedIssues: view !== 'all',
     groups: menuGroups,
-    labelGroupOptions: labelGroups(data.labels),
-    availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+    labelGroupOptions: labelGroupOptions(data, "issue", scopeTeamIds ? [...scopeTeamIds] : undefined),
+    availableGroupings: scope.kind === 'team' ? availableIssueGroupings(data, 'team', scopeTeamIds ? [...scopeTeamIds] : undefined).filter(grouping => !data.issueCollectionPaged || PAGED_GROUPINGS.includes(grouping)) : data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
     toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
     modified: displayModified,

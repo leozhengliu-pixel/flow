@@ -8,7 +8,7 @@
 export type TimelineZoom = 'week' | 'month' | 'quarter' | 'year'
 
 export const TIMELINE_ZOOMS: readonly TimelineZoom[] = ['week', 'month', 'quarter', 'year']
-export const DEFAULT_TIMELINE_ZOOM: TimelineZoom = 'quarter'
+export const DEFAULT_TIMELINE_ZOOM: TimelineZoom = 'year'
 
 /** Pixels per calendar day for each zoom level. */
 export const TIMELINE_PX_PER_DAY: Record<TimelineZoom, number> = { week: 36, month: 12, quarter: 3.5, year: 1.2 }
@@ -164,9 +164,9 @@ export const DESKTOP_AXIS_LABEL_PITCH = 35
  * Desktop axis: month names over one tick per week (per day at Week zoom). Every tick is drawn, but
  * when ticks sit closer than DESKTOP_AXIS_LABEL_PITCH only every n-th week carries its day number.
  * The labelled weeks come from the calendar, not from where the range starts, so scrolling or
- * changing the range never shifts which weeks are numbered.
+ * changing the range never shifts which weeks are numbered; `phone` takes the other parity.
  */
-export function desktopTimelineHeader(range: TimelineRange, locale: string, window?: TimelineAxisWindow) {
+export function desktopTimelineHeader(range: TimelineRange, locale: string, window?: TimelineAxisWindow, phone = false) {
   const daily = range.zoom === 'week'
   const tickDays = daily ? 1 : 7
   const tickWidth = tickDays * range.pxPerDay
@@ -177,7 +177,8 @@ export function desktopTimelineHeader(range: TimelineRange, locale: string, wind
     if (cursor < range.start) continue
     // Weeks are counted from the first Monday after the Unix epoch.
     const index = daily ? dayNumber(cursor) : Math.floor((dayNumber(cursor) - 4) / 7)
-    const labelled = labelEvery === 1 || index % labelEvery === 1 % labelEvery
+    // The reference numbers the other weeks on phones (it measures Nov 2 on desktop and Nov 9 on a phone in 2026).
+    const labelled = labelEvery === 1 || index % labelEvery === (phone ? 0 : 1 % labelEvery)
     minor.push({ key: isoTimelineDay(cursor), label: labelled ? String(cursor.getDate()) : '', x: timelineX(range, cursor), width: tickWidth })
   }
   const month = new Intl.DateTimeFormat(locale, { month: 'short' })

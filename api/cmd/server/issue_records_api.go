@@ -86,6 +86,13 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		return data, query, store.ErrIssueQuery
 	}
 	query.Filter = root.storeFilter()
+	if query.GroupBy == "labelGroup" {
+		// labelGroupId: the label group whose labels the issues group by.
+		query.GroupBy = "labels"
+		if query.GroupLabelIDs, err = s.issueGroupLabelIDs(r.Context(), query.Workspace, r.URL.Query().Get("labelGroupId")); err != nil {
+			return data, query, err
+		}
+	}
 	if query.GroupBy == "cases" {
 		// groupCases: [{"value": "…", "filter": <filter expression>}, …], the groups in order.
 		cases, err := decodeIssueGroupCases(r.URL.Query().Get("groupCases"))
@@ -364,6 +371,13 @@ func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ids": ids, "truncated": truncated})
 }
 
+// issueRecordGroupPoints is a group with its estimate point total
+// (aggregate=estimatePoints); groups without one leave it out.
+type issueRecordGroupPoints struct {
+	store.IssueRecordGroup
+	EstimatePoints *float64 `json:"estimatePoints,omitempty"`
+}
+
 func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {
@@ -371,12 +385,36 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query.Nested = r.URL.Query().Get("nested") == "true"
+	aggregate := r.URL.Query().Get("aggregate")
+	if aggregate != "" && aggregate != "estimatePoints" {
+		writeError(w, http.StatusBadRequest, "Unsupported aggregate")
+		return
+	}
 	groups, err := s.store.QueryIssueGroups(r.Context(), query)
+	if err == nil {
+		groups, err = s.orderIssueRecordGroups(r.Context(), query, groups)
+	}
 	if err != nil {
 		issueRecordsErrorFor(w, r, err)
 		return
 	}
-	s.writeIssueRead(w, r, map[string]any{"groups": groups})
+	if aggregate == "" {
+		s.writeIssueRead(w, r, map[string]any{"groups": groups})
+		return
+	}
+	points, err := s.store.QueryIssueGroupEstimatePoints(r.Context(), query)
+	if err != nil {
+		issueRecordsErrorFor(w, r, err)
+		return
+	}
+	result := make([]issueRecordGroupPoints, len(groups))
+	for index, group := range groups {
+		result[index].IssueRecordGroup = group
+		if total, ok := points[group.Value]; ok {
+			result[index].EstimatePoints = &total
+		}
+	}
+	s.writeIssueRead(w, r, map[string]any{"groups": result})
 }
 
 func (s *server) issueRecordProjectSummary(w http.ResponseWriter, r *http.Request) {

@@ -1,4 +1,5 @@
 import type { PropertyOption } from './property-menu'
+import { isMultiSelectLabelGroup } from '@/lib/labels'
 
 /** A label group row of the labels picker: it opens a submenu of the group's labels. */
 export interface LabelMenuGroup {
@@ -11,6 +12,8 @@ export interface LabelMenuGroup {
   /** The selected labels of the group, shown after the group's name. */
   detail?: string
   teamScoped: boolean
+  /** Multi-select group type: its labels toggle with boxes and the submenu stays open. */
+  multiSelect?: boolean
 }
 
 /**
@@ -68,6 +71,10 @@ export function labelMenuModel(options: PropertyOption[], selectedIds: ReadonlyS
       if (!query || search!.groupMatches(option.groupLabel)) order.push({ type: 'group', group })
     }
     group.options.push(option)
+    group.multiSelect = isMultiSelectLabelGroup(option.groupId)
+    // A multi-select group's selected labels list on their own rows ("Group › Label", each with its box); the group row
+    // stays among the unselected ones to add more. A single-select group's row moves up and names its label.
+    if (selectedIds.has(option.id) && group.multiSelect) { paths.push({ type: 'label', option, groupName: 'path' }); continue }
     if (selectedIds.has(option.id)) {
       group.checked = true
       group.detail = group.detail ? `${group.detail}, ${option.label}` : option.label
@@ -77,10 +84,13 @@ export function labelMenuModel(options: PropertyOption[], selectedIds: ReadonlyS
   const checked = (entry: LabelMenuEntry) => entry.type === 'group' ? entry.group.checked : selectedIds.has(entry.option.id)
   const teamScoped = (entry: LabelMenuEntry) => entry.type === 'group' ? entry.group.teamScoped : isTeamScopedLabel(entry.option)
   const sorted = (entries: LabelMenuEntry[]) => [...entries.filter(entry => entry.type === 'group'), ...entries.filter(entry => entry.type === 'label' && entry.groupName), ...entries.filter(entry => entry.type === 'label' && !entry.groupName)]
+  // Selected rows: grouped ones by group name (a multi-select group's labels and single-select groups alike), then plain labels.
+  const groupName = (entry: LabelMenuEntry) => entry.type === 'group' ? entry.group.label : entry.groupName ? entry.option.groupLabel ?? '' : undefined
+  const selectedOrder = (entries: LabelMenuEntry[]) => [...entries.filter(entry => groupName(entry) !== undefined).sort((left, right) => groupName(left)!.localeCompare(groupName(right)!, undefined, { sensitivity: 'base' })), ...entries.filter(entry => groupName(entry) === undefined)]
   const all = [...order, ...paths]
   const rest = all.filter(entry => !checked(entry))
   return {
-    selected: sorted(all.filter(checked)),
+    selected: selectedOrder(all.filter(checked)),
     team: sorted(rest.filter(teamScoped)),
     workspace: sorted(rest.filter(entry => !teamScoped(entry))),
   }

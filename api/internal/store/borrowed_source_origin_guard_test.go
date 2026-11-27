@@ -22,7 +22,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "a1fba71672d01fae78447673c322c1d868ca26e39bbc3482969c0c6bb22a5994",
 		"issue_records.go":      "f5e1cae5c796fd09a5bc7ebd4d7c5b541cf064e2a554cbf6a3cf814b684decd2",
-		"issue_query.go":        "096e3b3f52c3c4b0dd5ac409c65a0988a53c15f7e954688b687b6918b7d47cbc",
+		"issue_query.go":        "1e7cfc29bebf6e58999abc0cb7bf5924e563558b48d346f03865ee1be5c3a621",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
 		"issue_scan.go": "dd147c46e1bad9c304a87f9968b4944171159f97463b741d523d74dc9940d7ba",
@@ -32,9 +32,9 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"team_default_favorites.go":              "160beec6f9080397a9addddd55d7c0399ad2a755c2b9331ea7b1699811e9083e",
 		"snapshot_buffers.go":                    "023c93b51f6e9eaa6c0ba0b29a9f9e49d92ce006406801fb07d45cc8609e6bb2",
 		"snapshot_clone.go":                      "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
-		"../../cmd/server/advanced_features.go":  "919984659f265f6551ba609b814286bac136b3bb918dc5a0204d1583d0a00cbe",
+		"../../cmd/server/advanced_features.go":  "63ad8c92c8f801373a5cf7ebc1bf9ba7afd9b9dbaef8a20060ac42f7ca6da214",
 		"../../cmd/server/loop_settings.go":      "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":               "34ae00f91e6c50daf360a2cce466a26240eef6cdd4d1a5dcf20a9d5b380f8709",
+		"../../cmd/server/main.go":               "c0a9aa8fc1a6fe16327ce1ac30b77739e4a9f21463ef9a2c64d05c7a367b83cb",
 		"../../cmd/server/notification_state.go": "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
 		"../../cmd/server/personal_data.go":      "ac5b80d21fc3f3edc717e140729d0b59b9e245ae5d68597c388336856cc0bb01",
 		"../../cmd/server/cold_dispatch.go":      "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
@@ -47,7 +47,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/issue_update_targets.go":            "0aba87367470607dfcbc0ae7e48ec7c0e8402c7c5020991d85acc2c6af9594ee",
 		"../../cmd/server/triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
-		"../../cmd/server/settings_features.go":               "f2867b72c1f9b5611f57a4b8033cd362865754b1757d7866600ecb95fc0e84e6",
+		"../../cmd/server/settings_features.go":               "4c2075a712aea26c60777ec3ce4c6bbc815f90584b8715b62fb80218114954b6",
 		"authz_epoch.go":                                      "6de890ae6a645e416fbbfb479dfcb165c68b78ccd384851c433f03c5a285e583",
 		"content_records.go":                                  "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
 		"database.go":                                         "0f8031be40273399b3e770ff44726abdb107483b5d282feaa5d675277c4be0cb",

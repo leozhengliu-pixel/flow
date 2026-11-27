@@ -58,7 +58,12 @@ type IssueRecordQuery struct {
 	// GroupCases defines the groups of GroupBy "cases": each row is in the
 	// group of the first case whose filter it matches (a row matching none
 	// is in the "" group). GroupValue then names a case's Value.
-	GroupCases         []IssueGroupCase `json:",omitempty"`
+	GroupCases []IssueGroupCase `json:",omitempty"`
+	// GroupLabelIDs limits a "labels" grouping to these labels (one label
+	// group's); empty groups by every label. A "labels" grouping is
+	// multi-membership: an issue is in the group of each of its labels, and
+	// in the "" group ("No label") when it has none of them.
+	GroupLabelIDs      []string `json:",omitempty"`
 	IncludeTotal       bool
 	Summary            bool
 	IncludeDescription bool
@@ -755,6 +760,12 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		args = append(args, values...)
 		return strings.Join(clauses, " AND "), args, nil
 	}
+	if query.GroupValue != nil && query.GroupBy == "labels" {
+		clause, values := labelGroupClause(*query.GroupValue, query.GroupLabelIDs)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+		return strings.Join(clauses, " AND "), args, nil
+	}
 	if query.GroupValue != nil && query.GroupBy == "customer" {
 		// Customer groups are multi-membership: an issue is in every requesting customer's group.
 		clause, values := customerGroupClause(*query.GroupValue)
@@ -798,6 +809,8 @@ func issueGroupColumn(group string) (string, error) {
 		return "project_id", nil
 	case "cycle":
 		return "cycle_id", nil
+	case "statusType":
+		return "state_type", nil
 	}
 	return "", fmt.Errorf("%w: unsupported grouping", ErrIssueQuery)
 }
@@ -1456,6 +1469,9 @@ func (s *SQLiteStore) flatIssueGroupsBySQL(ctx context.Context, query IssueRecor
 	}
 	if query.GroupBy == "customer" {
 		return s.customerIssueGroups(ctx, query, where, args)
+	}
+	if query.GroupBy == "labels" {
+		return s.labelIssueGroups(ctx, query, where, args)
 	}
 	column, err := issueGroupColumn(query.GroupBy)
 	from := "issue_records i"

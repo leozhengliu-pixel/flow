@@ -162,6 +162,13 @@ func testNestedIssueQueryContract(t *testing.T, repository *SQLiteStore, workspa
 	if got := counts(query(true, "label", scope)); got["nest-label"] != 4 || got[""] != 153 {
 		t.Fatalf("nested label groups %v", got)
 	}
+	if got := counts(query(true, "labels", scope)); got["nest-label"] != 4 || got[""] != 153 || len(got) != 2 {
+		t.Fatalf("nested multi-membership label groups %v", got)
+	}
+	// Sub-issues count in their top-level row's group: P1's and PL's trees are unstarted, C3 (parent outside) started.
+	if got := counts(query(true, "statusType", scope)); got["unstarted"] != 156 || got["started"] != 1 || len(got) != 2 {
+		t.Fatalf("nested status type groups %v", got)
+	}
 	if got := counts(query(true, "priority", scope)); got[fmt.Sprint(base.Priority)] != 157 {
 		t.Fatalf("nested priority groups %v", got)
 	}
