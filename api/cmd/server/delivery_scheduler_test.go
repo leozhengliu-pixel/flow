@@ -57,8 +57,9 @@ func TestDeliverySchedulerStopsGracefully(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repository.Close()
+	t.Cleanup(func() { _ = repository.Close() })
 	s := &server{store: repository, realtime: newRealtimeHub(), deliverySchedulerInterval: time.Hour}
+	cleanupTestServer(t, s)
 	s.startDeliveryScheduler()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
@@ -84,6 +85,7 @@ func TestChatWorkerDoesNotBlockDeliverySweeps(t *testing.T) {
 	defer repository.Close()
 	s := &server{store: repository, realtime: newRealtimeHub()}
 	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	var mu sync.Mutex
 	active, peak := 0, 0
 	started := make(chan struct{}, 16)

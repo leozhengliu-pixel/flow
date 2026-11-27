@@ -37,11 +37,15 @@ func (s *SQLiteStore) startRecordJournalMaintenance() {
 }
 
 func (d *sqlDatabase) Close() error {
+	d.stopRecordJournalMaintenance()
+	return d.closePools()
+}
+
+func (d *sqlDatabase) stopRecordJournalMaintenance() {
 	if d.journalStop != nil {
 		d.journalStop()
 	}
 	d.journalWorkers.Wait()
-	return d.closePools()
 }
 
 func (d *sqlDatabase) closePools() error {

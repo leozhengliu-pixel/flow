@@ -121,7 +121,7 @@ func (s *server) startBoundedLoopRun(workspace, loopID string, trigger loopTrigg
 		return domain.LoopRun{}, err
 	}
 	current := *loop
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer releaseLoop()
 		defer loopGuards.release(guardKey)
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run}
@@ -130,6 +130,10 @@ func (s *server) startBoundedLoopRun(workspace, loopID string, trigger loopTrigg
 		}, func(ctx context.Context, runErr error) {
 			s.finishLoopRun(ctx, workspace, current, recorder, runErr)
 		})
-	}()
+	}) {
+		releaseLoop()
+		work.abandon()
+		loopGuards.release(guardKey)
+	}
 	return run, nil
 }

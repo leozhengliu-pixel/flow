@@ -150,29 +150,24 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 			return
 		}
 	}
-	var posts sync.WaitGroup
-	owned := read != nil
-	if owned {
-		posts.Add(len(deliveries))
-		output := read
+	output := read
+	if s.goBackground(func(lifetime context.Context) {
+		if output != nil {
+			defer output.Close()
+		}
+		var posts sync.WaitGroup
+		for _, item := range deliveries {
+			posts.Go(func() {
+				ctx, cancel := context.WithTimeout(lifetime, 10*time.Second)
+				defer cancel()
+				if err := postSlackMessage(ctx, token, item.channel, item.text); err != nil && lifetime.Err() == nil {
+					log.Printf("Flow team Slack notification workspace=%s channel=%s event=%s: %v", workspace, item.channel, event.Type, err)
+				}
+			})
+		}
+		posts.Wait()
+	}) {
 		read = nil
-		go func() {
-			posts.Wait()
-			output.Close()
-		}()
-	}
-	for _, item := range deliveries {
-		channel, text := item.channel, item.text
-		go func() {
-			if owned {
-				defer posts.Done()
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := postSlackMessage(ctx, token, channel, text); err != nil {
-				log.Printf("Flow team Slack notification workspace=%s channel=%s event=%s: %v", workspace, channel, event.Type, err)
-			}
-		}()
 	}
 }
 

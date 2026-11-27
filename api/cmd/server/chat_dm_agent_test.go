@@ -181,6 +181,7 @@ func newChatDMFixture(t *testing.T, script func(call int, input string) string) 
 		f.s.agentClient = f.provider.Client()
 	}
 	t.Cleanup(func() { chatDMReplies.Wait() })
+	cleanupTestServer(t, f.s)
 	return f
 }
 

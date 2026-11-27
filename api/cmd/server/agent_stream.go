@@ -340,6 +340,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		// Unlike a browser stream, a DM is owned by a renewable queue lease.
 		parent = r.Context()
 	}
+	parent, stop := s.bindBackground(parent)
+	defer stop()
 	runCtx, cancelRun := context.WithCancelCause(parent)
 	defer cancelRun(nil)
 	// A stop (stopAgentRun) cancels with errAgentReplyStopped, so the reply is saved as stopped, not interrupted.
@@ -1244,9 +1246,11 @@ func (s *server) startAgentSessionTitle(r *http.Request, session domain.AgentSes
 		}
 		request += "\n\nContext:\n" + extra
 	}
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer close(done)
-		ctx, cancel := contextWithTimeout(r, 60*time.Second)
+		parent, release := s.detachedContext(r.Context())
+		defer release()
+		ctx, cancel := context.WithTimeout(parent, 60*time.Second)
 		defer cancel()
 		turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: agentTitleSystemPrompt}, {Role: "user", Content: request}})
 		if err != nil {
@@ -1264,13 +1268,10 @@ func (s *server) startAgentSessionTitle(r *http.Request, session domain.AgentSes
 			current.Title = title
 			return nil
 		})
-	}()
+	}) {
+		close(done)
+	}
 	return done
-}
-
-// contextWithTimeout outlives the HTTP request so background work can finish after the stream closes.
-func contextWithTimeout(r *http.Request, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
 }
 
 func cleanAgentSessionTitle(text string) string {

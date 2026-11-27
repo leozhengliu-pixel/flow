@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"flow/api/internal/domain"
@@ -29,6 +30,7 @@ func diagnoseRealtimeResync(reason string) {
 }
 
 type realtimeHub struct {
+	background  atomic.Pointer[serverBackground]
 	mu          sync.Mutex
 	budget      *realtimeBudget
 	nextID      uint64
@@ -101,7 +103,7 @@ type realtimeSeqOrder struct {
 	last         int64
 	pending      map[int64]domain.RealtimeEvent
 	pendingBytes int64
-	timer        *time.Timer
+	timer        *serverTimer
 	peerReplay   bool
 }
 
@@ -276,8 +278,8 @@ func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.Realti
 // events behind it go out without it.
 func (h *realtimeHub) awaitGapLocked(workspace string, order *realtimeSeqOrder) {
 	// The callback takes h.mu, held here, so timer is set before it reads it.
-	var timer *time.Timer
-	timer = time.AfterFunc(realtimeReorderWait, func() {
+	var timer *serverTimer
+	timer = h.background.Load().afterFunc(realtimeReorderWait, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		if order.timer != timer {
@@ -563,7 +565,7 @@ const presenceBroadcastInterval = time.Second
 
 type presenceBroadcastState struct {
 	last     time.Time
-	timer    *time.Timer
+	timer    *serverTimer
 	deferred func()
 }
 
@@ -597,7 +599,7 @@ func (h *realtimeHub) broadcastPresence(workspace string, immediate, deferred fu
 	}
 	if wait := state.last.Add(interval).Sub(now); wait > 0 {
 		state.deferred = deferred
-		state.timer = time.AfterFunc(wait, func() {
+		state.timer = h.background.Load().afterFunc(wait, func() {
 			h.presenceMu.Lock()
 			run := state.deferred
 			state.deferred, state.timer, state.last = nil, nil, time.Now()
@@ -606,6 +608,9 @@ func (h *realtimeHub) broadcastPresence(workspace string, immediate, deferred fu
 				run()
 			}
 		})
+		if state.timer == nil {
+			state.deferred = nil
+		}
 		h.presenceMu.Unlock()
 		return
 	}
@@ -637,6 +642,9 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "Streaming is unavailable")
 		return
 	}
+	ctx, cancel := bindLifetime(r.Context(), s.backgroundWork().serving)
+	defer cancel()
+	r = r.WithContext(ctx)
 	releaseInitial, err := acquireRealtimeWork(r.Context(), s.realtime.budget, 4<<20)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")

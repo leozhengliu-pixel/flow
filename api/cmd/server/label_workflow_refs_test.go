@@ -61,8 +61,7 @@ func seedLabelWorkflowFixture(t *testing.T, repo *store.SQLiteStore, bounded boo
 		}
 	}
 	service := &server{store: repo, uploadPath: t.TempDir(), authDisabled: true}
-	disableBackgroundWorkersForTest(service)
-	handler := newHandler(service)
+	handler := newTestHandler(t, service)
 	var events []domain.RealtimeEvent
 	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { events = append(events, event) })
 	t.Cleanup(func() { repo.SetRealtimeSink(nil) })

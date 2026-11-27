@@ -516,7 +516,7 @@ func (s *server) createOAuthApplicationWithStore(w http.ResponseWriter, r *http.
 	})
 	if err == nil {
 		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
+		s.goBackground(s.reconcileAllApplicationWebhooks)
 		// The response carries the client secret.
 		s.auditAPIKeyCredential(r, "client_secret_issued", created)
 		w.Header().Set("Cache-Control", "no-store")

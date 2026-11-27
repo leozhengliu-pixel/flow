@@ -53,20 +53,18 @@ func newPeerServers(t *testing.T) peerServers {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = repository.Close() })
 		coordinator, err := coordination.Open(context.Background(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: "peers", ConnectTimeout: time.Second, LockTTL: 5 * time.Second, LockWait: 5 * time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = coordinator.Close() })
 		repository.SetWorkspaceCoordinator(coordinator)
 		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
 		instance := &server{store: repository, uploadPath: uploads, coordinator: coordinator, coordinationContext: ctx}
-		httpServer := httptest.NewServer(newHandler(instance))
-		t.Cleanup(func() {
-			httpServer.Close()
-			cancel()
-			_ = coordinator.Close()
-			_ = repository.Close()
-		})
+		httpServer := httptest.NewServer(newTestHandler(t, instance))
+		t.Cleanup(httpServer.Close)
 		peers.stores[index], peers.servers[index], peers.deafen[index] = repository, instance, cancel
 		if index == 0 {
 			peers.first = httpServer

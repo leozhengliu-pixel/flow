@@ -544,7 +544,13 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	if app.Builtin {
+		done := make(chan struct{})
+		defer func() {
+			cancel()
+			<-done
+		}()
 		go func(ctx context.Context) {
+			defer close(done)
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 			for {

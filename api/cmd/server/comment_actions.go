@@ -70,8 +70,12 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 		return
 	}
 	workspace, actor := data.Workspace.URLKey, data.Viewer
-	go func() {
-		ctx, cancel := context.WithTimeout(store.ContextWithActor(context.Background(), actor), 90*time.Second)
+	s.queueCommentActions(workspace, issueID, comment.ID, actor)
+}
+
+func (s *server) queueCommentActions(workspace, issueID, commentID string, actor domain.User) {
+	s.goBackground(func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(store.ContextWithActor(ctx, actor), 90*time.Second)
 		defer cancel()
 		select {
 		case commentActionSlots <- struct{}{}:
@@ -79,8 +83,8 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 			return
 		}
 		defer func() { <-commentActionSlots }()
-		s.generateCommentActions(ctx, workspace, issueID, comment.ID, actor)
-	}()
+		s.generateCommentActions(ctx, workspace, issueID, commentID, actor)
+	})
 }
 
 func (s *server) generateCommentActions(ctx context.Context, workspace, issueID, commentID string, actor domain.User) {

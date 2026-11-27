@@ -487,7 +487,7 @@ func (s *server) syncReviewFromCodeHost(w http.ResponseWriter, r *http.Request) 
 }
 
 // reviewSyncRunner runs background syncs (tests replace it).
-var reviewSyncRunner = func(job func()) { go job() }
+var reviewSyncRunner = (*server).goBackground
 
 var reviewSyncInFlight sync.Map
 
@@ -500,16 +500,18 @@ func (s *server) queueReviewSync(workspace, reviewID string) {
 	if _, busy := reviewSyncInFlight.LoadOrStore(key, true); busy {
 		return
 	}
-	reviewSyncRunner(func() {
+	if !reviewSyncRunner(s, func(lifetime context.Context) {
 		defer reviewSyncInFlight.Delete(key)
 		// COLD work with bounded metadata on: the review sync is a COLD
 		// consumer and runs after the webhook request ends (SW557).
-		ctx, cancel := context.WithTimeout(store.WithColdWork(context.Background(), "review-sync"), 2*time.Minute)
+		ctx, cancel := context.WithTimeout(store.WithColdWork(lifetime, "review-sync"), 2*time.Minute)
 		defer cancel()
 		if _, err := s.syncReview(ctx, workspace, reviewID, true); err != nil && !errors.Is(err, errReviewNotSynced) {
 			log.Printf("review sync %s: %v", key, err)
 		}
-	})
+	}) {
+		reviewSyncInFlight.Delete(key)
+	}
 }
 
 // findSyncedReview finds a workspace review by code host, repository and number.

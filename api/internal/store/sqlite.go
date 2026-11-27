@@ -64,18 +64,23 @@ type SQLiteStore struct {
 	deletionMu sync.Mutex
 	// keyObjects moves objects named after a workspace's URL key on a
 	// rename (workspace_rename.go).
-	keyObjects       atomic.Pointer[WorkspaceKeyObjects]
-	fixtureProfile   string
-	fixturePassword  string
-	maxStateBytes    int
-	lifecycle        context.Context
-	stopLifecycle    context.CancelFunc
-	apiKeyUseOnce    sync.Once
+	keyObjects      atomic.Pointer[WorkspaceKeyObjects]
+	fixtureProfile  string
+	fixturePassword string
+	maxStateBytes   int
+	testViewOwner   *SQLiteStore
+	lifecycle       context.Context
+	stopLifecycle   context.CancelFunc
+	closeOnce       sync.Once
+	closeErr        error
+	// workerMu serializes worker registration with Close.
+	workerMu         sync.Mutex
+	workersClosed    bool
+	workerShutdowns  []func() <-chan struct{}
+	workers          sync.WaitGroup
 	apiKeyUseMu      sync.Mutex
 	apiKeyUseTimes   map[string]time.Time
 	apiKeyUseQueue   chan apiKeyUse
-	apiKeyUseWorkers sync.WaitGroup
-	apiKeyUseClosed  bool
 	teamMembershipMu sync.Mutex
 	// changeLogMinRows: see SetChangeLogMinRows.
 	changeLogMinRows atomic.Int64
@@ -174,21 +179,20 @@ func OpenSQLiteTestFixture(path string) (*SQLiteStore, error) {
 	return OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1})
 }
 
-func (s *SQLiteStore) Close() error {
-	s.apiKeyUseMu.Lock()
-	s.apiKeyUseClosed = true
-	if s.stopLifecycle != nil {
-		s.stopLifecycle()
+func (s *SQLiteStore) workerOwner() *SQLiteStore {
+	if s.coldParent != nil {
+		return s.coldParent.workerOwner()
 	}
-	s.apiKeyUseMu.Unlock()
-	s.apiKeyUseWorkers.Wait()
-	s.releaseMetadataLogicalSources()
-	return s.db.Close()
+	if s.testViewOwner != nil {
+		return s.testViewOwner.workerOwner()
+	}
+	return s
 }
+
 func (s *SQLiteStore) WorkerContext() context.Context {
-	ctx := context.Background()
-	if s.lifecycle != nil {
-		ctx = s.lifecycle
+	ctx := s.workerOwner().lifecycle
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	if s.metadataResidency != nil {
 		// Background work runs COLD per operation (WithColdWork).

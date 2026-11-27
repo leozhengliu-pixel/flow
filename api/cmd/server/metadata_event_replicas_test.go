@@ -171,14 +171,14 @@ func TestMetadataEventReplicaProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repo.Close()
+	t.Cleanup(func() { _ = repo.Close() })
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	coordinator, err := coordination.Open(ctx, coordination.Config{Mode: "standalone", URL: os.Getenv("FLOW_TEST_REDIS_URL"), Prefix: "metadata-replicas", LockWait: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer coordinator.Close()
+	t.Cleanup(func() { _ = coordinator.Close() })
 	repo.SetWorkspaceCoordinator(coordinator)
 	srv := &server{store: repo, authDisabled: true, uploadPath: os.Getenv("FLOW_METADATA_DIR"), coordinator: coordinator, coordinationContext: ctx}
 	mux := http.NewServeMux()
@@ -198,9 +198,9 @@ func TestMetadataEventReplicaProcess(t *testing.T) {
 		})
 		respondMutation(w, err, http.StatusOK, map[string]bool{"saved": err == nil})
 	})
-	mux.Handle("/", newHandler(srv))
+	mux.Handle("/", newTestHandler(t, srv))
 	api := httptest.NewServer(mux)
-	defer api.Close()
+	t.Cleanup(api.Close)
 	if err := os.WriteFile(filepath.Join(os.Getenv("FLOW_METADATA_DIR"), "url"), []byte(api.URL), 0600); err != nil {
 		t.Fatal(err)
 	}

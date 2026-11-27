@@ -93,7 +93,10 @@ tolerations: []
 affinity: {}
 topologySpreadConstraints: []
 priorityClassName: ""
-terminationGracePeriodSeconds: 30
+# Graceful shutdown: up to 15 s HTTP drain, then up to 10 s to join background
+# work, 2 s for the database pools and 2 s for telemetry (about 29 s in the
+# worst case), so the grace period leaves headroom above that.
+terminationGracePeriodSeconds: 45
 
 service:
   type: ClusterIP

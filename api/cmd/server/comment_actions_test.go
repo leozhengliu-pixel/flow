@@ -38,7 +38,7 @@ func commentActionFixture(t *testing.T) (*server, http.Handler, domain.Bootstrap
 	}
 	t.Cleanup(func() { repo.Close() })
 	s := &server{store: repo, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: false, ToolsEnabled: true, WriteTools: true, BaseURL: provider.URL, Model: "scripted", MaxOutputTokens: 256}, agentClient: provider.Client()}
-	h := newHandler(s)
+	h := newTestHandler(t, s)
 	data := repo.Bootstrap()
 	issue := requestJSON[domain.Issue](t, h, "POST", "/api/issues", domain.IssueCreateInput{Title: "Comment actions", TeamID: data.Teams[0].ID}, 201)
 	issue = ageIssueForActivityTest(t, repo, data.Workspace.URLKey, issue)

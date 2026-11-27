@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -106,17 +105,7 @@ func (s *server) startCommentActionsBounded(r *http.Request, issueID string, com
 	if !allowed {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(store.ContextWithActor(context.Background(), actor), 90*time.Second)
-		defer cancel()
-		select {
-		case commentActionSlots <- struct{}{}:
-		case <-ctx.Done():
-			return
-		}
-		defer func() { <-commentActionSlots }()
-		s.generateCommentActions(ctx, workspace, issueID, comment.ID, actor)
-	}()
+	s.queueCommentActions(workspace, issueID, comment.ID, actor)
 }
 
 func (s *server) listCommentActionsBounded(w http.ResponseWriter, r *http.Request) {

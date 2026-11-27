@@ -36,6 +36,7 @@ var errAgentLiveSkip = errors.New("agent live reply: nothing to save")
 type agentLiveReply struct {
 	s         *server
 	ctx       context.Context
+	cancel    context.CancelFunc
 	workspace string
 	sessionID string
 	template  domain.AgentMessage
@@ -61,9 +62,11 @@ type agentLiveReply struct {
 
 // startAgentLiveReply begins saving the reply messageID of session sessionID while it runs.
 func (s *server) startAgentLiveReply(r *http.Request, sessionID, messageID string, started time.Time) *agentLiveReply {
+	ctx, stop := s.detachedContext(r.Context())
 	live := &agentLiveReply{
 		s:         s,
-		ctx:       store.WithMetadataFields(context.WithoutCancel(r.Context()), "agentSessions"),
+		ctx:       store.WithMetadataFields(ctx, "agentSessions"),
+		cancel:    stop,
 		workspace: workspaceKey(r),
 		sessionID: sessionID,
 		template:  domain.AgentMessage{ID: messageID, Role: "assistant", CreatedAt: started.UTC()},
@@ -72,7 +75,10 @@ func (s *server) startAgentLiveReply(r *http.Request, sessionID, messageID strin
 		done:      make(chan struct{}),
 	}
 	s.agentLiveReplies.Store(messageID, live)
-	go live.run()
+	if !s.goBackground(func(context.Context) { live.run() }) {
+		stop()
+		close(live.done)
+	}
 	return live
 }
 
@@ -177,6 +183,8 @@ func (l *agentLiveReply) run() {
 		select {
 		case <-l.stop:
 			return
+		case <-l.ctx.Done():
+			return
 		case <-l.wake:
 		case <-ticker.C:
 		}
@@ -222,7 +230,7 @@ func (l *agentLiveReply) write(message domain.AgentMessage) {
 	}
 	if err == nil {
 		l.written, l.lastWrite = &message, time.Now()
-	} else if !errors.Is(err, errAgentLiveSkip) {
+	} else if !errors.Is(err, errAgentLiveSkip) && l.ctx.Err() == nil {
 		log.Printf("save streaming agent reply %s: %v", message.ID, err)
 	}
 }
@@ -254,6 +262,7 @@ func (l *agentLiveReply) release() {
 	if l == nil {
 		return
 	}
+	defer l.cancel()
 	l.halt()
 	l.mu.Lock()
 	written, finalized, gone := l.written, l.finalized, l.gone
@@ -323,8 +332,8 @@ func (s *server) startAgentLiveReplySweeper() {
 	if !s.agentLiveSweepStarted.CompareAndSwap(false, true) {
 		return
 	}
-	go func() {
-		ctx := s.store.WorkerContext()
+	s.goWorker(func(lifetime context.Context) {
+		ctx := s.coldWorkerContext(lifetime)
 		// Replies saved as streaming by an earlier run of this server were cut off by the restart.
 		s.sweepAgentLiveReplies(ctx, time.Now())
 		ticker := time.NewTicker(agentLiveSweepInterval)
@@ -337,7 +346,7 @@ func (s *server) startAgentLiveReplySweeper() {
 				s.sweepAgentLiveReplies(ctx, time.Now())
 			}
 		}
-	}()
+	})
 }
 
 // agentLiveReplyAbandoned reports whether a stored streaming reply has no server writing it. A single server knows

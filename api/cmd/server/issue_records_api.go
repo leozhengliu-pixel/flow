@@ -30,7 +30,11 @@ func isIssueRecordsRequest(r *http.Request) bool {
 // access from requestIssueQueryAccess) and the teams its API key is limited
 // to (nil: not limited).
 func (s *server) issueRecordAccess(r *http.Request, data domain.Bootstrap, access store.IssueRecordAccess) (*store.IssueRecordAccess, []string) {
-	if s.authDisabled {
+	return issueRecordAccess(r, data, access, s.authDisabled)
+}
+
+func issueRecordAccess(r *http.Request, data domain.Bootstrap, access store.IssueRecordAccess, authDisabled bool) (*store.IssueRecordAccess, []string) {
+	if authDisabled {
 		// Development mode has no viewer, but deleted teams still stay hidden.
 		if archived := store.ArchivedTeamIDs(data); len(archived) > 0 {
 			return &store.IssueRecordAccess{Admin: true, ArchivedTeamIDs: archived}, nil
@@ -48,6 +52,10 @@ func (s *server) issueRecordAccess(r *http.Request, data domain.Bootstrap, acces
 }
 
 func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.IssueRecordQuery, error) {
+	return s.issueRecordsQueryWithStore(r, s.store)
+}
+
+func (s issueQueryReader) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.IssueRecordQuery, error) {
 	key := workspaceKey(r)
 	query := store.IssueRecordQuery{Workspace: key, Archived: r.URL.Query().Get("archived"), Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"), Cursor: r.URL.Query().Get("cursor"), Text: r.URL.Query().Get("q"), IncludeTotal: r.URL.Query().Get("includeTotal") == "true", GroupBy: r.URL.Query().Get("groupBy")}
 	query.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
@@ -64,7 +72,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
-	query.Access, query.AllowedTeamIDs = s.issueRecordAccess(r, data, access)
+	query.Access, query.AllowedTeamIDs = issueRecordAccess(r, data, access, s.authDisabled)
 	query.TeamIDs = splitQueryValues(r.URL.Query().Get("teamId"))
 	if len(query.TeamIDs) > 0 && r.URL.Query().Get("includeSubTeams") == "true" {
 		query.TeamIDs = domain.TeamSubtreeIDs(&data, query.TeamIDs)

@@ -20,7 +20,7 @@ func scaleP03Fixture(t *testing.T, repo *store.SQLiteStore) scaleP03PlatformFixt
 	t.Helper()
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	svc := &server{store: repo, uploadPath: t.TempDir()}
-	host := httptest.NewServer(newHandler(svc))
+	host := httptest.NewServer(newTestHandler(t, svc))
 	t.Cleanup(host.Close)
 	return scaleP03CreateFixture(t, repo, svc, host)
 }

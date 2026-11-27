@@ -14,6 +14,7 @@ import (
 	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
@@ -57,23 +58,26 @@ func (s *server) startCoordination() {
 	if s.coordinator == nil || !s.coordinationStarted.CompareAndSwap(false, true) {
 		return
 	}
-	listenCtx := s.coordinationContext
-	if listenCtx == nil {
-		listenCtx = context.Background()
+	parent := s.coordinationContext
+	if parent == nil {
+		parent = context.Background()
 	}
-	listenCtx, stop := context.WithCancel(listenCtx)
-	context.AfterFunc(s.store.WorkerContext(), stop)
+	listenCtx, stop := s.bindBackground(parent)
 	if s.recordPeerSyncMode() != "off" {
-		go s.pollPeerChanges(listenCtx)
+		s.goWorker(func(ctx context.Context) {
+			poll, stop := bindLifetime(listenCtx, ctx)
+			defer stop()
+			s.pollPeerChanges(poll)
+		})
 	}
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer stop()
 		subscribedBefore := false
 		for listenCtx.Err() == nil {
 			err := s.coordinator.Listen(listenCtx, s.receiveRemoteEvent, func(resubscribed bool) {
 				if s.recordPeerSyncMode() != "off" {
 					for _, workspace := range s.store.WorkspaceKeys() {
-						s.remoteEvents.wake(workspace, s.applyRemoteEvents)
+						s.remoteEvents.wake(workspace, s.scheduleRemoteEvents)
 					}
 					if resubscribed || subscribedBefore {
 						s.realtime.resyncAll()
@@ -87,10 +91,10 @@ func (s *server) startCoordination() {
 				// subscribed are gone, so reload and resync instead.
 				missed := resubscribed || subscribedBefore
 				subscribedBefore = true
-				ctx, cancel := context.WithTimeout(s.store.WorkerContext(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(store.WithColdWork(listenCtx, "worker"), 10*time.Second)
 				err := s.store.ReloadAllWorkspaces(ctx)
 				cancel()
-				if err != nil {
+				if err != nil && listenCtx.Err() == nil {
 					log.Printf("Redis coordination refresh: %v", err)
 				}
 				if missed {
@@ -109,7 +113,9 @@ func (s *server) startCoordination() {
 			case <-time.After(time.Second):
 			}
 		}
-	}()
+	}) {
+		stop()
+	}
 }
 
 // receiveRemoteEvent takes a peer's event off the Redis subscription. It must
@@ -120,13 +126,13 @@ func (s *server) receiveRemoteEvent(envelope coordination.EventEnvelope) {
 	}
 	if envelope.Event.Type == agentAnswerEventType {
 		// An answer for a chat reply running here; never shown to browsers (agent_live_answer.go).
-		go s.receiveForwardedAgentAnswer(envelope.Workspace, envelope.Event)
+		s.goBackground(func(context.Context) { s.receiveForwardedAgentAnswer(envelope.Workspace, envelope.Event) })
 		return
 	}
 	if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
 		return
 	}
-	s.remoteEvents.push(envelope.Workspace, envelope.Event, s.recordPeerSyncMode() != "off", s.applyRemoteEvents)
+	s.remoteEvents.push(envelope.Workspace, envelope.Event, s.recordPeerSyncMode() != "off", s.scheduleRemoteEvents)
 }
 
 // remoteEventQueue batches legacy envelopes while off. Peer sync coalesces
@@ -185,7 +191,13 @@ func (q *remoteEventQueue) push(workspace string, event domain.RealtimeEvent, pe
 	q.running[workspace] = true
 	q.mu.Unlock()
 	if start {
-		go apply(workspace)
+		apply(workspace)
+	}
+}
+
+func (s *server) scheduleRemoteEvents(workspace string) {
+	if !s.goBackground(func(context.Context) { s.applyRemoteEvents(workspace) }) {
+		s.remoteEvents.discard(workspace)
 	}
 }
 
@@ -255,30 +267,50 @@ func (q *remoteEventQueue) take(workspace string) []domain.RealtimeEvent {
 	if q.waking[workspace] {
 		batch = append(batch, domain.RealtimeEvent{Type: peerHeadEventType, Seq: q.heads[workspace]})
 	}
-	delete(q.pending, workspace)
-	delete(q.bytes, workspace)
-	delete(q.heads, workspace)
-	delete(q.waking, workspace)
-	delete(q.overflow, workspace)
+	q.clearPendingLocked(workspace)
 	if len(batch) == 0 {
 		delete(q.running, workspace)
 	}
 	return batch
 }
 
+func (q *remoteEventQueue) clearPendingLocked(workspace string) {
+	delete(q.pending, workspace)
+	delete(q.bytes, workspace)
+	delete(q.heads, workspace)
+	delete(q.waking, workspace)
+	delete(q.overflow, workspace)
+}
+
+func (q *remoteEventQueue) discard(workspace string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.clearPendingLocked(workspace)
+	delete(q.running, workspace)
+	delete(q.clients, workspace)
+	delete(q.clientBytes, workspace)
+	delete(q.hintOverflow, workspace)
+}
+
 // applyRemoteEvents installs durable transactions before publishing their SQL
 // events. Non-journal signals retain the compatibility reload path.
 func (s *server) applyRemoteEvents(workspace string) {
+	lifetime := s.workerContext()
+	defer func() {
+		if lifetime.Err() != nil {
+			s.remoteEvents.discard(workspace)
+		}
+	}()
 	if s.recordPeerSyncMode() == "off" {
 		s.applyLegacyRemoteEvents(workspace)
 		return
 	}
-	for {
+	for lifetime.Err() == nil {
 		batch := s.remoteEvents.take(workspace)
 		if len(batch) == 0 {
 			return
 		}
-		ctx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
+		ctx, cancel := context.WithTimeout(lifetime, workspaceReloadTimeout)
 		err := s.syncPeerWorkspace(ctx, workspace)
 		if err == nil {
 			for _, event := range batch {
@@ -298,7 +330,7 @@ func (s *server) applyRemoteEvents(workspace string) {
 			}
 		}
 		cancel()
-		if err != nil {
+		if err != nil && lifetime.Err() == nil {
 			slog.Warn("peer apply failed", "cause", requestErrorCode(err))
 			s.peerResync(workspace, "peer-apply-failed")
 		}
@@ -306,7 +338,8 @@ func (s *server) applyRemoteEvents(workspace string) {
 }
 
 func (s *server) applyLegacyRemoteEvents(workspace string) {
-	for {
+	lifetime := s.workerContext()
+	for lifetime.Err() == nil {
 		batch := s.remoteEvents.take(workspace)
 		if len(batch) == 0 {
 			return
@@ -325,7 +358,7 @@ func (s *server) applyLegacyRemoteEvents(workspace string) {
 		// load, and a failed reload makes every client here resync (refetch
 		// the bootstrap) at once, which adds the load that slowed it down. A
 		// closed store (shutdown) ends it.
-		ctx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
+		ctx, cancel := context.WithTimeout(lifetime, workspaceReloadTimeout)
 		var err error
 		// Read before reloading: the reload includes every change it counts.
 		version, versionErr := int64(0), error(nil)
@@ -346,6 +379,9 @@ func (s *server) applyLegacyRemoteEvents(workspace string) {
 			}
 		}
 		cancel()
+		if lifetime.Err() != nil {
+			return
+		}
 		if err == nil && versionErr == nil && version > 0 {
 			s.workspaceVersions.record(workspace, version)
 		}

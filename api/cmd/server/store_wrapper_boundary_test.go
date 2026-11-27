@@ -453,7 +453,7 @@ func (g *scaleP21SW286Graph) collect(owner *scaleP21SW286Func) {
 			}
 		}
 		offOnly := g.offOnly(ancestors) || kind == "value" && g.rebound(owner, ancestors)
-		async := slices.ContainsFunc(ancestors, func(node ast.Node) bool { _, ok := node.(*ast.GoStmt); return ok })
+		async := backgroundReference(ancestors)
 		authOnly := scaleP21SW286AuthOnly(ancestors)
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {
@@ -463,6 +463,24 @@ func (g *scaleP21SW286Graph) collect(owner *scaleP21SW286Func) {
 		}
 		return true
 	})
+}
+
+// The callback supplied to goBackground, goWorker or WaitGroup.Go runs on a new
+// goroutine just like the body of a go statement.
+func backgroundReference(ancestors []ast.Node) bool {
+	for index, node := range ancestors[:len(ancestors)-1] {
+		switch n := node.(type) {
+		case *ast.GoStmt:
+			return true
+		case *ast.CallExpr:
+			selector, ok := n.Fun.(*ast.SelectorExpr)
+			if ok && (selector.Sel.Name == "goBackground" || selector.Sel.Name == "goWorker" || selector.Sel.Name == "Go") &&
+				len(n.Args) == 1 && n.Args[0] == ancestors[index+1] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // rebound reports a function value bound to a local that is rebound whenever

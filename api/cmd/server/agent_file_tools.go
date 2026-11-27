@@ -187,7 +187,7 @@ func (s *server) executeAgentFileTool(ctx context.Context, call domain.AgentTool
 	if media {
 		text, err = s.transcribeAgentMedia(ctx, file, data)
 	} else {
-		text, err = parseAgentFileWithin(ctx, file, data)
+		text, err = s.parseAgentFileWithin(ctx, file, data)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -230,7 +230,7 @@ func (s *server) readAgentAttachment(ctx context.Context, file domain.AgentMessa
 var agentFileParseSlots = make(chan struct{}, 4)
 
 // parseAgentFileWithin parses off the request goroutine so a hostile file cannot hold the turn past the timeout.
-func parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachment, data []byte) (string, error) {
+func (s *server) parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachment, data []byte) (string, error) {
 	type result struct {
 		text string
 		err  error
@@ -242,7 +242,7 @@ func parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachmen
 		return "", fmt.Errorf("too many files are being read, try again shortly")
 	}
 	done := make(chan result, 1)
-	go func() {
+	if !s.goBackground(func(lifetime context.Context) {
 		outcome := result{}
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -253,8 +253,13 @@ func parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachmen
 			<-agentFileParseSlots
 			done <- outcome
 		}()
-		outcome.text, outcome.err = parseAgentFile(file.Name, file.ContentType, data)
-	}()
+		if outcome.err = lifetime.Err(); outcome.err == nil {
+			outcome.text, outcome.err = parseAgentFile(file.Name, file.ContentType, data)
+		}
+	}) {
+		<-agentFileParseSlots
+		return "", context.Canceled
+	}
 	timer := time.NewTimer(agentFileParseTimeout)
 	defer timer.Stop()
 	select {
@@ -264,5 +269,7 @@ func parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachmen
 		return "", fmt.Errorf("reading took too long")
 	case <-ctx.Done():
 		return "", ctx.Err()
+	case <-s.backgroundWork().ctx.Done():
+		return "", context.Canceled
 	}
 }

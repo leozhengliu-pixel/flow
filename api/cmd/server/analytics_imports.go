@@ -263,7 +263,7 @@ func (s *server) retryExport(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err == nil {
-		go s.completeExport(workspaceKey(r), id)
+		s.startExport(workspaceKey(r), id)
 	}
 	respondMutation(w, err, http.StatusAccepted, updated)
 }

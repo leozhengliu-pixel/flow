@@ -763,8 +763,8 @@ func (s *server) startAgentRunReconciler() {
 	if !s.agentRuntimeEnabled() || !s.agentRunReconcilerStarted.CompareAndSwap(false, true) {
 		return
 	}
-	go func() {
-		ctx := s.store.WorkerContext()
+	s.goWorker(func(lifetime context.Context) {
+		ctx := s.coldWorkerContext(lifetime)
 		ticker := time.NewTicker(agentRuntimeReconcileInterval)
 		defer ticker.Stop()
 		for {
@@ -775,7 +775,7 @@ func (s *server) startAgentRunReconciler() {
 				s.reconcileAgentRuns(ctx, time.Now())
 			}
 		}
-	}()
+	})
 }
 
 // reconcileAgentRuns releases expired leases once and posts an error activity to the sessions of interrupted runs.

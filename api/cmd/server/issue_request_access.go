@@ -19,9 +19,13 @@ type issueRequestAccess struct {
 	err       error
 }
 
+func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, store.IssueRecordAccess, error) {
+	return s.requestIssueQueryAccessWithStore(r, s.store)
+}
+
 // Request lifetime only: membership revocation is checked again on the next
 // request, while middleware and the handler share this one policy evaluation.
-func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, store.IssueRecordAccess, error) {
+func (s issueQueryReader) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, store.IssueRecordAccess, error) {
 	workspace, userID := workspaceKey(r), authUser(r).ID
 	// SSE reuses the HTTP request for its entire connection. Its individual
 	// events must observe membership changes instead of retaining login access.

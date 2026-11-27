@@ -775,8 +775,8 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 	if !s.loopDescriptionAllowed(workspace, loop) {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.goBackground(func(lifetime context.Context) {
+		ctx, cancel := context.WithTimeout(lifetime, 30*time.Second)
 		defer cancel()
 		turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: loopDescriptionPrompt}, {Role: "user", Content: "Name: " + loop.Name + "\n\nInstructions:\n" + truncateSettingsText(loop.Instructions, 6000)}})
 		if err != nil {
@@ -789,7 +789,7 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 		}
 		// No migrated writer serves loop.described: COLD work with bounded
 		// metadata on, so the write runs its legacy dispatch (SW557).
-		err = s.store.MutateWorkspace(store.WithColdWork(context.Background(), "loop-description"), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
+		err = s.store.MutateWorkspace(store.WithColdWork(lifetime, "loop-description"), workspace, "loop.described", loop.ID, nil, func(data *domain.Bootstrap) error {
 			current := loopByID(data, loop.ID)
 			// Skip when the instructions changed again meanwhile; that change describes itself.
 			if current == nil || current.Instructions != loop.Instructions {
@@ -802,7 +802,7 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 		if err != nil {
 			log.Printf("Loop description workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		}
-	}()
+	})
 }
 
 // describeLatestLoopVersion gives the newest published version the generated

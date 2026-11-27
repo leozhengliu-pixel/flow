@@ -421,7 +421,15 @@ func (s *server) loopContract(ctx context.Context, workspace string, loop domain
 		// The read outlives the request or run that asked for it (an editor
 		// that navigates away, a cancelled run): others may be waiting on it,
 		// and a cancelled read must not leave a fallback behind.
-		go s.readLoopContract(context.WithoutCancel(ctx), workspace, loop, hash, key, flight)
+		if !s.goBackground(func(context.Context) {
+			ctx, stop := s.detachedContext(ctx)
+			defer stop()
+			s.readLoopContract(ctx, workspace, loop, hash, key, flight)
+		}) {
+			delete(loopContractFlights.running, key)
+			loopContractFlights.mu.Unlock()
+			return loopFallbackContract(hash, context.Canceled.Error())
+		}
 	}
 	loopContractFlights.mu.Unlock()
 	wait := flight.done
@@ -458,13 +466,17 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 	defer cancel()
 	contract, err := s.requestLoopContract(callCtx, loop, teams)
 	if err != nil {
-		log.Printf("Loop output contract workspace=%s loop=%s: %v", workspace, loop.ID, err)
+		if ctx.Err() == nil {
+			log.Printf("Loop output contract workspace=%s loop=%s: %v", workspace, loop.ID, err)
+		}
 		contract = loopFallbackContractFor(hash, err)
 	}
 	flight.contract = contract
 	read = true
 	close(flight.done)
-	s.storeLoopContract(workspace, loop.ID, hash, contract)
+	if ctx.Err() == nil {
+		s.storeLoopContract(workspace, loop.ID, hash, contract)
+	}
 }
 
 // storeLoopContract caches a read contract on the loop, when its text is
@@ -475,16 +487,18 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 // loopContractStoreBackoff, so a busy COLD slot delays the contract rather
 // than losing it.
 func (s *server) storeLoopContract(workspace, loopID, hash string, contract *domain.LoopOutputContract) {
+	lifetime := s.backgroundWork().ctx
 	for attempt := 0; ; attempt++ {
 		err := s.storeLoopContractOnce(workspace, loopID, hash, contract)
 		if errors.Is(err, store.ErrColdMetadataBusy) && attempt < len(loopContractStoreBackoff) {
 			select {
-			case <-s.store.WorkerContext().Done():
+			case <-lifetime.Done():
+				return
 			case <-time.After(loopContractStoreBackoff[attempt]):
 				continue
 			}
 		}
-		if err != nil && !errors.Is(err, errNotFound) {
+		if err != nil && !errors.Is(err, errNotFound) && lifetime.Err() == nil {
 			log.Printf("Loop output contract store workspace=%s loop=%s: %v", workspace, loopID, err)
 		}
 		return
@@ -497,7 +511,7 @@ func (s *server) storeLoopContractOnce(workspace, loopID, hash string, contract 
 	// with bounded metadata on, the loop contract writer runs literally on a
 	// COLD facade for this one write (store.WithColdWork); off, the marker is
 	// inert.
-	ctx := store.WithColdWork(context.Background(), "loop-output-contract")
+	ctx := store.WithColdWork(s.backgroundWork().ctx, "loop-output-contract")
 	return s.store.MutateWorkspace(ctx, workspace, "loop.output_contract", loopID, nil, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, loopID)
 		if loop == nil {
@@ -633,9 +647,15 @@ func (s *server) extractLoopContractAsync(workspace string, loop domain.Loop) {
 	if _, ok := loopStoredContract(loopContractReviewCopy(loop)); ok {
 		return
 	}
-	go func() {
+	s.goBackground(func(ctx context.Context) {
 		if s.loopContractDebounce > 0 {
-			time.Sleep(s.loopContractDebounce)
+			timer := time.NewTimer(s.loopContractDebounce)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+			}
 		}
 		data, ok := s.store.WorkspaceMetadataFields(workspace, "loops")
 		if !ok {
@@ -645,8 +665,8 @@ func (s *server) extractLoopContractAsync(workspace string, loop domain.Loop) {
 		if current == nil || loopContractHashOf(*current) != loopContractHashOf(loop) {
 			return
 		}
-		s.loopContractFor(s.store.WorkerContext(), data.Workspace.URLKey, loopContractReviewCopy(*current))
-	}()
+		s.loopContractFor(s.workerContext(), data.Workspace.URLKey, loopContractReviewCopy(*current))
+	})
 }
 
 // A review reads the new text without replacing the contract runs still use.
@@ -720,8 +740,8 @@ func (s *server) startLoopContractMigration() {
 	if !s.loopContractMigration || !s.agent.Enabled {
 		return
 	}
-	go func() {
-		ctx := s.store.WorkerContext()
+	s.goWorker(func(lifetime context.Context) {
+		ctx := s.coldWorkerContext(lifetime)
 		select {
 		case <-ctx.Done():
 			return
@@ -757,5 +777,5 @@ func (s *server) startLoopContractMigration() {
 				}
 			}
 		}
-	}()
+	})
 }

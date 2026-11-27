@@ -360,9 +360,8 @@ func sw530Setup(t *testing.T) *sw530Sweep {
 	newService := func(repo *store.SQLiteStore) http.Handler {
 		limiter := newAuthRateLimiter()
 		s := &server{store: repo, uploadPath: uploads, authLimiter: limiter}
-		disableBackgroundWorkersForTest(s)
 		s.coordinationStarted.Store(true)
-		handler := newHandler(s)
+		handler := newTestHandler(t, s)
 		repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 			x.mu.Lock()
 			defer x.mu.Unlock()

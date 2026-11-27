@@ -13,7 +13,7 @@ import (
 const noIssueGroupLabel = "\x00"
 
 // issueGroupLabelIDs is the active issue labels of a label group.
-func (s *server) issueGroupLabelIDs(ctx context.Context, workspace, groupID string) ([]string, error) {
+func (s issueQueryReader) issueGroupLabelIDs(ctx context.Context, workspace, groupID string) ([]string, error) {
 	ids := []string{}
 	if groupID != "" {
 		var err error

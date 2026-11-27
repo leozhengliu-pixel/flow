@@ -122,8 +122,11 @@ func newArtifactTestEnv(t *testing.T) *artifactTestEnv {
 				{SessionID: "s1", CodeHost: domain.CodeHostGitHub, HostName: "github.com", Repository: "acme/web", Number: 9, State: "merged"},
 			}
 		},
-		authorize:  func(*server, *http.Request, domain.CodingSession) error { return env.authorize },
-		background: func(run func()) { run() },
+		authorize: func(*server, *http.Request, domain.CodingSession) error { return env.authorize },
+		background: func(_ *server, run func(context.Context)) bool {
+			run(context.Background())
+			return true
+		},
 	}
 	return env
 }

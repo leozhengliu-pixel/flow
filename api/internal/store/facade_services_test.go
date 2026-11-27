@@ -12,7 +12,7 @@ import (
 // use recorded through a facade goes through the live store's throttle and
 // worker, which a facade alone would not start or shut down.
 func TestScaleP21SW553FacadeSharesWakersAndAPIKeyUses(t *testing.T) {
-	_, view, workspace := scaleP21ColdReadFixture(t)
+	fixture, view, workspace := scaleP21ColdReadFixture(t)
 	view.metadataResidency.work.limit = metadataWorkBytes
 	runs, cancels := view.AgentRunWake(), view.AgentRunCancelWake()
 	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(ctx context.Context, facade *SQLiteStore) error {
@@ -38,10 +38,10 @@ func TestScaleP21SW553FacadeSharesWakersAndAPIKeyUses(t *testing.T) {
 			t.Fatalf("SW553 a %s wake on the facade did not reach the live store", name)
 		}
 	}
-	view.apiKeyUseMu.Lock()
-	_, recorded := view.apiKeyUseTimes[workspace+":sw553-key"]
-	started := view.apiKeyUseQueue != nil
-	view.apiKeyUseMu.Unlock()
+	fixture.apiKeyUseMu.Lock()
+	_, recorded := fixture.apiKeyUseTimes[workspace+":sw553-key"]
+	started := fixture.apiKeyUseQueue != nil
+	fixture.apiKeyUseMu.Unlock()
 	if !started || !recorded {
 		t.Fatal("SW553 the facade's API key use did not go through the live store's queue", started, recorded)
 	}

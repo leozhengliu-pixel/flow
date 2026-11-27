@@ -200,7 +200,7 @@ func (lc *loopRunContext) readWorkspaceAttachment(ctx context.Context, name stri
 	}
 	switch kind {
 	case "docx", "xlsx", "pptx", "pdf", "csv", "tsv", "text":
-		if text, err := parseAgentFileWithin(ctx, fileInput, content); err == nil && strings.TrimSpace(text) != "" {
+		if text, err := lc.s.parseAgentFileWithin(ctx, fileInput, content); err == nil && strings.TrimSpace(text) != "" {
 			result.Status, result.Text = "read", text
 		}
 	case "image":

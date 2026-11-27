@@ -121,6 +121,7 @@ func newChatWorkflowFixture(t *testing.T) *chatWorkflowFixture {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 	})
 	t.Cleanup(func() { http.DefaultTransport = transport })
+	cleanupTestServer(t, f.s)
 	return f
 }
 

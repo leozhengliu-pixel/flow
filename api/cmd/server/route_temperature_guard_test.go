@@ -332,10 +332,8 @@ func scaleP21SW550Fixture(t *testing.T) (scaleP21SW550Stores, string) {
 	return scaleP21SW550Stores{repository: repo, probe: view}, f.data.Workspace.URLKey
 }
 
-// scaleP21SW550BackgroundRoots lists the goroutines started outside a
-// request: every go statement in a function that server/main reaches without
-// passing a route handler, with the first legacy consumer its flag-on walk
-// reaches ("" when bounded).
+// scaleP21SW550BackgroundRoots lists asynchronous references, with the first
+// legacy consumer each flag-on walk reaches ("" when bounded).
 func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 	t.Helper()
 	graph := scaleP21SW286Load(t)
@@ -387,7 +385,7 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 	return result
 }
 
-// scaleP21SW550BackgroundWork names every goroutine root (a go statement)
+// scaleP21SW550BackgroundWork names every goroutine root
 // whose flag-on walk reaches a legacy consumer, with how its COLD needs run
 // with bounded metadata on. Legacy whole-workspace reads are served from the
 // legacy view whatever the context (default_cold.go); a write no
@@ -402,12 +400,11 @@ var scaleP21SW550BackgroundWork = map[string]string{
 	"server/server.startDeliveryScheduler go server/server.processChatIntegrationTick":        "COLD work: the scheduler context is store.WithColdWork",
 	"server/server.startDeliveryScheduler go server/server.runDeliverySchedulerTick":          "COLD work: the scheduler context is store.WithColdWork",
 	"server/server.startChatDMReplyJobs go server/server.processChatDMReplyJob":               "COLD work: the delivery scheduler's context",
-	"server/server.createExport go server/server.completeExport":                              "COLD work: store.WorkerContext",
-	"server/server.retryExport go server/server.completeExport":                               "COLD work: store.WorkerContext",
-	"server/server.createPersonalDataExport go server/server.buildPersonalDataExport":         "COLD work: store.WorkerContext",
-	"server/server.extractLoopContractAsync go server/server.loopContractFor":                 "COLD work: store.WorkerContext",
-	"server/server.startLoopContractMigration go server/server.loopContractFor":               "COLD work: store.WorkerContext",
-	"server/server.loopContract go server/server.readLoopContract":                            "inherits its caller's context (store.WorkerContext)",
+	"server/server.startExport go server/server.completeExport":                               "COLD work: server.workerContext",
+	"server/server.createPersonalDataExport go server/server.buildPersonalDataExport":         "COLD work: server.workerContext",
+	"server/server.extractLoopContractAsync go server/server.loopContractFor":                 "COLD work: server.workerContext",
+	"server/server.startLoopContractMigration go server/server.loopContractFor":               "COLD work: server.coldWorkerContext on the periodic worker's context",
+	"server/server.loopContract go server/server.readLoopContract":                            "inherits its caller's context",
 	"server/server.commitImport go server/server.commitImportSync":                            "inherits POST /api/imports/{id}/commit's COLD scope",
 	"server/server.codingEnvironmentTerminal go server/server.runCodingTerminalPrepareScript": "COLD work: the terminal context is store.WithColdWork (SW557)",
 	"server/server.startAgentLiveReply go server/agentLiveReply.run":                          "inherits the agent-session route's COLD scope",

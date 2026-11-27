@@ -204,24 +204,18 @@ func newScaleP03PeerServers(t *testing.T) peerServers {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = repo.Close() })
 		coordinator, err := coordination.Open(t.Context(), coordination.Config{Mode: "standalone", Addrs: []string{redisServer.Addr()}, Prefix: prefix, ConnectTimeout: time.Second, LockTTL: 5 * time.Second, LockWait: 5 * time.Second})
 		if err != nil {
-			_ = repo.Close()
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = coordinator.Close() })
 		repo.SetWorkspaceCoordinator(coordinator)
 		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
 		service := &server{store: repo, uploadPath: uploads, coordinator: coordinator, coordinationContext: ctx}
-		host := httptest.NewServer(newHandler(service))
-		if err := service.stopDeliveryScheduler(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			host.Close()
-			cancel()
-			_ = coordinator.Close()
-			_ = repo.Close()
-		})
+		host := httptest.NewServer(newTestHandler(t, service))
+		t.Cleanup(host.Close)
 		peers.stores[index], peers.servers[index], peers.deafen[index] = repo, service, cancel
 		if index == 0 {
 			peers.first = host

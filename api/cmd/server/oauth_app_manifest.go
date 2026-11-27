@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -454,7 +453,7 @@ func (s *server) respondManifestApplication(w http.ResponseWriter, r *http.Reque
 			s.auditAPIKeyCredential(r, "webhook_secret_issued", app)
 		}
 	}
-	go s.reconcileAllApplicationWebhooks(context.Background())
+	s.goBackground(s.reconcileAllApplicationWebhooks)
 	if response.ClientSecret != "" || response.WebhookSecret != "" {
 		w.Header().Set("Cache-Control", "no-store")
 	}

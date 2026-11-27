@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -326,6 +327,156 @@ func TestLoopRunReconcileInterruptsOrphanedRuns(t *testing.T) {
 	create("run_same_host", host+":2:sibling", now.Add(time.Hour), false)
 	if count := srv.reconcileLoopRuns(ctx, false); count != 0 {
 		t.Fatalf("periodic reconcile interrupted %d runs", count)
+	}
+}
+
+func TestLoopShutdownInterruptsRunsAndReplies(t *testing.T) {
+	running, replying := make(chan struct{}), make(chan struct{})
+	provider := &fakeLoopProvider{
+		replies: []string{"block", `tool:finish_run {"status":"done","summary":"First answer."}`, "block"},
+		wait: func(index int) {
+			switch index {
+			case 0:
+				close(running)
+			case 2:
+				close(replying)
+			}
+		},
+	}
+	s, handler := newReliableLoopServer(t, provider)
+	setLoopLimits(s, func(limits *loopRunLimits) { limits.Timeout = 30 * time.Second })
+	_, active := startTestRun(t, handler, "Active run", "Wait.", nil)
+	waitForShutdownPhase(t, running, "active loop run")
+
+	loop, completed := startTestRun(t, handler, "Active reply", "Answer.", nil)
+	if run := waitForRun(t, handler, loop.ID, completed.ID); run.Status != "completed" {
+		t.Fatalf("reply's run finished as %s", run.Status)
+	}
+	requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs/"+completed.ID+"/replies", map[string]any{"body": "Another answer?"}, http.StatusAccepted)
+	waitForShutdownPhase(t, replying, "active loop reply")
+
+	// Use the same shutdown path as the SIGTERM handler.
+	s.drainHTTP()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	const workspace = "test-workspace"
+	run, err := s.store.LoopRun(ctx, workspace, active.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const message = "Interrupted by server restart"
+	if run.Status != "interrupted" || run.FailureReason != "interrupted" || run.Error != message || run.FinishedAt == nil {
+		t.Fatalf("run after shutdown: status=%q reason=%q message=%q", run.Status, run.FailureReason, run.Error)
+	}
+	parent, err := s.store.LoopRun(ctx, workspace, completed.ID)
+	if err != nil || parent.Status != "completed" || len(parent.Replies) != 1 {
+		t.Fatalf("completed run after shutdown: %+v, %v", parent, err)
+	}
+	reply := parent.Replies[0]
+	if reply.Status != "interrupted" || reply.FailureReason != "interrupted" || reply.Error != message || reply.FinishedAt == nil {
+		t.Fatalf("reply after shutdown: status=%q reason=%q message=%q", reply.Status, reply.FailureReason, reply.Error)
+	}
+	if leased, err := s.store.RunningLoopRuns(ctx); err != nil || len(leased) != 0 {
+		t.Fatalf("leases after shutdown = %+v, %v", leased, err)
+	}
+}
+
+func TestLoopShutdownRetainsReplyLeaseAfterWriteFailure(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "loop.db")
+	repo, err := store.OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	s := &server{store: repo}
+	const workspace = "test-workspace"
+	now := time.Now().UTC()
+	reply := domain.LoopRunReply{ID: "reply", Status: "running"}
+	run := domain.LoopRun{ID: "run", LoopID: "loop", Status: "completed", StartedAt: now, Replies: []domain.LoopRunReply{reply}}
+	if err := repo.CreateLoopRun(ctx, workspace, run, store.LoopRunLease{Owner: s.loopInstanceID(), ExpiresAt: now.Add(-time.Second)}); err != nil {
+		t.Fatal(err)
+	}
+	// Reject the terminal write while leaving lease writes available.
+	if _, err := db.ExecContext(ctx, `CREATE TRIGGER reject_loop_finish BEFORE UPDATE OF status ON loop_run_records
+		BEGIN SELECT RAISE(ABORT, 'test finish failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	s.drainHTTP()
+	rec := &loopRunRecorder{s: s, run: run, reply: &reply}
+	s.finishLoopRunReply(s.backgroundWork().ctx, workspace, rec, context.Canceled)
+	if _, err := db.ExecContext(ctx, `DROP TRIGGER reject_loop_finish`); err != nil {
+		t.Fatal(err)
+	}
+	if count := s.reconcileLoopRuns(ctx, false); count != 1 {
+		t.Fatalf("reconciler interrupted %d replies after the failed write", count)
+	}
+	stored, err := repo.LoopRun(ctx, workspace, run.ID)
+	if err != nil || len(stored.Replies) != 1 || stored.Replies[0].Status != "interrupted" || stored.Replies[0].Error != loopInterruptedMessage {
+		t.Fatalf("reconciled reply = %+v, %v", stored.Replies, err)
+	}
+}
+
+func TestLoopHeartbeatContinuesUntilCancelledWorkReturns(t *testing.T) {
+	s, handler := newReliableLoopServer(t, &fakeLoopProvider{})
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Heartbeat", "instructions": "Wait.", "status": "published"}, http.StatusCreated)
+	const workspace = "test-workspace"
+	limits := s.loopLimits()
+	now := time.Now().UTC()
+	run := domain.LoopRun{ID: "run_shutdown_heartbeat", LoopID: loop.ID, Status: "running", StartedAt: now}
+	if err := s.store.CreateLoopRun(t.Context(), workspace, run, store.LoopRunLease{Owner: s.loopInstanceID(), ExpiresAt: now.Add(limits.LeaseTTL)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.loopRunRegistry().reserve(workspace, limits); err != nil {
+		t.Fatal(err)
+	}
+	work := s.registerLoopWork(workspace, run.ID, limits)
+	started, cancelled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	if !s.goBackground(func(context.Context) {
+		s.runLoopWork(work, workspace, limits, func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			close(cancelled)
+			<-release
+			return ctx.Err()
+		}, func(context.Context, error) {})
+	}) {
+		work.abandon()
+		t.Fatal("runner did not start")
+	}
+	waitForShutdownPhase(t, started, "loop work to start")
+	s.drainHTTP()
+	waitForShutdownPhase(t, cancelled, "loop work to cancel")
+	cancelledAt := time.Now()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	for {
+		stored, err := s.store.LoopRun(ctx, workspace, run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.HeartbeatAt != nil && stored.HeartbeatAt.After(cancelledAt) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("lease stopped renewing before the cancelled work returned")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	unblock()
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 

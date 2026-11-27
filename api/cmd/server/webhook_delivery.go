@@ -425,7 +425,7 @@ func (s *server) appBaseURL() string {
 
 func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent) {
 	if applicationWebhookLifecycleEvent(event.Type) {
-		go s.reconcileApplicationWebhooks(context.Background(), workspace)
+		s.goBackground(func(ctx context.Context) { s.reconcileApplicationWebhooks(ctx, workspace) })
 	}
 	if strings.HasPrefix(event.Type, "issue.") && len(event.PreviousValues) > 0 {
 		s.dispatchAppAssignmentNotifications(workspace, event, snapshotEntity(event))
@@ -1079,12 +1079,14 @@ func (s *server) kickWebhookDelivery(id string) {
 	default:
 		return
 	}
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer func() { <-webhookDeliverySlots }()
-		ctx, cancel := context.WithTimeout(s.store.WorkerContext(), webhookDeliveryLease)
+		ctx, cancel := context.WithTimeout(s.workerContext(), webhookDeliveryLease)
 		defer cancel()
 		s.runWebhookDelivery(ctx, id, time.Now().UTC())
-	}()
+	}) {
+		<-webhookDeliverySlots
+	}
 }
 
 // processDueWebhookDeliveries delivers queued and retrying deliveries. It runs

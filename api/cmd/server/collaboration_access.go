@@ -112,7 +112,7 @@ func (q *socketAccessQueue) push(workspace string, scope socketAccessScope, run 
 	q.running[workspace] = true
 	q.mu.Unlock()
 	if start {
-		go run(workspace)
+		run(workspace)
 	}
 }
 
@@ -125,6 +125,13 @@ func (q *socketAccessQueue) take(workspace string) *socketAccessScope {
 		delete(q.running, workspace)
 	}
 	return scope
+}
+
+func (q *socketAccessQueue) discard(workspace string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.pending, workspace)
+	delete(q.running, workspace)
 }
 
 // collaborationAccessScope maps an applied change to the joined sockets
@@ -234,7 +241,7 @@ func (s *server) queueSocketAccessCheck(workspace string, event domain.RealtimeE
 	}
 	if scope, ok := collaborationAccessScope(event); ok {
 		s.realtime.socketAccessWork(workspace, scope)
-		s.socketAccess.push(workspace, scope, s.runSocketAccessChecks)
+		s.socketAccess.push(workspace, scope, s.scheduleSocketAccessChecks)
 	}
 }
 
@@ -256,7 +263,7 @@ func (s *server) queueAllSocketAccessChecks() {
 		return
 	}
 	for _, workspace := range s.realtime.socketWorkspaces() {
-		s.socketAccess.push(workspace, socketAccessScope{all: true}, s.runSocketAccessChecks)
+		s.socketAccess.push(workspace, socketAccessScope{all: true}, s.scheduleSocketAccessChecks)
 	}
 }
 
@@ -281,7 +288,7 @@ func (s *server) queueAccountSocketChecks(userID string) {
 		return
 	}
 	for _, workspace := range s.realtime.socketWorkspaces() {
-		s.socketAccess.push(workspace, socketAccessScope{users: map[string]bool{userID: true}}, s.runSocketAccessChecks)
+		s.socketAccess.push(workspace, socketAccessScope{users: map[string]bool{userID: true}}, s.scheduleSocketAccessChecks)
 	}
 }
 
@@ -295,8 +302,19 @@ func (s *server) receiveAccountAccessSignal(event domain.RealtimeEvent) {
 	}
 }
 
-func (s *server) runSocketAccessChecks(workspace string) {
-	for {
+func (s *server) scheduleSocketAccessChecks(workspace string) {
+	if !s.goWorker(func(ctx context.Context) { s.runSocketAccessChecks(ctx, workspace) }) {
+		s.socketAccess.discard(workspace)
+	}
+}
+
+func (s *server) runSocketAccessChecks(ctx context.Context, workspace string) {
+	defer func() {
+		if ctx.Err() != nil {
+			s.socketAccess.discard(workspace)
+		}
+	}()
+	for ctx.Err() == nil {
 		scope := s.socketAccess.take(workspace)
 		if scope == nil {
 			return
@@ -306,7 +324,10 @@ func (s *server) runSocketAccessChecks(workspace string) {
 		}
 		// A peer's change may not be applied here yet when the check runs
 		// for another reason; read the committed state.
-		if err := s.ensureCurrentWorkspace(context.Background(), workspace); err != nil {
+		if err := s.ensureCurrentWorkspace(ctx, workspace); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			for _, item := range s.realtime.socketAccessWork(workspace, *scope) {
 				s.realtime.revokeSocketCredential(item.client)
 			}
@@ -526,7 +547,7 @@ func (h *realtimeHub) revokeSocketCredential(client *realtimeSocketClient) {
 		h.revokeDocument(client, documentID, issueID)
 	}
 	// Leave the writer a moment to deliver the notices.
-	time.AfterFunc(time.Second, client.cancel)
+	h.background.Load().afterFunc(time.Second, client.cancel)
 }
 
 func (h *realtimeHub) hasSockets(workspace string) bool {
@@ -550,22 +571,24 @@ func (s *server) startSocketAccessSweep() {
 	if !s.socketAccessSweepStarted.CompareAndSwap(false, true) {
 		return
 	}
-	done := context.Background().Done()
+	var peerDone <-chan struct{}
 	if s.coordinationContext != nil {
-		done = s.coordinationContext.Done()
+		peerDone = s.coordinationContext.Done()
 	}
-	go func() {
+	s.goWorker(func(ctx context.Context) {
 		ticker := time.NewTicker(socketAccessSweepInterval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
+				return
+			case <-peerDone:
 				return
 			case <-ticker.C:
 				s.queueAllSocketAccessChecks()
 			}
 		}
-	}()
+	})
 }
 
 // socketCredentialValid reports whether the session or API key a socket
@@ -575,7 +598,7 @@ func (s *server) socketCredentialValid(r *http.Request) (bool, error) {
 		return true, nil
 	}
 	user := authUser(r)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(s.backgroundWork().serving, 3*time.Second)
 	defer cancel()
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))

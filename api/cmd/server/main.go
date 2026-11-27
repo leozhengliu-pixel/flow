@@ -43,7 +43,9 @@ var (
 )
 
 type server struct {
-	store *store.SQLiteStore
+	store          *store.SQLiteStore
+	backgroundOnce sync.Once
+	background     *serverBackground
 	// reloadWorkspaceFn is used by focused freshness tests to exercise the
 	// shared reload failure path without replacing the concrete store.
 	reloadWorkspaceFn func(context.Context, string) error
@@ -154,6 +156,7 @@ type server struct {
 }
 
 var recordLoadRigMetadataMode = func(bool) {}
+var startLoadRigMetrics = func() (string, func()) { return "", func() {} }
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
@@ -222,15 +225,13 @@ func main() {
 	if err := store.ValidateSecretKeys(); err != nil {
 		log.Fatal(err)
 	}
+	_, stopLoadRigMetrics := startLoadRigMetrics()
+	defer stopLoadRigMetrics()
 	repository, err := store.OpenDatabase(applicationConfig.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
 	recordLoadRigMetadataMode(repository.BoundedMetadataEnabled())
-	// Deferred first so it runs after repository.Close has released every
-	// installed spool file: the per-process spool directory goes last.
-	defer func() { _ = store.RemoveMetadataSpoolDirectory() }()
-	defer repository.Close()
 	objects, err := objectstore.Open(context.Background(), applicationConfig.Storage)
 	if err != nil {
 		log.Fatal(err)
@@ -245,7 +246,6 @@ func main() {
 		log.Fatal(err)
 	}
 	if redisCoordinator != nil {
-		defer redisCoordinator.Close()
 		repository.SetWorkspaceCoordinator(redisCoordinator)
 	}
 	external, err := newExternalAuth(context.Background(), applicationConfig.Auth, applicationConfig.AppURL)
@@ -256,7 +256,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer shutdownTelemetry(context.Background())
+	defer func() {
+		// The store waits on its own and the server's workers under one budget.
+		err := repository.Close()
+		if err != nil {
+			log.Printf("close workspace store: %v", err)
+		}
+		if redisCoordinator != nil {
+			_ = redisCoordinator.Close()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = shutdownTelemetry(ctx)
+		// A surviving worker may still hold a spool file. After a timeout
+		// the next process's spool scavenger will clean up this directory.
+		if !errors.Is(err, context.DeadlineExceeded) {
+			_ = store.RemoveMetadataSpoolDirectory()
+		}
+	}()
 	s := &server{
 		agentAutoTitle:                 true,
 		loopContractMigration:          true,
@@ -289,21 +306,29 @@ func main() {
 	// A workspace rename moves the coding harness state saved under its key.
 	repository.SetWorkspaceKeyObjects(codingHarnessKeyObjects{objects: objects})
 
+	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
 	observeLoadRigGates(s.metadataGate, s.projectionGate)
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.stopDeliveryScheduler(ctx)
-	}()
-	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stopSignals()
 	s.initCoding(applicationConfig.Coding)
 	// coding sessions (track B): optional dedicated runtime listener (FLOW_CODING_RUNTIME_ADDR).
-	if _, err := s.serveCodingRuntime(shutdownSignal, httpServer.Handler); err != nil {
+	runtimeServer, _, err := s.serveCodingRuntime(httpServer.Handler)
+	if err != nil {
 		log.Fatalf("coding runtime listener: %v", err)
 	}
 	httpServer.Handler = s.codingMainHandler(httpServer.Handler)
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		<-shutdownSignal.Done()
+		s.drainHTTP(httpServer, runtimeServer)
+	}()
+	defer func() {
+		stopSignals()
+		// ListenAndServe returns before Shutdown has drained the requests.
+		// Wait for both listeners to drain before closing the store.
+		<-shutdownDone
+	}()
+	s.startBackgroundWorkers()
 	// Replicas starting together would otherwise race to install the same
 	// built-in application rows; the database startup lock makes them take
 	// turns, and later ones find the rows current.
@@ -321,48 +346,40 @@ func main() {
 		}
 		return nil
 	}); err != nil {
+		if errors.Is(err, context.Canceled) && shutdownSignal.Err() != nil {
+			return
+		}
 		log.Fatal(err)
 	}
 	// With bounded metadata on, operators see the aggregate catalog state
 	// once and the COLD path counters periodically (FLOW_BOUNDED_METADATA_STATS_INTERVAL).
 	if s.store.BoundedMetadataEnabled() {
 		s.store.LogMetadataCatalogCompleteness(store.WithColdWork(shutdownSignal, "catalog-report"))
-		go store.RunColdMetricsLog(shutdownSignal, store.BoundedMetadataStatsInterval())
+		s.goWorker(func(ctx context.Context) { store.RunColdMetricsLog(ctx, store.BoundedMetadataStatsInterval()) })
 	}
 	// Other replicas look here for this release's assets once it serves pages.
-	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
+	s.startSharedAssetPublish(applicationConfig.Assets, 30*time.Second)
 	// Background work that reaches COLD consumers runs COLD per operation
 	// with bounded metadata on (SW550 background roots, SW557). The coding
 	// service calls back into the server (its notifier and hooks) with the
 	// context runCoding hands its reconcilers.
-	go s.runCoding(store.WithColdWork(shutdownSignal, "coding"))
-	go s.runApplicationAgentWorker(store.WithColdWork(shutdownSignal, "application-agent-worker"))
-	go s.runRecurringIssueScheduler(shutdownSignal)
-	go s.runReviewImportScheduler(shutdownSignal)
-	go s.runPersonalConnectionScheduler(shutdownSignal)
-	go s.runStorageMaintenance(store.WithColdWork(shutdownSignal, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
-	go s.resealStoredSecrets(shutdownSignal)
-	shutdownDone := make(chan struct{})
-	go func() {
-		defer close(shutdownDone)
-		<-shutdownSignal.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = s.stopDeliveryScheduler(shutdownCtx)
-		_ = httpServer.Shutdown(shutdownCtx)
-	}()
+	s.goWorker(func(ctx context.Context) { s.runCoding(store.WithColdWork(ctx, "coding")) })
+	s.goWorker(func(ctx context.Context) {
+		s.runApplicationAgentWorker(store.WithColdWork(ctx, "application-agent-worker"))
+	})
+	s.goWorker(s.runRecurringIssueScheduler)
+	s.goWorker(s.runReviewImportScheduler)
+	s.goWorker(s.runPersonalConnectionScheduler)
+	s.goWorker(func(ctx context.Context) {
+		s.runStorageMaintenance(store.WithColdWork(ctx, "storage-maintenance"), applicationConfig.Retention.DomainEvents)
+	})
+	s.goWorker(s.resealStoredSecrets)
 	if s.agentRuntimeWorker() {
 		log.Printf("FLOW_AGENT_RUNTIME=worker: the internal runtime API is on; chat replies, comment threads, delegated issues and loop runs execute on the agent worker")
 	}
 	log.Printf("Flow API %s (commit %s) listening on %s using database=%s storage=%s redis=%s", version, commit, httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
-	}
-	// ListenAndServe returns as soon as Shutdown starts; wait until the drain
-	// ends so the deferred store close (which removes the spool files) never
-	// runs under a request that is still reading.
-	if shutdownSignal.Err() != nil {
-		<-shutdownDone
 	}
 }
 
@@ -415,6 +432,7 @@ func newHandler(s *server) http.Handler {
 	if s.realtime == nil {
 		s.realtime = newRealtimeHub()
 	}
+	s.realtime.background.Store(s.backgroundWork())
 	if s.coordinator != nil {
 		s.realtime.mu.Lock()
 		s.realtime.ordered, s.realtime.node = true, realtimeNodeTag(s.coordinator.InstanceID())
@@ -425,13 +443,6 @@ func newHandler(s *server) http.Handler {
 	s.store.SetAgentReplyListener(s.notifyAgentReply)
 	s.store.SetAccountAccessSink(s.accountAccessChanged)
 	s.startCoordination()
-	s.startSocketAccessSweep()
-	s.startWorkflowScheduler()
-	s.startDeliveryScheduler()
-	s.startLoopRunReconciler()
-	s.startLoopContractMigration()
-	s.startAgentRunReconciler()
-	s.startAgentLiveReplySweeper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/email-intake/{token}/receive", s.receiveEmailIntake)
@@ -1213,7 +1224,7 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 		}
 		// A hashed file another release built: a page from that release,
 		// answered by this replica during a rolling update or rollback.
-		if name, ok := hashedAssetName(r.URL.Path); ok && s.assets != nil && s.assets.serve(w, r, name) {
+		if name, ok := hashedAssetName(r.URL.Path); ok && s.assets != nil && s.serveFallbackAsset(w, r, name) {
 			return
 		}
 		// A missing asset is a 404, not the app: a stale client asking for an

@@ -30,7 +30,9 @@ func (s *SQLiteStore) ensureContentActivityCycles(ctx context.Context) error {
 			return err
 		}
 		if activities > contentActivityCyclesBackgroundThreshold {
-			go s.runContentActivityCycleBackfill()
+			ctx := s.WorkerContext()
+			s.workers.Add(1)
+			go s.runContentActivityCycleBackfill(ctx)
 			return nil
 		}
 	}
@@ -60,8 +62,8 @@ func (s *SQLiteStore) migrateContentActivityCycles(ctx context.Context) error {
 	return s.backfillContentActivityCycles(ctx)
 }
 
-func (s *SQLiteStore) runContentActivityCycleBackfill() {
-	ctx := s.WorkerContext()
+func (s *SQLiteStore) runContentActivityCycleBackfill(ctx context.Context) {
+	defer s.workers.Done()
 	began := time.Now()
 	if err := s.backfillContentActivityCycles(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) {

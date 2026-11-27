@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"slices"
 	"strings"
@@ -117,7 +116,7 @@ func (s *server) updateOAuthApplicationWithStore(w http.ResponseWriter, r *http.
 	if err == nil && changed {
 		s.syncApplicationIdentity(r.Context(), updated.ClientID)
 		// Keep each workspace's managed app webhook in step, as manifest saves do.
-		go s.reconcileAllApplicationWebhooks(context.Background())
+		s.goBackground(s.reconcileAllApplicationWebhooks)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }

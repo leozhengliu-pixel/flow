@@ -136,8 +136,10 @@ func expectSocketNoticeWithin(t *testing.T, connection *websocket.Conn, kind, do
 // a check that read the access before a later invalidation leaves it stale.
 func TestQueuedSocketAccessCheckInvalidatesAtOnce(t *testing.T) {
 	s := &server{realtime: newRealtimeHub()}
+	cleanupTestServer(t, s)
 	client := s.realtime.addSocket("test-workspace", "client-1", func() {})
 	release, started := make(chan struct{}), make(chan struct{}, 1)
+	t.Cleanup(func() { close(release) })
 	s.realtime.mu.Lock()
 	client.documents["doc_1"] = struct{}{}
 	client.issueDocuments["doc_1"] = "issue_1"

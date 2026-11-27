@@ -450,7 +450,7 @@ func (g *scaleP21SW292Graph) collect(owner *scaleP21SW292Func) {
 			}
 		}
 		offOnly := g.offOnly(ancestors) || kind == "value" && g.rebound(owner, ancestors)
-		async := slices.ContainsFunc(ancestors, func(node ast.Node) bool { _, ok := node.(*ast.GoStmt); return ok })
+		async := backgroundReference(ancestors)
 		authOnly := scaleP21SW292AuthOnly(ancestors)
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {

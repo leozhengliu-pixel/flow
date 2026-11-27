@@ -18,7 +18,7 @@ func TestScaleP21ActivationRealtimeDifferential(t *testing.T) {
 			writer, reader := peers[0].service, peers[1].service
 			// Drive the receiver's poll explicitly, between commit and the
 			// arrival of the first Redis hint.
-			receiver := &server{store: reader.store, coordinator: reader.coordinator, realtime: newRealtimeHub()}
+			receiver := &server{store: reader.store, coordinator: reader.coordinator, realtime: newTestRealtimeHub(t)}
 			receiver.realtime.ordered = true
 			if mode == "full" {
 				if err := receiver.syncPeerWorkspace(t.Context(), workspace); err != nil {

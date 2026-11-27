@@ -69,7 +69,7 @@ var scaleP21SW557Reviewed = map[string]string{
 	"server/server.runTriageIntelligenceWith -> store/SQLiteStore.MutateWorkspace: unknown call write": "write is the caller's triageRunWrite: bounded " +
 		"(runTriageIntelligenceBounded) it derives the context from ctx with store.ContextWithIssueSuggestionWrite and WithIssueRecordMutations " +
 		"(mutateBoundedIssueSuggestions) and an output owner; flag off it only adds the renumbering marker.",
-	"server/server.startCommentActionsBounded -> server/server.generateCommentActions: background context.Background()": "The comment-action generator " +
+	"server/server.queueCommentActions -> server/server.generateCommentActions: background context.Background()": "The comment-action generator " +
 		"outlives its request. Its writes select the bounded proposal writer (store.ContextWithCommentActionProposal with IsIssueDiscussionMutation: " +
 		"mutateBoundedCommentActionProposal) and its read is BeginIssueBootstrapRead's bounded projection.",
 	"store/OpenDatabase -> store/SQLiteStore.dataMigrationsPending: unknown function literal value": "Startup reads migration versions from SQL " +
@@ -453,7 +453,9 @@ func (tr *scaleP21SW557Tracer) traceCall(fn *scaleP21SW286Func, call *ast.CallEx
 	}
 	var result []string
 	for _, target := range targets {
-		if target == "store/SQLiteStore.WorkerContext" || target == "store/WithColdWork" {
+		switch target {
+		case "store/SQLiteStore.WorkerContext", "server/server.workerContext", "server/server.coldWorkerContext", "store/WithColdWork":
+			// The worker helpers add WithColdWork whenever bounded metadata is on.
 			result = append(result, "cold")
 			continue
 		}

@@ -261,8 +261,11 @@ func (s *SQLiteStore) RunMetadataCatalogBackfill(ctx context.Context) error {
 
 func (s *SQLiteStore) startMetadataCatalog() {
 	if metadataCatalogShadowEnabled() {
+		ctx := s.WorkerContext()
+		s.workers.Add(1)
 		go func() {
-			if err := s.RunMetadataCatalogBackfill(s.WorkerContext()); err != nil && s.WorkerContext().Err() == nil {
+			defer s.workers.Done()
+			if err := s.RunMetadataCatalogBackfill(ctx); err != nil && ctx.Err() == nil {
 				slog.Warn("metadata catalog shadow worker stopped", "error", fmt.Sprint(err))
 			}
 		}()

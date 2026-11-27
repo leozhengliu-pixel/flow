@@ -102,12 +102,27 @@ func (p *echoProvider) Exec(ctx context.Context, id string, request sandbox.Exec
 		_, _ = request.Stdout.Write([]byte("prepared\n"))
 		return sandbox.ExecResult{ExitCode: 0}, nil
 	}
+	resizeCtx, stopResizes := context.WithCancel(ctx)
+	resizesDone := make(chan struct{})
 	go func() {
-		for size := range request.Resize {
-			p.mu.Lock()
-			p.resizes = append(p.resizes, size)
-			p.mu.Unlock()
+		defer close(resizesDone)
+		for {
+			select {
+			case <-resizeCtx.Done():
+				return
+			case size, ok := <-request.Resize:
+				if !ok {
+					return
+				}
+				p.mu.Lock()
+				p.resizes = append(p.resizes, size)
+				p.mu.Unlock()
+			}
 		}
+	}()
+	defer func() {
+		stopResizes()
+		<-resizesDone
 	}()
 	buffer := make([]byte, 1024)
 	for {
@@ -170,7 +185,7 @@ func newCodingEnvTestServer(t *testing.T) *codingEnvTestServer {
 	}
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, objectStore: objects}
 	s.coding = &codingServices{config: config, sandbox: provider, hosts: map[codehost.Kind]codehost.Host{domain.CodeHostGitHub: codehost.Stub{HostKind: domain.CodeHostGitHub}, domain.CodeHostGitLab: gitlabCheckHost{Stub: codehost.Stub{HostKind: domain.CodeHostGitLab}}}}
-	harness := &codingEnvTestServer{t: t, server: s, handler: newHandler(s), provider: provider, store: repository, dbPath: dbPath}
+	harness := &codingEnvTestServer{t: t, server: s, provider: provider, store: repository, dbPath: dbPath}
 	codingEnvironmentLauncherOverride = func(s *server) coding.SandboxLauncher {
 		return coding.ProviderLauncher{Provider: provider, Config: s.coding.config, Usage: func(_ context.Context, record domain.CodingUsageRecord) error {
 			harness.mu.Lock()
@@ -182,6 +197,7 @@ func newCodingEnvTestServer(t *testing.T) *codingEnvTestServer {
 	t.Cleanup(func() {
 		codingEnvironmentLauncherOverride, codingSandboxAuthenticator, codingSessionLookup, codingEnvironmentSessionStarter = nil, nil, nil, nil
 	})
+	harness.handler = newTestHandler(t, s)
 	return harness
 }
 

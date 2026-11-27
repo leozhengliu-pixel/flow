@@ -445,7 +445,7 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		return domain.LoopRun{}, err
 	}
 	current := *loop
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer loopGuards.release(guardKey)
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run}
 		s.runLoopWork(work, workspace, limits, func(ctx context.Context) error {
@@ -453,7 +453,10 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		}, func(ctx context.Context, runErr error) {
 			s.finishLoopRun(ctx, workspace, current, recorder, runErr)
 		})
-	}()
+	}) {
+		work.abandon()
+		loopGuards.release(guardKey)
+	}
 	return run, nil
 }
 
@@ -718,6 +721,10 @@ func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domai
 	})
 	if err != nil {
 		log.Printf("Loop run finish workspace=%s run=%s: %v", workspace, run.ID, err)
+		if errors.Is(context.Cause(ctx), errServerShutdown) {
+			// Leave the lease for the reconciler if the terminal write failed.
+			return
+		}
 	}
 	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, run.ID, firstNonEmpty(rec.leaseOwner, s.loopInstanceID())); err != nil {
 		log.Printf("Loop run lease release workspace=%s run=%s: %v", workspace, run.ID, err)

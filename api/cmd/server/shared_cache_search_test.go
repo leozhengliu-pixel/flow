@@ -71,10 +71,9 @@ func sharedCacheReplicas(t *testing.T, flag string, opTimeout time.Duration) (*m
 		}
 		repository.SetWorkspaceCoordinator(coordinator)
 		instance := &server{store: repository, uploadPath: uploads, coordinator: coordinator, coordinationContext: t.Context()}
-		disableBackgroundWorkersForTest(instance)
 		// Require requests to observe peer writes before any subscriber refresh.
 		instance.coordinationStarted.Store(true)
-		httpServer := httptest.NewServer(newHandler(instance))
+		httpServer := httptest.NewServer(newTestHandler(t, instance))
 		t.Cleanup(func() {
 			httpServer.Close()
 			_ = coordinator.Close()

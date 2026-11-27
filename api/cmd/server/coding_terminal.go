@@ -114,6 +114,12 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Sandboxes are not available", "code": string(domain.CodingErrSandboxDisabled)})
 		return
 	}
+	background := s.backgroundWork()
+	if !background.begin(background.serving) {
+		writeError(w, http.StatusServiceUnavailable, "The terminal is temporarily unavailable")
+		return
+	}
+	defer background.finish()
 	conn, err := websocket.Accept(w, r, webSocketAcceptOptions(r))
 	if err != nil {
 		return
@@ -126,12 +132,12 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 	expiresAt := time.Now().Add(ttl).UTC()
 	// The terminal keeps no request values and writes its audit and
 	// prepare-script records: COLD work with bounded metadata on (SW557).
-	ctx, cancel := context.WithDeadline(store.WithColdWork(context.Background(), "coding-terminal"), expiresAt)
+	ctx, cancel := context.WithDeadline(store.WithColdWork(background.serving, "coding-terminal"), expiresAt)
 	defer cancel()
 	// Socket I/O must outlive the TTL context: coder/websocket closes the
 	// connection when a Read's context ends, and the "exit" frame is sent
 	// after the deadline.
-	connCtx, connCancel := context.WithCancel(context.Background())
+	connCtx, connCancel := context.WithCancel(background.serving)
 	defer connCancel()
 	socket := &codingTerminalSocket{conn: conn, ctx: connCtx}
 	closeReason := "terminal closed"
@@ -172,7 +178,14 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 	resize := make(chan sandbox.TerminalSize, 4)
 	prepare := make(chan struct{}, 1)
 	clientGone := make(chan struct{})
-	go func() {
+	var workers sync.WaitGroup
+	defer func() {
+		cancel()
+		connCancel()
+		_ = stdinReader.Close()
+		workers.Wait()
+	}()
+	workers.Go(func() {
 		defer close(clientGone)
 		defer stdinWriter.Close()
 		for {
@@ -209,7 +222,7 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 				}
 			}
 		}
-	}()
+	})
 
 	if err := s.waitForCodingTerminal(ctx, launcher, request.workspace, sandboxID, restored, socket, clientGone); err != nil {
 		if ctx.Err() == nil {
@@ -223,15 +236,15 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 
 	execDone := make(chan error, 1)
 	var exitCode int
-	go func() {
+	workers.Go(func() {
 		result, err := s.coding.sandbox.Exec(ctx, sandboxID, sandbox.ExecRequest{Command: []string{"bash", "-l"}, TTY: true, Stdin: stdinReader, Stdout: socket, Resize: resize})
 		exitCode = result.ExitCode
 		execDone <- err
-	}()
+	})
 	for {
 		select {
 		case <-prepare:
-			go s.runCodingTerminalPrepareScript(ctx, r, request, environment, sandboxID, socket)
+			workers.Go(func() { s.runCodingTerminalPrepareScript(ctx, r, request, environment, sandboxID, socket) })
 		case err := <-execDone:
 			// A shell killed because the sandbox itself stopped reports why
 			// the sandbox stopped, not the shell's exit code.
@@ -254,11 +267,11 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 			return
 		case <-clientGone:
 			cancel()
-			<-execDone
 			return
 		case <-ctx.Done():
-			s.codingTerminalExpired(socket, &closeReason)
-			_ = stdinReader.Close()
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				s.codingTerminalExpired(socket, &closeReason)
+			}
 			return
 		}
 	}

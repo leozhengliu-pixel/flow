@@ -179,22 +179,21 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if parent := s.coldParent; parent != nil {
-		// A COLD facade or legacy view records through the live store's
-		// queue: its throttle, its worker and its shutdown.
-		return parent.RecordAPIKeyUse(ctx, workspace, keyID, authorizationID)
+	// Facades and test views share the owning store's throttle and worker.
+	s = s.workerOwner()
+	s.workerMu.Lock()
+	defer s.workerMu.Unlock()
+	if s.workersClosed {
+		return context.Canceled
 	}
 	s.apiKeyUseMu.Lock()
 	defer s.apiKeyUseMu.Unlock()
-	if s.apiKeyUseClosed {
-		return context.Canceled
-	}
-	s.apiKeyUseOnce.Do(func() {
+	if s.apiKeyUseQueue == nil {
 		s.apiKeyUseQueue = make(chan apiKeyUse, 256)
 		s.apiKeyUseTimes = map[string]time.Time{}
-		s.apiKeyUseWorkers.Add(1)
+		s.workers.Add(1)
 		go s.runAPIKeyUses()
-	})
+	}
 	now := time.Now().UTC()
 	identity := workspace + ":" + keyID
 	if at, ok := s.apiKeyUseTimes[identity]; ok && now.Sub(at) < time.Minute {
@@ -219,14 +218,15 @@ func (s *SQLiteStore) RecordAPIKeyUse(ctx context.Context, workspace, keyID, aut
 }
 
 func (s *SQLiteStore) runAPIKeyUses() {
-	defer s.apiKeyUseWorkers.Done()
+	defer s.workers.Done()
+	ctx := s.WorkerContext()
 	for {
 		select {
-		case <-s.WorkerContext().Done():
+		case <-ctx.Done():
 			return
 		case use := <-s.apiKeyUseQueue:
-			ctx, cancel := context.WithTimeout(s.WorkerContext(), 2*time.Second)
-			err := s.writeAPIKeyUse(ctx, use)
+			pass, cancel := context.WithTimeout(ctx, 2*time.Second)
+			err := s.writeAPIKeyUse(pass, use)
 			cancel()
 			if err != nil {
 				s.apiKeyUseMu.Lock()

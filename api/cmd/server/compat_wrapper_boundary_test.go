@@ -279,7 +279,7 @@ func (g *scaleP21SW270Graph) collect(owner *scaleP21SW270Func) {
 			}
 		}
 		offOnly := g.offOnly(ancestors)
-		async := slices.ContainsFunc(ancestors, func(node ast.Node) bool { _, ok := node.(*ast.GoStmt); return ok })
+		async := backgroundReference(ancestors)
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {
 			g.into[target] = append(g.into[target], len(g.refs))

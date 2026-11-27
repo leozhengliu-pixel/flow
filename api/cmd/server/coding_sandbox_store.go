@@ -51,9 +51,13 @@ func (s *server) runCodingSandboxes(ctx context.Context) {
 	s.coding.sandboxGC = gc
 	// Track I: artifacts of deleted sessions (rows and objects).
 	gc.AddSweeper(sandbox.Sweeper{Name: "coding-artifacts", Run: s.sweepOrphanCodingArtifacts})
-	go reconciler.Run(ctx)
-	go pool.Run(ctx)
-	go gc.Run(ctx)
+	for _, run := range []func(context.Context){reconciler.Run, pool.Run, gc.Run} {
+		s.goBackground(func(context.Context) {
+			lifetime, cancel := s.bindBackground(ctx)
+			defer cancel()
+			run(lifetime)
+		})
+	}
 }
 
 // sweepOrphanCodingArtifacts deletes the artifacts of sessions that no longer

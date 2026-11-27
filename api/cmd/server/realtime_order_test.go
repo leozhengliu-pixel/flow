@@ -57,7 +57,7 @@ func TestRealtimeReplayCoversTheWholeWindow(t *testing.T) {
 // hub delivers changes in Seq order; one that can no longer be put in order
 // becomes a resync rather than older state applied over newer.
 func TestRealtimeHubDeliversChangesInSeqOrder(t *testing.T) {
-	hub := newRealtimeHub()
+	hub := newTestRealtimeHub(t)
 	hub.ordered = true
 	channel, stop := hub.subscribe("w")
 	defer stop()
@@ -105,7 +105,7 @@ func TestRealtimeHubDeliversChangesInSeqOrder(t *testing.T) {
 // A gap filled while a later one is still open gives the later gap its own
 // full wait instead of the remainder of the first one's.
 func TestRealtimeHubWaitsForEachGap(t *testing.T) {
-	hub := newRealtimeHub()
+	hub := newTestRealtimeHub(t)
 	hub.ordered = true
 	channel, stop := hub.subscribe("w")
 	defer stop()
@@ -156,7 +156,7 @@ func TestRealtimeCursorFromAnotherInstanceResyncs(t *testing.T) {
 // are gone: every workspace's subscribers, and clients resuming from before,
 // resync. Changes waiting for a gap go out first.
 func TestRealtimeResyncAllAfterMissedPeerEvents(t *testing.T) {
-	hub := newRealtimeHub()
+	hub := newTestRealtimeHub(t)
 	hub.ordered = true
 	channel, stop := hub.subscribe("w")
 	defer stop()
@@ -184,7 +184,7 @@ func TestRealtimeResyncAllAfterMissedPeerEvents(t *testing.T) {
 }
 
 func TestRealtimePeerReplayKeepsGapDuringRedisReconnect(t *testing.T) {
-	hub := newRealtimeHub()
+	hub := newTestRealtimeHub(t)
 	hub.ordered = true
 	hub.followPeerReplay("w", 0)
 	channel, stop := hub.subscribe("w")
@@ -212,22 +212,28 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	release := make(chan struct{})
 	batches := make(chan []string, 4)
 	var workers sync.WaitGroup
+	t.Cleanup(workers.Wait)
+	ctx := t.Context()
 	apply := func(workspace string) {
-		defer workers.Done()
-		for {
-			<-release
-			batch := queue.take(workspace)
-			if len(batch) == 0 {
-				return
+		workers.Go(func() {
+			for {
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return
+				}
+				batch := queue.take(workspace)
+				if len(batch) == 0 {
+					return
+				}
+				ids := []string{}
+				for _, event := range batch {
+					ids = append(ids, event.ID)
+				}
+				batches <- ids
 			}
-			ids := []string{}
-			for _, event := range batch {
-				ids = append(ids, event.ID)
-			}
-			batches <- ids
-		}
+		})
 	}
-	workers.Add(1)
 	for i := 1; i <= 3; i++ {
 		queue.push("w", domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", i)}, false, apply)
 	}
@@ -242,7 +248,6 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	}
 	release <- struct{}{}
 	workers.Wait()
-	workers.Add(1)
 	queue.push("w", domain.RealtimeEvent{ID: "evt_5"}, false, apply) // a stopped worker is started again
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_5" {

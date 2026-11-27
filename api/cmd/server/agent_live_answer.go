@@ -74,7 +74,7 @@ func (s *server) receiveForwardedAgentAnswer(workspace string, event domain.Real
 // agentRunOwnedBy reports whether the chat sessionID in workspace belongs to userID.
 func (s *server) agentRunOwnedBy(workspace, sessionID, userID string) bool {
 	if s.store.BoundedMetadataEnabled() {
-		owned, err := s.store.AgentSessionOwnedBy(context.Background(), workspace, sessionID, userID)
+		owned, err := s.store.AgentSessionOwnedBy(s.backgroundWork().ctx, workspace, sessionID, userID)
 		return err == nil && owned
 	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "agentSessions")

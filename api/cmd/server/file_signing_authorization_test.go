@@ -50,8 +50,7 @@ func runSignedFileScenario(t *testing.T, bounded bool) {
 		}
 	}
 	service := &server{store: serving, uploadPath: t.TempDir()}
-	disableBackgroundWorkersForTest(service)
-	host := httptest.NewServer(newHandler(service))
+	host := httptest.NewServer(newTestHandler(t, service))
 	defer host.Close()
 	const workspace = "test-workspace"
 	url := func(path string) string { return host.URL + path }

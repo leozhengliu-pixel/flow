@@ -3607,17 +3607,16 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusBadRequest, nil)
 		return
 	}
-	release = false
-	go func() {
+	release = !s.goBackground(func(context.Context) {
 		defer func() { <-s.importSlots }()
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Minute)
-		defer cancel()
-		stop := context.AfterFunc(s.store.WorkerContext(), cancel)
+		parent, stop := s.detachedContext(r.Context())
 		defer stop()
+		ctx, cancel := context.WithTimeout(parent, 30*time.Minute)
+		defer cancel()
 		request := r.Clone(ctx)
 		request.Body = io.NopCloser(bytes.NewReader(body))
 		s.commitImportSync(httptest.NewRecorder(), request)
-	}()
+	})
 	writeJSON(w, http.StatusAccepted, job)
 }
 
@@ -3943,13 +3942,17 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 		return created.ID, nil
 	})
 	if err == nil {
-		go s.completeExport(key, created.ID)
+		s.startExport(key, created.ID)
 	}
 	respondMutation(w, err, http.StatusAccepted, created)
 }
 
+func (s *server) startExport(workspace, id string) {
+	s.goBackground(func(context.Context) { s.completeExport(workspace, id) })
+}
+
 func (s *server) completeExport(workspaceKey, id string) {
-	_ = s.store.MutateWorkspaceScoped(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "exportJobs", ID: id}}}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(s.workerContext(), workspaceKey, "export.completed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "exportJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound

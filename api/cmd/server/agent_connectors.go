@@ -382,7 +382,8 @@ func (s *server) withSelectedConnectorTools(ctx context.Context, data domain.Boo
 		if budget <= 0 {
 			budget = connectorDiscoveryBudget
 		}
-		discoverCtx, cancel := context.WithTimeout(ctx, budget)
+		lifetime, release := s.bindBackground(ctx)
+		discoverCtx, cancel := context.WithTimeout(lifetime, budget)
 		type outcome struct {
 			index int
 			tools []connectorTool
@@ -392,10 +393,12 @@ func (s *server) withSelectedConnectorTools(ctx context.Context, data domain.Boo
 		// closes its client) in the background without blocking the run.
 		outcomes := make(chan outcome, len(chosen))
 		for index, policy := range chosen {
-			go func() {
+			if !s.goBackground(func(context.Context) {
 				tools, err := s.listConnectorTools(discoverCtx, policy)
 				outcomes <- outcome{index: index, tools: tools, err: err}
-			}()
+			}) {
+				outcomes <- outcome{index: index, err: context.Canceled}
+			}
 		}
 		results := make([][]connectorTool, len(chosen))
 		failures := make([]error, len(chosen))
@@ -411,6 +414,7 @@ func (s *server) withSelectedConnectorTools(ctx context.Context, data domain.Boo
 		}
 		stopped := discoverCtx.Err()
 		cancel()
+		release()
 		for index := range chosen {
 			if !finished[index] {
 				failures[index] = fmt.Errorf("discovery did not finish within %s: %w", budget, stopped)

@@ -193,10 +193,10 @@ func (s *server) runCoding(ctx context.Context) {
 	}
 	// Track B: the session reconciler.
 	reconciler := &coding.Reconciler{Service: s.coding.service, Owner: codingLeaseOwner(), Meter: s.coding.meter, ProcessStart: time.Now()}
-	go reconciler.Run(ctx)
-	s.runCodingSandboxes(ctx)    // coding sessions (track A): sandbox reconciler, warm pool, orphan GC
-	go s.runCodingSnapshots(ctx) // coding sessions (track K): snapshot reconciler
-	go s.runGitLabCoding(ctx)    // coding sessions (track J): GitLab project token sweep
+	s.goBackground(func(context.Context) { reconciler.Run(ctx) })
+	s.runCodingSandboxes(ctx) // coding sessions (track A): sandbox reconciler, warm pool, orphan GC
+	s.goBackground(func(context.Context) { s.runCodingSnapshots(ctx) })
+	s.goBackground(func(context.Context) { s.runGitLabCoding(ctx) })
 	// Approval timeouts are the session reconciler's (PhasePolicies,
 	// approvalExpired); Service.ApprovalExpired posts track L's notification.
 	<-ctx.Done()
@@ -259,29 +259,33 @@ func (s *server) codingMainHandler(next http.Handler) http.Handler {
 	})
 }
 
-// serveCodingRuntime starts the FLOW_CODING_RUNTIME_ADDR listener (when set)
-// with the runner-facing routes of handler, until ctx ends. It returns the
-// bound address ("" when no listener is configured).
-func (s *server) serveCodingRuntime(ctx context.Context, handler http.Handler) (string, error) {
+// serveCodingRuntime starts the optional runner-facing listener and returns
+// it to main so both HTTP servers drain before detached work is cancelled.
+func (s *server) serveCodingRuntime(handler http.Handler) (*http.Server, string, error) {
 	if s.coding == nil || strings.TrimSpace(s.coding.config.RuntimeAddr) == "" {
-		return "", nil
+		return nil, "", nil
 	}
 	listener, err := net.Listen("tcp", s.coding.config.RuntimeAddr)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
-	server := &http.Server{Handler: codingRuntimeOnly(handler), ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdown)
-	}()
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	httpServer := &http.Server{Handler: codingRuntimeOnly(handler), ReadHeaderTimeout: 5 * time.Second}
+	if !s.goBackground(func(ctx context.Context) {
+		done := make(chan struct{})
+		stopShutdown := context.AfterFunc(ctx, func() {
+			defer close(done)
+			_ = httpServer.Close()
+		})
+		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("coding runtime listener: %v", err)
 		}
-	}()
+		if !stopShutdown() {
+			<-done
+		}
+	}) {
+		_ = listener.Close()
+		return nil, "", context.Canceled
+	}
 	log.Printf("Flow coding runtime listening on %s", listener.Addr())
-	return listener.Addr().String(), nil
+	return httpServer, listener.Addr().String(), nil
 }

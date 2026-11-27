@@ -186,6 +186,8 @@ func classifyLoopRunFailure(ctx context.Context, err error, limits loopRunLimits
 	switch cause := context.Cause(ctx); {
 	case errors.Is(cause, errLoopRunCancelled):
 		return "cancelled", "cancelled", "Cancelled"
+	case errors.Is(cause, errServerShutdown):
+		return "interrupted", "interrupted", loopInterruptedMessage
 	case errors.Is(cause, errLoopLeaseLost):
 		return "interrupted", "interrupted", "Interrupted: the run lost its lease (the server stopped renewing it)"
 	case errors.Is(cause, errLoopRunTimedOut), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
@@ -333,7 +335,7 @@ func (s *server) registerLoopWork(workspace, runID string, limits loopRunLimits)
 	registry := s.loopRunRegistry()
 	// A loop run's tool calls reach COLD consumers (runFlowTool): with
 	// bounded metadata on, each runs COLD per operation (SW552).
-	ctx, cancel := context.WithCancelCause(store.WithColdWork(context.Background(), "loop-run"))
+	ctx, cancel := context.WithCancelCause(store.WithColdWork(s.backgroundWork().ctx, "loop-run"))
 	ctx, stop := context.WithTimeoutCause(ctx, limits.Timeout, errLoopRunTimedOut)
 	return &loopWork{registry: registry, runID: runID, entry: registry.register(runID, workspace, cancel), ctx: ctx, cancel: cancel, stop: stop}
 }
@@ -355,7 +357,10 @@ func (lw *loopWork) abandon() {
 func (s *server) runLoopWork(lw *loopWork, workspace string, limits loopRunLimits, work func(context.Context) error, finish func(context.Context, error)) {
 	defer lw.abandon()
 	ctx, cancel, runID := lw.ctx, lw.cancel, lw.runID
-	done := make(chan struct{})
+	// In-flight work can still be unwinding after cancellation. Keep its
+	// lease until it returns, then cancel any heartbeat query still in flight.
+	heartbeatCtx, stopHeartbeat := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopHeartbeat()
 	heartbeatDone := make(chan struct{})
 	go func() {
 		defer close(heartbeatDone)
@@ -363,13 +368,15 @@ func (s *server) runLoopWork(lw *loopWork, workspace string, limits loopRunLimit
 		defer ticker.Stop()
 		for {
 			select {
-			case <-done:
+			case <-heartbeatCtx.Done():
 				return
 			case <-ticker.C:
 			}
 			now := time.Now().UTC()
-			requested, err := s.store.HeartbeatLoopRun(context.Background(), workspace, runID, s.loopInstanceID(), now, now.Add(limits.LeaseTTL))
+			requested, err := s.store.HeartbeatLoopRun(heartbeatCtx, workspace, runID, s.loopInstanceID(), now, now.Add(limits.LeaseTTL))
 			switch {
+			case heartbeatCtx.Err() != nil:
+				return
 			case errors.Is(err, store.ErrLoopRunLeaseLost):
 				cancel(errLoopLeaseLost)
 				return
@@ -381,7 +388,7 @@ func (s *server) runLoopWork(lw *loopWork, workspace string, limits loopRunLimit
 		}
 	}()
 	err := work(ctx)
-	close(done)
+	stopHeartbeat()
 	<-heartbeatDone
 	finish(ctx, err)
 }
@@ -392,8 +399,8 @@ func (s *server) startLoopRunReconciler() {
 	if !s.loopReconcilerStarted.CompareAndSwap(false, true) {
 		return
 	}
-	go func() {
-		ctx := s.store.WorkerContext()
+	s.goWorker(func(lifetime context.Context) {
+		ctx := s.coldWorkerContext(lifetime)
 		s.reconcileLoopRuns(ctx, true)
 		interval := max(s.loopLimits().LeaseTTL/2, 50*time.Millisecond)
 		ticker := time.NewTicker(interval)
@@ -406,7 +413,7 @@ func (s *server) startLoopRunReconciler() {
 				s.reconcileLoopRuns(ctx, false)
 			}
 		}
-	}()
+	})
 }
 
 // reconcileLoopRuns interrupts runs (and replies) whose lease expired, that

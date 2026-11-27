@@ -34,7 +34,7 @@ func applicationFixture(t *testing.T) (*server, http.Handler, domain.Bootstrap, 
 		t.Fatal(err)
 	}
 	s := &server{store: repo, authDisabled: true, uploadPath: t.TempDir()}
-	handler := newHandler(s)
+	handler := newTestHandler(t, s)
 	response := requestJSON[struct {
 		Application domain.ApplicationInstallation `json:"application"`
 	}](t, handler, "POST", "/api/application-installations", map[string]any{"clientId": "agent-test", "teamIds": []string{data.Teams[0].ID}, "scopes": []string{"read", "write", "app:assignable", "app:mentionable"}, "active": true}, 200)

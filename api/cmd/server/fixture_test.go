@@ -78,27 +78,24 @@ func scaleP01Peers(t *testing.T, config store.DatabaseConfig, redisAddr string) 
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = repo.Close() })
 		probe, err := repo.EnableScaleP01Probe(config)
 		if err != nil {
-			repo.Close()
 			t.Fatal(err)
 		}
 		scaleP01Probes.Store(repo, probe)
+		t.Cleanup(func() { scaleP01Probes.Delete(repo) })
 		coordinator, err := coordination.Open(t.Context(), coordination.Config{Mode: "standalone", Addrs: []string{redisAddr}, Prefix: "scale-p01", ConnectTimeout: time.Second, LockTTL: 5 * time.Second, LockWait: 5 * time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = coordinator.Close() })
 		repo.SetWorkspaceCoordinator(coordinator)
 		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
 		instance := &server{store: repo, uploadPath: uploads, coordinator: coordinator, coordinationContext: ctx}
-		host := httptest.NewServer(scaleP01Handler(newHandler(instance), probe))
-		t.Cleanup(func() {
-			host.Close()
-			cancel()
-			coordinator.Close()
-			repo.Close()
-			scaleP01Probes.Delete(repo)
-		})
+		host := httptest.NewServer(scaleP01Handler(newTestHandler(t, instance), probe))
+		t.Cleanup(host.Close)
 		peers.stores[index], peers.servers[index], peers.deafen[index] = repo, instance, cancel
 		if index == 0 {
 			peers.first = host

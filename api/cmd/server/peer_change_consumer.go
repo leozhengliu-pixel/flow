@@ -361,7 +361,7 @@ func (s *server) queuePeerSocketAccessCheck(workspace string) {
 	}
 	scope := socketAccessScope{all: true}
 	s.realtime.socketAccessWork(workspace, scope)
-	s.socketAccess.push(workspace, scope, s.runSocketAccessChecks)
+	s.socketAccess.push(workspace, scope, s.scheduleSocketAccessChecks)
 }
 
 func (s *server) pollPeerChanges(ctx context.Context) {
@@ -370,10 +370,10 @@ func (s *server) pollPeerChanges(ctx context.Context) {
 	}
 	ticker := time.NewTicker(peerChangePollInterval)
 	defer ticker.Stop()
-	for s.recordPeerSyncMode() != "off" {
+	for ctx.Err() == nil && s.recordPeerSyncMode() != "off" {
 		workspaces := s.store.WorkspaceKeys()
 		for _, workspace := range workspaces {
-			s.remoteEvents.wake(workspace, s.applyRemoteEvents)
+			s.remoteEvents.wake(workspace, s.scheduleRemoteEvents)
 		}
 		s.remoteEvents.pruneConsumers(workspaces)
 		select {

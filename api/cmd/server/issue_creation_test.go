@@ -68,10 +68,11 @@ func scaleP21SW186Create(t *testing.T, f scaleP21IssueUpdateFixture, service *se
 }
 
 func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
-	wanted := map[string]bool{"issueRecordsQuery": false, "issueRecordAccess": false, "requestIssueQueryAccess": false}
+	wanted := map[string]bool{"issueRecordsQuery": false, "issueRecordsQueryWithStore": false, "issueRecordAccess": false, "requestIssueQueryAccess": false, "requestIssueQueryAccessWithStore": false}
 	allowed := map[string]bool{
 		"store": true, "authDisabled": true,
 		"requestIssueQueryAccess": true, "issueRecordAccess": true,
+		"issueRecordsQueryWithStore": true, "requestIssueQueryAccessWithStore": true,
 		// Reads a label group's active label IDs straight from the metadata
 		// records (fresh strings, bounded by MaxIssueGroupLabels); it never
 		// touches the borrowed snapshot.
@@ -83,7 +84,7 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 		// SW215 pins fresh cold reads in the existing legacy-only branches.
 		"RefreshColdMetadataRead": true,
 	}
-	for _, path := range []string{"issue_records_api.go", "issue_request_access.go"} {
+	for _, path := range []string{"issue_query_access.go", "issue_records_api.go", "issue_request_access.go"} {
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -98,6 +99,11 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 			}
 			wanted[function.Name.Name] = true
 			ast.Inspect(function.Body, func(node ast.Node) bool {
+				if literal, ok := node.(*ast.CompositeLit); ok {
+					if typ, ok := literal.Type.(*ast.Ident); ok && typ.Name == "server" {
+						t.Errorf("%s constructs a server with its own lifecycle for a borrowed query", function.Name.Name)
+					}
+				}
 				if selector, ok := node.(*ast.SelectorExpr); ok {
 					if receiver, ok := selector.X.(*ast.Ident); ok && receiver.Name == "s" && !allowed[selector.Sel.Name] {
 						t.Errorf("%s reads unreviewed server field/helper %s; update the borrowed query dependency audit", function.Name.Name, selector.Sel.Name)

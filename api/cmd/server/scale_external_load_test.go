@@ -102,7 +102,7 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer repo.Close()
+	t.Cleanup(func() { _ = repo.Close() })
 	probe, err := repo.EnableScaleP01Probe(config)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer coord.Close()
+	t.Cleanup(func() { _ = coord.Close() })
 	repo.SetWorkspaceCoordinator(coord)
 	srv := &server{store: repo, uploadPath: dir, coordinator: coord, coordinationContext: ctx}
 	// Metrics are on this test process's loopback server, never a production route.
@@ -122,9 +122,9 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 		value, _ := scaleP01LocalMetricSource(probe)(r.Context())
 		writeJSON(w, http.StatusOK, value)
 	})
-	mux.Handle("/", scaleP01Handler(newHandler(srv), probe))
+	mux.Handle("/", scaleP01Handler(newTestHandler(t, srv), probe))
 	host := httptest.NewServer(mux)
-	defer host.Close()
+	t.Cleanup(host.Close)
 	if err := os.WriteFile(filepath.Join(dir, "url"), []byte(host.URL), 0o600); err != nil {
 		t.Fatal(err)
 	}

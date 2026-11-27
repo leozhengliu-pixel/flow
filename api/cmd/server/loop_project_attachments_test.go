@@ -263,8 +263,7 @@ func TestLoopAttachmentReadRespectsScopeAndTriggeringUser(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	fixture, _ := newLoopTestServer(t, &fakeLoopProvider{})
 	srv := &server{store: fixture.store, uploadPath: fixture.uploadPath}
-	disableBackgroundWorkersForTest(srv)
-	api := httptest.NewServer(newHandler(srv))
+	api := httptest.NewServer(newTestHandler(t, srv))
 	defer api.Close()
 	const workspace = "test-workspace"
 	admin := authClient(t)

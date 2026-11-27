@@ -22,15 +22,27 @@ import (
 	"flow/api/internal/store"
 )
 
-// Request-only fixtures exercise handlers and their sinks without periodic
-// workers changing or contending for the same workspace state.
-func disableBackgroundWorkersForTest(s *server) {
-	s.socketAccessSweepStarted.Store(true)
-	s.workflowSchedulerStarted.Store(true)
-	s.deliverySchedulerStarted.Store(true)
-	s.loopReconcilerStarted.Store(true)
-	s.agentRunReconcilerStarted.Store(true)
-	s.agentLiveSweepStarted.Store(true)
+func newTestHandler(t testing.TB, s *server) http.Handler {
+	cleanupTestServer(t, s)
+	return newHandler(s)
+}
+
+func newTestRealtimeHub(t testing.TB) *realtimeHub {
+	s := &server{}
+	cleanupTestServer(t, s)
+	hub := newRealtimeHub()
+	hub.background.Store(s.backgroundWork())
+	return hub
+}
+
+func cleanupTestServer(t testing.TB, s *server) {
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.Shutdown(ctx); err != nil {
+			t.Errorf("shut down test server: %v", err)
+		}
+	})
 }
 
 func workspaceFixtureContext(ctx context.Context) context.Context {

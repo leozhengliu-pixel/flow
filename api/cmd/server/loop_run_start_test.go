@@ -99,8 +99,7 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 	fixtureService := &server{store: repo, uploadPath: t.TempDir()}
 	// SW260 drives its own clock. A live reconciler can renew the queued
 	// runs' leases between a dispatch and the snapshot that checks it.
-	disableBackgroundWorkersForTest(fixtureService)
-	host := httptest.NewServer(newHandler(fixtureService))
+	host := httptest.NewServer(newTestHandler(t, fixtureService))
 	t.Cleanup(host.Close)
 	f := scaleP03CreateFixture(t, repo, fixtureService, host)
 	workspace, public := f.data.Workspace.URLKey, f.data.Teams[0].ID

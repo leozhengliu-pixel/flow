@@ -75,7 +75,9 @@ func startReplica(t *testing.T, staticPath string, config appconfig.AssetsConfig
 		config.SharedKeepReleases = appconfig.DefaultAssetSharedKeepReleases
 	}
 	r := &replica{}
-	handler := (&server{staticPath: staticPath, assets: newAssetFallback(config)}).withStaticFiles(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	s := &server{staticPath: staticPath, assets: newAssetFallback(config)}
+	cleanupTestServer(t, s)
+	handler := s.withStaticFiles(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "api", http.StatusTeapot)
 	}))
 	r.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -100,7 +102,9 @@ func startReplicaOn(t *testing.T, listener *httptest.Server, staticPath string, 
 		config.SharedKeepReleases = appconfig.DefaultAssetSharedKeepReleases
 	}
 	r := &replica{Server: listener}
-	handler := (&server{staticPath: staticPath, assets: newAssetFallback(config)}).withStaticFiles(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	s := &server{staticPath: staticPath, assets: newAssetFallback(config)}
+	cleanupTestServer(t, s)
+	handler := s.withStaticFiles(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "api", http.StatusTeapot)
 	}))
 	listener.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

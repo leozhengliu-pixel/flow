@@ -344,7 +344,7 @@ func TestScaleP06WorkReservationsReleaseOnPanic(t *testing.T) {
 }
 
 func TestScaleP06ReorderingUsesTransportBudget(t *testing.T) {
-	h := newRealtimeHub()
+	h := newTestRealtimeHub(t)
 	h.ordered = true
 	h.publish("w", domain.RealtimeEvent{ID: "first", Seq: 1})
 	payload := bytes.Repeat([]byte{1}, 256<<10)

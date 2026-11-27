@@ -53,23 +53,39 @@ type loadRigProcessMetrics struct {
 var (
 	loadRigGates           atomic.Pointer[[2]*metadataReadGate]
 	loadRigBoundedMetadata atomic.Bool
+	loadRigListening       atomic.Bool
 )
 
 func init() {
 	recordLoadRigMetadataMode = loadRigBoundedMetadata.Store
+	startLoadRigMetrics = serveLoadRigMetrics
+	observeLoadRigGates = func(bootstrap, resource *metadataReadGate) {
+		loadRigGates.Store(&[2]*metadataReadGate{bootstrap, resource})
+	}
+	diagnoseWorkspaceRefusal = loadRigWorkspaceRefusal
+	diagnoseWorkspaceReload = func(start time.Time, versionWait time.Duration, trace store.WorkspaceReloadTrace, err error) {
+		if loadRigListening.Load() {
+			log.Printf("freshness reload=%d elapsed_ms=%d version_ms=%d delta_attempts=%d delta_races=%d delta_ms=%d full_attempts=%d full_ms=%d install_wait_ms=%d locked_reload_ms=%d ok=%t",
+				start.UnixNano(), time.Since(start).Milliseconds(), versionWait.Milliseconds(), trace.DeltaAttempts, trace.DeltaRaces, trace.DeltaBuild.Milliseconds(), trace.FullAttempts, trace.FullBuild.Milliseconds(), trace.InstallWait.Milliseconds(), trace.LockedReload.Milliseconds(), err == nil)
+		}
+	}
+}
+
+func serveLoadRigMetrics() (string, func()) {
+	noop := func() {}
 	addr := os.Getenv("FLOW_LOADRIG_METRICS_ADDR")
 	if addr == "" {
-		return
+		return "", noop
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
 		log.Printf("load rig: FLOW_LOADRIG_METRICS_ADDR must be a loopback host:port; metrics listener off")
-		return
+		return "", noop
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Printf("load rig: metrics listener: %v", err)
-		return
+		return "", noop
 	}
 	if rate, _ := strconv.Atoi(os.Getenv("FLOW_LOADRIG_MUTEX_PROFILE_FRACTION")); rate > 0 {
 		runtime.SetMutexProfileFraction(rate)
@@ -77,14 +93,7 @@ func init() {
 	if rate, _ := strconv.Atoi(os.Getenv("FLOW_LOADRIG_BLOCK_PROFILE_RATE")); rate > 0 {
 		runtime.SetBlockProfileRate(rate)
 	}
-	diagnoseWorkspaceRefusal = loadRigWorkspaceRefusal
-	observeLoadRigGates = func(bootstrap, resource *metadataReadGate) {
-		loadRigGates.Store(&[2]*metadataReadGate{bootstrap, resource})
-	}
-	diagnoseWorkspaceReload = func(start time.Time, versionWait time.Duration, trace store.WorkspaceReloadTrace, err error) {
-		log.Printf("freshness reload=%d elapsed_ms=%d version_ms=%d delta_attempts=%d delta_races=%d delta_ms=%d full_attempts=%d full_ms=%d install_wait_ms=%d locked_reload_ms=%d ok=%t",
-			start.UnixNano(), time.Since(start).Milliseconds(), versionWait.Milliseconds(), trace.DeltaAttempts, trace.DeltaRaces, trace.DeltaBuild.Milliseconds(), trace.FullAttempts, trace.FullBuild.Milliseconds(), trace.InstallWait.Milliseconds(), trace.LockedReload.Milliseconds(), err == nil)
-	}
+	loadRigListening.Store(true)
 	// One function handler, so the listener adds no API route binding.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -107,10 +116,23 @@ func init() {
 			http.NotFound(w, r)
 		}
 	})
-	go func() { _ = http.Serve(listener, handler) }()
+	httpServer := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = httpServer.Serve(listener)
+	}()
+	return listener.Addr().String(), func() {
+		loadRigListening.Store(false)
+		_ = httpServer.Close()
+		<-done
+	}
 }
 
 func loadRigWorkspaceRefusal(s *server, r *http.Request, workspace string, err error, waited time.Duration) {
+	if !loadRigListening.Load() {
+		return
+	}
 	pattern := "unmatched"
 	if mux, ok := r.Context().Value(coldAuthorizationMuxKey{}).(*http.ServeMux); ok {
 		if _, matched := mux.Handler(r); matched != "" {

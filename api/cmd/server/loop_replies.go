@@ -227,7 +227,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, presentLoopRun(run, userID))
 		return
 	}
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer loopGuards.release(guardKey)
 		answer := reply
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills, answering: intent != loopReplyContinue, noTools: intent == loopReplyStatus, contextPrompt: contextPrompt, completedWrites: completedWrites}
@@ -237,7 +237,10 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		}, func(ctx context.Context, runErr error) {
 			s.finishLoopRunReply(ctx, workspace, recorder, runErr)
 		})
-	}()
+	}) {
+		work.abandon()
+		loopGuards.release(guardKey)
+	}
 	writeJSON(w, http.StatusAccepted, presentLoopRun(run, userID))
 }
 
@@ -417,6 +420,10 @@ func (s *server) finishLoopRunReply(ctx context.Context, workspace string, rec *
 	})
 	if err != nil {
 		log.Printf("Loop reply finish workspace=%s loop=%s run=%s: %v", workspace, rec.run.LoopID, rec.run.ID, err)
+		if errors.Is(context.Cause(ctx), errServerShutdown) {
+			// The reconciler finds running replies through their lease.
+			return
+		}
 	}
 	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, rec.run.ID, firstNonEmpty(rec.leaseOwner, s.loopInstanceID())); err != nil {
 		log.Printf("Loop reply lease release workspace=%s run=%s: %v", workspace, rec.run.ID, err)

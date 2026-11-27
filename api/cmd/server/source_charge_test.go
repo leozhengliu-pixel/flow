@@ -186,12 +186,14 @@ func sw602ChargeOpen(t *testing.T, config store.DatabaseConfig, seeded int) *rtS
 	if err != nil {
 		t.Fatalf("open bounded: %v", err)
 	}
+	t.Cleanup(func() { _ = repo.Close() })
 	if !repo.BoundedMetadataEnabled() {
 		t.Fatal("the store opened with bounded metadata off")
 	}
 	svc := &server{store: repo, uploadPath: t.TempDir()}
 	svc.agent.Enabled, svc.agent.WorkerSecret, svc.agent.Runtime = true, testWorkerSecret, appconfig.AgentRuntimeWorker
-	host := httptest.NewServer(newHandler(svc))
+	host := httptest.NewServer(newTestHandler(t, svc))
+	t.Cleanup(host.Close)
 	st := &rtStack{t: t, repo: repo, svc: svc, host: host, bounded: true}
 	email, password := "admin@example.test", "test-password"
 	if seeded == 0 {

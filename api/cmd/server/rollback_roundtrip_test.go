@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -72,14 +71,15 @@ func rtOpen(t *testing.T, path string, bounded bool) *rtStack {
 	if err != nil {
 		t.Fatalf("open bounded=%v: %v", bounded, err)
 	}
+	t.Cleanup(func() { _ = repo.Close() })
 	if repo.BoundedMetadataEnabled() != bounded {
 		t.Fatalf("bounded=%v store opened with bounded=%v", bounded, repo.BoundedMetadataEnabled())
 	}
 	svc := &server{store: repo, uploadPath: t.TempDir(), coordinationContext: t.Context()}
-	disableBackgroundWorkersForTest(svc)
 	// Loop runs queue for a worker (none claims them) instead of calling a model.
 	svc.agent.Enabled, svc.agent.WorkerSecret, svc.agent.Runtime = true, testWorkerSecret, appconfig.AgentRuntimeWorker
-	host := httptest.NewServer(newHandler(svc))
+	host := httptest.NewServer(newTestHandler(t, svc))
+	t.Cleanup(host.Close)
 	st := &rtStack{t: t, repo: repo, svc: svc, host: host, bounded: bounded}
 	st.admin = rtLogin(t, host.URL, "admin@example.test", "test-password")
 	return st
@@ -95,7 +95,6 @@ func rtLogin(t *testing.T, base, email, password string) *http.Client {
 
 func (st *rtStack) close() {
 	st.t.Helper()
-	_ = st.svc.stopDeliveryScheduler(context.Background())
 	st.host.Close()
 	if err := st.repo.Close(); err != nil {
 		st.t.Fatal(err)
@@ -911,7 +910,6 @@ func TestScaleP21RollbackReopenWithoutCatalogCompletion(t *testing.T) {
 		svc := &server{store: repo, uploadPath: t.TempDir()}
 		host := httptest.NewServer(newHandler(svc))
 		defer host.Close()
-		defer svc.stopDeliveryScheduler(context.Background())
 		admin := rtLogin(t, host.URL, "admin@example.test", "test-password")
 		served = true
 		for _, p := range []string{"/api/bootstrap", "/api/labels", "/api/issue-records?limit=50"} {

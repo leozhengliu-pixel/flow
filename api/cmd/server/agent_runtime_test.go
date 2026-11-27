@@ -83,7 +83,7 @@ func newRuntimeTestServer(t *testing.T, provider *responsesScript) (*server, htt
 	}
 	t.Cleanup(func() { repository.Close() })
 	srv := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: host.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: host.Client()}
-	return srv, newHandler(srv)
+	return srv, newTestHandler(t, srv)
 }
 
 func streamRuntime(t *testing.T, handler http.Handler, path, body string) string {

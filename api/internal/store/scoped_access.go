@@ -29,7 +29,7 @@ func (s *SQLiteStore) BoundedMetadataViewForTesting(ctx context.Context) (*SQLit
 	if !testing.Testing() {
 		return nil, ErrBoundedMetadataCoverage
 	}
-	view := &SQLiteStore{db: s.db, dialect: s.dialect, maxStateBytes: s.maxStateBytes, viewer: s.viewer, workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency()}
+	view := &SQLiteStore{db: s.db, dialect: s.dialect, maxStateBytes: s.maxStateBytes, viewer: s.viewer, workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency(), testViewOwner: s}
 	view.metadataResidency.requireCoverage = false
 	if err := view.loadResidentWorkspaces(ctx); err != nil {
 		return nil, err

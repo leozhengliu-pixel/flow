@@ -127,9 +127,10 @@ func newAssetFallback(config appconfig.AssetsConfig) *assetFallback {
 
 func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-// serve answers r with another release's copy of name; false when no source
+// serveFallbackAsset answers r with another release's copy of name; false when no source
 // has it (the caller answers 404).
-func (f *assetFallback) serve(w http.ResponseWriter, r *http.Request, name string) bool {
+func (s *server) serveFallbackAsset(w http.ResponseWriter, r *http.Request, name string) bool {
+	f := s.assets
 	for _, dir := range f.dirs {
 		file, err := os.Open(filepath.Join(dir.path, "assets", name))
 		if err != nil {
@@ -148,7 +149,7 @@ func (f *assetFallback) serve(w http.ResponseWriter, r *http.Request, name strin
 	if r.Header.Get(assetPeerHeader) != "" {
 		return false
 	}
-	asset := f.fetch(r.Context(), name)
+	asset := s.fetchFallbackAsset(r.Context(), name)
 	if asset == nil {
 		return false
 	}
@@ -168,10 +169,11 @@ func writeAssetHeaders(w http.ResponseWriter, name, contentType, source string) 
 	w.Header().Set(assetSourceHeader, source)
 }
 
-// fetch asks the peers, then the fallback URLs. Concurrent requests for one
+// fetchFallbackAsset asks the peers, then the fallback URLs. Concurrent requests for one
 // file share a fetch; found files stay in a bounded memory cache and misses
 // are remembered briefly so a burst of stale requests does not fan out.
-func (f *assetFallback) fetch(ctx context.Context, name string) *fetchedAsset {
+func (s *server) fetchFallbackAsset(ctx context.Context, name string) *fetchedAsset {
+	f := s.assets
 	if len(f.peers) == 0 && len(f.urls) == 0 {
 		return nil
 	}
@@ -199,8 +201,10 @@ func (f *assetFallback) fetch(ctx context.Context, name string) *fetchedAsset {
 
 	// The fetch outlives a client that gives up, so the others waiting on it
 	// still get the file.
-	fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*assetFetchTimeout)
-	asset := f.fetchFromPeers(fetchCtx, name)
+	lifetime, stop := s.detachedContext(ctx)
+	defer stop()
+	fetchCtx, cancel := context.WithTimeout(lifetime, 2*assetFetchTimeout)
+	asset := s.fetchAssetFromPeers(fetchCtx, name)
 	if asset == nil {
 		asset = f.fetchFromURLs(fetchCtx, name)
 	}
@@ -243,7 +247,8 @@ func (f *assetFallback) remember(name string, asset *fetchedAsset) {
 	}
 }
 
-func (f *assetFallback) fetchFromPeers(ctx context.Context, name string) *fetchedAsset {
+func (s *server) fetchAssetFromPeers(ctx context.Context, name string) *fetchedAsset {
+	f := s.assets
 	var targets []string
 	for _, peer := range f.peers {
 		host, port, err := net.SplitHostPort(peer)
@@ -269,13 +274,20 @@ func (f *assetFallback) fetchFromPeers(ctx context.Context, name string) *fetche
 	defer cancel()
 	results := make(chan *fetchedAsset, len(targets))
 	for _, target := range targets {
-		go func(target string) {
+		if !s.goBackground(func(context.Context) {
 			results <- f.get(ctx, f.peerClient, target+"/assets/"+name, "peer", true)
-		}(target)
+		}) {
+			return nil
+		}
 	}
 	for range targets {
-		if asset := <-results; asset != nil {
-			return asset
+		select {
+		case asset := <-results:
+			if asset != nil {
+				return asset
+			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
 	return nil
@@ -385,6 +397,10 @@ func readRelease(staticPath string) (releaseManifest, error) {
 // written to a temporary name and renamed, so a reader never sees half a file.
 // Assets are never changed in place: a name is a content hash.
 func publishSharedAssets(staticPath, sharedPath string, keep int, now time.Time) (releaseManifest, error) {
+	return publishSharedAssetsContext(context.Background(), staticPath, sharedPath, keep, now)
+}
+
+func publishSharedAssetsContext(ctx context.Context, staticPath, sharedPath string, keep int, now time.Time) (releaseManifest, error) {
 	manifest, err := readRelease(staticPath)
 	if err != nil {
 		return manifest, err
@@ -405,6 +421,9 @@ func publishSharedAssets(staticPath, sharedPath string, keep int, now time.Time)
 	}
 	_ = os.Chtimes(filepath.Join(releases, manifest.Release+".json"), now, now)
 	for _, name := range manifest.Assets {
+		if err := ctx.Err(); err != nil {
+			return manifest, err
+		}
 		target := filepath.Join(assets, name)
 		source := filepath.Join(staticPath, "assets", name)
 		sourceInfo, err := os.Stat(source)
@@ -512,23 +531,30 @@ func writeFileAtomic(target string, body io.Reader) error {
 // startSharedAssetPublish publishes this build's assets to the shared
 // directory before the server takes traffic, waiting at most wait so a slow
 // volume cannot hold startup; publishing then finishes in the background.
-func startSharedAssetPublish(staticPath string, config appconfig.AssetsConfig, wait time.Duration) {
-	if staticPath == "" || config.SharedPath == "" {
+func (s *server) startSharedAssetPublish(config appconfig.AssetsConfig, wait time.Duration) {
+	if s.staticPath == "" || config.SharedPath == "" {
 		return
 	}
 	done := make(chan struct{})
-	go func() {
+	if !s.goWorker(func(ctx context.Context) {
 		defer close(done)
-		manifest, err := publishSharedAssets(staticPath, config.SharedPath, config.SharedKeepReleases, time.Now())
+		manifest, err := publishSharedAssetsContext(ctx, s.staticPath, config.SharedPath, config.SharedKeepReleases, time.Now())
 		if err != nil {
-			log.Printf("WARNING: asset publish to FLOW_ASSET_SHARED_PATH: %v", err)
+			if ctx.Err() == nil {
+				log.Printf("WARNING: asset publish to FLOW_ASSET_SHARED_PATH: %v", err)
+			}
 			return
 		}
 		log.Printf("published web assets release=%s files=%d to %s", manifest.Release, len(manifest.Assets), config.SharedPath)
-	}()
+	}) {
+		return
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 	select {
 	case <-done:
-	case <-time.After(wait):
+	case <-s.backgroundWork().serving.Done():
+	case <-timer.C:
 		log.Printf("WARNING: asset publish to FLOW_ASSET_SHARED_PATH still running after %s; serving meanwhile", wait)
 	}
 }

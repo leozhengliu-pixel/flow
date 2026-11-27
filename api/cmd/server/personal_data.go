@@ -98,7 +98,7 @@ func (s *server) createPersonalDataExport(w http.ResponseWriter, r *http.Request
 	}
 	if created {
 		s.auditPersonalData(r.Context(), user.ID, "data_export_requested", map[string]any{"exportId": item.ID})
-		go s.buildPersonalDataExport(item.ID, user.ID)
+		s.goBackground(func(context.Context) { s.buildPersonalDataExport(item.ID, user.ID) })
 	}
 	writeJSON(w, http.StatusAccepted, personalDataExportView(item, time.Now().UTC()))
 }
@@ -167,7 +167,7 @@ func (s *server) auditPersonalData(ctx context.Context, userID, action string, m
 // buildPersonalDataExport writes the zip to object storage and records the
 // result. It runs in the background.
 func (s *server) buildPersonalDataExport(id, userID string) {
-	ctx := s.store.WorkerContext()
+	ctx := s.workerContext()
 	if started, err := s.store.StartPersonalDataExport(ctx, id); err != nil || !started {
 		return
 	}

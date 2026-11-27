@@ -290,14 +290,21 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return
 	}
+	background := s.backgroundWork()
+	if !background.begin(background.serving) {
+		writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+		return
+	}
+	defer background.finish()
 	connection, err := websocket.Accept(w, r, webSocketAcceptOptions(r))
 	if err != nil {
 		return
 	}
 	connection.SetReadLimit(maxCollaborationFrameSize)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(background.serving)
 	client := s.realtime.addSocket(workspace, clientID, cancel)
 	if client == nil {
+		cancel()
 		_ = connection.Close(websocket.StatusTryAgainLater, "Realtime is temporarily unavailable")
 		return
 	}
@@ -828,11 +835,15 @@ func (s *server) publishCollaborationEvent(workspace, eventType string, payload 
 	if s.coordinator == nil {
 		return
 	}
+	lifetime := s.backgroundWork().serving
+	if lifetime.Err() != nil {
+		return
+	}
 	raw, _ := json.Marshal(payload)
 	event := domain.RealtimeEvent{ID: newCollaborationID(), Type: eventType, AggregateID: payload.DocumentID, ClientID: payload.ClientID, Payload: raw, CreatedAt: time.Now().UTC()}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(lifetime, 2*time.Second)
 	defer cancel()
-	if err := s.coordinator.Publish(ctx, workspace, event); err != nil {
+	if err := s.coordinator.Publish(ctx, workspace, event); err != nil && lifetime.Err() == nil {
 		log.Printf("Redis publish collaboration workspace=%s event=%s: %v", workspace, eventType, err)
 	}
 }

@@ -213,7 +213,7 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 		s.auditAPIKeyCredential(r, "webhook_secret_issued", updated)
 		w.Header().Set("Cache-Control", "no-store")
 	}
-	go s.reconcileAllApplicationWebhooks(context.Background())
+	s.goBackground(s.reconcileAllApplicationWebhooks)
 	writeJSON(w, http.StatusOK, settings)
 }
 
@@ -324,6 +324,9 @@ func (s *server) reconcileAllApplicationWebhooks(ctx context.Context) {
 	}
 	defer release()
 	for _, key := range s.store.WorkspaceKeys() {
+		if ctx.Err() != nil {
+			return
+		}
 		s.reconcileApplicationWebhooksWith(ctx, key, apps)
 	}
 }

@@ -85,7 +85,7 @@ func gitlabTestServer(t *testing.T) (*server, http.Handler, *store.SQLiteStore) 
 	}
 	t.Cleanup(func() { repository.Close() })
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
-	return s, newHandler(s), repository
+	return s, newTestHandler(t, s), repository
 }
 
 func enableConnectorSecrets(t *testing.T) {

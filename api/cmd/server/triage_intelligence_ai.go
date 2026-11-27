@@ -134,15 +134,12 @@ func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor,
 		return false
 	}
 	// Keep request values (actor, API key) but not the request's cancellation.
-	base := context.WithoutCancel(ctx)
-	go func() {
+	if !s.goBackground(func(context.Context) {
 		defer s.triageRuns.Delete(key)
+		base, stop := s.detachedContext(ctx)
+		defer stop()
 		runCtx, cancel := context.WithTimeout(base, s.triageIntelligenceTimeout()+30*time.Second)
 		defer cancel()
-		if s.store != nil {
-			stop := context.AfterFunc(s.store.WorkerContext(), cancel)
-			defer stop()
-		}
 		select {
 		case triageAISlots <- struct{}{}:
 			defer func() { <-triageAISlots }()
@@ -152,10 +149,13 @@ func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor,
 		runCtx, release := beginIndependentMetadataOutputReads(runCtx)
 		defer release()
 		_, _, err := s.runTriageIntelligence(runCtx, actor, issueID, triageRunOptions{useAI: true, reason: reason, eventType: "issue.suggestions_generated"})
-		if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errInvalid) {
+		if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errInvalid) && runCtx.Err() == nil {
 			log.Print("generate triage intelligence: run failed")
 		}
-	}()
+	}) {
+		s.triageRuns.Delete(key)
+		return false
+	}
 	return true
 }
 
@@ -206,12 +206,7 @@ func (s *server) scheduleTriageEditRun(ctx context.Context, actor mcpActor, issu
 		existing.(*triageEdit).due.Store(time.Now().Add(delay).UnixNano())
 		return
 	}
-	base := context.WithoutCancel(ctx)
-	var done <-chan struct{}
-	if s.store != nil {
-		done = s.store.WorkerContext().Done()
-	}
-	go func() {
+	if !s.goBackground(func(lifetime context.Context) {
 		defer s.triageEdits.Delete(key)
 		for {
 			wait := time.Until(time.Unix(0, entry.due.Load()))
@@ -227,13 +222,15 @@ func (s *server) scheduleTriageEditRun(ctx context.Context, actor mcpActor, issu
 			timer := time.NewTimer(wait)
 			select {
 			case <-timer.C:
-			case <-done:
+			case <-lifetime.Done():
 				timer.Stop()
 				return
 			}
 		}
-		s.startTriageIntelligenceRun(base, actor, issueID, triageRunEdited)
-	}()
+		s.startTriageIntelligenceRun(ctx, actor, issueID, triageRunEdited)
+	}) {
+		s.triageEdits.Delete(key)
+	}
 }
 
 // runTriageIntelligence generates and stores suggestions for one triage issue.

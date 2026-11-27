@@ -5,6 +5,9 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"os"
+	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -167,6 +170,19 @@ func TestScaleP21SW136LoopTextFailures(t *testing.T) {
 }
 
 func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
+	// TotalAlloc is process-wide. Run only this test in the child, with no
+	// server or store fixtures to start background workers.
+	const child = "FLOW_TEST_LOOP_TEXT_SCRATCH_CHILD"
+	if os.Getenv(child) != "1" {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+regexp.QuoteMeta(t.Name())+"$", "-test.timeout=2m", "-test.v")
+		cmd.Env = append(os.Environ(), child+"=1")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("isolated scratch bound: %v\n%s", err, output)
+		}
+		t.Logf("%s", output)
+		return
+	}
 	stateBytes := unsafe.Sizeof(scaleP21LoopTextState{})
 	if stateBytes > 4<<10 {
 		t.Fatal("streamed loop text state exceeds 4 KiB", stateBytes)
@@ -182,10 +198,7 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 			return nil
 		}
 	}
-	// TotalAlloc is process-wide, so background goroutines left by earlier
-	// tests in the package can add a few KiB to one sample. Their allocations
-	// only ever add, while input-sized scratch appears in every sample, so the
-	// smallest of three samples keeps the bound exact.
+	// Take the minimum to account for incidental runtime allocations.
 	measure := func(chunks func(func([]byte) error) error) uint64 {
 		least := uint64(math.MaxUint64)
 		for range 3 {

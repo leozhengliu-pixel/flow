@@ -97,7 +97,7 @@ func webhookTestServer(t *testing.T) (*server, http.Handler, domain.Bootstrap, s
 	}
 	t.Cleanup(func() { repository.Close() })
 	service := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, allowedOrigin: "https://flow.example"}
-	handler := newHandler(service)
+	handler := newTestHandler(t, service)
 	seed, _ := repository.BootstrapFor("test-workspace")
 	return service, handler, seed, path
 }

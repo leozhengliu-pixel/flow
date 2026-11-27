@@ -25,7 +25,8 @@ func newContentFeatureHandler(t *testing.T) (http.Handler, *store.SQLiteStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true}), repository
+	t.Cleanup(func() { _ = repository.Close() })
+	return newTestHandler(t, &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}), repository
 }
 
 func TestDashboardLifecycleResultsShareSubscriptionAndExport(t *testing.T) {

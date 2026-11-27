@@ -148,7 +148,7 @@ func newLoopTestServerWithProvider(t *testing.T, provider http.HandlerFunc) (*se
 	}
 	t.Cleanup(func() { repository.Close() })
 	srv := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: upstream.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: upstream.Client()}
-	return srv, newHandler(srv)
+	return srv, newTestHandler(t, srv)
 }
 
 func waitForLoopRun(t *testing.T, handler http.Handler, loopID string) domain.LoopRun {

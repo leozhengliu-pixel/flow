@@ -104,10 +104,12 @@ func (s *server) startChatDMReplyJobs(ctx context.Context, workspace string) err
 		}
 		job := jobs[0]
 		chatDMReplies.Add(1)
-		go func() {
+		if !s.goBackground(func(context.Context) {
 			defer chatDMReplies.Done()
 			progress := &chatDeliveryProgress{}
-			parent := context.WithValue(context.WithoutCancel(ctx), chatDeliveryProgressKey{}, progress)
+			lifetime, stop := s.detachedContext(ctx)
+			defer stop()
+			parent := context.WithValue(lifetime, chatDeliveryProgressKey{}, progress)
 			if s.store.BoundedMetadataEnabled() {
 				var close func()
 				parent, close = beginIndependentMetadataOutputReads(parent)
@@ -115,8 +117,6 @@ func (s *server) startChatDMReplyJobs(ctx context.Context, workspace string) err
 			}
 			runCtx, cancel := context.WithTimeout(parent, chatDMRunLimit)
 			defer cancel()
-			stopWorker := context.AfterFunc(s.store.WorkerContext(), cancel)
-			defer stopWorker()
 			if s.coordinationContext != nil {
 				stop := context.AfterFunc(s.coordinationContext, cancel)
 				defer stop()
@@ -169,7 +169,10 @@ func (s *server) startChatDMReplyJobs(ctx context.Context, workspace string) err
 			lease.mu.Unlock()
 			cancel()
 			<-done
-		}()
+		}) {
+			chatDMReplies.Done()
+			return context.Canceled
+		}
 	}
 	return nil
 }

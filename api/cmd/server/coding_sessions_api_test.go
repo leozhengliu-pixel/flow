@@ -33,7 +33,7 @@ func codingTestServer(t *testing.T, runtimeAddr string) (*server, http.Handler) 
 		LLM:      appconfig.CodingLLMConfig{CodexModels: []string{"gpt-5-codex"}},
 		Regions:  []string{"eu"},
 	})
-	return s, newHandler(s)
+	return s, newTestHandler(t, s)
 }
 
 func TestCodingSessionsAPI(t *testing.T) {
@@ -141,11 +141,9 @@ func TestCodingSessionsAPI(t *testing.T) {
 }
 
 func TestCodingRuntimeListener(t *testing.T) {
-	s, handler := codingTestServer(t, "127.0.0.1:5111")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	addr, err := s.serveCodingRuntime(ctx, handler)
-	if err != nil || addr == "" {
+	s, handler := codingTestServer(t, "127.0.0.1:0")
+	runtime, addr, err := s.serveCodingRuntime(handler)
+	if err != nil || runtime == nil || addr == "" {
 		t.Fatalf("listener: %q %v", addr, err)
 	}
 	get := func(url string) int {
@@ -170,10 +168,10 @@ func TestCodingRuntimeListener(t *testing.T) {
 			t.Fatalf("main listener %s: %d", path, recorder.Code)
 		}
 	}
-	cancel()
+	s.drainHTTP(runtime)
 	// Without FLOW_CODING_RUNTIME_ADDR nothing listens and the main handler is unchanged.
 	plain, plainHandler := codingTestServer(t, "")
-	if addr, err := plain.serveCodingRuntime(context.Background(), plainHandler); addr != "" || err != nil {
+	if runtime, addr, err := plain.serveCodingRuntime(plainHandler); runtime != nil || addr != "" || err != nil {
 		t.Fatalf("no listener expected: %q %v", addr, err)
 	}
 	recorder := httptest.NewRecorder()

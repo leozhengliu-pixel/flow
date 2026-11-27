@@ -26,11 +26,15 @@ import (
 
 func TestMain(m *testing.M) {
 	// Background review syncs never run in tests unless a test asks for them.
-	reviewSyncRunner = func(func()) {}
+	reviewSyncRunner = func(*server, func(context.Context)) bool { return false }
 	code := m.Run()
 	comparisons, differences := store.NarrowMutationVerificationCounts()
 	fmt.Fprintf(os.Stderr, "P04 verification callbacks=%d mismatches=%d\n", comparisons, differences)
 	if differences != 0 {
+		code = 1
+	}
+	if workers := remainingWorkers(append(slices.Clone(serverWorkerFrames), storeWorkerFrames...)); len(workers) != 0 {
+		fmt.Fprintf(os.Stderr, "background workers survived test cleanup:\n%s\n", strings.Join(workers, "\n\n"))
 		code = 1
 	}
 	os.Exit(code)
@@ -698,7 +702,10 @@ func TestGitHubAppWebhookSyncsReviewCommentsAndThreads(t *testing.T) {
 	f.install()
 	var queued []string
 	previous := reviewSyncRunner
-	reviewSyncRunner = func(func()) { queued = append(queued, "sync") }
+	reviewSyncRunner = func(*server, func(context.Context)) bool {
+		queued = append(queued, "sync")
+		return false
+	}
 	t.Cleanup(func() { reviewSyncRunner = previous })
 	if rec := f.webhook("pull_request", "a1", fmt.Sprintf(appPullRequestPayload, "opened", "open", false, false, time.Now().UTC().Format(time.RFC3339))); rec.Code != http.StatusAccepted {
 		t.Fatalf("opened: %d %s", rec.Code, rec.Body.String())

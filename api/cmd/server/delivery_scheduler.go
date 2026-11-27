@@ -24,31 +24,25 @@ func (s *server) startDeliveryScheduler() {
 	}
 	// Delivery ticks reach COLD consumers (chat integration ticks, DM reply
 	// jobs): with bounded metadata on they run COLD per operation (SW550).
-	ctx, cancel := context.WithCancel(store.WithColdWork(context.Background(), "delivery-scheduler"))
+	ctx, cancel := context.WithCancel(store.WithColdWork(s.backgroundWork().serving, "delivery-scheduler"))
 	done := make(chan struct{})
 	s.deliverySchedulerMu.Lock()
 	s.deliverySchedulerCancel, s.deliverySchedulerDone = cancel, done
 	s.deliverySchedulerMu.Unlock()
-	var workers sync.WaitGroup
-	workers.Add(2)
-	go func() {
-		workers.Wait()
-		close(done)
-	}()
-	// Chat platform calls can be slow; they run in their own loop so they
-	// never delay webhook, email or settings sweeps.
-	go func() {
-		defer workers.Done()
-		s.runChatWorkerLoop(ctx, interval, s.processChatIntegrationTick)
-	}()
-	go func() {
-		defer workers.Done()
+	if !s.goWorker(func(context.Context) {
+		defer close(done)
+		// Chat platform calls can be slow; they run in their own loop so
+		// they never delay webhook, email or settings sweeps.
+		chatDone := make(chan struct{})
+		go func() {
+			defer close(chatDone)
+			s.runChatWorkerLoop(ctx, interval, s.processChatIntegrationTick)
+		}()
+		defer func() { cancel(); <-chatDone }()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-s.store.WorkerContext().Done():
-				return
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
@@ -57,7 +51,10 @@ func (s *server) startDeliveryScheduler() {
 				}
 			}
 		}
-	}()
+	}) {
+		cancel()
+		close(done)
+	}
 }
 
 func (s *server) stopDeliveryScheduler(ctx context.Context) error {
@@ -170,8 +167,6 @@ func (s *server) runChatWorkerLoop(ctx context.Context, interval time.Duration, 
 	defer ticker.Stop()
 	for {
 		select {
-		case <-s.store.WorkerContext().Done():
-			return
 		case <-ctx.Done():
 			return
 		case <-ticker.C:

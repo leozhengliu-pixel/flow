@@ -758,12 +758,24 @@ func (c *workerChatReply) updateLater(reason string, delay time.Duration) {
 	if _, scheduled := workerChatLater.LoadOrStore(key, true); scheduled {
 		return
 	}
-	time.AfterFunc(delay, func() {
+	// A cancelled timer also needs to release the deduplication entry.
+	// The waiter is tracked by its server and stops as soon as it shuts down.
+	if !c.s.goBackground(func(ctx context.Context) {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			workerChatLater.Delete(key)
+			return
+		}
 		workerChatLater.Delete(key)
-		if _, err := c.update(context.Background(), false, nil); err != nil && !errors.Is(err, errAgentLiveSkip) {
+		if _, err := c.update(ctx, false, nil); err != nil && !errors.Is(err, errAgentLiveSkip) && ctx.Err() == nil {
 			log.Printf("update worker chat reply %s: %v", c.info.MessageID, err)
 		}
-	})
+	}) {
+		workerChatLater.Delete(key)
+	}
 }
 
 // workerChatDraft is the reply while one update changes it; events are sent to this process's followers once it
@@ -1923,7 +1935,9 @@ func (s *server) agentRunStopContext(parent context.Context, runID string) (cont
 	calls.mu.Lock()
 	calls.cancels[&cancel] = struct{}{}
 	calls.mu.Unlock()
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(agentRuntimeCancelRecheck)
 		defer ticker.Stop()
 		for {
@@ -1941,6 +1955,7 @@ func (s *server) agentRunStopContext(parent context.Context, runID string) (cont
 	}()
 	return ctx, func() {
 		cancel()
+		<-done
 		calls.mu.Lock()
 		delete(calls.cancels, &cancel)
 		empty := len(calls.cancels) == 0

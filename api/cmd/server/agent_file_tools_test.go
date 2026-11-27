@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -460,11 +459,13 @@ func TestAgentMediaTimestamp(t *testing.T) {
 }
 
 func TestParseAgentFileWithinBoundsConcurrentParses(t *testing.T) {
+	s := &server{}
+	cleanupTestServer(t, s)
 	for i := 0; i < cap(agentFileParseSlots); i++ {
 		agentFileParseSlots <- struct{}{}
 	}
 	file := domain.AgentMessageAttachment{Name: "a.txt", ContentType: "text/plain"}
-	_, err := parseAgentFileWithin(context.Background(), file, []byte("hi"))
+	_, err := s.parseAgentFileWithin(t.Context(), file, []byte("hi"))
 	for i := 0; i < cap(agentFileParseSlots); i++ {
 		<-agentFileParseSlots
 	}
@@ -472,7 +473,7 @@ func TestParseAgentFileWithinBoundsConcurrentParses(t *testing.T) {
 		t.Fatalf("full slots error = %v", err)
 	}
 	for i := 0; i < 100; i++ {
-		if text, err := parseAgentFileWithin(context.Background(), file, []byte("hi")); err != nil || text != "hi" {
+		if text, err := s.parseAgentFileWithin(t.Context(), file, []byte("hi")); err != nil || text != "hi" {
 			t.Fatalf("after release = %q, %v", text, err)
 		}
 		if len(agentFileParseSlots) != 0 {

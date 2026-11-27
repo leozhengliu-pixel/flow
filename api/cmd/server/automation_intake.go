@@ -849,10 +849,10 @@ func (s *server) startWorkflowScheduler() {
 	if !s.workflowSchedulerStarted.CompareAndSwap(false, true) {
 		return
 	}
-	go func() {
+	s.goWorker(func(lifetime context.Context) {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
-		ctx := s.store.WorkerContext()
+		ctx := s.coldWorkerContext(lifetime)
 		for {
 			select {
 			case <-ctx.Done():
@@ -881,7 +881,7 @@ func (s *server) startWorkflowScheduler() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {

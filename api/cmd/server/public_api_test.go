@@ -38,7 +38,7 @@ func newPlatformFixture(t *testing.T, limits *apiRateLimiter) platformFixture {
 	}
 	t.Cleanup(func() { repository.Close() })
 	service := &server{store: repository, uploadPath: t.TempDir(), apiRateLimiter: limits}
-	host := httptest.NewServer(newHandler(service))
+	host := httptest.NewServer(newTestHandler(t, service))
 	t.Cleanup(host.Close)
 	admin := authClient(t)
 	authRequest[domain.AuthSession](t, admin, http.MethodPost, host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)

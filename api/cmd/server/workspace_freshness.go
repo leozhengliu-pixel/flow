@@ -175,8 +175,8 @@ func (s *server) waitForPeerRefresh(ctx context.Context, workspace string) (curr
 	if load == nil {
 		load = &workspaceReload{done: make(chan struct{}), started: time.Now()}
 		versions.loading[workspace] = load
-		go func() {
-			workerCtx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
+		if !s.goBackground(func(context.Context) {
+			workerCtx, cancel := context.WithTimeout(s.workerContext(), workspaceReloadTimeout)
 			defer cancel()
 			err := s.syncPeerWorkspace(workerCtx, workspace)
 			if diagnoseWorkspaceReload != nil {
@@ -187,7 +187,11 @@ func (s *server) waitForPeerRefresh(ctx context.Context, workspace string) (curr
 			delete(versions.loading, workspace)
 			close(load.done)
 			versions.mu.Unlock()
-		}()
+		}) {
+			load.err = context.Canceled
+			delete(versions.loading, workspace)
+			close(load.done)
+		}
 	}
 	versions.mu.Unlock()
 	select {
@@ -293,10 +297,11 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 		// waiting at its own deadline and returns an error. It does
 		// not outlive the store: closing it (shutdown) ends the reload, which
 		// then decodes nothing more.
-		go func() {
-			reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workspaceReloadTimeout)
+		if !s.goBackground(func(context.Context) {
+			parent, stop := s.detachedContext(ctx)
+			defer stop()
+			reloadCtx, cancel := context.WithTimeout(parent, workspaceReloadTimeout)
 			defer cancel()
-			defer context.AfterFunc(s.store.WorkerContext(), cancel)()
 			var (
 				version     int64
 				versionErr  error
@@ -337,7 +342,13 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 				reloadCtx = store.WithWorkspaceReloadTrace(reloadCtx, &trace)
 			}
 			err = reload(reloadCtx, workspace)
-		}()
+		}) {
+			versions.mu.Lock()
+			load.err = context.Canceled
+			delete(versions.loading, workspace)
+			close(load.done)
+			versions.mu.Unlock()
+		}
 		select {
 		case <-load.done:
 			return load.err

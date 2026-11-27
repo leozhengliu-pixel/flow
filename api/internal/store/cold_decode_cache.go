@@ -124,10 +124,12 @@ type coldDecodedImage struct {
 }
 
 type coldDecodeCache struct {
-	mu     sync.Mutex
-	images map[string]*coldDecodedImage
-	bytes  int64
-	idle   *time.Timer
+	mu       sync.Mutex
+	images   map[string]*coldDecodedImage
+	bytes    int64
+	idle     *time.Timer
+	idleDone chan struct{}
+	closed   bool
 }
 
 // COLD decode cache counters (load measurement and tests).
@@ -488,6 +490,9 @@ func (r *metadataResidency) storeColdImage(workspace string, image *coldDecodedI
 	cache := &r.coldImages
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	if cache.closed {
+		return
+	}
 	if cache.images == nil {
 		cache.images = map[string]*coldDecodedImage{}
 	}
@@ -513,10 +518,21 @@ func (r *metadataResidency) storeColdImage(workspace string, image *coldDecodedI
 	coldDecodeCachedBytes.Store(cache.bytes)
 	idle := coldDecodeCacheIdle()
 	if cache.idle == nil {
-		cache.idle = time.AfterFunc(idle, func() { r.expireColdImages(coldDecodeCacheIdle()) })
-	} else {
+		r.armColdImageTimerLocked(idle)
+	} else if cache.idle.Stop() {
+		// When the callback is already running it will pick the next deadline.
 		cache.idle.Reset(idle)
 	}
+}
+
+func (r *metadataResidency) armColdImageTimerLocked(wait time.Duration) {
+	cache := &r.coldImages
+	done := make(chan struct{})
+	cache.idleDone = done
+	cache.idle = time.AfterFunc(wait, func() {
+		defer close(done)
+		r.expireColdImages(coldDecodeCacheIdle())
+	})
 }
 
 // expireColdImages drops the images unused for idle and rearms itself while
@@ -525,6 +541,10 @@ func (r *metadataResidency) expireColdImages(idle time.Duration) {
 	cache := &r.coldImages
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	if cache.closed {
+		return
+	}
+	cache.idle, cache.idleDone = nil, nil
 	now := time.Now()
 	next := idle
 	for key, image := range cache.images {
@@ -537,8 +557,22 @@ func (r *metadataResidency) expireColdImages(idle time.Duration) {
 		}
 	}
 	coldDecodeCachedBytes.Store(cache.bytes)
-	if len(cache.images) != 0 && cache.idle != nil {
-		cache.idle.Reset(next)
+	if len(cache.images) != 0 {
+		r.armColdImageTimerLocked(next)
+	}
+}
+
+func (r *metadataResidency) closeColdImages() {
+	cache := &r.coldImages
+	cache.mu.Lock()
+	cache.closed = true
+	timer, done := cache.idle, cache.idleDone
+	cache.idle, cache.idleDone, cache.images, cache.bytes = nil, nil, nil, 0
+	coldDecodeCachedBytes.Store(0)
+	stopped := timer == nil || timer.Stop()
+	cache.mu.Unlock()
+	if !stopped {
+		<-done
 	}
 }
 

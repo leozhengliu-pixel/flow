@@ -80,7 +80,7 @@ type codingArtifactHooks struct {
 	// authorize checks that the web caller may read the session.
 	authorize func(*server, *http.Request, domain.CodingSession) error
 	// background runs follow-up work (PR body sync) after the response.
-	background func(func())
+	background func(*server, func(context.Context)) bool
 }
 
 var codingArtifacts = codingArtifactHooks{
@@ -94,7 +94,7 @@ var codingArtifacts = codingArtifactHooks{
 		// issue, document, agent chat, pull request, loop, environment).
 		return s.codingSessionAnchorAccess(r, session, false)
 	},
-	background: func(run func()) { go run() },
+	background: (*server).goBackground,
 }
 
 // codingRuntimeUploadArtifact stores a screenshot or recording from the runner.
@@ -205,8 +205,10 @@ func (s *server) codingRuntimeUploadArtifact(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	baseURL := s.codingArtifactBaseURL(r)
-	codingArtifacts.background(func() {
-		syncCtx, cancel := context.WithTimeout(ctx, codingArtifactSyncTimeout)
+	codingArtifacts.background(s, func(context.Context) {
+		parent, stop := s.detachedContext(ctx)
+		defer stop()
+		syncCtx, cancel := context.WithTimeout(parent, codingArtifactSyncTimeout)
 		defer cancel()
 		s.syncCodingArtifactsToChangeRequests(syncCtx, workspace, artifact.SessionID, baseURL)
 	})

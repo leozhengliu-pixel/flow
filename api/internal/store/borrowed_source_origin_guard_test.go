@@ -32,11 +32,11 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"team_default_favorites.go":              "160beec6f9080397a9addddd55d7c0399ad2a755c2b9331ea7b1699811e9083e",
 		"snapshot_buffers.go":                    "023c93b51f6e9eaa6c0ba0b29a9f9e49d92ce006406801fb07d45cc8609e6bb2",
 		"snapshot_clone.go":                      "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
-		"../../cmd/server/advanced_features.go":  "63ad8c92c8f801373a5cf7ebc1bf9ba7afd9b9dbaef8a20060ac42f7ca6da214",
+		"../../cmd/server/advanced_features.go":  "18d0967f97f0b40a12cf7ae280cea5212571e8a781a20a4e9baa7345f2e9005c",
 		"../../cmd/server/loop_settings.go":      "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":               "c0a9aa8fc1a6fe16327ce1ac30b77739e4a9f21463ef9a2c64d05c7a367b83cb",
+		"../../cmd/server/main.go":               "35a38d664f82e9f17e1dd77c9711557fd848ced1dac189a10e8b92cec0f2aa30",
 		"../../cmd/server/notification_state.go": "5827fa9e2184d4c4726e3724a2a4e6d7ce54a956877d58694249a6c2f1cb3f98",
-		"../../cmd/server/personal_data.go":      "ac5b80d21fc3f3edc717e140729d0b59b9e245ae5d68597c388336856cc0bb01",
+		"../../cmd/server/personal_data.go":      "b5d62e57389a5eb2f880dbcad11ad17aea5d9a9fda7d57a014b587cbd3792d9c",
 		"../../cmd/server/cold_dispatch.go":      "78f6979c7b6492f603c4b1a452786f590b800139ea08d371bc3bc8054ba3e597",
 		// Background comment-action generator: borrows the issue bootstrap
 		// projection for its own run; never reaches request authorization.
