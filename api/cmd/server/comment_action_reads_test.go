@@ -259,7 +259,13 @@ func TestCommentActionReadRoutesDifferential(t *testing.T) {
 				if test.gate == "write-tools" {
 					service.agent.WriteTools = false
 				}
-				request := issueChildAuthorizationRequest(f.policyDifferentialFixture, test.actor, test.key, http.MethodGet, "/api/issue-records/"+issue.ID+"/comment-actions", issue.ID, "", nil)
+				// A start follows a comment create, whose request carries the
+				// comment; authorization reads that body completely.
+				var body any
+				if test.operation == "start" {
+					body = map[string]any{"body": "Start comment actions"}
+				}
+				request := issueChildAuthorizationRequest(f.policyDifferentialFixture, test.actor, test.key, http.MethodGet, "/api/issue-records/"+issue.ID+"/comment-actions", issue.ID, "", body)
 				if test.operation == "start" {
 					request.Method, request.URL.Path = http.MethodPost, "/api/issue-records/"+issue.ID+"/comments"
 				}
