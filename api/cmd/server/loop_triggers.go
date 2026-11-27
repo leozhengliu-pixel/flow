@@ -292,7 +292,7 @@ func matchLoopEvent(data domain.Bootstrap, loop domain.Loop, event loopEvent) (b
 		want = "created"
 	}
 	value, hasValue := config["value"]
-	if text, ok := value.(string); ok && (text == "" || strings.EqualFold(text, "any")) {
+	if loopAnyValue(value) {
 		hasValue = false
 	}
 	if event.Issue != nil {
@@ -328,6 +328,11 @@ func matchLoopEvent(data domain.Bootstrap, loop domain.Loop, event loopEvent) (b
 		return true, loopTriggerReason{Code: "statusChanged"}
 	}
 	return true, loopTriggerReason{Code: want}
+}
+
+func loopAnyValue(value any) bool {
+	text, ok := value.(string)
+	return ok && (text == "" || strings.EqualFold(text, "any"))
 }
 
 func loopIssueEventMatches(data domain.Bootstrap, issue domain.Issue, event loopEvent, want string, value any, hasValue bool) (bool, loopTriggerReason) {
@@ -402,14 +407,11 @@ func loopIssueEventMatches(data domain.Bootstrap, issue domain.Issue, event loop
 		if !changed("team") {
 			return false, loopTriggerReason{}
 		}
-		return !hasValue || issue.Team.ID == fmt.Sprint(value) || strings.EqualFold(issue.Team.Key, fmt.Sprint(value)), loopTriggerReason{Code: "team", Value: issue.Team.Name}
+		return !hasValue || automationTeamMatches(issue.Team, value), loopTriggerReason{Code: "team", Value: issue.Team.Name}
 	case "labels":
 		added := loopAddedLabels(issue, previous, created)
-		if len(added) == 0 {
-			return false, loopTriggerReason{}
-		}
 		for _, label := range added {
-			if !hasValue || label.ID == fmt.Sprint(value) || strings.EqualFold(label.Name, fmt.Sprint(value)) {
+			if !hasValue || automationLabelMatches([]domain.IssueLabel{label}, value, true) {
 				return true, loopTriggerReason{Code: "label", Value: label.Name}
 			}
 		}
@@ -501,14 +503,7 @@ func loopUserName(user *domain.User, empty string) string {
 
 // loopFiltersMatch applies the trigger's "+ Add filter" conditions to the issue.
 func loopFiltersMatch(data domain.Bootstrap, config map[string]any, issue domain.Issue) bool {
-	filters, _ := config["filters"].([]any)
-	for _, item := range filters {
-		filter, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		field, _ := filter["field"].(string)
-		value := filter["value"]
+	match := func(field, operator string, value any) bool {
 		text := ""
 		if value != nil {
 			text = fmt.Sprint(value)
@@ -524,13 +519,8 @@ func loopFiltersMatch(data domain.Bootstrap, config map[string]any, issue domain
 		case "creator":
 			creator := issue.Creator
 			matched = loopUserMatches(&creator, value)
-		case "label":
-			matched = slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool {
-				return value != nil && (label.ID == text || strings.EqualFold(label.Name, text))
-			})
-			if value == nil {
-				matched = len(issue.Labels) == 0
-			}
+		case "label", "labelId", "labelIds", "labels":
+			return automationLabelFilterMatches(issue.Labels, value, operator, true)
 		case "project":
 			if value == nil {
 				matched = issue.Project == nil
@@ -538,14 +528,16 @@ func loopFiltersMatch(data domain.Bootstrap, config map[string]any, issue domain
 				matched = issue.Project != nil && (issue.Project.ID == text || strings.EqualFold(issue.Project.Name, text))
 			}
 		case "team":
-			matched = issue.Team.ID == text || strings.EqualFold(issue.Team.Key, text)
+			matched = automationTeamMatches(issue.Team, value)
+		case "teamId":
+			matched = automationOperandMatches(value, func(id string) bool { return id != "" && id == issue.Team.ID })
 		default:
-			continue
+			return true
 		}
-		if operator, _ := filter["operator"].(string); operator == "isNot" {
-			matched = !matched
-		}
-		if !matched {
+		return matched != negativeAutomationFilter(operator)
+	}
+	for key, value := range config {
+		if workflowFilterField(key) && value != nil && !workflowFilterMatches(key, value, match) {
 			return false
 		}
 	}

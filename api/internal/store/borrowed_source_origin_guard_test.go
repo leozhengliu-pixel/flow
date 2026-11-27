@@ -47,7 +47,7 @@ func TestScaleP21SW318ProductionBorrowedIssueSources(t *testing.T) {
 		"../../cmd/server/issue_record_authorization_read.go": "6026fba608d49f31c47ac07de86b8ea1f000f94b93a7f0758e0ee964303025d4",
 		"../../cmd/server/issue_update_targets.go":            "0aba87367470607dfcbc0ae7e48ec7c0e8402c7c5020991d85acc2c6af9594ee",
 		"../../cmd/server/triage_suggestions.go":              "ce4dc87da131244726aadae31d61b8a7fe9cd5760d05b895013aa8ac88fc2002",
-		"../../cmd/server/settings_features.go":               "87273670857aaf48a54850c1a341472a1734110efb883ecf83f7b089672d4ea0",
+		"../../cmd/server/settings_features.go":               "4c2075a712aea26c60777ec3ce4c6bbc815f90584b8715b62fb80218114954b6",
 		"authz_epoch.go":                                      "6de890ae6a645e416fbbfb479dfcb165c68b78ccd384851c433f03c5a285e583",
 		"content_records.go":                                  "b128e7aa3a74c4dcf0167ccbef6f316757c3ddc02645a89a12becee369fcdff2",
 		"database.go":                                         "0f8031be40273399b3e770ff44726abdb107483b5d282feaa5d675277c4be0cb",

@@ -617,6 +617,7 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 	moved := []domain.IssueLabel{}
 	// Only issues carrying the label change.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{LabelIssues: []string{id}})
+	ctx = store.WithLabelAutomationScope(ctx, func(domain.Bootstrap) []string { return []string{id} })
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
@@ -872,6 +873,10 @@ func removeLabelReferences(data *domain.Bootstrap, ids map[string]struct{}) {
 	for index := range data.SavedViews {
 		data.SavedViews[index].Filters = removeLabelReferencesFromJSON(data.SavedViews[index].Filters, ids)
 	}
+	rewriteWorkflowLabelReferences(data, func(id string) (string, bool) {
+		_, ok := ids[id]
+		return "", ok
+	})
 }
 
 func removeLabelReferencesFromJSON(raw json.RawMessage, ids map[string]struct{}) json.RawMessage {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
@@ -45,6 +46,15 @@ func (s *server) moveWorkspaceLabelGroupToTeams(w http.ResponseWriter, r *http.R
 		}
 		return store.MutationScope{LabelIssues: ids}
 	}})
+	ctx = store.WithLabelAutomationScope(ctx, func(data domain.Bootstrap) []string {
+		var ids []string
+		for _, label := range data.Labels {
+			if label.GroupID == id && labelScopeIsWorkspace(label.Scope) {
+				ids = append(ids, label.ID)
+			}
+		}
+		return ids
+	})
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label_group.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
 		index := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
 			return group.ID == id && labelScopeIsWorkspace(group.Scope)
@@ -113,16 +123,17 @@ type labelTeamMove struct {
 
 // moveLabelsToTeams moves workspace labels to the teams that use them: a team
 // uses a label when one of its issues carries it or its templates, triage
-// rules, single-team SLA rules or team views name it. The topmost using team
-// of each subtree gets a copy (or reuses a label it already has with the same
-// name and group); its sub-teams inherit it. With group, every receiving team
-// gets the group too (or reuses a same-named group of the same type), and the
-// group's team labels move into their own team's group.
+// rules, single-team SLA rules, team views or single-team workflows name it.
+// The topmost using team of each subtree gets a copy (or reuses a label it
+// already has with the same name and group); its sub-teams inherit it. With
+// group, every receiving team gets the group too (or reuses a same-named group
+// of the same type), and the group's team labels move into their own team's
+// group.
 //
 // References follow the copies: issues (and trashed issues), suggested
 // labels, team templates and their sub-issues, project template issues,
-// triage rules, SLA rules, team views and label favorites and subscriptions
-// switch to the label of their team. References outside any team that got a
+// triage rules, SLA rules, team views, workflows, and label favorites and
+// subscriptions switch to the label of their team. References outside any team that got a
 // copy (workspace templates, workspace views, projects) lose the label as a
 // deletion removes it; a multi-team SLA rule matches the label by name, which
 // every copy keeps. The moving labels are then deleted.
@@ -223,6 +234,17 @@ func (m *labelTeamMove) usingTeams(data *domain.Bootstrap) map[string]bool {
 	for _, view := range data.SavedViews {
 		if view.TeamID != "" && labelReferencesInJSON(view.Filters, m.moving) {
 			add(view.TeamID)
+		}
+	}
+	probe := func(id string) (string, bool) { return "", m.moves(id) }
+	for _, workflow := range data.WorkflowDefinitions {
+		if _, references := remapWorkflowLabels(workflow, probe); references {
+			add(workflowLabelTeam(data, workflow))
+		}
+	}
+	for _, loop := range data.Loops {
+		if _, references := remapLoopLabels(loop, probe); references {
+			add(loopLabelTeam(data, loop))
 		}
 	}
 	return used
@@ -512,7 +534,33 @@ func (m *labelTeamMove) rewriteReferences(data *domain.Bootstrap) {
 			view.Display = moveDisplayLabelGroup(view.Display, m.group.ID, target)
 		}
 	}
+	m.moveWorkflowReferences(data)
 	m.movePreferences(data)
+}
+
+func (m *labelTeamMove) moveWorkflowReferences(data *domain.Bootstrap) {
+	forTeam := func(teamID string) workflowLabelRemap {
+		return func(id string) (string, bool) {
+			if !m.moves(id) {
+				return id, false
+			}
+			label, _ := m.teamLabel(data, teamID, id)
+			return label.ID, true
+		}
+	}
+	now := time.Now().UTC()
+	for i, workflow := range data.WorkflowDefinitions {
+		if next, changed := remapWorkflowLabels(workflow, forTeam(workflowLabelTeam(data, workflow))); changed {
+			next.UpdatedAt = now
+			data.WorkflowDefinitions[i] = next
+		}
+	}
+	for i, loop := range data.Loops {
+		if next, changed := remapLoopLabels(loop, forTeam(loopLabelTeam(data, loop))); changed {
+			next.UpdatedAt = now
+			data.Loops[i] = next
+		}
+	}
 }
 
 // moveTrashedIssues rewrites trashed issues carrying a moving label, so a

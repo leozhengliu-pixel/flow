@@ -269,6 +269,7 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		next.TeamAccess, next.AllowChangesOutsideTrigger, next.AllowExternalSync = definition.TeamAccess, definition.AllowChangesOutsideTrigger, definition.AllowExternalSync
 		next.WebSearch, next.CodeAccess = definition.WebSearch, definition.CodeAccess
 		next.NextRunAt = nil
+		next = restoreLoopLabelReferences(data, next)
 		if source.OutputContract != nil {
 			// The version's outputs come back with its instructions.
 			next.OutputContract = source.OutputContract
