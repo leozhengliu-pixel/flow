@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
-import { makeIssue } from '@/test/fixtures'
+import { makeIssue, teammate } from '@/test/fixtures'
 import type { BootstrapData } from '@/types/flow'
 
 const api = vi.hoisted(() => ({ fetchIssueRecord: vi.fn(), listProjectRecords: vi.fn(), listIssueRecords: vi.fn(), realtimeClientId: () => 'mention-test' }))
@@ -162,6 +162,23 @@ describe('typing references', () => {
 })
 
 describe('the @ menu', () => {
+  it('checks who can be mentioned only when the menu opens', async () => {
+    const people = [
+      { ...teammate, id: 'allowed-helper', displayName: 'Allowed helper', app: true, appScopes: ['app:mentionable'] },
+      { ...teammate, id: 'private-helper', displayName: 'Private helper', app: true },
+      { ...teammate, id: 'retired-helper', displayName: 'Retired helper', active: false },
+    ]
+    const scan = vi.spyOn(people, 'filter')
+    const user = userEvent.setup()
+    await mountEditor(mentionFixture({ users: people }))
+    expect(scan).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('textbox'))
+    await user.keyboard('@helper')
+    expect(await screen.findByRole('option', { name: /Allowed helper/ })).toBeVisible()
+    expect(screen.queryByRole('option', { name: /Private helper|Retired helper/ })).not.toBeInTheDocument()
+  })
+
   it('lists people first and then issues, projects and documents, each under a heading', async () => {
     const user = userEvent.setup()
     await mountEditor(mentionFixture())

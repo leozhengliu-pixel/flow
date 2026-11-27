@@ -456,7 +456,7 @@ button.document-icon.is-empty:hover,
 .document-title::placeholder { color: var(--theme-text-tertiary); opacity: 1; }
 /* The body sits flush with the title column (issue descriptions keep a 14px inset for their focus panel). */
 .document-page .issue-description-root.document-editor { width: 100%; margin-left: 0; }
-.document-editor .flow-prosemirror {
+.document-editor :is(.flow-prosemirror, .document-editor-placeholder) {
   box-sizing: border-box;
   width: 100%;
   max-width: none;
@@ -471,6 +471,7 @@ button.document-icon.is-empty:hover,
 }
 /* Body text is one step softer than headings (the reference app: lch 19.6 vs 9.8). */
 .document-editor .flow-prosemirror :is(p, li) { color: var(--text); }
+.document-editor .document-editor-placeholder p { color: var(--theme-text-tertiary); }
 :root .document-page .document-editor .description-editor:focus { background: transparent; box-shadow: none; }
 .document-editor .flow-prosemirror p.is-editor-empty:first-child:before {
   content: attr(data-placeholder);
@@ -519,7 +520,7 @@ button.document-icon.is-empty:hover,
     width: calc(100% + 28px);
     margin-left: -14px;
   }
-  .document-editor .flow-prosemirror {
+  .document-editor :is(.flow-prosemirror, .document-editor-placeholder) {
     padding: 10px 14px 384px;
   }
   .document-icon { margin-left: 4px; }
@@ -970,7 +971,7 @@ button.document-icon.is-empty:hover,
     color: var(--theme-text-primary);
     caret-color: var(--theme-text-primary);
   }
-  .document-editor .flow-prosemirror {
+  .document-editor :is(.flow-prosemirror, .document-editor-placeholder) {
     width: calc(100% + 28px);
     min-height: 458px;
     margin-left: -14px;

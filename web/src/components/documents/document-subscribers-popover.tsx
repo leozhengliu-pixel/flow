@@ -19,7 +19,7 @@ import { setDocumentSubscribers, type DocumentActionContext } from './document-a
 import { DOCUMENT_PAGE_SHORTCUTS } from './use-document-page-shortcuts'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
-export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, onToggleViewer, open, onOpenChange, disabled }: {
+interface DocumentSubscribersProps {
   ctx: DocumentActionContext
   document: FlowDocument
   /** Whether the viewer is subscribed (subscription records or the document's subscriber list). */
@@ -29,23 +29,17 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
   open: boolean
   onOpenChange: (open: boolean) => void
   disabled?: boolean
-}) {
+}
+
+export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, onToggleViewer, open, onOpenChange, disabled }: DocumentSubscribersProps) {
   const { t } = useI18n()
-  const phone = usePhoneLayout()
   const changeLabel = t('Change document subscribers')
-  const viewer = ctx.data.viewer
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState<string>()
-  const users = useMemo(() => {
-    const others = ctx.data.users.filter(user => user.active !== false && user.id !== viewer.id)
-    const needle = query.trim().toLowerCase()
-    const everyone = [viewer, ...others]
-    return needle ? everyone.filter(user => `${user.displayName} ${user.name} ${user.username ?? ''}`.toLowerCase().includes(needle)) : everyone
-  }, [ctx.data.users, viewer, query])
 
   const toggle = async (user: User, checked: boolean) => {
     if (pending) return
-    if (user.id === viewer.id) { await onToggleViewer(); return }
+    if (user.id === ctx.data.viewer.id) { await onToggleViewer(); return }
     setPending(user.id)
     const current = document.subscriberIds ?? []
     const next = checked ? current.filter(id => id !== user.id) : [...current, user.id]
@@ -53,16 +47,6 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
     setPending(undefined)
   }
 
-  const isSubscribed = (user: User) => user.id === viewer.id ? subscribed : (document.subscriberIds ?? []).includes(user.id)
-  const pinned = (user: User) => isSubscribed(user) || !phone && user.id === viewer.id
-  const pinnedUsers = users.filter(pinned).sort((a, b) => Number(isSubscribed(b)) - Number(isSubscribed(a)))
-  const rest = users.filter(user => !pinned(user))
-  // A phone lists everyone else under one "Other users" heading. The desktop popover lists the remaining members
-  // first and puts only applications and agents under the heading, with a rule after the subscribed rows.
-  const sections: Array<{ heading?: boolean; users: User[] }> = phone
-    ? [{ users: pinnedUsers }, { heading: true, users: rest }]
-    : [{ users: pinnedUsers }, { users: rest.filter(user => !user.app && !user.builtinAgent) }, { heading: true, users: rest.filter(user => user.app || user.builtinAgent) }]
-  const visible = sections.filter(section => section.users.length > 0)
   return <Popover.Root open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <ScopedFlowTooltip label={changeLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.subscribers} disabled={open}>
       <Popover.Trigger asChild>
@@ -76,33 +60,61 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
     </ScopedFlowTooltip>
     <Popover.Portal>
       <Popover.Content align="end" className="document-subscribers" data-popper-device-pixels="" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={3.5}>
-        <div className="document-subscribers__document">
-          <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span className="document-subscribers__label" data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{' '}<span data-i18n-ignore>{document.title}</span></span>
-        </div>
-        <div className="document-subscribers__search">
-          <input aria-label={t('Change subscribers…')} autoComplete="off" className="document-subscribers__filter" onChange={event => setQuery(event.target.value)} placeholder={t('Change subscribers…')} spellCheck={false} value={query}/>
-          {phone ? <kbd aria-hidden="true">{DOCUMENT_PAGE_SHORTCUTS.subscribers}</kbd> : <span aria-hidden="true" className="document-subscribers__keys">{tooltipShortcutKeys(DOCUMENT_PAGE_SHORTCUTS.subscribers).flat().map((key, index) => <kbd key={index}>{key}</kbd>)}</span>}
-        </div>
-        <div className="document-subscribers__list" role="group" aria-label={t('Document subscribers')}>
-          {visible.map((section, index) => <Fragment key={index}>
-          {index === 1 && !section.heading && <div aria-hidden="true" className="document-subscribers__rule"><div/></div>}
-          {section.heading && <div className="document-subscribers__group">{t('Other users')}</div>}
-          {section.users.map(user => {
-            const checked = isSubscribed(user)
-            const name = user.displayName || user.name
-            const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'
-            return <button aria-checked={checked} aria-label={name} className="menu-option document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
-              <span className="document-subscribers__check" data-checked={checked}>{checked && <CheckboxMark/>}</span>
-              <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" color={avatarColor(user.id)} name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
-              <span className="document-subscribers__identity">
-                <span className="document-subscribers__name" data-i18n-ignore>{name}</span>
-                {user.app && <span className="document-subscribers__badge-line"><span className="document-subscribers__badge-wrap"><span className="document-subscribers__badge">{t('Agent')}</span></span></span>}
-              </span>
-            </button>
-          })}</Fragment>)}
-          {!users.length && <p className="document-subscribers__empty">{t('No results')}</p>}
-        </div>
+        <DocumentSubscriberList ctx={ctx} document={document} subscribed={subscribed} disabled={busy || Boolean(pending)} onToggle={toggle} query={query} onQueryChange={setQuery}/>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
+}
+
+function DocumentSubscriberList({ ctx, document, subscribed, disabled, onToggle, query, onQueryChange }: Pick<DocumentSubscribersProps, 'ctx' | 'document' | 'subscribed' | 'disabled'> & {
+  onToggle: (user: User, checked: boolean) => Promise<void>
+  query: string
+  onQueryChange: (query: string) => void
+}) {
+  const { t } = useI18n()
+  const phone = usePhoneLayout()
+  const { users: workspaceUsers, viewer } = ctx.data
+  const everyone = useMemo(() => [viewer, ...workspaceUsers.filter(user => user.active !== false && user.id !== viewer.id)], [viewer, workspaceUsers])
+  const needle = query.trim().toLowerCase()
+  const users = needle ? everyone.filter(user => `${user.displayName} ${user.name} ${user.username ?? ''}`.toLowerCase().includes(needle)) : everyone
+  const subscriberIds = new Set(document.subscriberIds)
+  const isSubscribed = (user: User) => user.id === viewer.id ? subscribed : subscriberIds.has(user.id)
+  const pinned = (user: User) => isSubscribed(user) || !phone && user.id === viewer.id
+  const pinnedUsers = users.filter(pinned).sort((a, b) => Number(isSubscribed(b)) - Number(isSubscribed(a)))
+  const rest = users.filter(user => !pinned(user))
+  // A phone lists everyone else under one "Other users" heading. The desktop popover lists the remaining members
+  // first and puts only applications and agents under the heading, with a rule after the subscribed rows.
+  const sections: Array<{ heading?: boolean; users: User[] }> = phone
+    ? [{ users: pinnedUsers }, { heading: true, users: rest }]
+    : [{ users: pinnedUsers }, { users: rest.filter(user => !user.app && !user.builtinAgent) }, { heading: true, users: rest.filter(user => user.app || user.builtinAgent) }]
+  const visible = sections.filter(section => section.users.length > 0)
+  return <>
+    <div className="document-subscribers__document">
+      <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span className="document-subscribers__label" data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{' '}<span data-i18n-ignore>{document.title}</span></span>
+    </div>
+    <div className="document-subscribers__search">
+      <input aria-label={t('Change subscribers…')} autoComplete="off" className="document-subscribers__filter" onChange={event => onQueryChange(event.target.value)} placeholder={t('Change subscribers…')} spellCheck={false} value={query}/>
+      {phone ? <kbd aria-hidden="true">{DOCUMENT_PAGE_SHORTCUTS.subscribers}</kbd> : <span aria-hidden="true" className="document-subscribers__keys">{tooltipShortcutKeys(DOCUMENT_PAGE_SHORTCUTS.subscribers).flat().map((key, index) => <kbd key={index}>{key}</kbd>)}</span>}
+    </div>
+    <div className="document-subscribers__list" role="group" aria-label={t('Document subscribers')}>
+      {visible.map((section, index) => <Fragment key={index}>
+        {index === 1 && !section.heading && <div aria-hidden="true" className="document-subscribers__rule"><div/></div>}
+        {section.heading && <div className="document-subscribers__group">{t('Other users')}</div>}
+        {section.users.map(user => {
+          const checked = isSubscribed(user)
+          const name = user.displayName || user.name
+          const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'
+          return <button aria-checked={checked} aria-label={name} className="menu-option document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={disabled} key={user.id} onClick={() => void onToggle(user, checked)} role="checkbox" type="button">
+            <span className="document-subscribers__check" data-checked={checked}>{checked && <CheckboxMark/>}</span>
+            <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" color={avatarColor(user.id)} name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
+            <span className="document-subscribers__identity">
+              <span className="document-subscribers__name" data-i18n-ignore>{name}</span>
+              {user.app && <span className="document-subscribers__badge-line"><span className="document-subscribers__badge-wrap"><span className="document-subscribers__badge">{t('Agent')}</span></span></span>}
+            </span>
+          </button>
+        })}
+      </Fragment>)}
+      {!users.length && <p className="document-subscribers__empty">{t('No results')}</p>}
+    </div>
+  </>
 }

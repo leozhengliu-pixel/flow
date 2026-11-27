@@ -87,8 +87,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const { t } = useI18n()
   const deleted = Boolean(deletedEntry)
   const [title, setTitle] = useState(document.title)
-  const editorState = document.contentData ? JSON.stringify(document.contentData) : document.contentState
-  const [body, setBody] = useState({ value: document.content, state: editorState })
+  const [body, setBody] = useState(() => ({ value: document.content, state: document.contentData ? JSON.stringify(document.contentData) : document.contentState }))
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -119,7 +118,16 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const people = useResourcePeople(data.users, ownerOpen || subscribersOpen)
   const pending = useRef<number | undefined>(undefined)
   const bodyLoaded = !bodyPending && (!resourceWindowEnabled('documents') || documentBodyLoaded(data, document))
+  const [shouldMountEditor, setShouldMountEditor] = useState(false)
   const [titleFocused, setTitleFocused] = useState(false)
+
+  useEffect(() => {
+    // The title must get a paint before Tiptap's mount and plugin setup can block the main thread.
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => setShouldMountEditor(true))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
   const ctx: DocumentActionContext = { data: people === data.users ? data : { ...data, users: people }, reload: () => onReload(), navigate, t }
@@ -311,6 +319,9 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   }, !deleted)
 
   const documentUrlLabel = t('Copy document URL')
+  const editorPlaceholder = <div className="issue-description-root document-editor">
+    <div className="description-editor document-editor-placeholder"><p role="status">{t('Loading document')}</p></div>
+  </div>
 
   // One agent task directory for the page: comment cards show their own sessions (the reference app answers inside the thread).
   // An issue made from a comment's selection goes to the document's team and project.
@@ -381,12 +392,12 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         value={title}
       /></div>
       <div className="document-editor-shell" ref={setShell}>
-        <DocumentAuthorLabels document={document} enabled={authorNamesOpen} lastEditor={lastEditor} shell={shell} state={body.state}/>
-        {!bodyLoaded ? <div role="status">{t('Loading document')}</div> : <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>
+        <DocumentAuthorLabels document={document} editor={liveEditor} enabled={authorNamesOpen} lastEditor={lastEditor} shell={shell} state={body.state}/>
+        {!bodyLoaded || !shouldMountEditor ? editorPlaceholder : <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>
           {deleted
-            ? <IssueDescriptionEditor ariaLabel={t('Document content')} className="document-editor" key={`deleted:${document.id}`} placeholder="" readOnly state={editorState} users={data.users} value={document.content}/>
+            ? <IssueDescriptionEditor ariaLabel={t('Document content')} className="document-editor" editorRef={setLiveEditor} key={`deleted:${document.id}`} loadingFallback={editorPlaceholder} placeholder="" readOnly state={body.state} users={data.users} value={body.value}/>
             : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
-              readOnly={!canEdit} editorRef={setLiveEditor}
+              readOnly={!canEdit} editorRef={setLiveEditor} loadingFallback={editorPlaceholder}
               onPersistReady={persist => { persistEditorRef.current = persist }}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
               selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}

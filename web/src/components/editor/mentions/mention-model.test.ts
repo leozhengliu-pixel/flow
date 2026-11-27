@@ -1,7 +1,8 @@
 import type { JSONContent } from '@tiptap/core'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { resetAgentRecordCache } from '@/components/agent/agent-entity-fetch'
-import { makeIssue } from '@/test/fixtures'
+import { resolveAgentEntity } from '@/components/agent/agent-entity-refs'
+import { makeIssue, teammate } from '@/test/fixtures'
 import { mentionFixture, mentionLabels, mentionUrls } from './mention-fixtures'
 import { convertMentionLinks, linkMentionTarget, mentionAttrsForEntity, mentionKind, mentionMarkdown, mentionTarget, mentionText, typedIdentifierTarget } from './mention-model'
 
@@ -10,6 +11,21 @@ const link = (href: string, text: string): JSONContent => ({ type: 'text', text,
 const paragraph = (converted: JSONContent) => converted.content?.[0].content ?? []
 
 beforeEach(() => resetAgentRecordCache())
+
+it('resolves people against the latest directory without rescanning an unchanged users array', () => {
+  let reads = 0
+  const user = { ...teammate, get id() { reads++; return teammate.id } }
+  const data = mentionFixture({ users: [user] })
+  const target = { kind: 'user', id: teammate.id } as const
+  expect(resolveAgentEntity(data, target)).toEqual({ kind: 'user', user })
+  reads = 0
+  const refreshed = { ...data, projects: [] }
+  expect(resolveAgentEntity(refreshed, target)?.kind).toBe('user')
+  expect(reads).toBe(0)
+  const renamed = { ...teammate, displayName: 'Updated person' }
+  expect(resolveAgentEntity({ ...refreshed, users: [renamed] }, target)).toEqual({ kind: 'user', user: renamed })
+  expect(resolveAgentEntity({ ...refreshed, users: [] }, target)).toBeUndefined()
+})
 
 describe('mention markdown and plain text', () => {
   it('writes people as @name and every other resource as a link with its path', () => {

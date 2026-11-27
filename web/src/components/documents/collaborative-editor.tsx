@@ -19,6 +19,7 @@ export interface CollaborativeEditorProps {
   state?: string
   editorKey?: string
   className?: string
+  loadingFallback?: ReactNode
   placeholder?: string
   ariaLabel?: string
   presence: User[]
@@ -52,6 +53,7 @@ export function CollaborativeEditor({
   state,
   editorKey,
   className = 'document-editor',
+  loadingFallback,
   placeholder = 'Start writing…',
   ariaLabel = 'Document content',
   presence,
@@ -136,6 +138,7 @@ export function CollaborativeEditor({
         }}
         editorRef={editorRef}
         key={editorKey ?? `${document.id}`}
+        loadingFallback={loadingFallback}
         readOnly={readOnly}
         onChange={onChange}
         onInsertImage={onUploadFile}

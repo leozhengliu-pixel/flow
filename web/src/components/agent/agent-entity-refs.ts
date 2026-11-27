@@ -104,6 +104,20 @@ function findProject(data: BootstrapData, slugOrId: string) {
   return findBySlugRef(data.projects, slugOrId)
 }
 
+const usersById = new WeakMap<User[], Map<string, User>>()
+
+function findMentionedUser(users: User[] | undefined, id: string) {
+  if (!users) return undefined
+  let index = usersById.get(users)
+  if (!index) {
+    // Every mention in a document shares this index, even across unrelated bootstrap updates.
+    index = new Map()
+    for (const user of users) if (!index.has(user.id)) index.set(user.id, user)
+    usersById.set(users, index)
+  }
+  return index.get(id)
+}
+
 /** Resolves a shortcode target to the workspace entity it names; undefined when the client does not hold it. */
 export function resolveAgentEntity(data: BootstrapData, target: Pick<AgentEntityTarget, 'kind' | 'id'> & Partial<AgentEntityTarget>): AgentEntity | undefined {
   const { kind, id } = target
@@ -126,7 +140,7 @@ export function resolveAgentEntity(data: BootstrapData, target: Pick<AgentEntity
       return document ? { kind, document } : undefined
     }
     case 'user': {
-      const user = (data.users ?? []).find(item => item.id === id)
+      const user = findMentionedUser(data.users, id)
       return user ? { kind, user } : undefined
     }
     case 'team': {
