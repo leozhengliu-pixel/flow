@@ -920,25 +920,48 @@ func (s *server) sharedEventPolicy(ctx context.Context, workspace string, versio
 	return source.policy, nil
 }
 
+// syncAccessAttempts bounds how often resolveSyncAccess selects a new policy
+// source after a metadata write raced the previous one.
+const syncAccessAttempts = 3
+
+// syncAccessSourceSelectedHook, when set (tests only), runs after
+// resolveSyncAccess selected a policy source and before it resolves the
+// principal's access from that source.
+var syncAccessSourceSelectedHook func(ctx context.Context, attempt int)
+
+// resolveSyncAccess resolves the principal against the current policy source.
+// An unrelated metadata write that commits between selecting the source and
+// resolving from it (store.ErrEventAccessStale) is a race, not a denial: each
+// attempt reads current authority again, so membership, credential scope and
+// the authorization epoch are always checked live. After syncAccessAttempts
+// the stale error is returned for callers to answer as retryable.
 func (s *server) resolveSyncAccess(r *http.Request) (store.EventAccess, error) {
 	ctx, err := s.store.LiveEventContext(r.Context())
 	if err != nil {
 		return store.EventAccess{}, err
 	}
 	r = r.WithContext(ctx)
-	authority, err := s.readEventAuthority(r.Context(), workspaceKey(r))
-	if err != nil {
-		return store.EventAccess{}, err
-	}
-	policy, err := s.sharedEventPolicy(r.Context(), workspaceKey(r), authority.version)
-	if err != nil {
-		return store.EventAccess{}, err
-	}
 	var key *domain.APIKey
 	if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		key = &credential
 	}
-	return s.cachedEventAccess(r.Context(), policy, authority, authUser(r).ID, key)
+	for attempt := 1; ; attempt++ {
+		authority, err := s.readEventAuthority(r.Context(), workspaceKey(r))
+		if err != nil {
+			return store.EventAccess{}, err
+		}
+		policy, err := s.sharedEventPolicy(r.Context(), workspaceKey(r), authority.version)
+		if err != nil {
+			return store.EventAccess{}, err
+		}
+		if syncAccessSourceSelectedHook != nil {
+			syncAccessSourceSelectedHook(r.Context(), attempt)
+		}
+		access, err := s.cachedEventAccess(r.Context(), policy, authority, authUser(r).ID, key)
+		if !errors.Is(err, store.ErrEventAccessStale) || attempt == syncAccessAttempts || r.Context().Err() != nil {
+			return access, err
+		}
+	}
 }
 
 func frameSequence(event domain.RealtimeEvent) string { return strconv.FormatInt(event.Seq, 10) }

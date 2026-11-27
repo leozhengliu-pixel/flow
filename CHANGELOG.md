@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Paint the document title before preparing the editor, and speed up opening documents with many mentions in large workspaces.
+- Fix Sync V2 answering 403 "You don't have access to this workspace" to an authorized session when an unrelated metadata write, such as recording an API key's first use, committed while the request resolved access. The server now resolves access again against current authority (up to three times) and answers 503 with `Retry-After` if metadata keeps moving; removed members, revoked keys and other real access changes still answer 403. Sync streams send a reconnect hint instead of closing silently in the same case.
 - Fix slow startup with bounded metadata on for workspaces with many projects that have long progress histories. Each spool write looked at every remembered frame of the workspace source, so a start took quadratic time and 2,300 such projects did not finish opening within minutes; startup now finds the affected frames directly.
 - Merging, deleting or moving labels to teams updates workflow actions and Loop triggers and filters. Workflows limited to one team use its available copy, and required filters that lose their label stop matching.
 - Fix bounded workflow runs on issues with large editor state by validating borrowed frames against the issue collection's logical range.

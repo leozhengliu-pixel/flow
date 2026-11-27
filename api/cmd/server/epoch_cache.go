@@ -265,7 +265,9 @@ func (s *server) cachedEventAccess(ctx context.Context, source *store.EventPolic
 		return store.EventAccess{}, err
 	}
 	if authority.epoch != "" && access.AuthzEpoch != authority.epoch || access.SourceVersion() != authority.version {
-		return store.EventAccess{}, store.ErrAuthForbidden
+		// Authority moved after it was read. Resolving again against current
+		// authority decides whether access actually changed.
+		return store.EventAccess{}, store.ErrEventAccessStale
 	}
 	if cache.entries == nil {
 		cache.entries = map[eventAccessKey]eventAccessEntry{}

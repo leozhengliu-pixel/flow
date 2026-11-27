@@ -879,7 +879,9 @@ func issueRecordsErrorFor(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if errors.Is(err, store.ErrAuthForbidden) {
+	// A policy source that moved during resolution is retryable (below), not
+	// a denial, although it also matches ErrAuthForbidden.
+	if errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrEventAccessStale) {
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return
 	}

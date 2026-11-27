@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 type realtimeDatabaseHealth struct {
@@ -32,7 +35,9 @@ func (s *server) realtimeDatabaseError() error {
 // writeRealtimeRetry is used after the SSE response has started. The retry
 // field carries no event or ID, so it leaves the resume cursor alone.
 func writeRealtimeRetry(w http.ResponseWriter, err error) bool {
-	if !databaseReadUnavailable(err) {
+	// A policy source that kept moving while access was resolved is no
+	// denial either: the client reconnects from its cursor and resolves again.
+	if !databaseReadUnavailable(err) && !errors.Is(err, store.ErrEventAccessStale) {
 		return false
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
