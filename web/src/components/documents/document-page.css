@@ -655,8 +655,8 @@ button.document-icon.is-empty:hover,
     scrollbar-width: none;
   }
   .document-subscribers__group {
+    /* The heading follows the pinned rows. The next row reserves its space. */
     position: absolute;
-    top: 52px;
     left: 6px;
     right: 6px;
     width: auto;
