@@ -85,8 +85,16 @@ func documentBodyRoute(r *http.Request) bool {
 	path := r.URL.EscapedPath()
 	switch r.Method {
 	case http.MethodPost:
-		return path == "/api/documents"
+		if r.URL.RawPath == "" {
+			return path == "/api/documents"
+		}
+		_, ok := scaleEscapedRouteParts(r, "/api/documents")
+		return ok
 	case http.MethodPatch:
+		if r.URL.RawPath != "" {
+			_, ok := scaleEscapedRouteParts(r, "/api/documents/{id}")
+			return ok
+		}
 		id, ok := strings.CutPrefix(path, "/api/documents/")
 		return ok && id != "" && !strings.Contains(id, "/")
 	}
@@ -113,6 +121,9 @@ type documentRequestBodyKey struct{}
 
 func withDocumentRequestBody(s *server, w http.ResponseWriter, r *http.Request) *http.Request {
 	body := &documentRequestBody{server: s, w: w, body: r.Body, length: r.ContentLength}
+	if unsupportedJSONEncoding(r) {
+		body.err = errDocumentBodySyntax
+	}
 	return r.WithContext(context.WithValue(r.Context(), documentRequestBodyKey{}, body))
 }
 
@@ -139,7 +150,9 @@ func (s *server) documentRequestBodies(next http.Handler) http.Handler {
 
 func (b *documentRequestBody) decode(ctx context.Context) error {
 	b.once.Do(func() {
-		b.fields, b.err = b.server.readDocumentBody(ctx, b.w, b.body, b.length, &b.input)
+		if b.err == nil {
+			b.fields, b.err = b.server.readDocumentBody(ctx, b.w, b.body, b.length, &b.input)
+		}
 		b.body = nil
 	})
 	return b.err
@@ -163,7 +176,7 @@ func (b *documentRequestBody) peek(ctx context.Context, value any) bool {
 func (s *server) decodeDocumentBody(w http.ResponseWriter, r *http.Request, input *documentInput) bool {
 	body := requestDocumentBody(r)
 	if body == nil {
-		body = &documentRequestBody{server: s, w: w, body: r.Body, length: r.ContentLength}
+		body = requestDocumentBody(withDocumentRequestBody(s, w, r))
 	}
 	if err := body.decode(r.Context()); err != nil {
 		writeDocumentBodyError(w, err)
@@ -173,12 +186,16 @@ func (s *server) decodeDocumentBody(w http.ResponseWriter, r *http.Request, inpu
 	return true
 }
 
-// decodeRequestDocumentBody decodes the request's document body, if it has
-// one, and answers its error.
-func decodeRequestDocumentBody(w http.ResponseWriter, r *http.Request) bool {
+// decodeRequestDocumentBody shares the document decode with the handler,
+// including when authorization is called without documentRequestBodies.
+func (s *server) decodeRequestDocumentBody(w http.ResponseWriter, r *http.Request) bool {
 	body := requestDocumentBody(r)
 	if body == nil {
-		return true
+		if !documentBodyRoute(r) {
+			return true
+		}
+		*r = *withDocumentRequestBody(s, w, r)
+		body = requestDocumentBody(r)
 	}
 	if err := body.decode(r.Context()); err != nil {
 		writeDocumentBodyError(w, err)
@@ -239,9 +256,9 @@ func (s *server) readDocumentBody(ctx context.Context, w http.ResponseWriter, bo
 // decodeDocumentObject decodes one JSON document request object from src
 // into input, as encoding/json would, and returns
 // its small members as a JSON object. content and contentState strings are
-// decoded from the stream into their fields; contentData and the other
-// members are buffered as JSON and decoded with encoding/json. One of
-// content, contentState or contentData named twice is refused.
+// decoded from the stream into their fields. contentData and the other
+// members are buffered as JSON and decoded with encoding/json. The
+// authorization projection preserves large member names without their values.
 func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 	stream := &jsonValueStream{r: bufio.NewReaderSize(src, 64<<10)}
 	first, err := stream.nextByte()
@@ -249,22 +266,12 @@ func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 		return nil, err
 	}
 	if first != '{' {
-		// Not an object (null, a list...): encoding/json decides.
-		var raw bytes.Buffer
-		if err := stream.r.UnreadByte(); err != nil {
-			return nil, err
-		}
-		if err := stream.copyValue(&raw); err != nil {
-			return nil, err
-		}
-		if json.Unmarshal(raw.Bytes(), input) != nil {
-			return nil, errDocumentBodySyntax
-		}
-		return raw.Bytes(), nil
+		return nil, errDocumentBodySyntax
 	}
 	streamedStrings := map[string]**string{"content": &input.Content, "contentState": &input.ContentState}
 	seen := map[string]bool{}
 	var fields, contentData, key bytes.Buffer
+	var largeMembers []string
 	fields.WriteByte('{')
 	c, err := stream.nextByte()
 	for err == nil && c != '}' {
@@ -303,6 +310,7 @@ func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 				return nil, err
 			}
 			*field = &value
+			largeMembers = append(largeMembers, name)
 		case name == "contentData":
 			if err := stream.r.UnreadByte(); err != nil {
 				return nil, err
@@ -310,6 +318,7 @@ func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 			if err := stream.copyValue(&contentData); err != nil {
 				return nil, err
 			}
+			largeMembers = append(largeMembers, name)
 		default:
 			if fields.Len() > 1 {
 				fields.WriteByte(',')
@@ -338,6 +347,9 @@ func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err := stream.nextNonSpace(); !errors.Is(err, io.EOF) {
+		return nil, streamError(err)
+	}
 	fields.WriteByte('}')
 	if json.Unmarshal(fields.Bytes(), input) != nil {
 		return nil, errDocumentBodySyntax
@@ -347,6 +359,20 @@ func decodeDocumentObject(src io.Reader, input *documentInput) ([]byte, error) {
 		if json.Unmarshal(contentData.Bytes(), &input.ContentData) != nil {
 			return nil, errDocumentBodySyntax
 		}
+	}
+	// A patch with content and a favorite must not look like a favorite-only
+	// patch to authorization. Record member presence after decoding the values.
+	if len(largeMembers) > 0 {
+		fields.Truncate(fields.Len() - 1)
+		for _, name := range largeMembers {
+			if fields.Len() > 1 {
+				fields.WriteByte(',')
+			}
+			fields.WriteByte('"')
+			fields.WriteString(name)
+			fields.WriteString(`":null`)
+		}
+		fields.WriteByte('}')
 	}
 	return fields.Bytes(), nil
 }
@@ -368,10 +394,18 @@ func streamError(err error) error {
 
 // nextByte is the next byte that is not JSON whitespace.
 func (s *jsonValueStream) nextByte() (byte, error) {
+	c, err := s.nextNonSpace()
+	if err != nil {
+		return 0, streamError(err)
+	}
+	return c, nil
+}
+
+func (s *jsonValueStream) nextNonSpace() (byte, error) {
 	for {
 		c, err := s.r.ReadByte()
 		if err != nil {
-			return 0, streamError(err)
+			return 0, err
 		}
 		if !jsonSpace(c) {
 			return c, nil

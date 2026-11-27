@@ -187,25 +187,30 @@ func TestLegacyCommentActionReadAllocations(t *testing.T) {
 	defer fallbackGate.projectionBudget.used.Release(1)
 	authenticated := commentActionReadScopeHandler(service, fallbackGate, false)
 	for _, test := range []struct {
-		name, method, path, body string
-		handler                  http.Handler
+		name, method, path string
+		handler            http.Handler
 	}{
 		{name: "development HEAD", method: http.MethodHead, path: "/api/issues/" + issue.ID + "/comment-actions", handler: fallbackGate.holdProjections(mux)},
 		{name: "release filter", method: http.MethodGet, path: path + "?releaseId=missing-release", handler: authenticated},
-		{name: "extra issue IDs", method: http.MethodGet, path: path, body: `{"issueIds":["another-issue"]}`, handler: authenticated},
 	} {
 		request := commentActionReadScopeRequest(workspace, test.path, owner, nil)
 		request.Method = test.method
-		if test.body != "" {
-			request = httptest.NewRequestWithContext(request.Context(), test.method, test.path, strings.NewReader(test.body))
-			request.Header.Set("X-Workspace-Key", workspace)
-			request.Header.Set("Content-Type", "application/json")
-		}
 		response := httptest.NewRecorder()
 		test.handler.ServeHTTP(response, request)
 		if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") == "" {
 			t.Fatalf("%s bypassed projection budget: HTTP %d (%s)", test.name, response.Code, response.Body.String())
 		}
+	}
+
+	// A GET body cannot expand the authorization read beyond the path.
+	request := commentActionReadScopeRequest(workspace, path, owner, nil)
+	request = httptest.NewRequestWithContext(request.Context(), http.MethodGet, path, strings.NewReader(`{"issueIds":["another-issue"]}`))
+	request.Header.Set("X-Workspace-Key", workspace)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	authenticated.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != "[]\n" {
+		t.Fatalf("GET body changed the path-only read: HTTP %d (%s)", response.Code, response.Body.String())
 	}
 }
 

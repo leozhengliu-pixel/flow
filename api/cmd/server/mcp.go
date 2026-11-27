@@ -81,16 +81,29 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			return
 		}
 		var request mcpRPCRequest
-		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		if unsupportedJSONEncoding(r) {
+			writeMCPParseError(w)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
 		stripRequestJSONNUL(r)
 		decoder := json.NewDecoder(r.Body)
 		var envelope json.RawMessage
-		if err := decoder.Decode(&envelope); err != nil {
-			s.writeMCPError(w, nil, -32700, "Parse error", nil)
-			return
+		err := decoder.Decode(&envelope)
+		if err == nil {
+			if err = decoder.Decode(new(json.RawMessage)); err == io.EOF {
+				err = nil
+			} else if err == nil {
+				err = errAuthorizationJSON
+			}
 		}
-		if err := decoder.Decode(new(any)); err != io.EOF {
-			s.writeMCPError(w, nil, -32700, "Parse error", nil)
+		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				requestDecodeError(w, err)
+			} else {
+				writeMCPParseError(w)
+			}
 			return
 		}
 		decoder = json.NewDecoder(bytes.NewReader(envelope))
@@ -462,6 +475,10 @@ func mcpPatchNotAList(args map[string]any) bool {
 
 func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message string, data any) {
 	writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Error: &mcpRPCError{Code: code, Message: message, Data: data}})
+}
+
+func writeMCPParseError(w http.ResponseWriter) {
+	writeJSON(w, http.StatusBadRequest, mcpRPCResponse{JSONRPC: "2.0", Error: &mcpRPCError{Code: -32700, Message: "Parse error"}})
 }
 
 // toolInternalError replaces a database or driver error in a tool result: the

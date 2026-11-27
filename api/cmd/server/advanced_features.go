@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -3550,6 +3549,11 @@ func (s *server) previewImport(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
+type importCommitInput struct {
+	Mapping map[string]string `json:"mapping"`
+	TeamID  string            `json:"teamId"`
+}
+
 // commitImport acknowledges quickly and processes rows in a background worker.
 // The worker uses a detached context so a browser closing the mapping dialog
 // cannot abort a job that was already accepted.
@@ -3567,23 +3571,24 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 			<-s.importSlots
 		}
 	}()
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := readAuthorizationBody(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid import request")
+		requestDecodeError(w, err)
 		return
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	var input struct {
-		Mapping map[string]string `json:"mapping"`
-		TeamID  string            `json:"teamId"`
+	var input importCommitInput
+	if err := json.Unmarshal(body, &input); err != nil {
+		requestDecodeError(w, err)
+		return
 	}
-	if json.Unmarshal(body, &input) != nil || input.Mapping["title"] == "" || strings.TrimSpace(input.TeamID) == "" {
+	if input.Mapping["title"] == "" || strings.TrimSpace(input.TeamID) == "" {
 		writeError(w, http.StatusBadRequest, "title mapping and teamId are required")
 		return
 	}
 	id := r.PathValue("id")
+	workspace := workspaceKey(r)
 	var job domain.ImportJob
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.queued", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspace, "import.queued", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if index < 0 {
 			return errNotFound
@@ -3613,25 +3618,13 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 		defer stop()
 		ctx, cancel := context.WithTimeout(parent, 30*time.Minute)
 		defer cancel()
-		request := r.Clone(ctx)
-		request.Body = io.NopCloser(bytes.NewReader(body))
-		s.commitImportSync(httptest.NewRecorder(), request)
+		s.commitImportSync(ctx, workspace, id, input)
 	})
 	writeJSON(w, http.StatusAccepted, job)
 }
 
-func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Mapping map[string]string `json:"mapping"`
-		TeamID  string            `json:"teamId"`
-	}
-	if !decodeJSON(w, r, &input) || input.Mapping["title"] == "" {
-		writeError(w, http.StatusBadRequest, "title mapping is required")
-		return
-	}
-	id := r.PathValue("id")
-	var updated domain.ImportJob
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.committed", id, input, func(data *domain.Bootstrap) error {
+func (s *server) commitImportSync(ctx context.Context, workspace, id string, input importCommitInput) {
+	err := s.store.MutateWorkspace(ctx, workspace, "import.committed", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if index < 0 {
 			return errNotFound
@@ -3846,13 +3839,12 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 		if job.Status == "completed" {
 			job.Rows = nil
 		}
-		updated = *job
 		appendAudit(data, "completed", "import", id, map[string]any{"imported": job.Imported, "errors": len(job.Errors)})
 		return nil
 	})
 	if err != nil {
 		failure := err.Error()
-		_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "import.failed", id, nil, func(data *domain.Bootstrap) error {
+		_ = s.store.MutateWorkspace(ctx, workspace, "import.failed", id, nil, func(data *domain.Bootstrap) error {
 			index := slices.IndexFunc(data.ImportJobs, func(job domain.ImportJob) bool {
 				return job.ID == id && job.UserID == data.Viewer.ID && job.Status == "running"
 			})
@@ -3865,7 +3857,6 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 	}
-	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func importedPriority(value string) (int, bool) {

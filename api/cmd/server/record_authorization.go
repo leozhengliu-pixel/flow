@@ -62,32 +62,34 @@ func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, 
 			if r.Method == http.MethodPost && len(parts) == 2 || r.Method == http.MethodPatch {
 				if parts[1] == "projects" {
 					var input domain.ProjectMutationInput
-					if peekRequestJSON(r, &input) {
-						for _, id := range input.Initiatives {
-							initiative(id)
-						}
-						for _, id := range input.Customers {
-							scope.Read = append(scope.Read, store.RecordKey{Kind: "customers", ID: id})
-						}
-						for _, id := range input.DependencyIDs {
-							project(id)
-						}
-						for _, relation := range input.DependencyRelations {
-							project(relation.ProjectID)
-						}
+					if !peekRequestJSON(r, &input) {
+						return store.MetadataRecordScope{}, false
+					}
+					for _, id := range input.Initiatives {
+						initiative(id)
+					}
+					for _, id := range input.Customers {
+						scope.Read = append(scope.Read, store.RecordKey{Kind: "customers", ID: id})
+					}
+					for _, id := range input.DependencyIDs {
+						project(id)
+					}
+					for _, relation := range input.DependencyRelations {
+						project(relation.ProjectID)
 					}
 				} else {
 					var input domain.InitiativeMutationInput
-					if peekRequestJSON(r, &input) {
-						if input.ProjectIDs != nil {
-							for _, id := range *input.ProjectIDs {
-								project(id)
-							}
+					if !peekRequestJSON(r, &input) {
+						return store.MetadataRecordScope{}, false
+					}
+					if input.ProjectIDs != nil {
+						for _, id := range *input.ProjectIDs {
+							project(id)
 						}
-						if input.ParentInitiativeIDs != nil {
-							for _, id := range *input.ParentInitiativeIDs {
-								initiative(id)
-							}
+					}
+					if input.ParentInitiativeIDs != nil {
+						for _, id := range *input.ParentInitiativeIDs {
+							initiative(id)
 						}
 					}
 				}
@@ -95,7 +97,10 @@ func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, 
 			if len(parts) >= 4 && parts[3] == "relations" {
 				if parts[1] == "projects" {
 					var input domain.ProjectRelation
-					if r.Method == http.MethodPost && peekRequestJSON(r, &input) {
+					if r.Method == http.MethodPost {
+						if !peekRequestJSON(r, &input) {
+							return store.MetadataRecordScope{}, false
+						}
 						project(input.RelatedProjectID)
 					}
 					for _, relation := range source.ProjectRelations {
@@ -106,7 +111,10 @@ func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, 
 					}
 				} else {
 					var input domain.InitiativeRelation
-					if r.Method == http.MethodPost && peekRequestJSON(r, &input) {
+					if r.Method == http.MethodPost {
+						if !peekRequestJSON(r, &input) {
+							return store.MetadataRecordScope{}, false
+						}
 						initiative(input.RelatedInitiativeID)
 					}
 					for _, relation := range source.InitiativeRelations {
@@ -119,6 +127,9 @@ func (s *server) projectRecordAuthorizationMetadata(r *http.Request, workspace, 
 			}
 			return scope, len(scope.Read) <= store.MetadataRecordBatchMaxKeys
 		})
+		if bodyErr := authorizationBodyError(r); bodyErr != nil {
+			return domain.Bootstrap{}, bodyErr, true
+		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || !errors.Is(err, store.ErrAuthForbidden) {
 			break
 		}

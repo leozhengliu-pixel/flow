@@ -7438,6 +7438,13 @@ func priorityLabel(priority int) string {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	if body := bufferedAuthorizationJSON(r); body != nil {
+		if err := body.decode(target, false); err != nil {
+			requestDecodeError(w, err)
+			return false
+		}
+		return true
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
 	stripRequestJSONNUL(r)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
@@ -7451,15 +7458,17 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 // not support is rejected with 400 instead of being silently ignored, so a
 // client never sees success for a change that was not made.
 func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
-	stripRequestJSONNUL(r)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
-			writeError(w, http.StatusBadRequest, "Unsupported field "+field)
-			return false
-		}
+	var err error
+	if body := bufferedAuthorizationJSON(r); body != nil {
+		err = body.decode(target, true)
+	} else {
+		r.Body = http.MaxBytesReader(w, r.Body, jsonRequestLimit())
+		stripRequestJSONNUL(r)
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		err = decoder.Decode(target)
+	}
+	if err != nil {
 		requestDecodeError(w, err)
 		return false
 	}

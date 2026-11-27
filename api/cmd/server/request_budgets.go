@@ -43,5 +43,9 @@ func requestDecodeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusRequestEntityTooLarge, "Request body is too large")
 		return
 	}
+	if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+		writeError(w, http.StatusBadRequest, "Unsupported field "+field)
+		return
+	}
 	writeError(w, http.StatusBadRequest, "invalid JSON")
 }

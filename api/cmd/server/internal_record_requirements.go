@@ -26,6 +26,28 @@ type internalRequesterAuthorization struct {
 	actor   mcpActor
 }
 
+func internalJSONRequest(ctx context.Context, method, path string, values map[string]string, input any) (*http.Request, error) {
+	var body io.Reader
+	if input != nil {
+		raw, err := json.Marshal(input)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(raw)
+	}
+	// The synthetic request has its own body, even when its caller was a
+	// request with a decoded body.
+	if ctx.Value(documentRequestBodyKey{}) != nil {
+		ctx = context.WithValue(ctx, documentRequestBodyKey{}, (*documentRequestBody)(nil))
+	}
+	request := withAuthorizationBody(httptest.NewRequest(method, "http://flow.internal"+path, body).WithContext(ctx))
+	request.Header.Set("Content-Type", "application/json")
+	for name, value := range values {
+		request.SetPathValue(name, value)
+	}
+	return request, nil
+}
+
 func (s *server) mutateInternalConversation(r *http.Request, input any, mutate func(*domain.Bootstrap) error) error {
 	ctx := r.Context()
 	scoped := internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") && store.RecordHydrationEnabled(ctx)
@@ -44,8 +66,8 @@ func (s *server) mutateInternalConversation(r *http.Request, input any, mutate f
 // The older in-process JSON adapter has no URL. Register its actual HTTP
 // routes explicitly so delegated calls still check both principals before
 // the handler mutates anything.
-func authorizeInternalJSONHandler(ctx context.Context, method string, values map[string]string, input any, handler http.HandlerFunc) error {
-	auth, enabled := ctx.Value(internalRequesterAuthorizationKey{}).(internalRequesterAuthorization)
+func authorizeInternalJSONHandler(r *http.Request, values map[string]string, handler http.HandlerFunc) error {
+	auth, enabled := r.Context().Value(internalRequesterAuthorizationKey{}).(internalRequesterAuthorization)
 	if !enabled || auth.actor.AuthorizationUserID == "" {
 		return nil
 	}
@@ -77,18 +99,9 @@ func authorizeInternalJSONHandler(ctx context.Context, method string, values map
 		for name, value := range values {
 			path = strings.ReplaceAll(path, "{"+name+"}", value)
 		}
-		raw, err := json.Marshal(input)
-		if err != nil {
-			return err
-		}
-		request, err := http.NewRequestWithContext(ctx, method, "http://flow.internal"+path, bytes.NewReader(raw))
-		if err != nil {
-			return err
-		}
-		request.Header.Set("Content-Type", "application/json")
-		for name, value := range values {
-			request.SetPathValue(name, value)
-		}
+		prepareAuthorizationBody(r)
+		request := r.Clone(r.Context())
+		request.URL.Path = path
 		return s.internalAuthorizeRequester(request, auth.actor)
 	}
 	return fmt.Errorf("internal route requirements are not registered")
@@ -102,22 +115,9 @@ func (s *server) internalAuthorizeRequester(r *http.Request, actor mcpActor) err
 	if err != nil || !user.Active {
 		return fmt.Errorf("requester access was revoked")
 	}
-	ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
-	request := r.Clone(ctx)
-	if r.GetBody != nil {
-		request.Body, err = r.GetBody()
-		if err != nil {
-			return err
-		}
-		defer request.Body.Close()
-	} else if r.Body != nil && r.Body != http.NoBody {
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			return err
-		}
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		request.Body = io.NopCloser(bytes.NewReader(raw))
-	}
+	// Both principals and the handler use the same bounded decode.
+	prepareAuthorizationBody(r)
+	request := r.Clone(context.WithValue(r.Context(), authUserContextKey{}, user))
 	response := httptest.NewRecorder()
 	if !s.authorizeWorkspaceRequest(response, request, user) {
 		if _, err := mcpHandlerResult(response); err != nil {

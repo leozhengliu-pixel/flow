@@ -497,10 +497,22 @@ func TestImportMappingAndBackgroundExport(t *testing.T) {
 	state := statesForTeam(&bootstrap, team.ID)[0]
 	csvBody := "Title,Description,Priority,Status,Assignee,Labels,Project,Due Date\nImported workflow,Imported body,High," + state.Name + "," + user.Email + "," + label.Name + "," + project.Name + ",2026-09-30\n"
 	job := previewImportRequest(t, handler, "issues.csv", csvBody)
-	requestJSON[domain.ImportJob](t, handler, http.MethodPost, "/api/imports/"+job.ID+"/commit", map[string]any{
+	commitPath := "/api/imports/" + job.ID + "/commit"
+	input := string(mustJSON(t, map[string]any{
 		"teamId":  team.ID,
 		"mapping": map[string]string{"title": "Title", "description": "Description", "priority": "Priority", "status": "Status", "assignee": "Assignee", "labels": "Labels", "project": "Project", "dueDate": "Due Date"},
-	}, http.StatusAccepted)
+	}))
+	malformed := httptest.NewRecorder()
+	handler.ServeHTTP(malformed, httptest.NewRequest(http.MethodPost, commitPath, strings.NewReader(input+"{")))
+	if malformed.Code != http.StatusBadRequest {
+		t.Fatalf("malformed import was queued: %d", malformed.Code)
+	}
+	assertInvalidAuthorizationBody(t, malformed.Body.Bytes())
+	accepted := httptest.NewRecorder()
+	handler.ServeHTTP(accepted, httptest.NewRequest(http.MethodPost, commitPath, strings.NewReader(strings.Repeat(" ", 1<<20)+input)))
+	if accepted.Code != http.StatusAccepted {
+		t.Fatalf("large import was refused: %d %s", accepted.Code, accepted.Body)
+	}
 	job = waitForImport(t, handler, job.ID)
 	if job.Status != "completed" || job.Imported != 1 || len(job.Errors) != 0 {
 		t.Fatalf("import did not complete: %#v", job)

@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/mail"
@@ -26,22 +24,13 @@ import (
 // and team-restricted resource visibility. Agent writes therefore cannot do
 // anything the equivalent REST request from the same actor could not.
 func (s *server) invokeMCPRoute(ctx context.Context, actor mcpActor, method, path string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {
-	var body io.Reader
-	if input != nil {
-		raw, err := json.Marshal(input)
-		if err != nil {
-			return nil, err
-		}
-		body = bytes.NewReader(raw)
-	}
 	ctx = context.WithValue(ctx, authUserContextKey{}, actor.User)
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, actor.WorkspaceKey)
 	ctx = store.ContextWithActor(ctx, actor.User)
-	request := httptest.NewRequest(method, "http://flow.internal"+path, body).WithContext(ctx)
-	request.Header.Set("Content-Type", "application/json")
-	for key, value := range pathValues {
-		request.SetPathValue(key, value)
+	request, err := internalJSONRequest(ctx, method, path, pathValues, input)
+	if err != nil {
+		return nil, err
 	}
 	if documentBodyRoute(request) {
 		// Authorization and the handler share one decode of a document body,
@@ -51,12 +40,15 @@ func (s *server) invokeMCPRoute(ctx context.Context, actor mcpActor, method, pat
 	if err := s.internalAuthorizeRequester(request, actor); err != nil {
 		return nil, err
 	}
+	response := httptest.NewRecorder()
 	// Keys minted by users carry an ID; the in-app agent's session actor uses
 	// a synthetic read/write key whose scopes were already checked upstream.
 	if actor.APIKey.ID != "" && !apiKeyAllowsRequest(request, actor.APIKey) {
+		if writeAuthorizationBodyError(response, request) {
+			return mcpHandlerResult(response)
+		}
 		return nil, fmt.Errorf("this API key's scopes do not allow this action")
 	}
-	response := httptest.NewRecorder()
 	if !s.authorizeWorkspaceRequest(response, request, actor.User) {
 		return mcpHandlerResult(response)
 	}

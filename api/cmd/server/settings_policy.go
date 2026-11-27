@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"flow/api/internal/domain"
@@ -44,15 +46,8 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 		if r.Method == http.MethodDelete {
 			return "owners"
 		}
-		var patch map[string]any
-		if !peekRequestJSON(r, &patch) {
+		if teamOwnerPatch(r, "retired", "private", "subTeamAction", "parentTeamId") {
 			return "owners"
-		}
-		for key := range patch {
-			switch key {
-			case "retired", "private", "subTeamAction", "parentTeamId":
-				return "owners"
-			}
 		}
 		return settings.SettingsPermission
 	}
@@ -75,20 +70,27 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 	case strings.HasSuffix(path, "/default-favorites"):
 		return "owners"
 	case strings.HasSuffix(path, "/settings"):
-		var patch map[string]any
-		if !peekRequestJSON(r, &patch) {
+		if teamOwnerPatch(r, "access", "membershipRestriction", "settingsPermission", "labelPermission", "templatePermission", "agentSkillPermission", "loopPermission", "memberPermission", "pinnedViewPermission", "parentTeamId") {
 			return "owners"
-		}
-		for key := range patch {
-			switch key {
-			case "access", "membershipRestriction", "settingsPermission", "labelPermission", "templatePermission", "agentSkillPermission", "loopPermission", "memberPermission", "pinnedViewPermission", "parentTeamId":
-				return "owners"
-			}
 		}
 		return settings.SettingsPermission
 	default:
 		return settings.SettingsPermission
 	}
+}
+
+func teamOwnerPatch(r *http.Request, fields ...string) bool {
+	var patch map[string]json.RawMessage
+	if !peekRequestJSON(r, &patch) {
+		return true
+	}
+	for key := range patch {
+		// Match the handler's case-insensitive struct field lookup.
+		if slices.ContainsFunc(fields, func(field string) bool { return strings.EqualFold(key, field) }) {
+			return true
+		}
+	}
+	return false
 }
 
 func teamOperationAllowed(settings domain.TeamSettings, permission, teamRole, workspaceRole string) bool {

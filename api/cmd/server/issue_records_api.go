@@ -281,7 +281,7 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueCreateInput
 	if !peekRequestJSON(r, &input) {
-		writeError(w, 400, "invalid issue input")
+		writeAuthorizationBodyError(w, r)
 		return
 	}
 	if err := checkIssueTitle(strings.TrimSpace(input.Title)); err != nil {

@@ -1056,6 +1056,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Security
 
+- Authorization validates the complete JSON body within the route's size limit before using its fields for permissions or OAuth attribution. Invalid or oversized bodies are refused before the handler can write.
 - Upgrade `github.com/go-jose/go-jose/v4` to v4.1.6 to address panics in JSON
   and CBC-HMAC processing and denial of service when parsing RSA JWKs used by
   OIDC discovery and token verification.

@@ -101,9 +101,10 @@ func documentReadRequirements(data domain.Bootstrap, r *http.Request) (store.Met
 		scope = documentRecordRequirements(data, *document, nil)
 		if r.Method == http.MethodPatch {
 			var input documentInput
-			if peekRequestJSON(r, &input) {
-				scope = documentRecordRequirements(data, *document, input)
+			if !peekRequestJSON(r, &input) {
+				return store.MetadataRecordScope{}, false
 			}
+			scope = documentRecordRequirements(data, *document, input)
 		}
 		scope.Fields = slices.Clone(documentRecordReadFields)
 		return scope, true
@@ -135,7 +136,10 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 		}
 		if r.Method == http.MethodPatch {
 			var input documentInput
-			if peekRequestJSON(r, &input) && input.ProjectIDs != nil {
+			if !peekRequestJSON(r, &input) {
+				return domain.Bootstrap{}, authorizationBodyError(r), true
+			}
+			if input.ProjectIDs != nil {
 				request.ProjectIDs = normalizedStrings(*input.ProjectIDs)
 			}
 		}
@@ -175,6 +179,9 @@ func (s *server) documentAuthorizationMetadata(r *http.Request, workspace, userI
 		data, err = s.store.SelectedDocumentMetadata(r.Context(), workspace, userID, documentRecordCredential(r), func(data domain.Bootstrap) (store.MetadataRecordScope, bool) {
 			return documentReadRequirements(data, r)
 		})
+		if bodyErr := authorizationBodyError(r); bodyErr != nil {
+			return domain.Bootstrap{}, bodyErr, true
+		}
 		if !errors.Is(err, store.ErrResourceAccessChanged) || !errors.Is(err, store.ErrAuthForbidden) {
 			break
 		}

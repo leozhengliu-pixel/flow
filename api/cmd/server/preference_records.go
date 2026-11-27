@@ -27,8 +27,18 @@ func embeddedFavoriteRequest(r *http.Request) bool {
 	if !peekRequestJSON(r, &fields) || len(fields) != 1 {
 		return false
 	}
-	var value *bool
-	return json.Unmarshal(fields["favorite"], &value) == nil && value != nil
+	for key, raw := range fields {
+		if !strings.EqualFold(key, "favorite") {
+			return false
+		}
+		var value *bool
+		if json.Unmarshal(raw, &value) != nil {
+			prepareAuthorizationBody(r).err = errAuthorizationJSON
+			return false
+		}
+		return value != nil
+	}
+	return false
 }
 
 func favoriteMutationEvent(fallback string, input any) string {

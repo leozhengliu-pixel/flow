@@ -288,7 +288,11 @@ func (fx *harnessFixture) runPart(t *testing.T, label string, rows []harnessRow,
 										}
 									}
 									got := outcome{allowed, resource, recorder.Code, recorder.Body.String(), recorder.Header().Clone(), pattern}
-									if allowed && (recorder.Code != http.StatusOK && recorder.Code != http.StatusNotFound || recorder.Code == http.StatusOK && pattern != item.pattern) || !allowed && recorder.Code != http.StatusForbidden && recorder.Code != http.StatusNotFound {
+									bodyRefusal := !allowed && recorder.Code == http.StatusBadRequest && authorizationBodyError(request) != nil
+									if bodyRefusal {
+										assertInvalidAuthorizationBody(t, recorder.Body.Bytes())
+									}
+									if allowed && (recorder.Code != http.StatusOK && recorder.Code != http.StatusNotFound || recorder.Code == http.StatusOK && pattern != item.pattern) || !allowed && !bodyRefusal && recorder.Code != http.StatusForbidden && recorder.Code != http.StatusNotFound {
 										release()
 										t.Fatalf("unexpected middleware result %+v", got)
 									}

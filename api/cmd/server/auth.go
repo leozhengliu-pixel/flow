@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -124,6 +122,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 		// scope could be accidentally upgraded by an ambient cookie session.
 		authorizationHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 		user, apiKey, apiWorkspace, keyErr := s.authenticateAPIKey(r)
+		if writeAuthorizationBodyError(w, r) {
+			return
+		}
 		if apiKey == nil {
 			if authorizationHeader != "" {
 				if !writeAuthCheckFailure(w, keyErr) {
@@ -166,7 +167,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			// OAuth tokens attribute what they create to "<User> via <App>".
 			via, err := s.oauthRequestAttribution(r, *apiKey)
 			if err != nil {
-				writeErrorFor(w, r, http.StatusBadRequest, err)
+				if !writeAuthorizationBodyError(w, r) {
+					writeErrorFor(w, r, http.StatusBadRequest, err)
+				}
 				return
 			}
 			user.Via = via
@@ -317,6 +320,7 @@ func apiKeyHasScope(key domain.APIKey, scope string) bool {
 	if key.Scopes == nil {
 		return true
 	}
+	scope = canonicalAPIKeyScope(scope)
 	for _, value := range key.Scopes {
 		canonical := canonicalAPIKeyScope(value)
 		if canonical == scope || canonical == "admin" {
@@ -532,11 +536,11 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 	redactAPIKeyReferences(data, key)
 }
 
-// A member may join or leave their own public/open team. Changes involving a
-// different user or assigning the owner role remain owner/admin operations.
-func membershipSelfServiceRequest(r *http.Request, userID string) bool {
-	_, ok := membershipSelfServiceAction(r, userID)
-	return ok
+type teamMembershipUpdateInput struct {
+	Role   string `json:"role"`
+	Member *bool  `json:"member"`
+	// Origin replaces the stored origin when explicitly supplied.
+	Origin string `json:"origin,omitempty"`
 }
 
 // membershipSelfServiceAction returns whether the caller is joining (true) or
@@ -546,10 +550,7 @@ func membershipSelfServiceAction(r *http.Request, userID string) (bool, bool) {
 	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/api/workspaces/") || !strings.Contains(r.URL.Path, "/teams/") || !strings.HasSuffix(r.URL.Path, "/members/"+userID) {
 		return false, false
 	}
-	var input struct {
-		Role   string `json:"role"`
-		Member *bool  `json:"member"`
-	}
+	var input teamMembershipUpdateInput
 	if !peekRequestJSON(r, &input) || input.Member == nil {
 		return false, false
 	}
@@ -778,13 +779,20 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		}
 		return false
 	}
-	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
+	joining, selfService := membershipSelfServiceAction(r, user.ID)
+	if writeAuthorizationBodyError(w, r) {
+		return false
+	}
+	if teamManagementRequest(r) && !workspaceAdminRole(role) && !selfService {
 		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
+		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
+		if writeAuthorizationBodyError(w, r) {
+			return false
+		}
 		teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
 		if writeStoreReadUnavailable(w, err) {
 			return false
 		}
-		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
 		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
 			writeError(w, http.StatusForbidden, teamOperationDeniedMessage(allowed, role))
 			return false
@@ -793,7 +801,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// Workspace admins are team owners of every team (the reference app: "All workspace
 	// admins are automatically considered team owners"), so they may add
 	// themselves to a private team from its member settings.
-	if joining, selfService := membershipSelfServiceAction(r, user.ID); selfService && joining && !workspaceAdminRole(role) {
+	if selfService && joining && !workspaceAdminRole(role) {
 		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
 		settings := data.TeamSettings[teamID]
 		if role == "guest" || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
@@ -828,12 +836,16 @@ func (s *server) authorizeResourceRequest(w http.ResponseWriter, r *http.Request
 	}
 	// A document body is decoded here, once the caller is authenticated, so
 	// its errors (413, 400) answer as such rather than as a refused peek.
-	if !s.authDisabled && !decodeRequestDocumentBody(w, r) {
+	if !s.authDisabled && !s.decodeRequestDocumentBody(w, r) {
 		return false
 	}
 	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
 	// team-scoped resourceAllowed checks must not block local/dev fixtures.
-	if s.authDisabled || s.resourceAllowed(r, workspace, userID) {
+	allowed := s.authDisabled || s.resourceAllowed(r, workspace, userID)
+	if writeAuthorizationBodyError(w, r) {
+		return false
+	}
+	if allowed {
 		return true
 	}
 	if !writeProjectionRefusal(w, r) {
@@ -1395,6 +1407,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if resourcePreferenceRequest(r) {
 		filterBootstrapForAPIKey(&data, r)
 	}
+	if authorizationBodyError(r) != nil {
+		return false
+	}
 	if len(parts) > 1 && parts[1] == "issue-records" {
 		parts[1] = "issues"
 	}
@@ -1662,7 +1677,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		}
 		if parts[2] == "batch" {
 			var input domain.BatchIssueUpdateInput
-			if !peekRequestJSON(r, &input) || slices.ContainsFunc(input.IssueIDs, func(id string) bool { return !issueAllowed(id) }) {
+			if !peekStrictRequestJSON(r, &input) || slices.ContainsFunc(input.IssueIDs, func(id string) bool { return !issueAllowed(id) }) {
 				return false
 			}
 			if isIssueRecordsRequest(r) && slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool {
@@ -1729,9 +1744,7 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 				return false
 			}
 			if r.Method == http.MethodPost {
-				var input struct {
-					RelatedIssueID string `json:"relatedIssueId"`
-				}
+				var input domain.RelationCreateInput
 				return peekRequestJSON(r, &input) && issueAllowed(input.RelatedIssueID)
 			}
 			return true
@@ -1754,6 +1767,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 				return false
 			}
 			var input domain.IssueUpdateInput
+			if len(parts) == 3 {
+				return peekStrictRequestJSON(r, &input) && mutationAllowed(input)
+			}
 			return peekRequestJSON(r, &input) && mutationAllowed(input)
 		}
 		return true
@@ -2123,23 +2139,6 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 		}
 	}
 	return true
-}
-
-func peekRequestJSON(r *http.Request, value any) bool {
-	if body := requestDocumentBody(r); body != nil {
-		// A document body is decoded once, whatever its size, and shared
-		// with the handler (document_request_body.go).
-		return body.peek(r.Context(), value)
-	}
-	if r.Body == nil {
-		return false
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return false
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-	return json.Unmarshal(raw, value) == nil
 }
 
 func authUser(r *http.Request) domain.User {
@@ -3141,13 +3140,7 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	var input struct {
-		Role   string `json:"role"`
-		Member *bool  `json:"member"`
-		// Origin (manual, api or sync) of a membership this adds; on an
-		// existing membership it replaces the stored origin.
-		Origin string `json:"origin,omitempty"`
-	}
+	var input teamMembershipUpdateInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}

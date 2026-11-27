@@ -187,7 +187,11 @@ func (s *server) boundedInitiativeBodyPredicate(r *http.Request, ref string, cre
 		// An embedded favorite PATCH first applies filterBootstrapForAPIKey,
 		// which removes every initiative for an app credential without an
 		// initiative scope.
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && embeddedFavoriteRequest(r) {
+		favorite := embeddedFavoriteRequest(r)
+		if authorizationBodyError(r) != nil {
+			return false, nil
+		}
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && favorite {
 			if key.Actor == "app" && !apiKeyHasScope(key, "initiative:read") && !apiKeyHasScope(key, "initiative:write") {
 				return false, nil
 			}

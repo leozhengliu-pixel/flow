@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -109,22 +108,11 @@ func (s *server) boundedIssueWriteAuthorizationMetadata(r *http.Request) (domain
 			}
 		}
 	}
-	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		var input map[string]json.RawMessage
-		if peekRequestJSON(r, &input) {
-			var batchIDs []string
-			if json.Unmarshal(input["issueIds"], &batchIDs) == nil {
-				ids = append(ids, batchIDs...)
-			}
-			for _, field := range []string{"parentId", "relatedIssueId"} {
-				var id string
-				if json.Unmarshal(input[field], &id) == nil && id != "" {
-					ids = append(ids, id)
-				}
-			}
-		}
+	targets, err := issueAuthorizationReferences(r, parts)
+	if err != nil {
+		return domain.Bootstrap{}, true, err
 	}
-	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: ids, FullPermissions: permissionRead, CommentActionValidation: commentActionRead}
+	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: append(ids, targets...), FullPermissions: permissionRead, CommentActionValidation: commentActionRead}
 	if len(parts) > 4 && parts[3] == "comments" {
 		request.CommentIssueID, request.CommentID = parts[2], parts[4]
 	}

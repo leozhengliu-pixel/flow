@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -34,22 +33,11 @@ func (s *server) boundedIssueRecordAuthorizationMetadata(r *http.Request) (domai
 			}
 		}
 	}
-	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		var input map[string]json.RawMessage
-		if peekRequestJSON(r, &input) {
-			var batchIDs []string
-			if json.Unmarshal(input["issueIds"], &batchIDs) == nil {
-				ids = append(ids, batchIDs...)
-			}
-			for _, field := range []string{"parentId", "relatedIssueId"} {
-				var id string
-				if json.Unmarshal(input[field], &id) == nil && id != "" {
-					ids = append(ids, id)
-				}
-			}
-		}
+	targets, err := issueAuthorizationReferences(r, parts)
+	if err != nil {
+		return domain.Bootstrap{}, err
 	}
-	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: ids}
+	request := store.IssueWriteAuthorizationRequest{Query: query, IDs: append(ids, targets...)}
 	if len(parts) > 4 && parts[3] == "comments" {
 		request.CommentIssueID, request.CommentID = parts[2], parts[4]
 	}
@@ -84,17 +72,22 @@ func (s *server) boundedIssueRecordAuthorizationMetadata(r *http.Request) (domai
 	destinationChecks := false
 	if r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "batch" {
 		var input domain.BatchIssueUpdateInput
-		if peekRequestJSON(r, &input) {
-			update, destinationChecks = input.Update, true
+		if !peekStrictRequestJSON(r, &input) {
+			return domain.Bootstrap{}, authorizationBodyError(r)
 		}
-	} else if r.Method == http.MethodPatch && len(parts) >= 3 {
-		destinationChecks = peekRequestJSON(r, &update)
+		update, destinationChecks = input.Update, true
+	} else if r.Method == http.MethodPatch && len(parts) == 3 {
+		if !peekStrictRequestJSON(r, &update) {
+			return domain.Bootstrap{}, authorizationBodyError(r)
+		}
+		destinationChecks = true
 	} else if r.Method == http.MethodPost && len(parts) == 2 {
 		var input domain.IssueCreateInput
-		if peekRequestJSON(r, &input) {
-			update = domain.IssueUpdateInput{ProjectID: input.ProjectID, CycleID: input.CycleID, AssigneeID: input.AssigneeID}
-			destinationChecks = true
+		if !peekRequestJSON(r, &input) {
+			return domain.Bootstrap{}, authorizationBodyError(r)
 		}
+		update = domain.IssueUpdateInput{ProjectID: input.ProjectID, CycleID: input.CycleID, AssigneeID: input.AssigneeID}
+		destinationChecks = true
 	}
 	if destinationChecks {
 		data, err = s.boundedIssueRecordAuthorizationTargets(r, data, scope, userID, credential, update)
@@ -104,31 +97,32 @@ func (s *server) boundedIssueRecordAuthorizationMetadata(r *http.Request) (domai
 	}
 	if len(parts) >= 4 && parts[3] == "releases" && r.Method == http.MethodPut {
 		var input issueReleasesInput
-		if peekRequestJSON(r, &input) {
-			installed, found, err := s.store.BeginInstalledMetadataRead(r.Context(), data.Workspace.URLKey)
+		if !peekRequestJSON(r, &input) {
+			return domain.Bootstrap{}, authorizationBodyError(r)
+		}
+		installed, found, err := s.store.BeginInstalledMetadataRead(r.Context(), data.Workspace.URLKey)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		if !found {
+			return domain.Bootstrap{}, store.ErrAuthForbidden
+		}
+		defer installed.Close()
+		var visible *store.ViewerProjectionScope
+		if !s.authDisabled {
+			visible = &scope
+		}
+		var allows func(string) bool
+		if credential != nil && apiKeyTeamRestrictionSelected(*credential) {
+			allows = func(id string) bool { return slices.Contains(credential.TeamIDs, id) }
+		}
+		for _, id := range input.ReleaseIDs {
+			ok, err := installed.IssueAuthorizationReleaseVisible(r.Context(), visible, id, allows)
 			if err != nil {
 				return domain.Bootstrap{}, err
 			}
-			if !found {
-				return domain.Bootstrap{}, store.ErrAuthForbidden
-			}
-			defer installed.Close()
-			var visible *store.ViewerProjectionScope
-			if !s.authDisabled {
-				visible = &scope
-			}
-			var allows func(string) bool
-			if credential != nil && apiKeyTeamRestrictionSelected(*credential) {
-				allows = func(id string) bool { return slices.Contains(credential.TeamIDs, id) }
-			}
-			for _, id := range input.ReleaseIDs {
-				ok, err := installed.IssueAuthorizationReleaseVisible(r.Context(), visible, id, allows)
-				if err != nil {
-					return domain.Bootstrap{}, err
-				}
-				if ok {
-					data.Releases = append(data.Releases, domain.Release{ID: id})
-				}
+			if ok {
+				data.Releases = append(data.Releases, domain.Release{ID: id})
 			}
 		}
 	}

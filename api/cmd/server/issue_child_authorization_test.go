@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -329,8 +328,7 @@ func TestIssueChildAuthorization(t *testing.T) {
 		if f.probe.MetadataWorkUsedForTesting() != 0 || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("child authorization leaked work or decoded complete metadata")
 		}
-		// Authorization peeks must leave the exact request body available to
-		// the pending child callback; no callback writer is invoked here.
+		// A child handler still receives the complete input after authorization.
 		body := []byte(`{"body":"still available","parentId":"sw47-comment"}`)
 		request = f.literalRequest(guest, nil, nil)
 		request.Method, request.URL.Path = http.MethodPost, path
@@ -338,9 +336,10 @@ func TestIssueChildAuthorization(t *testing.T) {
 		request.SetPathValue("id", child.ID)
 		request.Body = io.NopCloser(bytes.NewReader(body))
 		_, closeBody := issueChildAuthorizationCall(t, f.probe, request, workspace, guest, "")
-		after, err := io.ReadAll(request.Body)
-		if err != nil || !json.Valid(after) || !bytes.Equal(body, after) {
-			t.Fatal("authorization consumed or rewrote the callback body", err)
+		var input domain.CommentCreateInput
+		if !decodeJSON(httptest.NewRecorder(), request, &input) ||
+			input.Body != "still available" || input.ParentID == nil || *input.ParentID != "sw47-comment" {
+			t.Fatal("authorization lost fields from the callback body")
 		}
 		closeBody()
 	}

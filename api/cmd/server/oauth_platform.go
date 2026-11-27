@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
-	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -283,25 +281,43 @@ type oauthAttributionInput struct {
 	DisplayIconURL *string `json:"displayIconUrl"`
 }
 
-// oauthAttributionRequest reports create requests whose body may carry
-// createAsUser / displayIconUrl: issues, comments, attachments and documents.
-func oauthAttributionRequest(r *http.Request) bool {
-	if r.Method != http.MethodPost || !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		return false
+// Only JSON create routes can carry OAuth attribution fields. Use the
+// handler's input where it includes these fields.
+func peekOAuthAttribution(r *http.Request, input *oauthAttributionInput) bool {
+	if r.Method != http.MethodPost {
+		return true
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if r.URL.RawPath != "" {
+		parts = strings.Split(strings.Trim(r.URL.EscapedPath(), "/"), "/")
+		for i, part := range parts {
+			parts[i], _ = url.PathUnescape(part)
+		}
+	}
 	if len(parts) < 2 || parts[0] != "api" {
-		return false
+		return true
 	}
+	issue := parts[1] == "issues" || parts[1] == "issue-records"
+	document := parts[1] == "documents"
 	switch {
-	case len(parts) == 2:
-		return parts[1] == "issues" || parts[1] == "issue-records" || parts[1] == "documents"
-	case len(parts) == 4:
-		return (parts[1] == "issues" || parts[1] == "issue-records" || parts[1] == "documents") && (parts[3] == "comments" || parts[3] == "attachments" || parts[3] == "links" || parts[3] == "link-attachments")
-	case len(parts) == 5:
-		return (parts[1] == "issues" || parts[1] == "issue-records") && parts[3] == "attachments" && parts[4] == "from-url"
+	case len(parts) == 2 && issue:
+		var create domain.IssueCreateInput
+		if !peekRequestJSON(r, &create) {
+			return false
+		}
+		input.CreateAsUser, input.DisplayIconURL = create.CreateAsUser, create.DisplayIconURL
+	case len(parts) == 4 && (issue || document) && parts[3] == "comments":
+		var create domain.CommentCreateInput
+		if !peekRequestJSON(r, &create) {
+			return false
+		}
+		input.CreateAsUser, input.DisplayIconURL = create.CreateAsUser, create.DisplayIconURL
+	case len(parts) == 2 && document,
+		len(parts) == 4 && issue && (parts[3] == "links" || parts[3] == "link-attachments"),
+		len(parts) == 5 && issue && parts[3] == "attachments" && parts[4] == "from-url":
+		return peekRequestJSON(r, input)
 	}
-	return false
+	return true
 }
 
 // oauthAttributionError is a client error in createAsUser / displayIconUrl.
@@ -319,16 +335,8 @@ func (s *server) oauthRequestAttribution(r *http.Request, key domain.APIKey) (*d
 		return nil, nil
 	}
 	var input oauthAttributionInput
-	if body := requestDocumentBody(r); body != nil && oauthAttributionRequest(r) {
-		// A document body is decoded once and shared (document_request_body.go).
-		body.peek(r.Context(), &input)
-	} else if oauthAttributionRequest(r) && r.Body != nil {
-		raw, err := io.ReadAll(io.LimitReader(r.Body, maxJSONRequestBytes+1))
-		if err != nil {
-			return nil, err
-		}
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		_ = json.Unmarshal(raw, &input)
+	if !peekOAuthAttribution(r, &input) {
+		return nil, errAuthorizationJSON
 	}
 	name, icon := s.oauthClientDisplay(r, key.OAuthClientID)
 	bot := &domain.ActorBot{ID: key.OAuthClientID, Type: domain.ActorBotTypeOAuthApplication, Name: name, AvatarURL: icon}

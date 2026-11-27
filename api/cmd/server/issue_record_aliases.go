@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -52,6 +52,9 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 		cached.data = domain.Bootstrap{}
 		return data, nil
 	}
+	// The retry rebuilds the request from ctx, so the body holder must already be
+	// on it: a body the first attempt read stays available to the second.
+	prepareAuthorizationBody(r)
 	ctx := r.Context()
 	data, err := s.buildIssueRecordAuthorizationData(r)
 	for attempt := 1; attempt < 3 && errors.Is(err, store.ErrIssueAuthorizationPolicyChanged) && ctx.Err() == nil; attempt++ {
@@ -96,7 +99,11 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 		if commentActionRead {
 			metadata, err = s.store.LegacyIssueViewerPolicy(r.Context(), query.Workspace, authUser(r).ID)
 		} else {
-			if projectIDs, cycleIDs, single := legacyIssueWriteScope(r); single {
+			projectIDs, cycleIDs, single, scopeErr := legacyIssueWriteScope(r)
+			if scopeErr != nil {
+				return metadata, scopeErr
+			}
+			if single {
 				// A single-issue write is authorized against the viewer's
 				// policy and the records its body names (issue #244).
 				metadata, err = s.store.LegacyIssueWriteAuthorization(r.Context(), query.Workspace, authUser(r).ID, projectIDs, cycleIDs)
@@ -136,37 +143,75 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 
 // legacyIssueWriteScope reports a write to one existing issue whose
 // authorization needs only the viewer's policy, plus the projects and cycles
-// its body names. Batch writes, release edits (which check the release
-// directory) and bodies that select further issues keep the complete
+// its body names. Batch writes and release edits keep the complete
 // projection under the projection gate.
-func legacyIssueWriteScope(r *http.Request) (projectIDs, cycleIDs []string, ok bool) {
+func legacyIssueWriteScope(r *http.Request) (projectIDs, cycleIDs []string, ok bool, err error) {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || completeIssueWriteReads.Load() {
-		return nil, nil, false
+		return nil, nil, false, nil
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) < 3 || parts[0] != "api" || parts[1] != "issue-records" || parts[2] == "" || parts[2] == "batch" || parts[2] == "visibility" {
-		return nil, nil, false
+		return nil, nil, false, nil
 	}
 	if len(parts) == 4 && parts[3] == "releases" {
-		return nil, nil, false
+		return nil, nil, false, nil
 	}
-	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		var input map[string]json.RawMessage
-		if peekRequestJSON(r, &input) {
-			if _, selects := input["issueIds"]; selects {
-				return nil, nil, false
-			}
-			var id string
-			if json.Unmarshal(input["projectId"], &id) == nil && id != "" {
-				projectIDs = append(projectIDs, id)
-			}
-			id = ""
-			if json.Unmarshal(input["cycleId"], &id) == nil && id != "" {
-				cycleIDs = append(cycleIDs, id)
-			}
+	if r.Method == http.MethodPatch && len(parts) == 3 {
+		var input domain.IssueUpdateInput
+		if !peekStrictRequestJSON(r, &input) {
+			return nil, nil, false, authorizationBodyError(r)
+		}
+		if input.ProjectID != nil && *input.ProjectID != "" {
+			projectIDs = append(projectIDs, *input.ProjectID)
+		}
+		if input.CycleID != nil && *input.CycleID != "" {
+			cycleIDs = append(cycleIDs, *input.CycleID)
 		}
 	}
-	return projectIDs, cycleIDs, true
+	return projectIDs, cycleIDs, true, nil
+}
+
+// issueAuthorizationReferences selects the additional issues that a write
+// actually names. In particular, a comment's parentId names a comment, and
+// an upload does not carry JSON issue references.
+func issueAuthorizationReferences(r *http.Request, parts []string) ([]string, error) {
+	switch {
+	case r.Method == http.MethodPost && len(parts) == 2:
+		var input domain.IssueCreateInput
+		if !peekRequestJSON(r, &input) {
+			return nil, authorizationBodyError(r)
+		}
+		if input.ParentID != nil && *input.ParentID != "" {
+			return []string{*input.ParentID}, nil
+		}
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "batch":
+		var input domain.BatchIssueUpdateInput
+		if !peekStrictRequestJSON(r, &input) {
+			return nil, authorizationBodyError(r)
+		}
+		ids := input.IssueIDs
+		if input.Update.ParentID != nil && *input.Update.ParentID != "" {
+			ids = append(slices.Clone(ids), *input.Update.ParentID)
+		}
+		return ids, nil
+	case r.Method == http.MethodPatch && len(parts) == 3:
+		var input domain.IssueUpdateInput
+		if !peekStrictRequestJSON(r, &input) {
+			return nil, authorizationBodyError(r)
+		}
+		if input.ParentID != nil && *input.ParentID != "" {
+			return []string{*input.ParentID}, nil
+		}
+	case r.Method == http.MethodPost && len(parts) == 4 && parts[3] == "relations":
+		var input domain.RelationCreateInput
+		if !peekRequestJSON(r, &input) {
+			return nil, authorizationBodyError(r)
+		}
+		if input.RelatedIssueID != "" {
+			return []string{input.RelatedIssueID}, nil
+		}
+	}
+	return nil, nil
 }
 
 // completeIssueWriteReads restores the complete reads single-issue writes
@@ -249,31 +294,18 @@ func (s *server) issueRecordAuthorizationRows(r *http.Request, metadata domain.B
 			}
 		}
 	}
-	pathIDs := len(ids)
-	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		var input map[string]json.RawMessage
-		if peekRequestJSON(r, &input) {
-			var batchIDs []string
-			if json.Unmarshal(input["issueIds"], &batchIDs) == nil {
-				ids = append(ids, batchIDs...)
-			}
-			for _, field := range []string{"parentId", "relatedIssueId"} {
-				var id string
-				if json.Unmarshal(input[field], &id) == nil && id != "" {
-					ids = append(ids, id)
-				}
-			}
-		}
+	targets, err := issueAuthorizationReferences(r, parts)
+	if err != nil {
+		return metadata, err
 	}
+	ids = append(ids, targets...)
 	query.Filter = store.IssueFilter{Field: "id", Values: ids}
 	query.Archived = "all"
 	if len(ids) > 1000 {
 		return metadata, store.ErrIssueQuery
 	}
-	// The legacy release filter clones the workspace metadata, and a JSON
-	// body can expand the issue selection beyond the path. Keep those query
-	// semantics under the shared projection budget.
-	if commentActionRead && (len(query.ReleaseIDs) != 0 || len(ids) > pathIDs) && !acquireProjection(r) {
+	// The legacy release filter clones workspace metadata.
+	if commentActionRead && len(query.ReleaseIDs) != 0 && !acquireProjection(r) {
 		if err := r.Context().Err(); err != nil {
 			return metadata, err
 		}
@@ -375,7 +407,7 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.issueRecordAuthorizationData(r)
 		if err != nil {
-			if !errors.Is(err, errIssueAuthorizationProjectionRefused) || !writeProjectionRefusal(w, r) {
+			if !writeAuthorizationBodyError(w, r) && (!errors.Is(err, errIssueAuthorizationProjectionRefused) || !writeProjectionRefusal(w, r)) {
 				issueRecordsError(w, err)
 			}
 			return
@@ -395,32 +427,29 @@ func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 				}
 			}
 		}
-		if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-			var input map[string]json.RawMessage
-			if peekRequestJSON(r, &input) {
-				var batchIDs []string
-				if json.Unmarshal(input["issueIds"], &batchIDs) == nil {
-					ids = append(ids, batchIDs...)
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		targets, err := issueAuthorizationReferences(r, parts)
+		if err != nil {
+			writeAuthorizationBodyError(w, r)
+			return
+		}
+		ids = append(ids, targets...)
+		var commentID string
+		if strings.Contains(r.URL.Path, "/comments") {
+			commentID = r.PathValue("commentId")
+			if r.Method == http.MethodPost && len(parts) == 4 && parts[3] == "comments" {
+				var input domain.CommentCreateInput
+				if !peekRequestJSON(r, &input) {
+					writeAuthorizationBodyError(w, r)
+					return
 				}
-				for _, field := range []string{"relatedIssueId"} {
-					var id string
-					if json.Unmarshal(input[field], &id) == nil && id != "" {
-						ids = append(ids, id)
-					}
+				if input.ParentID != nil {
+					commentID = *input.ParentID
 				}
 			}
 		}
 		ctx := store.WithIssueRecordMutations(r.Context(), ids...)
 		if strings.Contains(r.URL.Path, "/comments") {
-			commentID := r.PathValue("commentId")
-			if commentID == "" {
-				var input struct {
-					ParentID string `json:"parentId"`
-				}
-				if peekRequestJSON(r, &input) {
-					commentID = input.ParentID
-				}
-			}
 			ctx = store.WithIssueDiscussionMutation(r.Context(), r.PathValue("id"), commentID)
 		}
 		if _, bounded := ctx.Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); !bounded {

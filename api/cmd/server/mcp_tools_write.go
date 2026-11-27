@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1350,21 +1347,12 @@ func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEven
 }
 
 func invokeJSONHandler(ctx context.Context, method string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {
-	if err := authorizeInternalJSONHandler(ctx, method, pathValues, input, handler); err != nil {
+	request, err := internalJSONRequest(ctx, method, "", pathValues, input)
+	if err != nil {
 		return nil, err
 	}
-	var body io.Reader
-	if input != nil {
-		raw, err := json.Marshal(input)
-		if err != nil {
-			return nil, err
-		}
-		body = bytes.NewReader(raw)
-	}
-	request := httptest.NewRequest(method, "http://flow.internal", body).WithContext(ctx)
-	request.Header.Set("Content-Type", "application/json")
-	for key, value := range pathValues {
-		request.SetPathValue(key, value)
+	if err := authorizeInternalJSONHandler(request, pathValues, handler); err != nil {
+		return nil, err
 	}
 	response := httptest.NewRecorder()
 	handler(response, request)

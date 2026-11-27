@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -199,6 +200,37 @@ func TestOAuthViaApplicationAttribution(t *testing.T) {
 	}
 	applicationBearerRequest(t, host, machine.Token, "POST", "/api/issues/"+issue.ID+"/comments", `{"body":"x","displayIconUrl":"https://cdn.example.test/a.png"}`, 400)
 	applicationBearerRequest(t, host, machine.Token, "POST", "/api/issues/"+issue.ID+"/comments", `{"body":"x","createAsUser":"Mark","displayIconUrl":"javascript:alert(1)"}`, 400)
+
+	// Attribution follows the JSON route and sees the whole chunked body
+	// even when a client sends a different media type.
+	commentPath := "/api/issue-records/" + issue.ID + "/comments"
+	chunked := func(token, body string, status int) []byte {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, host.URL+commentPath, io.LimitReader(strings.NewReader(body), int64(len(body))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "text/plain")
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := host.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		raw, err := io.ReadAll(res.Body)
+		if err != nil || res.StatusCode != status {
+			t.Fatalf("chunked comment status=%d, want %d (%v): %s", res.StatusCode, status, err, raw)
+		}
+		return raw
+	}
+	padded := strings.Repeat(" ", 1<<20) + `{"body":"Large request","createAsUser":"External user"}`
+	chunked(pair.AccessToken, padded, http.StatusBadRequest)
+	raw := chunked(machine.Token, padded, http.StatusCreated)
+	var large domain.Comment
+	if json.Unmarshal(raw, &large) != nil || large.Body != "Large request" || large.BotActor == nil || large.BotActor.UserDisplayName != "External user" {
+		t.Fatal("the handler did not receive the complete attributed comment")
+	}
+	assertInvalidAuthorizationBody(t, chunked(machine.Token, `{"body":"invalid"}{`, http.StatusBadRequest))
 }
 
 // Manifest saves reconcile the managed per-workspace application webhook the

@@ -12,8 +12,8 @@ import (
 	"testing"
 )
 
-// The streaming document body decoder answers what decodeJSON answered for
-// the same body: the same input, or an error for the same bodies.
+// Within the single-object framing, the streaming document decoder matches
+// encoding/json's field decoding and rejects malformed objects.
 func TestDocumentBodyDecodesLikeEncodingJSON(t *testing.T) {
 	random := rand.New(rand.NewSource(264))
 	alphabet := []rune("abc xyz \"\\/<>&\n\t\r\b\f é文档😀\x01")
@@ -26,7 +26,7 @@ func TestDocumentBodyDecodesLikeEncodingJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	bodies := []string{
-		`{}`, ` { } `, `null`, `{"title":"a","content":"plain"}`, string(longJSON),
+		`{}`, ` { } `, `{"title":"a","content":"plain"}`, string(longJSON),
 		`{"content":"esc \" \\ \/ \b \f \n \r \t é 文 😀 😀 end"}`,
 		`{"content":"\ud83d x \ude00 y \ud83dA \ud83d😀 \udfff"}`,
 		"{\"content\":\"a\xff\xfeb\xe6\x96\xed\xa0\x80c\"}",
@@ -34,7 +34,7 @@ func TestDocumentBodyDecodesLikeEncodingJSON(t *testing.T) {
 		`{"content":null,"contentState":"state","contentData":{"type":"doc","content":[{"type":"text","text":"x \"}\" ]"}]},"projectIds":["a","b"],"favorite":true,"expectedVersion":3}`,
 		`{"unknown":{"nested":[1,2,{"a":"}"}]},"content":"x","documentUpdateIds":[]}`,
 		"{\n\t\"expectedVersion\" : 12 ,\r\n \"content\" : \"x\" ,\"archived\":false}",
-		`{"content":"x"} trailing`, `{"Content":"x"}`, `{"contentData":null}`, `{"teamIds":null,"issueId":""}`,
+		`{"Content":"x"}`, `{"contentData":null}`, `{"teamIds":null,"issueId":""}`,
 		`{"content":"x"`, `{"content":"x",}`, `{"content":x}`, "{\"content\":\"a\x01b\"}", `{"content":"\q"}`,
 		`{"content":"\u12G4"}`, `{"content":"\u12"}`, `[`, ``, `   `, `{"title":1}`, `{"contentData":[1]}`, `{"content":5}`,
 		`{,}`, `{"a" "b"}`, `{"a":}`, `{"a":1 "b":2}`, `{"a":[1}`, `[1]`, `"text"`, `{"content":"x"]`,
@@ -58,8 +58,11 @@ func TestDocumentBodyDecodesLikeEncodingJSON(t *testing.T) {
 			t.Fatalf("%q: the small members carry the content", label)
 		}
 	}
-	// A member that is decoded on its own may not be named twice.
-	for _, body := range []string{`{"content":"a","content":"b"}`, `{"contentState":"a","contentState":null}`, `{"contentData":{},"contentData":{}}`} {
+	// Require exactly one object, with no repeated streamed members.
+	for _, body := range []string{
+		`null`, `{"content":"x"} trailing`, `{"content":"x"} {}`,
+		`{"content":"a","content":"b"}`, `{"contentState":"a","contentState":null}`, `{"contentData":{},"contentData":{}}`,
+	} {
 		var input documentInput
 		if _, err := decodeDocumentObject(strings.NewReader(body), &input); err == nil {
 			t.Fatalf("%s accepted", body)
@@ -88,7 +91,7 @@ func TestDocumentRequestBodyLimits(t *testing.T) {
 		reached++
 		// As authorizeResourceRequest, authorization peeks and OAuth
 		// attribution read the body before the handler.
-		if !decodeRequestDocumentBody(w, r) {
+		if !s.decodeRequestDocumentBody(w, r) {
 			return
 		}
 		if !peekRequestJSON(r, &peeked) || !peekRequestJSON(r, &attribution) {
@@ -174,10 +177,8 @@ func TestDocumentBodyWithoutMiddleware(t *testing.T) {
 	}
 }
 
-// Authorization reads a document body's ids before the handler. The general
-// peek keeps only the first megabyte of a body (and cuts the body there), so
-// a signed-in edit over 1 MiB was refused; a document body is instead decoded
-// once and shared by the peeks and the handler.
+// Authorization and the handler share the complete document decode even for
+// in-process requests that enter authorization without HTTP middleware.
 func TestDocumentBodyPeekKeepsLargeBodies(t *testing.T) {
 	content := strings.Repeat("text over one megabyte ", (2<<20)/23)
 	raw, err := json.Marshal(map[string]any{"content": content, "projectIds": []string{"project"}})
@@ -185,21 +186,37 @@ func TestDocumentBodyPeekKeepsLargeBodies(t *testing.T) {
 		t.Fatal(err)
 	}
 	var input documentInput
-	plain := httptest.NewRequest(http.MethodPatch, "/api/documents/doc", bytes.NewReader(raw))
-	if peekRequestJSON(plain, &input) {
-		t.Fatal("the general peek read a body over 1 MiB")
-	}
-	if rest, _ := io.ReadAll(plain.Body); len(rest) != 1<<20 {
-		t.Fatalf("the general peek left %d bytes of the body", len(rest))
-	}
-
 	s := &server{}
-	shared := withDocumentRequestBody(s, httptest.NewRecorder(), httptest.NewRequest(http.MethodPatch, "/api/documents/doc", bytes.NewReader(raw)))
+	shared := httptest.NewRequest(http.MethodPatch, "/api/documents/doc", bytes.NewReader(raw))
+	if !s.decodeRequestDocumentBody(httptest.NewRecorder(), shared) {
+		t.Fatal("authorization did not decode the document")
+	}
 	if !peekRequestJSON(shared, &input) || input.ProjectIDs == nil || (*input.ProjectIDs)[0] != "project" {
 		t.Fatal("the document peek lost the body's ids")
 	}
 	var decoded documentInput
 	if !s.decodeDocumentBody(httptest.NewRecorder(), shared, &decoded) || decoded.Content == nil || *decoded.Content != content {
 		t.Fatal("the handler did not get the whole document body after a peek")
+	}
+}
+
+func TestDocumentBodyFavoriteClassification(t *testing.T) {
+	s := &server{}
+	for _, tc := range []struct {
+		body     string
+		favorite bool
+	}{
+		{`{"favorite":true}`, true},
+		{`{"favorite":true,"content":"text"}`, false},
+		{`{"favorite":false,"contentState":"state"}`, false},
+		{`{"favorite":true,"contentData":null}`, false},
+	} {
+		r := httptest.NewRequest(http.MethodPatch, "/api/documents/doc", strings.NewReader(tc.body))
+		if !s.decodeRequestDocumentBody(httptest.NewRecorder(), r) {
+			t.Fatal("authorization did not decode the document")
+		}
+		if got := embeddedFavoriteRequest(r); got != tc.favorite {
+			t.Fatalf("favorite-only classification = %t, want %t", got, tc.favorite)
+		}
 	}
 }

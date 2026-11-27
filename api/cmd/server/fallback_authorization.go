@@ -172,6 +172,17 @@ func (s *server) boundedFallbackAuthorization(r *http.Request, workspace, userID
 		return false, false
 	}
 	shape := fallbackShape(r)
+	if shape.kind == "cycles" && r.Method == http.MethodPatch && strings.Count(strings.Trim(r.URL.Path, "/"), "/") == 2 {
+		// Keep the legacy favorite PATCH's complete-body requirement. The
+		// bounded cycle reader already applies team visibility to all writes.
+		var input domain.CycleMutationInput
+		if !peekRequestJSON(r, &input) {
+			return false, true
+		}
+	}
+	if authorizationBodyError(r) != nil {
+		return false, true
+	}
 	switch shape.decision {
 	case fallbackMembership, fallbackNonGuest, fallbackReviewPreference:
 		data, err := s.membershipAccess(r, workspace, userID)
