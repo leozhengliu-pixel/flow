@@ -917,12 +917,11 @@ func (s *logicalJSONStream) stringContent(input io.Reader) error {
 		if err := s.ctx.Err(); err != nil {
 			return err
 		}
-		// Copy a buffered run of ASCII that needs no escape in one write.
+		// Copy a buffered run that needs no escape in one write: ASCII
+		// without a quote and complete, valid UTF-8 other than U+2028 and
+		// U+2029, which the rune path below writes unchanged.
 		if buffered, _ := reader.Peek(reader.Buffered()); len(buffered) > 0 {
-			plain := 0
-			for plain < len(buffered) && buffered[plain] < utf8.RuneSelf && logicalJSONASCIIQuotes[buffered[plain]] == "" {
-				plain++
-			}
+			plain := logicalJSONPlainRun(buffered)
 			if plain > 0 {
 				if _, err := s.out.Write(buffered[:plain]); err != nil {
 					return err
@@ -959,6 +958,32 @@ func (s *logicalJSONStream) stringContent(input io.Reader) error {
 			return err
 		}
 	}
+}
+
+// logicalJSONPlainRun is the length of the prefix of value that a JSON
+// string encoder writes unchanged. A UTF-8 sequence cut by the end of value
+// ends the run; the caller decodes it with its successors.
+func logicalJSONPlainRun(value []byte) int {
+	plain := 0
+	for plain < len(value) {
+		char := value[plain]
+		if char < utf8.RuneSelf {
+			if logicalJSONASCIIQuotes[char] != "" {
+				return plain
+			}
+			plain++
+			continue
+		}
+		if !utf8.FullRune(value[plain:]) {
+			return plain
+		}
+		decoded, size := utf8.DecodeRune(value[plain:])
+		if (decoded == utf8.RuneError && size == 1) || decoded == 0x2028 || decoded == 0x2029 {
+			return plain
+		}
+		plain += size
+	}
+	return plain
 }
 
 var logicalJSONASCIIQuotes = func() [128]string {

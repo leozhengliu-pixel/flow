@@ -666,7 +666,9 @@ func legacyProjectMarshalHeader(ctx context.Context, owner *ResourceRead, value 
 }
 
 // Strip exactly the same JSON string escape as StripJSONNUL, including when
-// the escape crosses an input page or a SQL argument boundary.
+// the escape crosses an input page or a SQL argument boundary. Bytes up to
+// the next quote (or, inside a string, the next quote or backslash) are
+// copied as one run; only escapes are examined byte by byte.
 func legacyProjectCopyStoredJSON(ctx context.Context, output io.Writer, input io.Reader) error {
 	reader := bufio.NewReaderSize(input, metadataRecordChunkBytes)
 	writer := bufio.NewWriterSize(output, metadataRecordChunkBytes)
@@ -675,43 +677,73 @@ func legacyProjectCopyStoredJSON(ctx context.Context, output io.Writer, input io
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		char, err := reader.ReadByte()
-		if errors.Is(err, io.EOF) {
-			return writer.Flush()
+		if reader.Buffered() == 0 {
+			if _, err := reader.Peek(1); errors.Is(err, io.EOF) {
+				return writer.Flush()
+			} else if err != nil {
+				return err
+			}
 		}
+		chunk, _ := reader.Peek(reader.Buffered())
+		run, escape := 0, false
+		for run < len(chunk) {
+			if !inString {
+				next := bytes.IndexByte(chunk[run:], '"')
+				if next < 0 {
+					run = len(chunk)
+					break
+				}
+				run, inString = run+next+1, true
+				continue
+			}
+			next := bytes.IndexAny(chunk[run:], legacyProjectStringStops)
+			if next < 0 {
+				run = len(chunk)
+				break
+			}
+			run += next
+			if chunk[run] != '"' {
+				escape = true
+				break
+			}
+			run, inString = run+1, false
+		}
+		if _, err := writer.Write(chunk[:run]); err != nil {
+			return err
+		}
+		if _, err := reader.Discard(run); err != nil {
+			return err
+		}
+		if !escape {
+			continue
+		}
+		char, err := reader.ReadByte()
 		if err != nil {
 			return err
 		}
-		switch {
-		case !inString:
-			inString = char == '"'
-		case char == '"':
-			inString = false
-		case char == '\\':
-			next, err := reader.ReadByte()
-			if err != nil {
-				return err
+		next, err := reader.ReadByte()
+		if err != nil {
+			return err
+		}
+		if next == 'u' {
+			suffix, _ := reader.Peek(4)
+			if bytes.Equal(suffix, []byte("0000")) {
+				_, _ = reader.Discard(4)
+				continue
 			}
-			if next == 'u' {
-				suffix, _ := reader.Peek(4)
-				if bytes.Equal(suffix, []byte("0000")) {
-					_, _ = reader.Discard(4)
-					continue
-				}
-			}
-			if err := writer.WriteByte(char); err != nil {
-				return err
-			}
-			if err := writer.WriteByte(next); err != nil {
-				return err
-			}
-			continue
 		}
 		if err := writer.WriteByte(char); err != nil {
 			return err
 		}
+		if err := writer.WriteByte(next); err != nil {
+			return err
+		}
 	}
 }
+
+// legacyProjectStringStops are the bytes that end a run inside a string: its
+// closing quote and an escape.
+const legacyProjectStringStops = `"\`
 
 // Match metadataSearchText's map/interface round-trip and character cap.
 // Description is streamed separately, including when search indexing is

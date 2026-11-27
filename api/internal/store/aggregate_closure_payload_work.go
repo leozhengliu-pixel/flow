@@ -140,6 +140,7 @@ func metadataAggregateOmittedField(tag string, value reflect.Value) bool {
 // previous buffer bound without charging every ordinary byte as a \u escape.
 func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uint64, error) {
 	encoded := uint64(2)
+	limit := uint64(metadataWorkBytes()) / 4
 	nextCheck := 0
 	for index := 0; index < len(value); {
 		if index >= nextCheck {
@@ -147,6 +148,19 @@ func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uin
 				return 0, err
 			}
 			nextCheck = index + 4096
+		}
+		// A run of ASCII that encodes as itself is counted at once.
+		if run := index; value[run] < utf8.RuneSelf && logicalJSONASCIIQuotes[value[run]] == "" {
+			end := min(len(value), nextCheck)
+			for run < end && value[run] < utf8.RuneSelf && logicalJSONASCIIQuotes[value[run]] == "" {
+				run++
+			}
+			if uint64(run-index) > limit-encoded {
+				return 0, ErrMetadataWorkBudget
+			}
+			encoded += uint64(run - index)
+			index = run
+			continue
 		}
 		char, size := utf8.DecodeRuneInString(value[index:])
 		width := uint64(size)
@@ -158,7 +172,7 @@ func metadataAggregateStringEncodingWork(ctx context.Context, value string) (uin
 		case char == utf8.RuneError && size == 1, char == '\u2028', char == '\u2029':
 			width = 6
 		}
-		if width > uint64(metadataWorkBytes())/4-encoded {
+		if width > limit-encoded {
 			return 0, ErrMetadataWorkBudget
 		}
 		encoded += width

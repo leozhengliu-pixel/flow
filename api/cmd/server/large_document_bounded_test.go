@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"testing"
@@ -155,7 +157,13 @@ func TestBoundedLargeDocumentRoutes(t *testing.T) {
 	edit := func(handler http.Handler, input map[string]any, title, content string) {
 		t.Helper()
 		var updated domain.Document
-		expect(handler, http.MethodPatch, "/api/documents/"+id, input, http.StatusOK, &updated)
+		// The edit's time is logged, and its CPU samples are labelled
+		// edit=<title> for -cpuprofile with pprof -tagfocus.
+		started := time.Now()
+		pprof.Do(t.Context(), pprof.Labels("edit", title), func(context.Context) {
+			expect(handler, http.MethodPatch, "/api/documents/"+id, input, http.StatusOK, &updated)
+		})
+		t.Logf("edit %q: %s", title, time.Since(started))
 		var document domain.Document
 		expect(handler, http.MethodGet, "/api/documents/"+id, nil, http.StatusOK, &document)
 		if document.Title != title || document.Content != content {

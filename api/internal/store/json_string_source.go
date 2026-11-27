@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -139,6 +140,8 @@ type metadataJSONStringSource struct {
 	encoded     []byte
 	bufferAt    int64
 	bufferUsed  int
+	resume      metadataJSONStringCheckpoint
+	resumed     bool
 	uploads     bool
 	matched     int
 	release     func()
@@ -248,6 +251,7 @@ func (s *metadataJSONStringSource) Close() {
 	s.owner = nil
 	s.ctx = nil
 	s.size, s.rawSize, s.bufferUsed, s.uploads = 0, 0, 0, false
+	s.resumed = false
 	if s.release != nil {
 		s.release()
 		s.release = nil
@@ -269,8 +273,10 @@ func (s *metadataJSONStringSource) ContainsUploads() bool {
 	return s.uploads
 }
 
+const metadataJSONStringUploadsMarker = "/uploads/"
+
 func (s *metadataJSONStringSource) noteByte(char byte) {
-	const marker = "/uploads/"
+	const marker = metadataJSONStringUploadsMarker
 	if s.uploads {
 		return
 	}
@@ -286,12 +292,41 @@ func (s *metadataJSONStringSource) noteByte(char byte) {
 	}
 }
 
+// note feeds value to the upload marker matcher. The marker's only border is
+// its single '/', so the match state after a long value depends only on its
+// last len(marker)-1 bytes: the head finishes a match carried in from the
+// previous value, one search covers the body, and the tail restores the
+// state for the next value.
 func (s *metadataJSONStringSource) note(value []byte) {
-	for _, char := range value {
-		if s.uploads {
-			return
+	const marker = metadataJSONStringUploadsMarker
+	if s.uploads {
+		return
+	}
+	if len(value) < 4*len(marker) {
+		for _, char := range value {
+			s.noteByte(char)
 		}
+		return
+	}
+	for _, char := range value[:len(marker)-1] {
 		s.noteByte(char)
+	}
+	if s.uploads {
+		return
+	}
+	if bytes.Contains(value, []byte(marker)) {
+		s.uploads = true
+		return
+	}
+	s.matched = 0
+	for _, char := range value[len(value)-(len(marker)-1):] {
+		s.noteByte(char)
+	}
+}
+
+func (s *metadataJSONStringSource) noteString(value string) {
+	for i := 0; i < len(value); i++ {
+		s.noteByte(value[i])
 	}
 }
 
@@ -355,22 +390,26 @@ func (r metadataJSONStringRawInput) ReadAt(p []byte, offset int64) (int, error) 
 	return len(p), nil
 }
 
-func (s *metadataJSONStringSource) window(offset int64, size int) ([]byte, error) {
+// ahead returns every buffered input byte from offset, refilling the window
+// at offset when fewer than min(need, rest of input) bytes are buffered.
+// complete reports that the returned bytes reach the end of the input.
+func (s *metadataJSONStringSource) ahead(offset int64, need int) (raw []byte, complete bool, err error) {
 	if err := s.ctx.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if offset < s.bufferAt || offset+int64(size) > s.bufferAt+int64(s.bufferUsed) {
+	want := min(int64(need), s.rawSize-offset)
+	if offset < 0 || want <= 0 {
+		return nil, false, io.ErrUnexpectedEOF
+	}
+	if offset < s.bufferAt || offset+want > s.bufferAt+int64(s.bufferUsed) {
 		length := min(int64(len(s.buffer)), s.rawSize-offset)
-		if length < int64(size) || length < 0 {
-			return nil, io.ErrUnexpectedEOF
-		}
 		if err := s.inputAt(s.buffer[:int(length)], offset); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		s.bufferAt, s.bufferUsed = offset, int(length)
 	}
 	start := int(offset - s.bufferAt)
-	return s.buffer[start : start+size], nil
+	return s.buffer[start:s.bufferUsed], s.bufferAt+int64(s.bufferUsed) == s.rawSize, nil
 }
 
 var metadataJSONStringEscapes = func() [128]string {
@@ -385,52 +424,16 @@ var metadataJSONStringEscapes = func() [128]string {
 	return values
 }()
 
-func (s *metadataJSONStringSource) unit(offset int64) (string, int, error) {
-	raw, err := s.window(offset, 1)
-	if err != nil {
-		return "", 0, err
+// metadataJSONStringCompactStops are the bytes that end a verbatim run
+// inside a quoted string of compact raw JSON: string state changes and the
+// characters json.Marshal escapes.
+var metadataJSONStringCompactStops = func() [256]bool {
+	var stops [256]bool
+	for _, char := range []byte{'"', '\\', '<', '>', '&', 0xe2} {
+		stops[char] = true
 	}
-	if raw[0] < utf8.RuneSelf {
-		return metadataJSONStringEscapes[raw[0]], 1, nil
-	}
-	raw, err = s.window(offset, int(min(int64(utf8.UTFMax), s.rawSize-offset)))
-	if err != nil {
-		return "", 0, err
-	}
-	value, size := utf8.DecodeRune(raw)
-	switch {
-	case value == utf8.RuneError && size == 1:
-		return `\ufffd`, 1, nil
-	case value == '\u2028':
-		return `\u2028`, size, nil
-	case value == '\u2029':
-		return `\u2029`, size, nil
-	}
-	return "", size, nil
-}
-
-func (s *metadataJSONStringSource) rawUnit(offset int64, char byte) (string, int, error) {
-	switch char {
-	case '<', '>', '&':
-		return metadataJSONStringEscapes[char], 1, nil
-	case 0xe2:
-		if s.rawSize-offset >= 3 {
-			raw, err := s.window(offset, 3)
-			if err != nil {
-				return "", 0, err
-			}
-			if raw[1] == 0x80 {
-				if raw[2] == 0xa8 {
-					return `\u2028`, 3, nil
-				}
-				if raw[2] == 0xa9 {
-					return `\u2029`, 3, nil
-				}
-			}
-		}
-	}
-	return "", 1, nil
-}
+	return stops
+}()
 
 func metadataJSONStringSpace(char byte) bool {
 	return char == ' ' || char == '\n' || char == '\r' || char == '\t'
@@ -447,6 +450,127 @@ func metadataJSONStringState(char byte, quoted, escaped bool) (bool, bool) {
 		return !quoted, false
 	}
 	return quoted, false
+}
+
+// metadataJSONStringSpan is the output of width input bytes: nothing (skip,
+// insignificant whitespace), the escape unit, or the input bytes verbatim
+// (raw, valid until the next window read).
+type metadataJSONStringSpan struct {
+	raw   []byte
+	unit  string
+	width int
+	skip  bool
+}
+
+func (s metadataJSONStringSpan) length() int64 {
+	switch {
+	case s.skip:
+		return 0
+	case s.unit != "":
+		return int64(len(s.unit))
+	}
+	return int64(s.width)
+}
+
+// span returns the output of the input at offset, which starts a unit, with
+// the string state before it; it advances the state past the span. A
+// verbatim run stops at a byte that needs an escape, at the end of the
+// window and after limit input bytes, but never inside a UTF-8 sequence, so
+// every span ends on a unit boundary. Runs are found with table lookups over
+// the whole window instead of one window read per character.
+func (s *metadataJSONStringSource) span(offset, limit int64, quoted, escaped *bool) (metadataJSONStringSpan, error) {
+	buf, complete, err := s.ahead(offset, utf8.UTFMax)
+	if err != nil {
+		return metadataJSONStringSpan{}, err
+	}
+	end := len(buf)
+	if limit < int64(end) {
+		end = int(max(limit, 1))
+	}
+	if s.mode == metadataJSONStringCompactRaw {
+		q, e := *quoted, *escaped
+		if !q && metadataJSONStringSpace(buf[0]) {
+			n := 1
+			for n < end && metadataJSONStringSpace(buf[n]) {
+				n++
+			}
+			return metadataJSONStringSpan{width: n, skip: true}, nil
+		}
+		i := 0
+		for i < end {
+			char := buf[i]
+			if q && !e && !metadataJSONStringCompactStops[char] {
+				i++
+				continue
+			}
+			if !q && metadataJSONStringSpace(char) {
+				break
+			}
+			if char == 0xe2 && i+3 > len(buf) && !complete {
+				// Re-examine this byte with its successors in view.
+				break
+			}
+			unit, width := "", 1
+			switch {
+			case char == '<' || char == '>' || char == '&':
+				unit = metadataJSONStringEscapes[char]
+			case char == 0xe2 && i+3 <= len(buf) && buf[i+1] == 0x80 && (buf[i+2] == 0xa8 || buf[i+2] == 0xa9):
+				unit, width = `\u2028`, 3
+				if buf[i+2] == 0xa9 {
+					unit = `\u2029`
+				}
+			}
+			if unit != "" {
+				if i > 0 {
+					break
+				}
+				*quoted, *escaped = metadataJSONStringState(char, q, e)
+				return metadataJSONStringSpan{unit: unit, width: width}, nil
+			}
+			q, e = metadataJSONStringState(char, q, e)
+			i++
+		}
+		*quoted, *escaped = q, e
+		return metadataJSONStringSpan{raw: buf[:i], width: i}, nil
+	}
+	i := 0
+	for i < end {
+		char := buf[i]
+		if char < utf8.RuneSelf {
+			if unit := metadataJSONStringEscapes[char]; unit != "" {
+				if i > 0 {
+					break
+				}
+				return metadataJSONStringSpan{unit: unit, width: 1}, nil
+			}
+			i++
+			continue
+		}
+		if !complete && !utf8.FullRune(buf[i:]) {
+			break
+		}
+		value, size := utf8.DecodeRune(buf[i:])
+		unit := ""
+		switch {
+		case value == utf8.RuneError && size == 1:
+			unit = `\ufffd`
+		case value == '\u2028':
+			unit = `\u2028`
+		case value == '\u2029':
+			unit = `\u2029`
+		}
+		if unit != "" {
+			if i > 0 {
+				break
+			}
+			return metadataJSONStringSpan{unit: unit, width: size}, nil
+		}
+		if i > 0 && i+size > end {
+			break
+		}
+		i += size
+	}
+	return metadataJSONStringSpan{raw: buf[:i], width: i}, nil
 }
 
 func (s *metadataJSONStringSource) index() error {
@@ -485,43 +609,20 @@ func (s *metadataJSONStringSource) index() error {
 	for offset := int64(0); offset < s.rawSize; {
 		last := s.checkpoints[len(s.checkpoints)-1]
 		if offset-last.input >= metadataJSONStringCheckpointBytes {
-			s.checkpoints = append(s.checkpoints, metadataJSONStringCheckpoint{input: offset, output: output, quoted: quoted, escaped: escaped})
+			last = metadataJSONStringCheckpoint{input: offset, output: output, quoted: quoted, escaped: escaped}
+			s.checkpoints = append(s.checkpoints, last)
 		}
-		var unit string
-		var width int
-		var err error
-		if s.mode == metadataJSONStringCompactRaw {
-			raw, readErr := s.window(offset, 1)
-			if readErr != nil {
-				return readErr
-			}
-			char := raw[0]
-			if !quoted && metadataJSONStringSpace(char) {
-				offset++
-				continue
-			}
-			quoted, escaped = metadataJSONStringState(char, quoted, escaped)
-			unit, width, err = s.rawUnit(offset, char)
-		} else {
-			unit, width, err = s.unit(offset)
-		}
+		span, err := s.span(offset, last.input+metadataJSONStringCheckpointBytes-offset, &quoted, &escaped)
 		if err != nil {
 			return err
 		}
-		if unit != "" {
-			output += int64(len(unit))
-			for i := 0; i < len(unit); i++ {
-				s.noteByte(unit[i])
-			}
-		} else {
-			raw, err := s.window(offset, width)
-			if err != nil {
-				return err
-			}
-			output += int64(width)
-			s.note(raw)
+		if span.unit != "" {
+			s.noteString(span.unit)
+		} else if !span.skip {
+			s.note(span.raw)
 		}
-		offset += int64(width)
+		output += span.length()
+		offset += int64(span.width)
 	}
 	if s.mode == metadataJSONStringQuoted {
 		output++
@@ -580,48 +681,45 @@ func (s *metadataJSONStringSource) ReadAt(p []byte, offset int64) (int, error) {
 	}
 	index := sort.Search(len(s.checkpoints), func(i int) bool { return s.checkpoints[i].output > offset }) - 1
 	point := s.checkpoints[max(0, index)]
+	// A sequential reader continues from where the previous read stopped
+	// instead of re-walking from the checkpoint.
+	if s.resumed && s.resume.output <= offset && s.resume.output > point.output {
+		point = s.resume
+	}
 	quoted, escaped := point.quoted, point.escaped
-	for rawOffset, output := point.input, point.output; rawOffset < s.rawSize && n < len(p) && (s.mode != metadataJSONStringCompactRaw || output < s.size); {
-		var unit string
-		var width int
-		var err error
-		if s.mode == metadataJSONStringCompactRaw {
-			raw, readErr := s.window(rawOffset, 1)
-			if readErr != nil {
-				return n, readErr
-			}
-			char := raw[0]
-			if !quoted && metadataJSONStringSpace(char) {
-				rawOffset++
-				continue
-			}
-			quoted, escaped = metadataJSONStringState(char, quoted, escaped)
-			unit, width, err = s.rawUnit(rawOffset, char)
-		} else {
-			unit, width, err = s.unit(rawOffset)
+	rawOffset, output := point.input, point.output
+	s.resumed = false
+	for rawOffset < s.rawSize && n < len(p) && (s.mode != metadataJSONStringCompactRaw || output < s.size) {
+		// Verbatim runs stop exactly at the requested offset and at the end
+		// of p, so only an escape unit or a UTF-8 sequence is split.
+		limit := int64(len(p) - n)
+		if output < offset {
+			limit = offset - output
 		}
+		before := metadataJSONStringCheckpoint{input: rawOffset, output: output, quoted: quoted, escaped: escaped}
+		span, err := s.span(rawOffset, limit, &quoted, &escaped)
 		if err != nil {
 			return n, err
 		}
-		length := int64(width)
-		if unit != "" {
-			length = int64(len(unit))
-		}
+		length := span.length()
 		if output+length > offset {
 			skip := int(max(int64(0), offset-output))
 			copied := 0
-			if unit != "" {
-				copied = copy(p[n:], unit[skip:])
+			if span.unit != "" {
+				copied = copy(p[n:], span.unit[skip:])
 			} else {
-				raw, err := s.window(rawOffset, width)
-				if err != nil {
-					return n, err
-				}
-				copied = copy(p[n:], raw[skip:])
+				copied = copy(p[n:], span.raw[skip:])
 			}
 			n, offset = n+copied, offset+int64(copied)
+			if int64(skip+copied) < length {
+				s.resume, s.resumed = before, true
+				break
+			}
 		}
-		rawOffset, output = rawOffset+int64(width), output+length
+		rawOffset, output = rawOffset+int64(span.width), output+length
+	}
+	if !s.resumed {
+		s.resume, s.resumed = metadataJSONStringCheckpoint{input: rawOffset, output: output, quoted: quoted, escaped: escaped}, true
 	}
 	if s.mode == metadataJSONStringQuoted && n < len(p) && offset == s.size-1 {
 		p[n], n = '"', n+1

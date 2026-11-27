@@ -160,30 +160,34 @@ func (d *metadataJSONStringDecoder) appendRune(value rune) error {
 
 func (d *metadataJSONStringDecoder) stringBody() error {
 	for {
-		// Copy a buffered run of plain ASCII at once: the rune path below
-		// appends those bytes unchanged, flushing at the same boundaries,
-		// but checks the context twice per byte, which dominated decoding
-		// of large bodies. Cancellation is observed per run and per chunk.
+		// Copy a buffered run of plain ASCII and complete, valid UTF-8 at
+		// once: the rune path below appends those bytes unchanged, flushing
+		// at the same rune boundaries, but checks the context twice per
+		// byte, which dominated decoding of large bodies. Cancellation is
+		// observed per run and per chunk.
 		if buffered := d.input.Buffered(); buffered > 0 {
 			run, _ := d.input.Peek(buffered)
-			plain := 0
-			for plain < len(run) && run[plain] >= 0x20 && run[plain] < utf8.RuneSelf && run[plain] != '"' && run[plain] != '\\' {
-				plain++
-			}
+			plain := metadataJSONStringPlainRun(run)
 			if plain > 0 {
 				if err := d.ctx.Err(); err != nil {
 					return err
 				}
 				for copied := 0; copied < plain; {
-					if d.used == len(d.output) {
+					count := min(len(d.output)-d.used, plain-copied)
+					// A chunk holds complete runes only.
+					for count > 0 && copied+count < plain && !utf8.RuneStart(run[copied+count]) {
+						count--
+					}
+					if count == 0 {
 						if err := d.flush(); err != nil {
 							return err
 						}
 						if err := d.ctx.Err(); err != nil {
 							return err
 						}
+						continue
 					}
-					count := copy(d.output[d.used:], run[copied:plain])
+					copy(d.output[d.used:], run[copied:copied+count])
 					d.used += count
 					copied += count
 				}
@@ -228,6 +232,32 @@ func (d *metadataJSONStringDecoder) stringBody() error {
 			return err
 		}
 	}
+}
+
+// metadataJSONStringPlainRun is the length of the prefix of a JSON string
+// body that decodes to itself: no quote, backslash or control character, and
+// complete, valid UTF-8 (a sequence cut by the end of raw ends the run).
+func metadataJSONStringPlainRun(raw []byte) int {
+	plain := 0
+	for plain < len(raw) {
+		char := raw[plain]
+		if char < utf8.RuneSelf {
+			if char < 0x20 || char == '"' || char == '\\' {
+				return plain
+			}
+			plain++
+			continue
+		}
+		if !utf8.FullRune(raw[plain:]) {
+			return plain
+		}
+		value, size := utf8.DecodeRune(raw[plain:])
+		if value == utf8.RuneError && size == 1 {
+			return plain
+		}
+		plain += size
+	}
+	return plain
 }
 
 func (d *metadataJSONStringDecoder) escape() error {
