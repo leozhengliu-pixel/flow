@@ -440,6 +440,7 @@ var InternalRoutes = []string{
 	"DELETE /api/label-groups/{id}",
 	"PATCH /api/label-groups/{id}",
 	"POST /api/label-groups",
+	"POST /api/label-groups/{id}/move-to-teams",
 	// /api/labels
 	"DELETE /api/labels/{id}",
 	"GET /api/labels",

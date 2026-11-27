@@ -28,12 +28,10 @@ function renderTimeline(props: Partial<Parameters<typeof ProjectTimeline>[0]> = 
 afterEach(() => { localStorage.clear() })
 
 describe('ProjectTimeline zoom', () => {
-  it('switches Week / Month / Quarter / Year and reports the change', () => {
+  it('shows the zoom in its menu and steps it with + and -', () => {
     const onZoomChange = vi.fn()
     const { container } = renderTimeline({ zoom: 'quarter', onZoomChange })
-    expect(screen.getByRole('radio', { name: /Quarter/ }).getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(screen.getByRole('radio', { name: /Week/ }))
-    expect(onZoomChange).toHaveBeenCalledWith('week')
+    expect(screen.getByRole('button', { name: 'Timeline zoom' }).textContent).toBe('Quarter')
     fireEvent.keyDown(container.querySelector('.lp-project-timeline')!, { key: '-' })
     expect(onZoomChange).toHaveBeenLastCalledWith('year')
     fireEvent.keyDown(container.querySelector('.lp-project-timeline')!, { key: '+' })
@@ -43,9 +41,10 @@ describe('ProjectTimeline zoom', () => {
   it('rescales bars and the today line when uncontrolled zoom changes', () => {
     const { container } = renderTimeline()
     const width = () => parseFloat((screen.getByRole('button', { name: 'Blocker timeline bar' }).parentElement as HTMLElement).style.width)
-    const quarterWidth = width()
-    fireEvent.click(screen.getByRole('radio', { name: /Week/ }))
-    expect(width()).toBeGreaterThan(quarterWidth * 5)
+    const yearWidth = width()
+    for (let step = 0; step < 3; step++) fireEvent.keyDown(container.querySelector('.lp-project-timeline')!, { key: '+' })
+    expect(screen.getByRole('button', { name: 'Timeline zoom' }).textContent).toBe('Week')
+    expect(width()).toBeGreaterThan(yearWidth * 5)
     const line = container.querySelector<HTMLElement>('.lp-project-timeline__today-line')!
     expect(parseFloat(line.style.left)).toBeGreaterThan(TIMELINE_LABEL_WIDTH)
     expect(container.querySelector('.lp-project-timeline__minor')!.children.length).toBeGreaterThan(50)
@@ -53,7 +52,7 @@ describe('ProjectTimeline zoom', () => {
 
   it('persists the chosen zoom with the display options', () => {
     const first = renderHook(() => useProjectsViewState([], { storageKey: 'zoom-test' }))
-    expect(first.result.current.dataViewProps.timelineZoom).toBe('quarter')
+    expect(first.result.current.dataViewProps.timelineZoom).toBe('year')
     act(() => first.result.current.dataViewProps.onTimelineZoomChange?.('week'))
     expect(first.result.current.state.display.timelineZoom).toBe('week')
     first.unmount()
@@ -61,7 +60,7 @@ describe('ProjectTimeline zoom', () => {
     expect(second.result.current.dataViewProps.timelineZoom).toBe('week')
     second.unmount()
     const other = renderHook(() => useProjectsViewState([], { storageKey: 'other-view' }))
-    expect(other.result.current.dataViewProps.timelineZoom).toBe('quarter')
+    expect(other.result.current.dataViewProps.timelineZoom).toBe('year')
   })
 })
 

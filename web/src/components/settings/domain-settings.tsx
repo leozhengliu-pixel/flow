@@ -9,7 +9,7 @@ import { toast } from '@/lib/toast'
 
 import {
   createLabelGroup, createTeamLabel, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel, deleteTeamLabelGroup,
-  deleteWorkspaceLabel, mergeLabels, moveWorkspaceLabelToTeams, updateLabelGroup, updateTeamLabel, updateWorkspaceLabel,
+  deleteWorkspaceLabel, mergeLabels, moveWorkspaceLabelGroupToTeams, moveWorkspaceLabelToTeams, updateLabelGroup, updateTeamLabel, updateWorkspaceLabel,
 } from '@/lib/api'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
@@ -172,6 +172,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
   }
   const archiveLabel = (label: IssueLabel) => saveLabel(label, { archivedAt: label.archivedAt ? '' : nowISO() })
   const moveLabelToTeams = async (label: IssueLabel) => { await run(() => moveWorkspaceLabelToTeams(label.id)) }
+  const moveGroupToTeams = async (group: LabelGroup) => { await run(() => moveWorkspaceLabelGroupToTeams(group.id)) }
   const createLabel = (input: NewLabelInput, groupId?: string, scope = team?.id) => scope
     ? createTeamLabel(scope, { ...input, color: input.color ?? '#5E6AD2', resourceType: resourceType === 'project' ? 'project' : 'issue', groupId })
     : createWorkspaceLabel({ ...input, resourceType, groupId })
@@ -217,6 +218,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
       onSaveLabel={saveLabel}
       onArchiveLabel={archiveLabel}
       onMoveLabelToTeams={moveLabelToTeams}
+      onMoveGroupToTeams={moveGroupToTeams}
       onConvertLabel={convertLabelToGroup}
       onDeleteLabel={deleteLabel}
       onSaveGroup={async (group, input) => { await run(() => updateLabelGroup(group.id, input)) }}
@@ -337,16 +339,16 @@ function SortArrow({ className }: { className: string }) {
   return <svg aria-hidden="true" className={className} width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5361 10.2745C11.8024 10.0029 11.8249 9.56807 11.5762 9.26961C11.3275 8.97139 10.8961 8.91526 10.5811 9.12801L10.5195 9.17391L8.00001 11.2735L5.48048 9.17391L5.41895 9.12801C5.10388 8.91526 4.67252 8.97139 4.42384 9.26961C4.17512 9.56807 4.19758 10.0029 4.46387 10.2745L4.51954 10.3263L7.51954 12.8263C7.79767 13.058 8.20234 13.058 8.48048 12.8263L11.4805 10.3263L11.5361 10.2745Z"/><path d="M8.75 12.25C8.75 12.6642 8.41421 13 8 13C7.58579 13 7.25 12.6642 7.25 12.25L7.25 3.75C7.25 3.33579 7.58579 3 8 3C8.41421 3 8.75 3.33579 8.75 3.75V12.25Z"/></svg>
 }
 
-function GroupSectionRows({ entry, context, availableGroups, selected, filtering, creatingGroupId, onCancelCreate, onCreateInGroup, onCreateLabel, onToggleGroupSelected, onToggleSelected, onSaveLabel, onArchiveLabel, onMoveLabelToTeams, onConvertLabel, onDeleteLabel, onSaveGroup, onArchiveGroup, onConvertGroup, onDeleteGroup }: {
+function GroupSectionRows({ entry, context, availableGroups, selected, filtering, creatingGroupId, onCancelCreate, onCreateInGroup, onCreateLabel, onToggleGroupSelected, onToggleSelected, onSaveLabel, onArchiveLabel, onMoveLabelToTeams, onMoveGroupToTeams, onConvertLabel, onDeleteLabel, onSaveGroup, onArchiveGroup, onConvertGroup, onDeleteGroup }: {
   entry: Extract<Entry, { kind: 'group' }>; context: RowContext; availableGroups: LabelGroup[]; selected: string[]; filtering: boolean; creatingGroupId?: string;
   onCancelCreate: () => void; onCreateInGroup: (groupId: string) => void; onCreateLabel: (input: NewLabelInput, groupId: string) => Promise<boolean>; onToggleGroupSelected: (group: LabelGroup, childIds: string[]) => void; onToggleSelected: (id: string) => void; onSaveLabel: (label: IssueLabel, input: Partial<IssueLabel>) => Promise<void>;
-  onArchiveLabel: (label: IssueLabel) => Promise<void>; onMoveLabelToTeams: (label: IssueLabel) => Promise<void>; onConvertLabel: (label: IssueLabel) => Promise<void>; onDeleteLabel: (label: IssueLabel) => Promise<void>; onSaveGroup: (group: LabelGroup, input: Partial<LabelGroup>) => Promise<void>; onArchiveGroup: (group: LabelGroup) => Promise<void>; onConvertGroup: (group: LabelGroup) => Promise<void>; onDeleteGroup: (group: LabelGroup) => Promise<void>;
+  onArchiveLabel: (label: IssueLabel) => Promise<void>; onMoveLabelToTeams: (label: IssueLabel) => Promise<void>; onMoveGroupToTeams?: (group: LabelGroup) => Promise<void>; onConvertLabel: (label: IssueLabel) => Promise<void>; onDeleteLabel: (label: IssueLabel) => Promise<void>; onSaveGroup: (group: LabelGroup, input: Partial<LabelGroup>) => Promise<void>; onArchiveGroup: (group: LabelGroup) => Promise<void>; onConvertGroup: (group: LabelGroup) => Promise<void>; onDeleteGroup: (group: LabelGroup) => Promise<void>;
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const { group, labels } = entry
   const open = !collapsed || filtering
   return <>
-    <GroupRow group={group} context={context} labels={labels} collapsed={!open} selected={selected.includes(group.id)} onToggleCollapsed={labels.length ? () => setCollapsed(value => !value) : undefined} onToggleSelected={() => onToggleGroupSelected(group, labels.map(label => label.id))} onCreateLabel={() => { setCollapsed(false); onCreateInGroup(group.id) }} onSave={input => onSaveGroup(group, input)} onArchive={() => onArchiveGroup(group)} onConvert={() => onConvertGroup(group)} onDelete={() => onDeleteGroup(group)}/>
+    <GroupRow group={group} context={context} labels={labels} collapsed={!open} selected={selected.includes(group.id)} onToggleCollapsed={labels.length ? () => setCollapsed(value => !value) : undefined} onToggleSelected={() => onToggleGroupSelected(group, labels.map(label => label.id))} onCreateLabel={() => { setCollapsed(false); onCreateInGroup(group.id) }} onSave={input => onSaveGroup(group, input)} onMoveToTeams={onMoveGroupToTeams && context.resourceType === 'issue' && (!group.scope || group.scope.toLowerCase() === 'workspace') ? () => onMoveGroupToTeams(group) : undefined} onArchive={() => onArchiveGroup(group)} onConvert={() => onConvertGroup(group)} onDelete={() => onDeleteGroup(group)}/>
     {creatingGroupId === group.id && <InlineLabelRow kind="label" grouped treeLast={!labels.length} continuous showDescription={context.columns.includes('description')} onCancel={onCancelCreate} onSave={input => onCreateLabel(input, group.id)}/>}
     {open && labels.map((label, index) => <LabelRow key={label.id} context={context} label={label} grouped treeLast={index === labels.length - 1} selected={selected.includes(label.id)} groups={availableGroups} onToggleSelected={() => onToggleSelected(label.id)} onSave={input => onSaveLabel(label, input)} onArchive={() => onArchiveLabel(label)} onMoveToTeams={() => onMoveLabelToTeams(label)} onConvert={() => onConvertLabel(label)} onDelete={() => onDeleteLabel(label)}/>)}
   </>
@@ -439,7 +441,7 @@ function RulesCount({ rules, data }: { rules: LabelRuleUsage; data: BootstrapDat
   return <FlowTooltip side="top" contentClassName="flow-tooltip-content--title label-settings-usage-tooltip" label={card}><span className="label-settings-usage">{rules.total}</span></FlowTooltip>
 }
 
-function GroupRow({ group, context, labels, collapsed = false, selected, onToggleCollapsed, onToggleSelected, onCreateLabel, onSave, onArchive, onConvert, onDelete }: { group: LabelGroup; context: RowContext; labels: IssueLabel[]; collapsed?: boolean; selected: boolean; onToggleCollapsed?: () => void; onToggleSelected: () => void; onCreateLabel?: () => void; onSave?: (input: Partial<LabelGroup>) => Promise<void>; onArchive: () => Promise<void>; onConvert?: () => Promise<void>; onDelete: () => Promise<void> }) {
+function GroupRow({ group, context, labels, collapsed = false, selected, onToggleCollapsed, onToggleSelected, onCreateLabel, onSave, onMoveToTeams, onArchive, onConvert, onDelete }: { group: LabelGroup; context: RowContext; labels: IssueLabel[]; collapsed?: boolean; selected: boolean; onToggleCollapsed?: () => void; onToggleSelected: () => void; onCreateLabel?: () => void; onSave?: (input: Partial<LabelGroup>) => Promise<void>; onMoveToTeams?: () => Promise<void>; onArchive: () => Promise<void>; onConvert?: () => Promise<void>; onDelete: () => Promise<void> }) {
   const { locale, t } = useI18n()
   const [editing, setEditing] = useState<'name'|'description'|null>(null)
   const [confirm, setConfirm] = useState<'archive'|'delete'|null>(null)
@@ -452,7 +454,7 @@ function GroupRow({ group, context, labels, collapsed = false, selected, onToggl
     <div className="domain-label-name is-group-name">{onToggleCollapsed ? <button aria-label={actionLabel(collapsed ? 'expand' : 'collapse')} className="domain-label-group-chevron" onClick={onToggleCollapsed} type="button">{collapsed ? <ChevronRight/> : <ChevronDown/>}</button> : <span className="domain-label-group-chevron is-placeholder"/>}<LabelColorPicker color={group.color} disabled={Boolean(group.archivedAt)} kind="group" label={actionLabel('color')} onChange={color => onSave?.({ color })}/><LabelEditableText value={group.name} field={t('Name')} editing={editing === 'name'} archived={Boolean(group.archivedAt)} onEdit={() => setEditing('name')} onCancel={() => setEditing(null)} onSave={async value => { await onSave?.({ name: value }); setEditing(null) }}/></div>
     {context.columns.includes('description') && <EditableDescription value={group.description ?? ''} editing={editing === 'description'} archived={Boolean(group.archivedAt)} onEdit={() => setEditing('description')} onCancel={() => setEditing(null)} onSave={async value => { await onSave?.({ description: value }); setEditing(null) }}/>}
     <ValueCells context={context} label={group} usage={usage} lastAppliedAt={lastApplied} group/>
-    <GroupRowMenu group={group} canConvert={!children.length && Boolean(onConvert)} onEdit={() => setEditing('name')} onCreateLabel={onCreateLabel} onArchive={async () => { if (group.archivedAt || usage === 0) await onArchive(); else setConfirm('archive') }} onConvert={() => void onConvert?.()} onDelete={async () => setConfirm('delete')}/>
+    <GroupRowMenu group={group} workspaceSlug={context.data.workspace.urlKey} resourceType={context.resourceType} usage={usage} canConvert={!children.length && Boolean(onConvert)} onEdit={() => setEditing('name')} onCreateLabel={onCreateLabel} onMoveToTeams={usage > 0 ? onMoveToTeams : undefined} onArchive={async () => { if (group.archivedAt || usage === 0) await onArchive(); else setConfirm('archive') }} onGroupType={multiSelect => void onSave?.({ multiSelect })} onConvert={() => void onConvert?.()} onDelete={async () => setConfirm('delete')}/>
   </div><LabelConfirmDialog kind="group" action={confirm} name={group.name} archived={Boolean(group.archivedAt)} resourceType={context.resourceType} usage={usage} onArchive={onArchive} onClose={() => setConfirm(null)} onConfirm={async () => { if (confirm === 'archive') await onArchive(); else await onDelete(); setConfirm(null) }}/></>
 }
 
@@ -525,16 +527,26 @@ function MenuShell({ label, kind, children }: { label: string; kind: 'group'|'la
   return <DropdownMenu><DropdownMenuTrigger asChild><button className="domain-label-menu-button" aria-label={locale === 'zh-CN' ? `打开 ${label} 菜单` : `Open ${label} menu`}><MenuDotsGlyph/></button></DropdownMenuTrigger><DropdownMenuContent data-i18n-ignore className={`domain-label-row-menu is-${kind}-menu`} align="end" sideOffset={4}>{children}</DropdownMenuContent></DropdownMenu>
 }
 
-function GroupRowMenu({ group, canConvert, onEdit, onCreateLabel, onArchive, onConvert, onDelete }: { group: LabelGroup; canConvert: boolean; onEdit: () => void; onCreateLabel?: () => void; onArchive: () => Promise<void>; onConvert: () => void; onDelete: () => Promise<void> }) {
-  const { t } = useI18n()
-  return <MenuShell kind="group" label={group.name}>{group.archivedAt ? <><DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="restore"/><span>{t('Restore')}</span></DropdownMenuItem><DropdownMenuItem className="danger-item" onSelect={() => void onDelete()}><MenuIcon name="delete"/><span>{t('Delete')}</span></DropdownMenuItem></> : <>
-    <DropdownMenuItem onSelect={onEdit}><MenuIcon name="edit"/><span>{t('Edit label name')}</span><MenuShortcut>E</MenuShortcut></DropdownMenuItem>
+function GroupRowMenu({ group, workspaceSlug, resourceType, usage, canConvert, onEdit, onCreateLabel, onMoveToTeams, onArchive, onGroupType, onConvert, onDelete }: { group: LabelGroup; workspaceSlug: string; resourceType: LabelResourceType; usage: number; canConvert: boolean; onEdit: () => void; onCreateLabel?: () => void; onMoveToTeams?: () => Promise<void>; onArchive: () => Promise<void>; onGroupType: (multiSelect: boolean) => void; onConvert: () => void; onDelete: () => Promise<void> }) {
+  const { locale, t } = useI18n()
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const move = async () => { if (!onMoveToTeams) return; setMoving(true); try { await onMoveToTeams(); setMoveOpen(false) } finally { setMoving(false) } }
+  const viewLabel = resourceType === 'project' ? 'View labeled projects' : resourceType === 'initiative' ? 'View labeled initiatives' : 'View labeled issues'
+  return <><MenuShell kind="group" label={group.name}>{group.archivedAt ? <><DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="restore"/><span>{t('Restore')}</span></DropdownMenuItem><DropdownMenuItem className="danger-item" onSelect={() => void onDelete()}><MenuIcon name="delete"/><span>{t('Delete')}</span></DropdownMenuItem></> : <>
+    <DropdownMenuItem onSelect={onEdit}><MenuIcon name="edit"/><span>{t('Edit label name…')}</span><MenuShortcut>E</MenuShortcut></DropdownMenuItem>
     <DropdownMenuItem onSelect={onCreateLabel}><MenuIcon name="add"/><span>{t('Add label to group')}</span></DropdownMenuItem>
+    {onMoveToTeams && <DropdownMenuItem onSelect={() => setMoveOpen(true)}><MenuIcon name="teams"/><span>{t('Move to teams')}</span></DropdownMenuItem>}
+    {/* Group type: single-select groups allow one of their labels per item, multi-select groups several. */}
+    <DropdownMenuSub><DropdownMenuSubTrigger><MenuIcon name="grouptype"/><span>{t('Group type')}</span></DropdownMenuSubTrigger><DropdownMenuSubContent data-i18n-ignore className="domain-label-group-submenu domain-label-group-type-submenu" sideOffset={4} alignOffset={-7}>
+      {([false, true] as const).map(multiSelect => <DropdownMenuItem key={String(multiSelect)} className="domain-label-group-type-option" aria-checked={Boolean(group.multiSelect) === multiSelect} onSelect={() => { if (Boolean(group.multiSelect) !== multiSelect) onGroupType(multiSelect) }}><span>{t(multiSelect ? 'Multi-select' : 'Single-select')}</span>{Boolean(group.multiSelect) === multiSelect && <MenuCheckGlyph/>}</DropdownMenuItem>)}
+    </DropdownMenuSubContent></DropdownMenuSub>
     {canConvert && <DropdownMenuItem onSelect={onConvert}><MenuIcon name="label"/><span>{t('Convert to label')}</span></DropdownMenuItem>}
+    {usage > 0 && <><DropdownMenuSeparator/><DropdownMenuItem asChild><AppLink href={labelPath(workspaceSlug, resourceType, group.name.toLowerCase())}><MenuIcon name="view"/><span>{t(viewLabel)}</span></AppLink></DropdownMenuItem></>}
     <DropdownMenuSeparator/>
-    <DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="archive"/><span>{t('Archive…')}</span></DropdownMenuItem>
+    <DropdownMenuItem onSelect={() => void onArchive()}><MenuIcon name="archive"/><span>{t('Archive')}</span></DropdownMenuItem>
     <DropdownMenuItem className="danger-item" onSelect={() => void onDelete()}><MenuIcon name="delete"/><span>{t('Delete')}</span></DropdownMenuItem>
-  </>}</MenuShell>
+  </>}</MenuShell><Dialog open={moveOpen} onOpenChange={setMoveOpen}><DialogContent data-i18n-ignore className="domain-label-move-dialog"><DialogTitle>{locale === 'zh-CN' ? <>将“<strong>{group.name}</strong>”移动到团队？</> : <>Move <strong>"{group.name}"</strong> to teams?</>}</DialogTitle><p>{t('This label will be moved to each team that uses it and will no longer be available for the whole workspace.')}</p><p>{t('This action cannot be undone.')}</p><footer><button disabled={moving} onClick={() => setMoveOpen(false)}>{t('Cancel')}</button><button className="primary" disabled={moving} onClick={() => void move()}>{t(moving ? 'Moving…' : 'Move label')}</button></footer></DialogContent></Dialog></>
 }
 
 function LabelRowMenu({ label, groups, workspaceSlug, resourceType, usage, onEdit, onGroup, onArchive, onMoveToTeams, onConvert, onDelete }: { label: IssueLabel; groups: LabelGroup[]; workspaceSlug: string; resourceType: LabelResourceType; usage: number; onEdit: () => void; onGroup: (groupId: string) => Promise<void>; onArchive: () => void; onMoveToTeams?: () => Promise<void>; onConvert?: () => Promise<void>; onDelete: () => Promise<void> }) {
@@ -603,7 +615,11 @@ function MergeLabelsDialog({ labels, resourceType, usage, onClose, onMerge }: { 
   </DialogContent></Dialog>
 }
 
-type LabelMenuIcon = 'edit'|'add'|'move'|'teams'|'view'|'archive'|'delete'|'restore'|'group'|'label'
+type LabelMenuIcon = 'edit'|'add'|'move'|'teams'|'view'|'archive'|'delete'|'restore'|'group'|'label'|'grouptype'
+function MenuCheckGlyph() {
+  return <svg aria-hidden="true" className="domain-label-menu-check" viewBox="0 0 16 16"><path d="M4.2996 7.23968C4.01775 6.93614 3.5432 6.91857 3.23966 7.20042C2.93613 7.48227 2.91856 7.95682 3.20041 8.26035L6.45041 11.7603C6.7612 12.095 7.29647 12.0766 7.58346 11.7212L12.8335 5.22127C13.0937 4.89904 13.0435 4.42683 12.7213 4.16657C12.399 3.9063 11.9268 3.95654 11.6665 4.27877L6.96051 10.1053L4.2996 7.23968Z"/></svg>
+}
+
 function MenuIcon({ name }: { name: LabelMenuIcon }) {
   if (name === 'edit') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path d="M10.1805 3.34195 4.14166 9.416c1.18782.35421 2.15072 1.2469 2.59842 2.4024L12.6877 5.8425c-1.0235-.62127-1.8834-1.47898-2.5072-2.50055Z"/><path d="M13.7391 4.71631c.4184-.68683.3336-1.59893-.2545-2.19441-.5938-.60118-1.5062-.68298-2.1866-.24541.5567 1.03483 1.4057 1.8835 2.4411 2.43982Z"/><path d="M3.03104 10.7502c1.27192.0156 2.33541.9921 2.46679 2.2612-.66515.4146-2.09586.7808-2.96669.9772-.33104.0746-.61088-.2284-.51039-.5513.23251-.7471.62517-1.9237 1.01029-2.6871Z"/></svg>
   if (name === 'add') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path d="M8.75 4a.75.75 0 0 0-1.5 0v3.25H4a.75.75 0 0 0 0 1.5h3.25V12a.75.75 0 0 0 1.5 0V8.75H12a.75.75 0 0 0 0-1.5H8.75V4Z"/></svg>
@@ -613,6 +629,7 @@ function MenuIcon({ name }: { name: LabelMenuIcon }) {
   if (name === 'archive') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path fillRule="evenodd" d="M9.25 8a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1 0-1.5h2.5Z" clipRule="evenodd"/><path fillRule="evenodd" d="M12.75 2A2.25 2.25 0 0 1 15 4.25v1.5c0 .605-.43 1.109-1 1.225v4.775A2.25 2.25 0 0 1 11.75 14H4.2a2.25 2.25 0 0 1-2.25-2.25V6.962A1.25 1.25 0 0 1 1 5.75v-1.5A2.25 2.25 0 0 1 3.25 2h9.5ZM3.45 11.75c0 .414.336.75.75.75h7.55a.75.75 0 0 0 .75-.75V7H3.45v4.75ZM3.25 3.5a.75.75 0 0 0-.75.75V5.5h11V4.25a.75.75 0 0 0-.75-.75h-9.5Z" clipRule="evenodd"/></svg>
   if (name === 'delete') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path fillRule="evenodd" d="m2 3 1.652 9.911A2.5 2.5 0 0 0 6.118 15h3.764a2.5 2.5 0 0 0 2.466-2.089L14 3H2Zm1.77 1.5 1.361 8.164a1 1 0 0 0 .987.836h3.764a1 1 0 0 0 .987-.836l1.36-8.164H3.771Z" clipRule="evenodd"/><path d="M5.5 2.5A1.5 1.5 0 0 1 7 1h2a1.5 1.5 0 0 1 1.5 1.5v1h-5v-1Z"/><path d="M1 3.75A.75.75 0 0 1 1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 3.75Z"/></svg>
   if (name === 'group') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path fillRule="evenodd" clipRule="evenodd" d="M7.95 6A1.75 1.75 0 1 0 7.95 2.5 1.75 1.75 0 0 0 7.95 6ZM4.45 9.5A1.75 1.75 0 1 0 4.45 6a1.75 1.75 0 0 0 0 3.5ZM7.95 13a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm5.25-5.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Z"/></svg>
+  if (name === 'grouptype') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path d="M1 4.625C.9999 3.296 2.0773 2.2186 3.4063 2.2186h7.1874c1.3289 0 2.4062 1.0772 2.4063 2.4061l.0001 1.0914a3.17 3.17 0 0 0-1.3126-.9305V4.6238c0-.604-.4897-1.0937-1.0938-1.0937H3.4063c-.6041 0-1.0938.4897-1.0938 1.0938v.1617A3.17 3.17 0 0 0 1 5.7161V4.625Z"/><path d="M1.0001 8.0693c0-1.329 1.0773-2.4063 2.4063-2.4063h7.1875c1.3289 0 2.4062 1.0773 2.4062 2.4063v.0613a.6563.6563 0 0 1-1.3125 0v-.0613c0-.6041-.4897-1.0938-1.0937-1.0938H3.4064c-.6041 0-1.0938.4897-1.0938 1.0938v1.3738c0 .604.4897 1.0937 1.0938 1.0937h1.75a.6563.6563 0 0 1 0 1.3125h-1.75c-1.329 0-2.4063-1.0773-2.4063-2.4062V8.0693Z"/><path d="M12.1785 10.7806a.6562.6562 0 0 0-.9195-.9365L9.3101 12.1951l-1.0716-1.041a.6563.6563 0 0 0-.9145.9415l1.2248 1.1898c.426.4138 1.1045.412 1.5283-.0041l2.1014-2.5007Z"/></svg>
   if (name === 'label') return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path fillRule="evenodd" clipRule="evenodd" d="M2.5 4.75A2.25 2.25 0 0 1 4.75 2.5h4.172a2.25 2.25 0 0 1 1.59.659l3.33 3.33a2.25 2.25 0 0 1 0 3.182l-3.33 3.33a2.25 2.25 0 0 1-1.59.659H4.75A2.25 2.25 0 0 1 2.5 11.25v-6.5ZM4.75 4a.75.75 0 0 0-.75.75v6.5c0 .414.336.75.75.75h4.172a.75.75 0 0 0 .53-.22l3.33-3.33a.75.75 0 0 0 0-1.06l-3.33-3.33a.75.75 0 0 0-.53-.22H4.75Z"/></svg>
   return <svg aria-hidden="true" className="domain-label-menu-icon" viewBox="0 0 16 16"><path d="M8 2.25a5.75 5.75 0 1 1-5.51 7.4.75.75 0 1 1 1.436-.43A4.25 4.25 0 1 0 5.2 4.75H7a.75.75 0 0 1 0 1.5H3.5a.75.75 0 0 1-.75-.75V2a.75.75 0 0 1 1.5 0v1.54A5.72 5.72 0 0 1 8 2.25Z"/></svg>
 }

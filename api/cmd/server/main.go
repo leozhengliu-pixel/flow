@@ -679,6 +679,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/label-groups", s.createLabelGroup)
 	mux.HandleFunc("PATCH /api/label-groups/{id}", s.updateLabelGroup)
 	mux.HandleFunc("DELETE /api/label-groups/{id}", s.deleteLabelGroup)
+	mux.HandleFunc("POST /api/label-groups/{id}/move-to-teams", s.moveWorkspaceLabelGroupToTeams)
 	mux.HandleFunc("POST /api/project-statuses", s.createProjectStatus)
 	mux.HandleFunc("PATCH /api/project-statuses/{id}", s.updateProjectStatus)
 	mux.HandleFunc("DELETE /api/project-statuses/{id}", s.deleteProjectStatus)
@@ -6448,7 +6449,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if !labelsAvailableToTeam(data, issue.Labels, issue.Team.ID) {
 			return nil, fmt.Errorf("%w: label is not available to this team", errInvalid)
 		}
-		if !validLabelGroupSelection(issue.Labels) {
+		if !validLabelGroupSelection(data, issue.Labels) {
 			return nil, fmt.Errorf("%w: only one label from each group can be selected", errInvalid)
 		}
 		changes["labels"] = strings.Join(*input.LabelIDs, ",")
@@ -6992,7 +6993,7 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 				selectedLabels = append(selectedLabels, label)
 			}
 		}
-		if len(selectedLabels) != len(input.LabelIDs) || !validLabelGroupSelection(selectedLabels) {
+		if len(selectedLabels) != len(input.LabelIDs) || !validLabelGroupSelection(data, selectedLabels) {
 			return errInvalid
 		}
 		teamIDs := project.TeamIDs
@@ -7347,10 +7348,13 @@ func labelResourceType(label domain.IssueLabel) string {
 	}
 	return "issue"
 }
-func validLabelGroupSelection(labels []domain.IssueLabel) bool {
+
+// validLabelGroupSelection reports whether labels hold at most one label of
+// each single-select group; a multi-select group allows several.
+func validLabelGroupSelection(data *domain.Bootstrap, labels []domain.IssueLabel) bool {
 	groups := map[string]struct{}{}
 	for _, label := range labels {
-		if label.GroupID == "" {
+		if label.GroupID == "" || labelGroupMultiSelect(data, label.GroupID) {
 			continue
 		}
 		if _, exists := groups[label.GroupID]; exists {
@@ -7359,6 +7363,13 @@ func validLabelGroupSelection(labels []domain.IssueLabel) bool {
 		groups[label.GroupID] = struct{}{}
 	}
 	return true
+}
+
+// labelGroupMultiSelect reports whether the group lets an item carry several
+// of its labels. An unknown group counts as single-select.
+func labelGroupMultiSelect(data *domain.Bootstrap, groupID string) bool {
+	index := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == groupID })
+	return index >= 0 && data.LabelGroups[index].MultiSelect
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
 	activity := domain.ActivityEvent{ID: idgen.New("activity_"), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}

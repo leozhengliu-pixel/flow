@@ -139,6 +139,9 @@ func (s *server) createMCPLabel(ctx context.Context, actor mcpActor, data domain
 		groupInput := labelGroupInput{Name: &name, Color: &color, ResourceType: &resourceType}
 		description := stringArg(args, "description")
 		groupInput.Description = &description
+		if multiSelect, ok := args["multiSelect"].(bool); ok {
+			groupInput.MultiSelect = &multiSelect
+		}
 		return invokeJSONHandler(ctx, http.MethodPost, nil, groupInput, s.createLabelGroup)
 	}
 	groupID := ""

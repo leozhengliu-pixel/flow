@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { labelGroupOptions } from '@/components/issue-explorer/issue-grouping'
 import { toast } from '@/lib/toast'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
@@ -394,7 +395,7 @@ export function ProjectsPage({
     const activeTeamIds = teams.map(team => team.id)
     return { id: currentViewerId, activeTeamIds }
   }, [currentViewerId, teams])
-  const view = useProjectsViewState(visibleItems, { initial: savedDisplay || handoff ? { ...(savedDisplay ? { display: savedDisplay } : {}), ...(handoff ? { selectedIds: handoff.selectedIds } : {}) } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, leadTeamId: scopeTeamId })
+  const view = useProjectsViewState(visibleItems, { initial: savedDisplay || handoff ? { ...(savedDisplay ? { display: savedDisplay } : {}), ...(handoff ? { selectedIds: handoff.selectedIds } : {}) } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, groupingContext: itemIndexes, leadTeamId: scopeTeamId })
   useEffect(() => {
     const client = projectWindow.client
     if (!projectWindow.enabled || !client) { clearScaleP19ProjectHandoff(handoffScope); return }
@@ -653,6 +654,7 @@ export function ProjectsPage({
     filterCount={activeFilters.length + (insightFilter ? 1 : 0)}
     selectedFilters={bandActive && !viewEditor ? extraFilters : projectFilters}
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
+    groupingLabelGroups={labelGroupOptions({ teams, labelGroups: projectLabelGroups.filter(group => !group.archivedAt) }, 'project')}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
     onFilterOpenChange={projectWindow.enabled ? setWindowFilterOpen : undefined}
@@ -851,6 +853,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     leadTeamId: project.teamIds[0],
     memberIds: project.memberIds,
     labelIds: project.labelIds,
+    initiativeIds: project.initiatives ?? [],
     initiativeNames: (project.initiatives ?? []).map(id => indexes.initiatives.get(id)).filter((name): name is string => Boolean(name)),
     labelsByGroup,
     teamIds: project.teamIds,

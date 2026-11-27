@@ -364,7 +364,7 @@ import { subscriptionAfterGenericDelete } from "@/lib/subscription-records";
 import { INBOX_ACTIVITY_EVENT, inboxRealtimeRelevant, inboxUnread } from "@/lib/inbox-unread";
 import { LOOP_RUN_ACTIVITY_EVENT, isLoopRunSignal, loopRunActivity } from "@/lib/loop-run-activity";
 import { AGENT_TASK_ACTIVITY_EVENT } from "@/lib/application-agents";
-import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
+import { labelsForResource, registerLabelGroups, setGroupedLabelSelected } from "@/lib/labels";
 import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
 import { persistUserSettings } from "@/lib/settings-persistence";
 import { useExitPresence } from '@/components/ui/motion';
@@ -401,6 +401,7 @@ import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
+import { LabelGroupIcon } from '@/components/issue/issue-icons'
 import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
 // Realtime metadata reloads: one at a time per workspace, spread across tabs (realtime-bootstrap-coalescer).
@@ -455,6 +456,8 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
     }
     return byIssue.size ? deriveResourceCounts({ ...baseData, issues: baseData.issues.map(issue => byIssue.get(issue.id) ?? issue) }) : baseData;
   }, [baseData, visibleEdits]);
+  // Label pickers read each group's type (single- or multi-select) from the workspace's label groups.
+  useLayoutEffect(() => { registerLabelGroups(data?.labelGroups) }, [data?.labelGroups]);
   const [syncFallback, setSyncFallback] = useState('');
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
@@ -6736,7 +6739,37 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
         )}
         {page === "workspace-issues" && route.kind === "label" && route.resourceType === "issue" && (() => {
           // The reference app `label` view: the full issue view scoped to one label.
-          const label = data.labels.find((item) => item.name === route.resourceName && (item.resourceType ?? "issue") === "issue");
+          const label = data.labels.find((item) => item.name === route.resourceName && (item.resourceType ?? "issue") === "issue")
+            ?? data.labels.find((item) => item.name.toLowerCase() === route.resourceName.toLowerCase() && (item.resourceType ?? "issue") === "issue");
+          // A label group's "View labeled issues": the same view over every label of the group.
+          const group = label ? undefined : data.labelGroups.find((item) => item.name.toLowerCase() === route.resourceName.toLowerCase() && (item.resourceType ?? "issue") === "issue" && !item.archivedAt);
+          if (group) {
+            const memberIds = data.labels.filter((item) => item.groupId === group.id).map((item) => item.id);
+            return (
+              <IssueExplorerPage
+                key={`label-group-${group.id}`}
+                data={data}
+                scope={{ kind: "workspace" }}
+                view="all"
+                preferenceScope={`label-group:${group.id}`}
+                resourceHeader={{ icon: <LabelGroupIcon size={14} color={group.color} />, title: <span data-i18n-ignore>{group.name}</span> }}
+                scopeFilter={(issue) => issue.labels.some((item) => memberIds.includes(item.id))}
+                scopeConditions={[{ field: "labels", values: memberIds }]}
+                viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
+                onNavigateView={(view) => navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))}
+                onCreateSavedView={addSavedView}
+                onNavigateSavedView={(view) => navigateTo(workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)))}
+                onOpenSidebar={() => setMobileSidebarOpen(true)}
+                onOpenIssue={openIssue}
+                renderIssuePreview={renderIssuePreview}
+                onCreateIssue={(context) => openCreateIssue(context)}
+                onUpdateIssue={updateIssueFromPage}
+                onUpdateIssues={updateIssuesFromPage}
+                onDeleteIssues={deleteIssuesFromPage}
+                onConvertIssue={convertIssue}
+              />
+            );
+          }
           if (!label) return <main className="main-panel"><p className="secondary-empty">Label not found</p></main>;
           return (
             <IssueExplorerPage

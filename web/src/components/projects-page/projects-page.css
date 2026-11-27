@@ -37,7 +37,7 @@
 
 :root[data-theme="light"] .lp-projects__view { background: var(--theme-surface-1); color: var(--theme-text-secondary); }
 :root[data-theme="light"] .lp-projects__view:not([aria-current="page"]):hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-:root[data-theme="light"] .lp-projects__view[aria-current="page"] { background: var(--theme-surface-active); color: var(--theme-text-primary); }
+:root[data-theme="light"] .lp-projects__view[aria-current="page"] { background: var(--ui-pill-active-bg); color: var(--theme-text-primary); }
 :root[data-theme="light"] .lp-projects__view[aria-current="page"]:hover { background: lch(89.54% .5 282); color: var(--theme-text-primary); }
 
 :root[data-theme="light"] .lp-projects__header h1 {
@@ -500,6 +500,8 @@
 .lp-projects-display-select__direction[data-direction="desc"] svg { transform: scaleY(-1); }
 .lp-projects-display-select__trigger { align-items: center; background: var(--project-display-select-bg); border: 0; border-radius: 8px; color: var(--project-display-select-fg); cursor: default; display: flex; font-size: 12px; font-weight: 400; height: 24px; line-height: 15px; overflow: hidden; padding: 1px 18px 1px 8px; position: relative; text-align: left; white-space: nowrap; width: 99px; }
 .lp-projects-display-select__trigger > span { overflow: hidden; text-overflow: ellipsis; }
+.lp-projects-display .lp-projects-display-select__trigger { width: var(--display-select-width, 99px); }
+.lp-projects-display-select[data-label-group-select] .lp-projects-display-select__trigger { max-width: 142px; }
 .lp-projects-display-select__trigger > svg { color: var(--project-display-label-fg); position: absolute; right: 5px; top: 50%; transform: translateY(-50%); }
 .lp-projects-display-select__trigger:hover,
 .lp-projects-display-select__trigger[aria-expanded="true"] { background: var(--project-display-select-hover-bg); color: var(--project-display-select-hover-fg); }
@@ -558,6 +560,10 @@
   min-width: 1020px;
 }
 .lp-project-table.is-virtual .lp-project-subgroup__header { grid-column: 3 / -1; }
+/* Virtual rows are measured without margins: the 2px above and below a group header sit in its slot. */
+.lp-project-group__slot { padding-block: 2px; }
+.lp-project-group__slot[data-first] { padding-top: 0; }
+.lp-project-group__slot > .lp-project-group__header { margin-block: 0; }
 .lp-projects__data:has(.lp-project-table.is-virtual) { overflow-x: auto; overflow-y: hidden; }
 
 .lp-project-table__header,
@@ -614,12 +620,13 @@
   background: var(--lp-project-group-base);
   display: grid;
   height: 36px;
-  margin: 0 8px;
+  margin: 2px 8px;
   overflow: hidden;
   position: relative;
   border-radius: 8px;
   padding-right: 8px;
 }
+.lp-project-group:first-of-type > .lp-project-group__header { margin-top: 0; }
 .lp-project-group__header[data-group-status="started"] { background: linear-gradient(90deg, var(--project-group-gradient-started-dark) 0%, var(--lp-project-group-base) 100%), var(--lp-project-group-base); }
 .lp-project-group__header[data-group-status="backlog"] { background: linear-gradient(90deg, var(--project-group-gradient-backlog-dark) 0%, var(--lp-project-group-base) 100%), var(--lp-project-group-base); }
 :root[data-theme="light"] .lp-project-group__header { --lp-project-group-base: var(--project-group-gradient-base-light); }
@@ -795,8 +802,8 @@
 .lp-project-priority.is-urgent { color: #e56a68; }
 .lp-project-priority.is-high { color: var(--theme-text-secondary); }
 .lp-project-priority.is-medium { color: var(--theme-text-secondary); }
-.lp-project-priority.is-low,
-.lp-project-priority.is-none { color: #6b6b70; }
+.lp-project-priority.is-low { color: #6b6b70; }
+.lp-project-priority.is-none { color: var(--board-column-count); }
 .lp-project-avatar { align-items: center; border-radius: 50%; color: white; display: inline-flex; flex: none; font-size: 9px; height: 16px; justify-content: center; object-fit: cover; width: 16px; }
 .lp-project-avatar.is-empty { color: var(--theme-text-secondary); }
 .lp-project-row__date { color: var(--theme-text-secondary); font-size: 12px; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 92px; }
@@ -835,9 +842,26 @@
 .lp-project-board__column {
   box-sizing: border-box;
   flex: 0 0 354px;
+  isolation: isolate;
   min-height: 100%;
+  min-width: 0;
   padding: 0;
+  position: relative;
   transition: background-color 120ms ease, flex-basis 120ms cubic-bezier(.2,.8,.2,1);
+}
+/* The column panel: a fading wash from the header down to the pane's bottom edge. */
+.lp-project-board__column::before {
+  background: linear-gradient(var(--board-band-top), var(--board-band-bottom));
+  border-radius: 5px 5px 0 0;
+  content: "";
+  inset: 4px 4px 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+/* Phones (the reference switches at 640px): 290px columns. */
+@media (max-width: 640px) {
+  .lp-project-board__column { flex-basis: 290px; }
 }
 .lp-project-board__column[data-drop-target=true] { background: color-mix(in lch, var(--accent-primary) 8%, transparent); }
 .lp-project-board__column[data-collapsed=true] { flex-basis: 210px; }
@@ -848,11 +872,11 @@
   gap: 12px;
   height: 50px;
   justify-content: space-between;
-  padding: 2px 12px 0 18px;
+  padding: 4px 12px 0 18px;
   position: relative;
 }
 .lp-project-board__column > header::before {
-  background: color-mix(in lch, var(--theme-text-primary) 6%, transparent);
+  background: var(--board-band-top);
   border-radius: 5px 5px 0 0;
   content: "";
   height: 46px;
@@ -870,14 +894,14 @@
   z-index: 1;
 }
 .lp-project-board__heading strong {
-  color: var(--theme-text-primary);
+  color: var(--project-board-heading);
   font-size: 13px;
   font-weight: 500;
   line-height: 16px;
   margin-left: 2px;
 }
 .lp-project-board__count {
-  color: #77777c;
+  color: var(--board-column-count);
   font-size: 13px;
   font-weight: 450;
   line-height: 16px;
@@ -894,7 +918,7 @@
   background: transparent;
   border: .5px solid transparent;
   border-radius: 9999px;
-  color: var(--theme-text-primary);
+  color: var(--project-board-heading);
   display: flex;
   height: 24px;
   justify-content: center;
@@ -902,11 +926,8 @@
   width: 24px;
 }
 .lp-project-board__menu { height: 32px !important; width: 32px !important; }
+.lp-project-board__column > header button svg { color: var(--board-column-count); }
 .lp-project-board__column > header button:hover { background: var(--theme-control-hover); color: #fff; }
-:root[data-theme="light"] .lp-project-board__column > header::before { background: lch(94.44% .5 282 / .4); }
-:root[data-theme="light"] .lp-project-board__heading strong { color: var(--theme-text-primary); }
-:root[data-theme="light"] .lp-project-board__count { color: var(--theme-text-secondary); }
-:root[data-theme="light"] .lp-project-board__column > header button { color: var(--theme-text-primary); }
 :root[data-theme="light"] .lp-project-board__column > header button:hover {
   background: var(--ui-pill-hover-bg);
   color: var(--flow-light-icon);
@@ -917,9 +938,9 @@
 .lp-project-board__subgroup > header { align-items: center; color: #919196; display: flex; font-size: 12px; gap: 7px; height: 28px; padding: 0 6px; }
 .lp-project-board__subgroup > header small { color: #68686d; font-size: 12px; }
 .lp-project-card {
-  background: var(--theme-surface-1);
+  background: var(--board-card-surface);
   border-radius: 8px;
-  box-shadow: 0 0 0 .5px rgb(255 255 255 / 8%), 0 .5px 1px 1px rgb(0 0 0 / 30%);
+  box-shadow: 0 0 0 .5px var(--board-card-outline), 0 .5px 1px 1px var(--shadow-color-card);
   box-sizing: border-box;
   color: inherit;
   display: flex;
@@ -928,7 +949,7 @@
   outline: none;
   padding: 5px 6px;
   text-decoration: none;
-  width: 328px;
+  width: 100%;
 }
 .lp-project-card:hover { background: var(--theme-control); }
 .lp-project-card[data-dragging=true] { cursor: grabbing; opacity: .55; transform: scale(.985); }
@@ -950,7 +971,7 @@
 .lp-project-card__id { color: var(--project-id-fg); flex: none; font-size: 12px; line-height: 18px; }
 .lp-project-card__icon { border: 0; border-radius: 8px; flex: none; height: 28px; padding: 6px; width: 28px; }
 .lp-project-card__identity strong {
-  color: var(--theme-text-primary);
+  color: var(--project-card-title);
   display: block;
   font-size: 13px;
   font-weight: 500;
@@ -961,7 +982,6 @@
   padding-top: 6px;
   white-space: normal;
 }
-:root[data-theme="light"] .lp-project-card__identity strong { color: var(--theme-text-primary); }
 .lp-project-card__properties { align-items: center; display: flex; flex: none; margin-right: -4px; }
 .lp-project-card .lp-project-card__properties button {
   box-sizing: border-box;
@@ -1044,8 +1064,8 @@
 .lp-project-card__milestone-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lp-project-card__milestone-date { flex: none; }
 .lp-project-card__footer { align-items: center; display: flex; min-height: 28px; }
-.lp-project-card__issues {
-  color: #818187;
+.lp-project-card button.lp-project-card__issues {
+  color: var(--board-card-muted);
   font-size: 12px;
   font-weight: 450;
   height: 28px;
@@ -1068,7 +1088,7 @@
   height: 28px;
   justify-content: center;
   padding: 6px 8px;
-  width: 326px;
+  width: calc(100% - 2px);
 }
 .lp-project-board__column:is(:hover, :focus-within) .lp-project-board__add {
   display: flex;
@@ -1803,6 +1823,13 @@
   .lp-projects__toolbar .lp-projects__desktop-sidebar-icon { display: none; }
   .lp-projects__toolbar .lp-projects__phone-sidebar-icon { display: block; }
   .lp-projects__view { --ui-pill-ring: transparent; height: 32px; line-height: normal; }
+  /* Fine pointers at phone widths (a desktop browser window) use the reference's 28px controls; touch devices keep 32px. */
+  @media (pointer: fine) {
+    html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { flex-basis: 28px; height: 28px; min-width: 28px; width: 28px; }
+    html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { flex-basis: 28px; height: 28px; width: 28px; }
+    .lp-projects__toolbar .lp-projects__icon-button { flex-basis: 28px; height: 28px; width: 28px; }
+    .lp-projects__view { height: 28px; }
+  }
   .lp-projects__view > span { border-style: none; font-size: 12px; font-weight: 500; line-height: normal; }
 
   .lp-projects :is(.lp-projects-filter, .lp-projects-display, .lp-projects-filter__nested, .lp-projects-display-select__menu) {
@@ -1838,8 +1865,10 @@
   .lp-project-table.is-virtual { display: block; min-width: 0; padding-bottom: 8px; }
   .lp-project-table__header { display: none; }
   .lp-project-group { display: block; }
-  .lp-project-group__header,
+  /* Phones keep the group header bars (the reference): 36px, 8px from the edges, 2px from the rows. */
   .lp-project-subgroup__header { display: none; }
+  .lp-project-group__header { display: grid; grid-template-columns: 6px 24px minmax(0, 1fr) auto; margin: 2px 8px; }
+  .lp-project-group:first-of-type .lp-project-group__header { margin-top: 0; }
   .lp-project-table.is-virtual .lp-project-row { display: flex; min-width: 0; }
   .lp-project-row { border-radius: 8px; border-style: none; column-gap: 6px; display: flex; height: 48px; padding: 0; }
   .lp-project-row > *,
@@ -1895,12 +1924,8 @@
 .lp-projects__editor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
 .lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
-.lp-projects__timeline-pill { display: none; }
 @media (min-width: 768px) {
-  .lp-projects__timeline-pill { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: lch(13.861% 1.139 272); color: lch(90.826% 1.425 272); font: 500 12px var(--font); }
-  .lp-projects__timeline-zoom { gap: 6px; }
   .lp-projects__editor-actions .lp-projects__icon-button:not(.is-active) { background: lch(13.861% 1.139 272); }
-  .lp-projects__timeline-pill:hover { background: var(--ui-pill-hover-bg); color: var(--project-toolbar-icon-hover-fg); }
   /* The reference's view card floats 8px inside the frame, and its Copy URL button has no pill background. */
   .lp-projects__top > div:has(> section[data-mode]) { margin: 8px; }
   .lp-projects__header > .lp-projects__copy-url.lp-projects__icon-button { background: transparent; }
@@ -1910,3 +1935,36 @@
 .lp-project-row__customers { min-width: 0; overflow: hidden; }
 .lp-project-row__revenue, .lp-project-table__revenue-header { justify-content: flex-end; }
 .lp-project-table__revenue-unit { white-space: pre; }
+/* A label in a label group heads its group "Group › Label": the group name muted, then a 5px chevron. */
+.lp-project-group__prefix { color: var(--theme-text-secondary); font-size: 13px; font-weight: 450; white-space: nowrap; }
+.lp-project-group__path-chevron { flex: 0 0 5px; color: var(--theme-text-tertiary); }
+.lp-project-group__title:has(.lp-project-group__prefix), .lp-project-board__heading:has(.lp-project-group__prefix) { gap: 8px; }
+.lp-project-timeline__group-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* Label groupings: the label colour dot, and the header tinted with the label colour like issue label groups. */
+.lp-project-group__label-dot { border-radius: 50%; flex: 0 0 9px; height: 9px; width: 9px; }
+.lp-project-group__header[data-label-color] { background: var(--group-label-bg); }
+.lp-project-group__header[data-label-color] .lp-project-group__prefix { color: var(--group-label-prefix); }
+.lp-project-group__header[data-label-color] .lp-project-group__path-chevron { color: var(--group-label-chevron); }
+.lp-project-group__header[data-label-color] .lp-project-group__title strong { color: var(--group-label-name); font-weight: 450; }
+.lp-project-group__header[data-label-color] :is(.lp-project-group__count, .lp-project-group__create) { color: var(--group-label-count); }
+.lp-project-group__header[data-label-color] .lp-project-group__toggle { color: var(--group-label-collapse); }
+.lp-project-group__header[data-label-header] .lp-project-group__toggle { width: 28px; margin-left: -2px; }
+.lp-project-group__header[data-label-header] .lp-project-group__toggle .lp-project-group__caret { height: 16px; width: 16px; transform: rotate(90deg); }
+.lp-project-group__header[data-label-header] .lp-project-group__toggle[aria-expanded="false"] .lp-project-group__caret { transform: rotate(0); }
+.lp-project-group__header[data-label-header] .lp-project-group__title { line-height: normal; }
+.lp-project-group__header[data-label-header] .lp-project-group__label-dot { margin: 0 7.5px 0 1.5px; }
+.lp-project-group__header[data-label-header] .lp-project-group__count { font-variant-numeric: tabular-nums; font-weight: 450; margin-left: -2px; }
+/* "No label" (no dot or status icon) keeps the reference's 6px before its count. */
+.lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__count { margin-left: -6px; color: var(--group-plain-count); }
+.lp-project-group__header[data-label-header]:not([data-label-color]) .lp-project-group__toggle { color: var(--group-plain-caret); }
+/* Label column headers: the group name and the label in the board's header inks, both regular weight. */
+.lp-project-board__column > header[data-label-color] .lp-project-group__prefix { color: var(--board-label-prefix); }
+.lp-project-board__column > header[data-label-color] .lp-project-group__path-chevron { color: var(--board-label-chevron); }
+.lp-project-board__column > header[data-label-color] .lp-project-board__heading strong { color: var(--board-label-name); font-weight: 450; }
+.lp-project-board__heading strong { line-height: normal; }
+.lp-project-board__column > header .lp-project-group__prefix { line-height: normal; margin-left: 2px; }
+.lp-project-board__column > header[data-label-color] .lp-project-board__heading strong { margin-left: 0; }
+.lp-project-board__count { font-variant-numeric: tabular-nums; line-height: normal; }
+/* Board columns keep the label path on one line: the group name takes all the shrinking until its 24.88px floor, then the label, as the reference. */
+.lp-project-board__column > header .lp-project-group__prefix { flex: 0 100000 auto; min-width: 24.88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-project-board__column > header .lp-project-group__prefix ~ :is(strong, span) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

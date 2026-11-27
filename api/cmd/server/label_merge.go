@@ -17,7 +17,7 @@ type labelMergeInput struct {
 
 // mergeLabels folds labels into one target label "Merge labels…":
 // every issue, project and initiative carrying a merged label gets the target
-// instead, templates, triage and SLA rules and saved views are re-pointed, and
+// instead, templates, triage and SLA rules, saved views and workflows are re-pointed, and
 // the merged labels are deleted. Labels must share a resource type and either
 // all be ungrouped or all belong to the target's group; a team label can only
 // be merged into its own team or a workspace label.
@@ -41,6 +41,7 @@ func (s *server) mergeLabels(w http.ResponseWriter, r *http.Request) {
 	ids := append([]string{input.ToLabelID}, from...)
 	// Only issues carrying one of the labels change.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{LabelIssues: ids})
+	ctx = store.WithLabelAutomationScope(ctx, func(domain.Bootstrap) []string { return from })
 	var merged domain.IssueLabel
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label.merged", input, func(data *domain.Bootstrap) (string, error) {
 		target, err := applyLabelMerge(data, input.ToLabelID, from)
@@ -99,8 +100,8 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 		}
 		return next
 	}
-	for index := range data.Issues {
-		issue := &data.Issues[index]
+	mergeIssue := func(issue *domain.Issue) bool {
+		changed := false
 		if slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { _, ok := merged[label.ID]; return ok }) {
 			labels := make([]domain.IssueLabel, 0, len(issue.Labels))
 			for _, label := range issue.Labels {
@@ -113,10 +114,18 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 					labels = append(labels, label)
 				}
 			}
-			issue.Labels = labels
+			issue.Labels, changed = labels, true
 		}
-		issue.SuggestedLabelIDs = replace(issue.SuggestedLabelIDs)
+		if suggested := replace(issue.SuggestedLabelIDs); !slices.Equal(suggested, issue.SuggestedLabelIDs) {
+			issue.SuggestedLabelIDs, changed = suggested, true
+		}
+		return changed
 	}
+	for index := range data.Issues {
+		mergeIssue(&data.Issues[index])
+	}
+	// Trashed issues come back with the target label.
+	rewriteTrashedIssueLabels(data, merged, mergeIssue)
 	for index := range data.Projects {
 		data.Projects[index].LabelIDs = replace(data.Projects[index].LabelIDs)
 	}
@@ -152,6 +161,10 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 	for index := range data.SavedViews {
 		data.SavedViews[index].Filters = replaceLabelReferencesInJSON(data.SavedViews[index].Filters, merged, toID)
 	}
+	rewriteWorkflowLabelReferences(data, func(id string) (string, bool) {
+		_, ok := merged[id]
+		return toID, ok
+	})
 	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { _, ok := merged[label.ID]; return ok })
 	for id := range merged {
 		removeResourcePreferences(data, "label", id)
@@ -162,6 +175,15 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 // replaceLabelReferencesInJSON re-points saved filter values (bare ids or
 // "label:"-style prefixed ids) from merged labels to the target label.
 func replaceLabelReferencesInJSON(raw json.RawMessage, ids map[string]struct{}, toID string) json.RawMessage {
+	return remapLabelReferencesInJSON(raw, func(id string) (string, bool) {
+		_, ok := ids[id]
+		return toID, ok
+	})
+}
+
+// remapLabelReferencesInJSON re-points saved filter values (bare ids or
+// "label:"-style prefixed ids) for which remap names another label.
+func remapLabelReferencesInJSON(raw json.RawMessage, remap func(string) (string, bool)) json.RawMessage {
 	if len(raw) == 0 {
 		return raw
 	}
@@ -174,14 +196,17 @@ func replaceLabelReferencesInJSON(raw json.RawMessage, ids map[string]struct{}, 
 	walk = func(value any) any {
 		switch typed := value.(type) {
 		case string:
-			if _, ok := ids[typed]; ok {
+			if next, ok := remap(typed); ok {
 				changed = true
-				return toID
+				return next
 			}
 			for _, prefix := range []string{"label:", "labels:", "project-label:"} {
-				if _, ok := ids[strings.TrimPrefix(typed, prefix)]; ok && strings.HasPrefix(typed, prefix) {
+				if !strings.HasPrefix(typed, prefix) {
+					continue
+				}
+				if next, ok := remap(strings.TrimPrefix(typed, prefix)); ok {
 					changed = true
-					return prefix + toID
+					return prefix + next
 				}
 			}
 			return typed

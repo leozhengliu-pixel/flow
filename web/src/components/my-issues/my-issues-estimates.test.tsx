@@ -1,11 +1,14 @@
 import fs from 'node:fs'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import type { TeamSettings } from '@/types/flow'
+import { resetListGroupCountMode } from '@/lib/list-group-count-mode'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { IssueRowActionsProvider } from './issue-row-actions'
 import { MyIssuesList } from './my-issues-list'
 
@@ -13,10 +16,57 @@ function mount(settings: Partial<TeamSettings>) {
   const issues = [makeIssue({ id: 'a', identifier: 'TST-1', estimate: 3 }), makeIssue({ id: 'b', identifier: 'TST-2', estimate: 5 }), makeIssue({ id: 'c', identifier: 'TST-3', estimate: undefined })]
   const data = makeBootstrap({ issues, teamSettings: { 'team-1': { teamId: 'team-1', ...settings } as TeamSettings } })
   const rows = issues.map(issue => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data))
-  render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}>
+  render(<I18nProvider><TooltipProvider delayDuration={0}><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}>
     <MyIssuesList groups={[{ id: 'todo', label: 'Todo', issues: rows }]}/>
-  </IssueRowActionsProvider></I18nProvider>)
+  </IssueRowActionsProvider></TooltipProvider></I18nProvider>)
 }
+
+beforeEach(() => { localStorage.clear(); resetListGroupCountMode() })
+
+describe('issue list group count', () => {
+  it('draws the estimate total beside the points icon instead of the issue count (unestimated issues count as 1 point)', () => {
+    mount({ estimateType: 'fibonacci' })
+    const total = screen.getByRole('button', { name: '9 estimate points' })
+    expect(total.querySelector('.estimate-icon')).not.toBeNull()
+    expect(total).toHaveTextContent('9')
+    expect(screen.queryByRole('button', { name: '3 issues' })).toBeNull()
+  })
+
+  it('counts unestimated issues as 0 points when "Count unestimated issues" is off', () => {
+    mount({ estimateType: 'fibonacci', estimateCountUnestimated: false })
+    expect(screen.getByRole('button', { name: '8 estimate points' })).toBeInTheDocument()
+  })
+
+  it('shows a plain count, with no icon or toggle, for a team without estimates', () => {
+    mount({ estimateType: 'notUsed' })
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /estimate points|3 issues/ })).toBeNull()
+    expect(document.querySelector('[data-my-issues-group-header] .estimate-icon')).toBeNull()
+  })
+
+  it('switches every header to issue counts on click and back, keeping the choice across mounts', async () => {
+    mount({ estimateType: 'fibonacci' })
+    await userEvent.hover(screen.getByRole('button', { name: '9 estimate points' }))
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('Estimate points')
+    expect(tip).toHaveTextContent('Click to show issue counts')
+    await userEvent.click(screen.getByRole('button', { name: '9 estimate points' }))
+    const count = screen.getByRole('button', { name: '3 issues' })
+    expect(count).toHaveTextContent('3')
+    expect(count.querySelector('.estimate-icon')).toBeNull()
+    expect(localStorage.getItem('flow:list-group-count')).toBe('issues')
+    await userEvent.unhover(count)
+    await userEvent.hover(count)
+    const countTip = await screen.findByRole('tooltip')
+    expect(countTip).toHaveTextContent('Issue count')
+    expect(countTip).toHaveTextContent('Click to show estimate points')
+    cleanup()
+    resetListGroupCountMode()
+    mount({ estimateType: 'fibonacci' })
+    await userEvent.click(screen.getByRole('button', { name: '3 issues' }))
+    expect(screen.getByRole('button', { name: '9 estimate points' })).toBeInTheDocument()
+  })
+})
 
 describe('issue list estimates', () => {
   it('shows "△ N" chips on estimated rows and the group total (unestimated issues count as 1 point)', () => {
@@ -48,8 +98,11 @@ describe('issue list estimates', () => {
     const tokens = fs.readFileSync('src/styles/tokens.css', 'utf8')
     const css = fs.readFileSync('src/components/my-issues/my-issues-list.module.css', 'utf8')
     expect(tokens).toMatch(/:root\{color-scheme:dark;[^}]*--estimate-group-total:lch\(63\.304% 7 271\.994\)/)
-    expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total:lch\(/)
-    expect(css).toContain('.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total)')
+    expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total:lch\(37\.776% 12 281\.999\)/)
+    expect(tokens).toMatch(/:root\{color-scheme:dark;[^}]*--estimate-group-total-plain:lch\(63\.304% 1\.425 272\);--estimate-group-total-hover:lch\(100% 0 272\)/)
+    expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total-plain:lch\(37\.776% 1\.25 282\);--estimate-group-total-hover:lch\(9\.444% 0 282\)/)
+    expect(css).toContain('.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total-plain)')
+    expect(css).toContain(':global([data-team-issue-surface="true"]) .groupCountButton,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip){color:var(--estimate-group-total)}')
   })
 
   it('hides chips and totals for teams that do not use estimates', () => {

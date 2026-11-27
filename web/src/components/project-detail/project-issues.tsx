@@ -33,7 +33,7 @@ import {
   issueHierarchyFields,
   issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
-import { buildIssueGroups, groupMoveUpdate, groupSummaries, focusCasesKey, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { buildIssueGroups, groupMoveUpdate, groupSummaries, focusCasesKey, labelGroupOptions, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
 import { boundedIssueSequence } from "@/lib/navigation-context";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
@@ -143,7 +143,7 @@ export function ProjectIssueDisplayMenu({
       hideSplit
       toggles={projectDisplayToggles}
       groups={groups}
-      labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
+      labelGroupOptions={issueData ? labelGroupOptions(issueData) : []}
       modified={!issueDisplayEqual(display, DEFAULT_PROJECT_ISSUE_DISPLAY)}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
       phoneIssueMenu
@@ -363,10 +363,11 @@ export function ProjectIssues({
   const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
   const showProjectIntro = !milestoneScope && projectHasNoIssues;
   const focusKey = issueData ? focusCasesKey(display, issueData) : '';
-  const pagedQuery = useDepsSnapshot<IssueQueryInput>([project.id, milestoneScope, filters, display, focusKey], () => {
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueData : undefined);
+  const defaultLabelGroupId = issueData ? labelGroupOptions(issueData)[0]?.id : undefined;
+  const pagedQuery = useDepsSnapshot<IssueQueryInput>([project.id, milestoneScope, filters, display, focusKey, defaultLabelGroupId], () => {
+    const { sort, direction, groupBy, groupCases, labelGroupId, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueData : undefined, defaultLabelGroupId);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
+    return { projectId: project.id, archived, groupBy, groupCases, labelGroupId, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
   });
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),

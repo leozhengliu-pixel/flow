@@ -473,6 +473,8 @@ export type IssueQueryInput = {
   groupValues?: string[];
   /** `groupBy: 'cases'`: each row is in the group of the first case whose filter it matches (the Focus buckets). */
   groupCases?: { value: string; filter: Record<string, unknown> }[];
+  /** `groupBy: 'labelGroup'`: the label group whose labels the issues group by. */
+  labelGroupId?: string;
   includeTotal?: boolean;
   includeStatusHistory?: boolean;
   /** Nested sub-issues: sub-issues whose parent matches come with the parent's page (`descendants`), not as rows of their own. */
@@ -503,7 +505,11 @@ export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: Abo
   return request(`/api/projects${params.size ? `?${params}` : ''}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 
-export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {
+/** `aggregate: 'estimatePoints'` adds each group's estimate point total (left out for a group without issues of a team that uses estimates). */
+export type IssueRecordGroupsInput = IssueQueryInput & { aggregate?: 'estimatePoints' }
+export type IssueRecordGroup = { value: string; count: number; estimatePoints?: number }
+
+export function listIssueRecordGroups(filters: IssueRecordGroupsInput, signal?: AbortSignal): Promise<{ groups: IssueRecordGroup[] }> {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || key === 'cursor' || key === 'groupValue' || key === 'groupValues') continue
@@ -800,7 +806,7 @@ export function createLabelGroup(input: {
 export function updateLabelGroup(
   id: string,
   input: Partial<
-    Pick<LabelGroup, "name" | "color" | "description" | "archivedAt">
+    Pick<LabelGroup, "name" | "color" | "description" | "archivedAt" | "multiSelect">
   >,
 ): Promise<LabelGroup> {
   return request(`/api/label-groups/${id}`, jsonRequest("PATCH", input));
@@ -3810,6 +3816,11 @@ export function mergeLabels(
   fromLabelIds: string[],
 ): Promise<IssueLabel> {
   return request("/api/labels/merge", jsonRequest("POST", { toLabelId, fromLabelIds }));
+}
+
+/** Moves a workspace label group and its labels to each team that uses them; returns the teams' copies of the group. */
+export function moveWorkspaceLabelGroupToTeams(groupId: string): Promise<LabelGroup[]> {
+  return request(`/api/label-groups/${groupId}/move-to-teams`, jsonRequest("POST", {}));
 }
 
 export function moveWorkspaceLabelToTeams(

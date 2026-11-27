@@ -21,7 +21,7 @@ import {
 } from '@/components/content-view'
 
 export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity' | 'shared'
-export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'releaseDate' | 'labelGroup' | 'activityDate' | 'none'
+export type MyIssuesGrouping = 'focus' | 'status' | 'statusType' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'releaseDate' | 'labelGroup' | 'activityDate' | 'none'
 export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'customerImportantCount' | 'timeInStatus'
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'creator' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
 
@@ -31,6 +31,8 @@ export interface MyIssuesDisplayOptions {
   grouping: MyIssuesGrouping
   /** The parent label group used by the `labelGroup` grouping (the reference app "group by label group"). */
   labelGroupId?: string
+  /** The label group used when the sub-grouping (board rows) is `labelGroup`; it never equals `labelGroupId` when both groupings are label groups. */
+  subLabelGroupId?: string
   /** Unset means the reference default: status groups run started, unstarted, backlog, triage, completed, canceled; other groupings run ascending. A stored value keeps exactly its own order. */
   groupOrder?: 'asc' | 'desc'
   subGrouping: MyIssuesGrouping
@@ -41,6 +43,8 @@ export interface MyIssuesDisplayOptions {
   orderCompletedByRecency: boolean
   showSubIssues: boolean
   showEmptyGroups: boolean
+  /** Board rows (sub-groups) without issues; lists use `showEmptyGroups` for both levels. */
+  showEmptyRows?: boolean
   nestedSubIssues: boolean
   hiddenGroupIds: string[]
   /** The reference app `showTriageIssues`; undefined means the surface default. */

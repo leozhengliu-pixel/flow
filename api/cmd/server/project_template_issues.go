@@ -70,7 +70,7 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 		}
 		issue.LabelIDs = normalizedStrings(issue.LabelIDs)
 		labels := labelsByIDForResource(data, issue.LabelIDs, "issue")
-		if len(labels) != len(issue.LabelIDs) || !validLabelGroupSelection(labels) || issue.TeamID != "" && !labelsAvailableToTeam(data, labels, issue.TeamID) {
+		if len(labels) != len(issue.LabelIDs) || !validLabelGroupSelection(data, labels) || issue.TeamID != "" && !labelsAvailableToTeam(data, labels, issue.TeamID) {
 			return nil, errInvalid
 		}
 		if len(issue.LabelIDs) == 0 {
@@ -263,7 +263,7 @@ func createProjectTemplateIssues(data *domain.Bootstrap, template domain.Project
 			if !labelsAvailableToTeam(data, []domain.IssueLabel{label}, team.ID) || label.GroupID != "" && groups[label.GroupID] {
 				continue
 			}
-			if label.GroupID != "" {
+			if label.GroupID != "" && !labelGroupMultiSelect(data, label.GroupID) {
 				groups[label.GroupID] = true
 			}
 			labels = append(labels, label)

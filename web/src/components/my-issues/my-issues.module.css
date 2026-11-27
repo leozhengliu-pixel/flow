@@ -76,3 +76,14 @@
 }
 
 @media(max-width:767px){.viewsSubheader.viewsSubheader{gap:6px;border-style:none}}
+
+/* Fine pointers at phone widths (a desktop browser window) use the reference's 28px controls; touch devices keep 32px. */
+@media (max-width: 767px) and (pointer: fine) {
+  .tab,.tabsOverflow{height:28px}
+  .iconButton,.actions button{width:28px;height:28px;flex:0 0 28px}
+}
+
+/* Phone header, fine pointers: the reference's 28px menu button, 12px before the title. */
+@media (max-width: 767px) and (pointer: fine) {
+  html:root[data-sidebar-mode] body :global(.app) [data-my-issues-surface="true"] [data-content-view-header] [data-sidebar-trigger] { flex-basis: 28px; height: 28px; margin-right: 12px; min-width: 28px; width: 28px; }
+}

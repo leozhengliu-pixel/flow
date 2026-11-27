@@ -4,7 +4,7 @@ import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { statusGroupIndex } from '@/lib/status-groups'
 import { groupDescriptors, type IssueGroupingContext } from './issue-grouping'
 
-type StatusGroupContext = Pick<BootstrapData, 'states' | 'teams'> & Partial<Pick<BootstrapData, 'teamSettings'>>
+type StatusGroupContext = Pick<BootstrapData, 'states' | 'teams'> & Partial<Pick<BootstrapData, 'teamSettings' | 'labels'>>
 
 /**
  * The query of one group's pages. A status group that several team workflows share (`statusGroupFor`) pages all of
@@ -24,6 +24,13 @@ export function pagedGroupFilter(query: IssueQueryInput, value: string, data: St
     const cases = query.groupCases ?? []
     const index = cases.findIndex(item => item.value === value)
     return { and: [...(index < 0 ? cases : cases.slice(0, index)).map(item => ({ not: item.filter })), ...(index < 0 ? [] : [cases[index].filter])] }
+  }
+  if (field === 'labels' || field === 'labelGroup') {
+    // Multi-membership: a label's group is every issue with that label; "No label" has none of the grouping's labels.
+    if (value) return { field: 'labels', operator: 'in', values: [value] }
+    if (field === 'labels') return { field: 'labels', operator: 'isEmpty', values: [] }
+    const members = (data.labels ?? []).filter(label => label.groupId === query.labelGroupId).map(label => label.id)
+    return members.length ? { not: { field: 'labels', operator: 'in', values: members } } : { and: [] }
   }
   const values = field === 'status' ? statusGroupIndex(data).memberIds(value) : [value]
   return { field: field === 'label' ? 'firstLabel' : field === 'milestone' ? 'projectMilestoneId' : field === 'customer' ? 'customers' : field, operator: value ? 'in' : 'isEmpty', values }

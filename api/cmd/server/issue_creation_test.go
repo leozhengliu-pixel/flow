@@ -72,6 +72,10 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 	allowed := map[string]bool{
 		"store": true, "authDisabled": true,
 		"requestIssueQueryAccess": true, "issueRecordAccess": true,
+		// Reads a label group's active label IDs straight from the metadata
+		// records (fresh strings, bounded by MaxIssueGroupLabels); it never
+		// touches the borrowed snapshot.
+		"issueGroupLabelIDs": true,
 	}
 	allowedStore := map[string]bool{
 		"BoundedMetadataEnabled": true, "WorkspaceMetadata": true,

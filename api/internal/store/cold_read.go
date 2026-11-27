@@ -46,6 +46,14 @@ func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[st
 			// facade needs workspace identity, the locally installed rows it
 			// updates, and the inputs to webhookNeeded.
 			fields = []string{"loops", "loopVersions", "webhooks", "integrationConnections"}
+		} else if labelAutomationScope(ctx) != nil {
+			// Label mutations load only referencing automations inside their
+			// transaction. The facade publishes these edits from canonical rows.
+			for _, field := range persistedMetadataFields() {
+				if !slices.Contains(labelAutomationFields, field.name) {
+					fields = append(fields, field.name)
+				}
+			}
 		}
 		for workspace, source := range sources {
 			data, err := r.decodeColdImage(ctx, workspace, source, fields)

@@ -142,3 +142,39 @@ describe('only show lead team projects', () => {
     expect(result.current.state.display.layout).toBe('timeline')
   })
 })
+
+describe('project label groupings', () => {
+  const stage = { id: 'stage', name: 'Stage', color: '#999', resourceType: 'project' as const, createdAt: '' }
+  const size = { id: 'size', name: 'Size', color: '#999', resourceType: 'project' as const, createdAt: '' }
+  const labels = new Map([
+    ['alpha', { id: 'alpha', name: 'Alpha', color: '#f00', groupId: 'stage' }],
+    ['beta', { id: 'beta', name: 'Beta', color: '#0f0', groupId: 'stage' }],
+    ['small', { id: 'small', name: 'Small', color: '#00f', groupId: 'size' }],
+    ['plain', { id: 'plain', name: 'Plain', color: '#999' }],
+  ])
+  const context = { labels, labelGroups: [stage, size], teams: new Map(), initiatives: new Map() }
+  const projects = [
+    project(statuses[0], { id: 'one', labelIds: ['alpha', 'plain'] }),
+    project(statuses[0], { id: 'two', labelIds: ['beta', 'small'] }),
+    project(statuses[0], { id: 'three' }),
+  ]
+  const groups = (display: Partial<ProjectsViewState['display']>) => groupProjectsForView(projects, state({ ordering: 'Manual', showEmptyGroups: false, ...display }), statuses, undefined, context)
+
+  it('heads grouped labels "Group › Label", lists plain labels first and "No label" last in a list, first on a board', () => {
+    const list = groups({ grouping: 'Label', layout: 'list' })
+    expect(list.map(group => [group.labelPrefix ?? '', group.name, group.projects.map(item => item.id)])).toEqual([
+      ['', 'Plain', ['one']], ['Size', 'Small', ['two']], ['Stage', 'Alpha', ['one']], ['Stage', 'Beta', ['two']], ['', 'No label', ['three']],
+    ])
+    expect(groups({ grouping: 'Label', layout: 'board' })[0].name).toBe('No label')
+  })
+
+  it('groups by the chosen label group, keeping the group name before each label', () => {
+    const byGroup = groups({ grouping: 'Label group', layout: 'list', labelGroupId: 'stage' })
+    expect(byGroup.map(group => [group.labelPrefix, group.name, group.projects.map(item => item.id)])).toEqual([
+      ['Stage', 'Alpha', ['one']], ['Stage', 'Beta', ['two']], [undefined, 'No label', ['three']],
+    ])
+    // No stored group: the first one alphabetically (Size); the sub-grouping defaults to the other group.
+    const nested = groups({ grouping: 'Label group', subGrouping: 'Label group', layout: 'list' })
+    expect(nested.map(group => [group.name, group.subgroups?.map(sub => sub.name)])).toEqual([['Small', ['Beta']], ['No label', ['Alpha', 'No label']]])
+  })
+})

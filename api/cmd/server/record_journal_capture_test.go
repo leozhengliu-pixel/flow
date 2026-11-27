@@ -10,8 +10,11 @@ import (
 )
 
 func TestRecordJournalCaptureCommand(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	if code := recordJournalCaptureCommand([]string{"rebuild"}, &stdout, &stderr); code != 2 {
+	var stdout bytes.Buffer
+	// The command points the global loggers at stderr, so background
+	// goroutines that earlier tests left logging write here concurrently.
+	stderr := &lockedBuffer{}
+	if code := recordJournalCaptureCommand([]string{"rebuild"}, &stdout, stderr); code != 2 {
 		t.Fatalf("unknown action exited %d", code)
 	}
 	t.Setenv("FLOW_DATABASE_DRIVER", "sqlite")
@@ -19,7 +22,7 @@ func TestRecordJournalCaptureCommand(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, action := range []string{"status", "resync"} {
 		stdout.Reset()
-		if code := recordJournalCaptureCommand([]string{action}, &stdout, &stderr); code != 0 {
+		if code := recordJournalCaptureCommand([]string{action}, &stdout, stderr); code != 0 {
 			t.Fatalf("%s exited %d: %s", action, code, stderr.String())
 		}
 		var report struct {
@@ -31,7 +34,7 @@ func TestRecordJournalCaptureCommand(t *testing.T) {
 		}
 	}
 	// Dropping triggers is a MySQL application-capture step.
-	if code := recordJournalCaptureCommand([]string{"drop-triggers"}, &stdout, &stderr); code != 2 {
+	if code := recordJournalCaptureCommand([]string{"drop-triggers"}, &stdout, stderr); code != 2 {
 		t.Fatalf("drop-triggers on SQLite exited %d", code)
 	}
 }

@@ -87,6 +87,10 @@ html:root body .property-command-surface .property-command-options [role=option]
   color: var(--pk-text);
   font: 450 13px/normal var(--font);
 }
+/* The label picker lists labels and groups in the regular weight (the design reference measures 400). */
+html:root body .property-command-surface.property-command-labels .property-command-options [role=option] {
+  font-weight: 400;
+}
 html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] {
   color: var(--pk-text-strong);
 }

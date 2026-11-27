@@ -386,6 +386,45 @@ func TestLabelGroupArchiveCascadesToChildLabels(t *testing.T) {
 	}
 }
 
+func TestMultiSelectLabelGroupAllowsSeveralLabels(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	group := requestJSON[domain.LabelGroup](t, handler, http.MethodPost, "/api/label-groups", map[string]any{
+		"name": "Area", "resourceType": "issue",
+	}, http.StatusCreated)
+	if group.MultiSelect {
+		t.Fatal("a new group is single-select")
+	}
+	web := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{"name": "Web", "resourceType": "issue", "groupId": group.ID}, http.StatusCreated)
+	api := requestJSON[domain.IssueLabel](t, handler, http.MethodPost, "/api/labels", map[string]any{"name": "API", "resourceType": "issue", "groupId": group.ID}, http.StatusCreated)
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Both areas", "teamId": bootstrap.Teams[0].ID}, http.StatusCreated)
+	both := map[string]any{"labelIds": []string{web.ID, api.ID}}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, both, http.StatusBadRequest)
+
+	group = requestJSON[domain.LabelGroup](t, handler, http.MethodPatch, "/api/label-groups/"+group.ID, map[string]any{"multiSelect": true}, http.StatusOK)
+	if !group.MultiSelect {
+		t.Fatal("group type did not change to multi-select")
+	}
+	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, both, http.StatusOK)
+	if len(updated.Labels) != 2 {
+		t.Fatalf("multi-select group kept %d labels, want 2", len(updated.Labels))
+	}
+	created := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Created with both", "teamId": bootstrap.Teams[0].ID, "labelIds": []string{web.ID, api.ID}}, http.StatusCreated)
+	if len(created.Labels) != 2 {
+		t.Fatalf("created issue kept %d labels, want 2", len(created.Labels))
+	}
+	group = requestJSON[domain.LabelGroup](t, handler, http.MethodPatch, "/api/label-groups/"+group.ID, map[string]any{"multiSelect": false}, http.StatusOK)
+	if group.MultiSelect {
+		t.Fatal("group type did not change back to single-select")
+	}
+}
+
 func TestWorkspaceLabelMovesBetweenGroups(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

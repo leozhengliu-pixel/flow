@@ -238,6 +238,16 @@ func TestIssueRecordTotalMatchesCountSQL(t *testing.T) {
 		{name: "group-values", fields: []string{"GroupBy", "GroupValues"}, apply: func(q *IssueRecordQuery) {
 			q.GroupBy, q.GroupValues = "status", []string{state0, state1}
 		}},
+		// A label group grouping: a label's bucket, and "No label" (issues
+		// without any of the group's labels).
+		{name: "group-label-group-bucket", fields: []string{"GroupBy", "GroupValue", "GroupLabelIDs"}, apply: func(q *IssueRecordQuery) {
+			label := labelA
+			q.GroupBy, q.GroupValue, q.GroupLabelIDs = "labels", &label, []string{labelA}
+		}},
+		{name: "group-label-group-none", fields: []string{"GroupBy", "GroupValue", "GroupLabelIDs"}, apply: func(q *IssueRecordQuery) {
+			none := ""
+			q.GroupBy, q.GroupValue, q.GroupLabelIDs = "labels", &none, []string{labelA}
+		}},
 		{name: "group-cases", fields: []string{"GroupBy", "GroupCases"}, apply: func(q *IssueRecordQuery) {
 			q.GroupBy = "cases"
 			q.GroupCases = []IssueGroupCase{{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}}
@@ -286,6 +296,9 @@ func TestIssueRecordTotalMatchesCountSQL(t *testing.T) {
 		"AllowedTeamIDs": true, "Access": true, "Text": true, "SearchText": true,
 		"Archived": true, "GroupBy": true, "GroupValue": true, "GroupValues": true,
 		"GroupCases": true, "Nested": true,
+		// Limits a label grouping to a label group's labels; its "No label"
+		// bucket is the issues without any of them.
+		"GroupLabelIDs": true,
 	}
 	nonPredicateFields := map[string]bool{
 		"Sort": true, "Direction": true, "Cursor": true, "Limit": true,

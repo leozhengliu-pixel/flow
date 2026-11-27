@@ -6,7 +6,7 @@ export type IssueQueryInvalidation = { workspaceKey: string; issueId?: string; i
 
 export function queryUsesLabels(query: IssueQueryInput): boolean {
   const visit = (node?: Record<string, unknown>): boolean => Boolean(node && (node.field === 'labels' || node.field === 'labelId' || ['and', 'or'].some(key => Array.isArray(node[key]) && node[key].some(visit))))
-  return query.groupBy === 'label' || visit(query.filter)
+  return query.groupBy === 'label' || query.groupBy === 'labels' || query.groupBy === 'labelGroup' || visit(query.filter)
 }
 
 // This is an exclusion check, not a second query engine. Unknown predicates

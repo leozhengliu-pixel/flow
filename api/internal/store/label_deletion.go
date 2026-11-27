@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,6 +73,7 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 	if err != nil {
 		return err
 	}
+	s.dropMetadataCache(ctx, workspace)
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, event)
 	}
@@ -88,13 +90,7 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 // It returns the deleted label IDs and the metadata records it changed
 // (field, key, written value; nil when deleted).
 func (s *SQLiteStore) labelDeletionWrite(ctx context.Context, tx *sqlTx, workspace, id string, group bool, mutate func(*domain.Bootstrap) error) ([]string, map[string]map[string]json.RawMessage, error) {
-	text := "CAST(data AS TEXT)"
-	if s.dialect == "mysql" {
-		text = "CAST(data AS CHAR)"
-	}
-	if s.dialect == "postgres" {
-		text = "flow_utf8(data)"
-	}
+	text := labelReferenceText(s.dialect)
 	lock := ""
 	if s.dialect != "sqlite" {
 		lock = " FOR UPDATE"
@@ -165,61 +161,44 @@ func (s *SQLiteStore) labelDeletionWrite(ctx context.Context, tx *sqlTx, workspa
 	if group {
 		referenceIDs = append(referenceIDs, id)
 	}
-	for _, labelID := range referenceIDs {
-		lastField, lastID := "", ""
-		for {
-			rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','initiatives','issueTemplates','projectTemplates','triageRoutingRules','savedViews','favorites','subscriptions') AND (field>? OR (field=? AND record_key>?)) AND `+text+` LIKE ? ESCAPE '!' ORDER BY field,record_key LIMIT 100`+lock, workspace, lastField, lastField, lastID, labelReferencePattern(labelID))
+	fields := []string{"projects", "initiatives", "issueTemplates", "projectTemplates", "triageRoutingRules", "savedViews", "favorites", "subscriptions", "workflowDefinitions", "loops"}
+	if err := visitLabelReferenceRecords(ctx, tx, workspace, fields, referenceIDs, func(key metadataRecordKey, row metadataRecord) error {
+		next := cloneBootstrap(base)
+		if err := appendLabelProjection(&next, key.field, row.data); err != nil {
+			return err
+		}
+		before := row.data
+		automation := slices.Contains(labelAutomationFields, key.field)
+		if automation {
+			var err error
+			before, err = labelProjectionRecord(next, key.field)
 			if err != nil {
-				return nil, nil, err
-			}
-			type record struct {
-				field, id string
-				raw       []byte
-			}
-			batch := []record{}
-			for rows.Next() {
-				var item record
-				if err := rows.Scan(&item.field, &item.id, &item.raw); err != nil {
-					rows.Close()
-					return nil, nil, err
-				}
-				batch = append(batch, item)
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				return nil, nil, err
-			}
-			if len(batch) == 0 {
-				break
-			}
-			for _, item := range batch {
-				lastField, lastID = item.field, item.id
-				next := cloneBootstrap(base)
-				if err := appendLabelProjection(&next, item.field, item.raw); err != nil {
-					return nil, nil, err
-				}
-				if err := mutate(&next); err != nil {
-					return nil, nil, err
-				}
-				updated, err := labelProjectionRecord(next, item.field)
-				if err != nil {
-					return nil, nil, err
-				}
-				if bytes.Equal(updated, item.raw) {
-					continue
-				}
-				if len(updated) == 0 {
-					_, err = tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, item.field, item.id)
-				} else {
-					_, err = tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`, []byte(updated), workspace, item.field, item.id)
-				}
-				if err != nil {
-					return nil, nil, err
-				}
-				remember(item.field, item.id, updated)
+				return err
 			}
 		}
+		if err := mutate(&next); err != nil {
+			return err
+		}
+		updated, err := labelProjectionRecord(next, key.field)
+		if err != nil || bytes.Equal(updated, before) {
+			return err
+		}
+		if len(updated) == 0 {
+			_, err = tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key)
+		} else {
+			updated = StripJSONNUL(updated)
+			if automation {
+				err = writeMetadataRecordRow(ctx, tx, workspace, key, metadataRecord{order: row.order, data: updated}, row.data)
+			} else {
+				_, err = tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field=? AND record_key=?`, []byte(updated), workspace, key.field, key.key)
+			}
+		}
+		if err == nil {
+			remember(key.field, key.key, updated)
+		}
+		return err
+	}); err != nil {
+		return nil, nil, err
 	}
 	if issueLabels {
 		for _, labelID := range ids {
@@ -298,6 +277,72 @@ func (s *SQLiteStore) labelDeletionWrite(ctx context.Context, tx *sqlTx, workspa
 		remember("labelGroups", id, nil)
 	}
 	return ids, changes, nil
+}
+
+func labelReferenceText(dialect string) string {
+	switch dialect {
+	case "mysql":
+		return "CAST(data AS CHAR)"
+	case "postgres":
+		return "flow_utf8(data)"
+	default:
+		return "CAST(data AS TEXT)"
+	}
+}
+
+// Visit candidate rows in bounded pages. A row can name several of the
+// labels, so visit it once and let the callback check its actual references.
+func visitLabelReferenceRecords(ctx context.Context, tx *sqlTx, workspace string, fields, ids []string, visit func(metadataRecordKey, metadataRecord) error) error {
+	clause, fieldArgs := bindList("field", fields)
+	lock := ""
+	if tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	query := `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND ` + clause +
+		` AND (field>? OR (field=? AND record_key>?)) AND ` + labelReferenceText(tx.dialect) + ` LIKE ? ESCAPE '!' ORDER BY field,record_key LIMIT 100` + lock
+	seen := map[metadataRecordKey]bool{}
+	for _, id := range ids {
+		last := metadataRecordKey{}
+		pattern := labelReferencePattern(id)
+		for {
+			args := append([]any{workspace}, fieldArgs...)
+			rows, err := tx.QueryContext(ctx, query, append(args, last.field, last.field, last.key, pattern)...)
+			if err != nil {
+				return err
+			}
+			type record struct {
+				key metadataRecordKey
+				row metadataRecord
+			}
+			var batch []record
+			for rows.Next() {
+				var item record
+				if err := rows.Scan(&item.key.field, &item.key.key, &item.row.order, &item.row.data); err != nil {
+					rows.Close()
+					return err
+				}
+				batch = append(batch, item)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			for _, item := range batch {
+				last = item.key
+				if !seen[last] {
+					if err := visit(last, item.row); err != nil {
+						return err
+					}
+					seen[last] = true
+				}
+			}
+			if len(batch) < 100 {
+				break
+			}
+		}
+	}
+	return nil
 }
 
 func labelReferencePattern(id string) string {

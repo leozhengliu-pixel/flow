@@ -118,14 +118,17 @@ test('shows group rows only for a real grouping and keeps the names column whole
   expect((await longRow.locator('.lp-project-timeline__cells').boundingBox())!.x).toBeCloseTo(cellBoxes[0].x, 0)
 
   timeline = await openTimeline(page, workspaceKey, { grouping: 'Status' })
-  const group = timeline.locator('.lp-project-timeline__group h2').first()
+  // A grouped timeline heads each group with the reference's group bar: inset 8px on both sides of the
+  // pane, 36px tall, pinned to the left edge while the canvas scrolls.
+  const group = timeline.locator('.lp-project-timeline__group-bar').first()
   await expect(group).toBeVisible()
   const scroller = (await timeline.locator('.lp-project-timeline__scroller').boundingBox())!
   const groupBox = (await group.boundingBox())!
-  expect(groupBox.x).toBeCloseTo(scroller.x, 0)
-  expect(groupBox.width).toBeCloseTo(NAMES_COLUMN, 0)
+  expect(groupBox.x).toBeCloseTo(scroller.x + 8, 0)
+  expect(groupBox.height).toBe(36)
+  expect(groupBox.width).toBeGreaterThan(NAMES_COLUMN)
   // The group's name is on top of the names column backdrop.
-  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('h2') !== null, [groupBox.x + 20, groupBox.y + groupBox.height / 2])).toBe(true)
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.lp-project-timeline__group-bar') !== null, [groupBox.x + 40, groupBox.y + groupBox.height / 2])).toBe(true)
 })
 
 test('draws the names column down the pane and fades the today line', async ({ page, request, workspaceKey }) => {

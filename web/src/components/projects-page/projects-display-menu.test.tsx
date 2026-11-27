@@ -52,9 +52,11 @@ describe('ProjectsDisplayMenu', () => {
     rerender(<ProjectsDisplayMenu onChange={vi.fn()} settings={{ ...ungrouped, grouping: 'Status', layout: 'board', ordering: 'Name' }}/>)
     expect(screen.getByRole('button', { name: 'Group ordering' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Direction' })).toBeVisible()
-    expect(screen.getByText('Sub-grouping')).toBeVisible()
+    // Boards name the levels Columns and Rows, and the empty-group toggle "Show empty columns" (the design reference).
+    expect(screen.getByText('Columns')).toBeVisible()
+    expect(screen.getByText('Rows')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Board options' })).toBeVisible()
-    expect(screen.getByRole('checkbox', { name: 'Show empty groups' })).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: 'Show empty columns' })).toBeVisible()
   })
 
   it('offers "Only show lead team projects" only on a team page', async () => {

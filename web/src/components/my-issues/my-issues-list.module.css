@@ -58,9 +58,15 @@
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}
-/* Sub-grouping: primary header sits above indented sub-group headers. */
-.parentGroupHeader{height:32px;margin:6px 8px 2px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--theme-text-primary)}
-.groupHeader[data-subgroup]{margin-left:24px}
+/* Sub-grouping: the primary group keeps the full header; each sub-group is a bare row with a hairline after its count. */
+.groupHeader[data-subgroup],:global(:root[data-theme="light"]) .groupHeader[data-subgroup]{background:var(--group-subheader-bg)}
+.groupHeader[data-subgroup]::after{content:'';flex:1 1 auto;order:1;height:.5px;min-width:0;background:var(--group-subheader-line)}
+.groupHeader[data-subgroup] .createButton{order:2;margin-left:0}
+/* Label groupings: the label's colour dot, and "Group › Label" for a label in a group. */
+.groupDot{width:9px;height:9px;flex:0 0 9px;margin:0 3.5px 0 1.5px;border-radius:50%;background:var(--group-label-color)}
+.groupPrefix{color:var(--group-label-prefix);font-weight:450}
+.groupPathChevron{flex:0 0 5px;margin:0 8px;color:var(--group-label-chevron)}
+.groupName:has(.groupPrefix){display:flex;align-items:center}
 .row[data-active]{background:var(--bg-active)}.row[data-active]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent-primary)}
 :global(:root[data-theme="light"]) .groupHeader{background:var(--bg-sidebar)}
 :global(:where(:root[data-theme="light"])) .contextMenu .menuItem,:global(:where(:root[data-theme="light"])) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
@@ -108,13 +114,21 @@
 
 /* Estimate chip on rows ("△ 5", 12px 450 in the muted colour) and the group total ("Todo 2 △ 8", 13px 450). */
 .estimateChip{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--theme-border-strong);border-radius:48px;background:var(--theme-surface-1);color:var(--issue-muted)}
-.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}
+.groupCountButton,.groupEstimate:global(.estimate-chip){appearance:none;border:0;background:transparent;padding:0;cursor:pointer}.groupCountButton{color:var(--estimate-group-total-plain);font:450 13px/normal var(--font);font-variant-numeric:tabular-nums}.groupCountButton:hover{color:var(--estimate-group-total-hover)}
+.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total-plain);font-size:13px;font-weight:450;font-variant-numeric:tabular-nums}.groupEstimate>:global(.estimate-icon){margin-top:-1px}
+.groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}
+/* The reference tints a status-grouped team list's header totals toward the status hue (chroma 7 dark, 12 light); every other list keeps the neutral secondary text. */
+:global([data-team-issue-surface="true"]) .groupCountButton,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip){color:var(--estimate-group-total)}
+:global([data-team-issue-surface="true"]) .groupCountButton:hover,:global([data-team-issue-surface="true"]) .groupEstimate:global(.estimate-chip):hover{color:var(--estimate-group-total-hover)}.groupCountButton:focus-visible,.groupEstimate:global(.estimate-chip):focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .submenuItem>:global(.estimate-icon){flex:0 0 16px;color:var(--pk-muted)}
 .submenuItem[data-highlighted]>:global(.estimate-icon){color:var(--pk-text-strong)}
 
 /* Phone rows: the reference app shows priority, status, title and the assignee only.
    A delegated session's state sits in a pill before (and around) the avatars. */
 @media(max-width:767px){
+  /* A narrow desktop window leaves label pills out of the rows, as the reference does there (labels stay in the
+     group headers and the issue); on a touch phone the reference keeps the pill. */
+  @media (pointer:fine){.labelsTrigger{display:none}}
   /* Keep the real selection control available to touch/automation users without
      taking a column in the compact phone row. It remains visually transparent
      until selected, matching the reference's uncluttered rows. */
@@ -155,7 +169,7 @@
   .collapseButton svg{color:var(--phone-icon-subtle)}
   .groupName{line-height:normal;border-style:none}
   .groupCount{font-size:13px;font-weight:450;line-height:normal;border-style:none}
-  .groupEstimate:global(.estimate-chip){gap:3px}
+  .groupEstimate:global(.estimate-chip){margin-left:-1px}
   .createButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;font-size:12px;font-weight:500;line-height:normal}
   .createButton svg{color:var(--phone-icon-secondary)}
   .sessionPillTrigger{min-width:0;min-height:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent}
@@ -166,6 +180,8 @@
   :global(:root[data-theme="dark"]) .groupName{color:var(--phone-group-title)}
   :global(:root[data-theme="dark"] [data-team-issue-surface="true"]) .groupName{height:15.5px;font-size:20px;line-height:25px;color:var(--bright);overflow:visible}
   :global([data-team-issue-surface="true"]) .groupText{display:inline-block;font-size:13px;font-weight:500;line-height:normal;color:var(--phone-group-title);vertical-align:top}
+  /* The dark phone group name is 20px tall for the status glyph; the label group prefix keeps the text size. */
+  :global([data-team-issue-surface="true"]) .groupPrefix{font-size:13px;line-height:normal}
   :global([data-team-issue-surface="true"]) .groupHeader:has([id^="my-issues-group-state_progress"]) .groupCount{color:var(--phone-group-started-count)}
   :global(:root[data-theme="dark"]) .groupCount{color:var(--phone-group-count)}
   :global(:root[data-theme="dark"]) .createButton{color:var(--phone-group-title);background:transparent}
@@ -239,7 +255,7 @@
   .collapseTip>.collapseButton{margin-left:0}
   .groupCaret{color:var(--issue-dim)}
   .groupHeader:has(.groupEstimate) .groupCount{display:none}
-  .groupEstimate{margin-left:3px}
+  .groupEstimate{margin-left:-1px}
 }
 .identifierProbe{position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums;font-feature-settings:"calt","cpsp","tnum";letter-spacing:0}
 .identifierProbe[data-observe-width]{width:max-content;height:0;overflow:hidden}
@@ -253,3 +269,42 @@
 .creatorAvatar{display:inline-flex;flex:none;align-items:center}
 /* Row menu Labels: the labels picker hugs its widest row like the property picker (207px to 399px). */
 .contextSubmenu.contextLabelsSubmenu{width:max-content;min-width:207px;max-width:min(399px,calc(100vw - 20px));max-height:min(490px,calc(100vh - 20px));padding:0;overflow:hidden}
+/* Label groupings tint the header with the label colour (the design reference gradient, path, count and chevrons). */
+.groupHeader[data-label-color]:not([data-subgroup]){background-image:var(--group-label-bg)}
+.groupHeader[data-label-color]:not([data-subgroup]) .groupText{color:var(--group-label-name);font-weight:450}
+.groupHeader[data-label-color]:not([data-subgroup]) :is(.groupCount,.groupCountButton,.createButton,.groupEstimate){color:var(--group-label-count)}
+.groupHeader[data-label-grouping] .groupEstimate{margin-left:-1px}
+/* Label grouping headers without a label colour ("No label") and every sub-group row use neutral tints. */
+.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.groupCount,.groupCountButton,.createButton,.groupEstimate){color:var(--group-plain-count)}
+.groupHeader[data-label-grouping]:is(:not([data-label-color]),[data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-plain-caret)}
+.groupHeader[data-label-color]:not([data-subgroup]) :is(.collapseButton,.groupCaret){color:var(--group-label-collapse)}
+/* A multi-select group's labels share a chip: 9px dots, each overlapping the previous by half. */
+.mergedDots{display:flex;flex:0 0 auto;margin:0 3px 0 2px}
+.mergedDots i{width:9px;height:9px;flex:0 0 9px;border-radius:50%}
+.mergedDots i+i{margin-left:-4.5px}
+/* Phones keep the reference spacing for label headers: the dot nudged into its slot, 7px before the estimate glyph, tinted plus. */
+@media(max-width:767px){
+  .groupHeader[data-label-grouping] .groupDot{margin:0 1.32px 0 -0.7px}
+  .groupHeader[data-label-grouping] .groupEstimate{margin-left:2.66px}
+  .groupHeader[data-label-grouping] .groupEstimate:global(.estimate-chip){gap:4px}
+  .groupHeader[data-label-grouping] .createButton{width:24px;height:24px}
+  .groupHeader[data-label-grouping] .createButton svg{color:inherit}
+}
+/* A narrow header ellipsizes the label path before it clips, the group name giving way first (shrink 2:1, as the reference). */
+.groupName>.groupPrefix{flex:0 2 auto;min-width:24.88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.groupName>.groupPrefix~.groupText{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Team issue lists, label groupings (the reference): the label path never ellipsizes (the header clips instead), and a narrow header
+   first gives back the 2.62px around the dot; the count chip sits 1px left of its slot. */
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupName { flex: none; overflow: visible }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupName>.groupPrefix,
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupName>.groupPrefix~.groupText { flex: none; min-width: auto; overflow: visible; text-overflow: clip }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupDot { background: none; flex: 0 0 16px; margin: 0 0 0 -2px; position: relative; width: 16px }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupDot::before { background: var(--group-label-color); border-radius: 50%; content: ''; height: 9px; left: 3.5px; position: absolute; top: 0; width: 9px }
+/* A "Group › Label" path takes a 11.62px dot slot that gives back 2.62px when the header is tight. */
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping]:has(.groupPrefix) .groupDot { flex: 0 1 11.62px; min-width: 9px; width: 11.62px }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping]:has(.groupPrefix) .groupDot::before { left: calc((100% - 9px) * .496) }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .groupEstimate { flex: none; margin-left: -1px }
+:global([data-team-issue-surface="true"]) .groupHeader[data-label-grouping] .createButton { flex: none }
+/* Dark label headers fade into the group header's own surface, as the reference. */
+:global(:root[data-theme="dark"] [data-team-issue-surface="true"]) .groupHeader[data-label-color]:not([data-subgroup]) { background-image: linear-gradient(90deg, var(--group-label-tint) 0%, var(--phone-group-bg) 100%) }
