@@ -235,7 +235,8 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	x.requestContext = t.Context()
 	seedIssueDelete(t, x)
 	owner, member, guest, inherited, suspended := x.principals[0], x.principals[2], x.principals[3], x.principals[4], x.principals[5]
-	children := []string{issueDeleteSibling, issueDeleteChild}
+	// A deletion trashes the whole sub-issue family, deepest first.
+	children := []string{issueDeleteGrandchild, issueDeleteSibling, issueDeleteChild}
 	for _, tc := range []struct {
 		name, family, ref, query, body string
 		principal                      *routeSweepPrincipal
@@ -245,7 +246,8 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	}{
 		{"records-cascade", "issue-records", issueDeleteRoot, "", "", owner, false, 204, children},
 		{"records-keep-old-identifier", "issue-records", "OLD-8101", "?subIssues=keep", "", owner, false, 204, nil},
-		{"records-body-family", "issue-records", "DEL-8101", "", `{"issueIds":["issue_delete_child"]}`, owner, false, 204, append([]string{issueDeleteGrandchild}, children...)},
+		// A body on DELETE never selects targets: the family is the same.
+		{"records-delete-body-ignored", "issue-records", "DEL-8101", "", `{"issueIds":["issue_delete_child"]}`, owner, false, 204, children},
 		{"records-explicit-editor", "issue-records", issueDeleteRoot, "", "", member, false, 204, children},
 		{"records-inherited-team", "issue-records", issueDeleteRoot, "", "", inherited, false, 204, children},
 		{"records-key-restriction", "issue-records", "OLD-8101", "", "", member, true, 403, nil},
@@ -266,7 +268,7 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 		checkIssueDeleteCollaboration(t, x, owner)
 	})
 	t.Run("restore-on-peer", func(t *testing.T) {
-		request := issueDeleteRequest("issue-records", issueDeleteRoot, "", `{"issueIds":["issue_delete_child"]}`, owner, false)
+		request := issueDeleteRequest("issue-records", issueDeleteRoot, "", "", owner, false)
 		got, _ := x.run(t, "reloaded", request, time.Now().UTC())
 		if got.Status != http.StatusNoContent {
 			t.Fatalf("delete status=%d", got.Status)
@@ -280,6 +282,13 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 			t.Fatal("missing issue trash entry on peer")
 		}
 		entry := deleted.Trash[index]
+		for _, id := range []string{issueDeleteChild, issueDeleteSibling, issueDeleteGrandchild} {
+			if issueIndexByID(&deleted, id) >= 0 || !slices.ContainsFunc(deleted.Trash, func(item domain.TrashEntry) bool {
+				return item.ResourceID == id && item.Links != nil && item.Links.DeletedWithIssueID == issueDeleteRoot
+			}) {
+				t.Fatalf("sub-issue %s was not trashed with the issue on peer", id)
+			}
+		}
 		var payload deletedIssuePayload
 		if err := json.Unmarshal(entry.Payload, &payload); err != nil || len(payload.Comments) != 1 ||
 			len(payload.Activities) != 1 || len(payload.Issue.Attachments) != 1 || entry.Links == nil || len(entry.Links.InverseRelations) != 1 {
@@ -302,6 +311,11 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 			!slices.ContainsFunc(restored.Favorites, func(item domain.Favorite) bool { return item.ID == "delete-favorite" }) ||
 			!slices.ContainsFunc(restored.Subscriptions, func(item domain.Subscription) bool { return item.ID == "delete-subscription" }) {
 			t.Fatal("peer restoration lost issue records or links")
+		}
+		if slices.ContainsFunc(restored.Trash, func(item domain.TrashEntry) bool {
+			return item.ResourceType == "issue" && strings.HasPrefix(item.ResourceID, "issue_delete_")
+		}) {
+			t.Fatal("peer restoration left part of the issue family in the trash")
 		}
 		x.reset(t)
 	})
@@ -359,7 +373,8 @@ func checkIssueDeleteCollaboration(t *testing.T, x *routeSweepSweep, owner *rout
 	if err != nil {
 		t.Fatal(err)
 	}
-	documents := []string{issueDeleteDocument, "document_content_" + issueDeleteChild, "document_content_" + issueDeleteGrandchild}
+	// The family's documents are cleaned up; an unrelated issue's is kept.
+	documents := []string{issueDeleteDocument, "document_content_" + issueDeleteChild, "document_content_" + issueDeleteGrandchild, "document_content_" + issueDeleteRelated}
 	started := time.Now().UTC()
 	got := map[string]routeSweepOutcome{}
 	slots, views := x.totalSlots, x.totalViews
@@ -379,7 +394,7 @@ func checkIssueDeleteCollaboration(t *testing.T, x *routeSweepSweep, owner *rout
 		}
 		for i, id := range documents {
 			updates, err := x.legacy.store.DocumentCollaborationUpdates(t.Context(), x.workspace, id)
-			if err != nil || len(updates) != i/2 {
+			if err != nil || len(updates) != i/3 {
 				t.Errorf("%s collaboration cleanup changed the wrong rows", source)
 			}
 		}
@@ -395,12 +410,19 @@ func checkIssueDeleteCollaboration(t *testing.T, x *routeSweepSweep, owner *rout
 
 func checkIssueDeleteLargeFamily(t *testing.T, x *routeSweepSweep, owner *routeSweepPrincipal, children []string) {
 	t.Helper()
-	const largeRoot = "issue_delete_large_root"
+	const largeRoot, nestedRoot, nestedMiddle = "issue_delete_large_root", "issue_delete_nested_root", "issue_delete_nested_middle"
 	err := x.legacy.store.MutateWorkspace(t.Context(), x.workspace, "issue-delete.large-fixture", "", nil, func(data *domain.Bootstrap) error {
 		parent := data.Issues[issueIndexByID(data, issueDeleteRoot)]
 		parent.ID, parent.Identifier, parent.Number = largeRoot, "DEL-8200", 8200
 		parent.SubIssueIDs, parent.Relations, parent.PreviousIdentifiers = nil, nil, nil
-		data.Issues = append(data.Issues, parent)
+		// The large family also sits two levels below a nested root.
+		top, middle := parent, parent
+		top.ID, top.Identifier, top.Number, top.SubIssueIDs = nestedRoot, "DEL-8198", 8198, []string{nestedMiddle}
+		top.DocumentContent, top.Attachments, top.Project = nil, nil, nil
+		middle.ID, middle.Identifier, middle.Number, middle.ParentID, middle.SubIssueIDs = nestedMiddle, "DEL-8199", 8199, &top.ID, []string{largeRoot}
+		middle.DocumentContent, middle.Attachments, middle.Project = nil, nil, nil
+		parent.ParentID = &middle.ID
+		data.Issues = append(data.Issues, top, middle, parent)
 		for i := range 1000 {
 			child := domain.Issue{ID: fmt.Sprintf("issue_delete_large_%04d", i), Identifier: fmt.Sprintf("DEL-%d", 8201+i),
 				Number: 8201 + i, ParentID: &parent.ID, Team: parent.Team, State: parent.State, Creator: parent.Creator,
@@ -414,6 +436,8 @@ func checkIssueDeleteLargeFamily(t *testing.T, x *routeSweepSweep, owner *routeS
 	}
 	reloadIssueDeleteBaseline(t, x)
 	checkIssueDelete(t, x, issueDeleteRequest("issue-records", largeRoot, "", "", owner, false), 500)
+	// The family limit counts every level, not only the direct children.
+	checkIssueDelete(t, x, issueDeleteRequest("issue-records", nestedRoot, "", "", owner, false), 500)
 	checkIssueDelete(t, x, issueDeleteRequest("issues", issueDeleteRoot, "", "", owner, false), 204, children...)
 }
 

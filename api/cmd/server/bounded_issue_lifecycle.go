@@ -85,6 +85,11 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 			return issuePermissionRank(issueRole(s, data, issue)) >= issuePermissionRank("editor")
 		}, mutate)
 	} else {
+		if records && !keep {
+			// The scoped writer loads the whole sub-issue family, not only
+			// the direct children, so nested sub-issues are trashed too.
+			ctx = store.WithIssueDeleteFamily(ctx)
+		}
 		err = s.store.MutateWorkspace(ctx, workspace, "issue.deleted", id, payload, mutate)
 	}
 	if errors.Is(err, store.ErrAuthForbidden) && errors.Is(err, store.ErrResourceAccessChanged) {

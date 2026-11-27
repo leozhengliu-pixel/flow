@@ -238,6 +238,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 					}
 				}
 			}
+			children := []string{}
 			for _, id := range parentIDs {
 				rows, err := tx.QueryContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND parent_id=? ORDER BY id LIMIT 1001`+lock, workspace, id)
 				if err != nil {
@@ -255,6 +256,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 						return err
 					}
 					loaded[issue.ID] = issue
+					children = append(children, issue.ID)
 				}
 				if err := rows.Err(); err != nil {
 					rows.Close()
@@ -264,6 +266,31 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			}
 			if len(loaded) > 1000 {
 				return fmt.Errorf("issue deletion requires a batch job")
+			}
+			if eventType == "issue.deleted" && deletesIssueFamily(ctx) {
+				// The deletion trashes the whole family: follow the sub-issues
+				// down one indexed level at a time, within the same limit.
+				seen := map[string]bool{}
+				for _, id := range append(slices.Clone(ids), children...) {
+					seen[id] = true
+				}
+				for level := children; len(level) > 0; {
+					found, err := issueDeleteChildRecords(ctx, tx, workspace, level, 1001)
+					if err != nil {
+						return err
+					}
+					level = nil
+					for _, issue := range found {
+						if !seen[issue.ID] {
+							seen[issue.ID] = true
+							loaded[issue.ID] = issue
+							level = append(level, issue.ID)
+						}
+					}
+					if len(loaded) > 1000 {
+						return fmt.Errorf("issue deletion requires a batch job")
+					}
+				}
 			}
 		}
 		if batch.Update.StateID != nil {
@@ -513,4 +540,57 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		sink(workspace, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: realtime, CreatedAt: event.CreatedAt})
 	}
 	return nil
+}
+
+type issueDeleteFamilyContext struct{}
+
+// WithIssueDeleteFamily marks an issue deletion that trashes the issue's
+// whole sub-issue family, so the scoped writer loads its descendants too.
+func WithIssueDeleteFamily(ctx context.Context) context.Context {
+	return context.WithValue(ctx, issueDeleteFamilyContext{}, true)
+}
+
+func deletesIssueFamily(ctx context.Context) bool {
+	family, _ := ctx.Value(issueDeleteFamilyContext{}).(bool)
+	return family
+}
+
+// issueDeleteChildRecords reads the stored sub-issues of the given parents,
+// at most limit rows, in the order issueDeleteChildren lists them.
+func issueDeleteChildRecords(ctx context.Context, tx *sqlTx, workspace string, parents []string, limit int) ([]domain.Issue, error) {
+	parents = slices.Clone(parents)
+	slices.Sort(parents)
+	parents = slices.Compact(parents)
+	lock := ""
+	if tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	issues := []domain.Issue{}
+	for start := 0; start < len(parents) && len(issues) < limit; start += 500 {
+		where, args := bindList("parent_id", parents[start:min(start+500, len(parents))])
+		args = append(append([]any{workspace}, args...), limit-len(issues))
+		rows, err := tx.QueryContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND `+where+` ORDER BY parent_id,id LIMIT ?`+lock, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var raw []byte
+			var issue domain.Issue
+			if err := rows.Scan(&raw); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if err := json.Unmarshal(raw, &issue); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			issues = append(issues, issue)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return issues, nil
 }

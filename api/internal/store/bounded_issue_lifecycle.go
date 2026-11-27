@@ -154,7 +154,8 @@ func (p *issueDeleteImage) loadRecords(ctx context.Context, attempt *scopedImage
 	}
 	p.deleting[p.selection.ID] = true
 	// Match the legacy issue-record preimage: explicit targets, their
-	// parent and relation rows, and the indexed children of explicit targets.
+	// parent and relation rows, the indexed children of explicit targets
+	// and, unless children are kept, their descendants.
 	var linked []string
 	for _, id := range scope.IssueIDs {
 		if record, ok := records[id]; ok {
@@ -186,6 +187,28 @@ func (p *issueDeleteImage) loadRecords(ctx context.Context, attempt *scopedImage
 		return nil, errIssueDeleteFamily
 	}
 	if !p.selection.KeepChildren {
+		// A deletion trashes the whole family: follow the sub-issues down
+		// one indexed level at a time, within the same family limit.
+		seen := map[string]bool{}
+		for _, id := range append(slices.Clone(scope.IssueIDs), children...) {
+			seen[id] = true
+		}
+		for level := children; len(level) > 0; {
+			found, err := issueDeleteChildren(ctx, tx, workspace, level, 1001)
+			if err != nil {
+				return nil, err
+			}
+			level = slices.DeleteFunc(found, func(id string) bool { return seen[id] })
+			for _, id := range level {
+				seen[id] = true
+			}
+			if err := add(level, true); err != nil {
+				return nil, err
+			}
+			if len(records) > 1000 {
+				return nil, errIssueDeleteFamily
+			}
+		}
 		childrenByParent := map[string][]string{}
 		for id, record := range records {
 			if parent := record.issue.ParentID; parent != nil {

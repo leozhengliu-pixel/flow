@@ -104,7 +104,7 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 		"team_member_request.go":                              "131cbc4c25f0dc1a5c3d222f9427e21fb350efcf62880559a6310af2e11fc7ac",
 		"triage_suggestion_read.go":                           "83681e09dfbf29ea6c4888607bac7d7e97a37605bd1f7ef904f1f6941e65477f",
 		// Issue deletion borrows its own write transaction for policy and issue headers.
-		"bounded_issue_lifecycle.go": "9d33443fd44941047790c547c61d5a1c1925ad8dd8af0e32bfd778f790aa395a",
+		"bounded_issue_lifecycle.go": "a61882da0ccd093f8e0ddc17ffc395bd845e1663a273bb28991385349d4a33b3",
 		// Attachment visibility binds its owned raw projection only inside its
 		// own Project call; the context never reaches request authorization.
 		"attachment_visibility_read.go": "d6ae0a5f2e25635ae7a834a18e27eccb2b23b1ef31848d7cb47c376418729221",
