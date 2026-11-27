@@ -1,7 +1,9 @@
+import { createPortal } from 'react-dom'
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { chooseLabelGroup, defaultSubLabelGroupId, type LabelGroupOption } from '@/components/issue-explorer/issue-grouping'
-import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List, Plus } from 'lucide-react'
+import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List } from 'lucide-react'
 import { usePropertyCommand, type PropertyCommandOption } from '@/components/property/use-property-command'
+import { LabelGroupIcon } from '@/components/issue/issue-icons'
 import { CheckIcon } from './projects-page-icons'
 import { DEFAULT_PROJECTS_DISPLAY, projectDisplayProperties, projectLabelGroupProperty, projectsDisplayEqual, type ProjectsDisplaySettings } from './projects-display-model'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -81,7 +83,6 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
   teamScoped?: boolean
 }) {
   const [openField, setOpenField] = useState<DisplayField | null>(null)
-  const [labelGroupsOpen, setLabelGroupsOpen] = useState(false)
   const set = <K extends keyof ProjectsDisplaySettings>(key: K, value: ProjectsDisplaySettings[K]) => onChange({ ...settings, [key]: value })
   const toggleProperty = (property: string) => set('properties', settings.properties.includes(property)
     ? settings.properties.filter(item => item !== property)
@@ -90,6 +91,13 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
   const board = settings.layout === 'board'
   // Customer needs the customer requests feature (its display properties are offered only then).
   const groupingOptions = GROUPING_OPTIONS.filter(option => (option.id !== 'Label group' || groupingLabelGroups.length > 0) && (option.id !== 'Customer' || properties.includes('Customers')))
+  // The reference's sub-grouping leaves out what the grouping already uses (status and status type go together); "Label group" stays
+  // while a second group exists to nest by. Picking a group the other level uses swaps the two (`chooseLabelGroup`).
+  const subGroupingOptions = groupingOptions.filter(option => {
+    if (settings.grouping === 'Label group') return option.id !== 'Label group' || groupingLabelGroups.length > 1
+    if (settings.grouping === 'Status' || settings.grouping === 'Status type') return option.id !== 'Status' && option.id !== 'Status type'
+    return option.id !== settings.grouping
+  })
   const labelGroupChoices: DisplayOption[] = groupingLabelGroups.map(group => ({ id: group.id, label: group.name, heading: group.heading, translatableHeading: group.translatableHeading }))
   const labelGroupName = (id?: string) => groupingLabelGroups.find(group => group.id === id)?.name ?? ''
   // Display values use the menu's grouping names; the label-group helpers use the issue grouping ids.
@@ -136,7 +144,7 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
     <div className="lp-projects-display__rows">
       <ProjectDisplaySelect {...selectProps('grouping')} direction={grouped ? settings.groupOrder : undefined} label={board ? 'Columns' : 'Grouping'} onChange={changeGrouping} onToggleDirection={() => set('groupOrder', settings.groupOrder === 'asc' ? 'desc' : 'asc')} options={groupingOptions} value={settings.grouping} />
       {settings.grouping === 'Label group' && primaryLabelGroupId && <ProjectDisplaySelect {...selectProps('labelGroup')} label="Label group" onChange={id => chooseGroup('grouping', id)} options={labelGroupChoices} value={primaryLabelGroupId} valueLabel={labelGroupName(primaryLabelGroupId)} />}
-      {grouped && <ProjectDisplaySelect {...selectProps('subGrouping')} label={board ? 'Rows' : 'Sub-grouping'} onChange={changeSubGrouping} options={groupingOptions} value={settings.subGrouping} />}
+      {grouped && <ProjectDisplaySelect {...selectProps('subGrouping')} label={board ? 'Rows' : 'Sub-grouping'} onChange={changeSubGrouping} options={subGroupingOptions} value={settings.subGrouping} />}
       {grouped && settings.subGrouping === 'Label group' && subLabelGroupId && <ProjectDisplaySelect {...selectProps('subLabelGroup')} label="Label group" onChange={id => chooseGroup('subGrouping', id)} options={labelGroupChoices} value={subLabelGroupId} valueLabel={labelGroupName(subLabelGroupId)} />}
       <ProjectDisplaySelect {...selectProps('ordering')} direction={settings.ordering !== 'Manual' ? settings.orderingDirection : undefined} label="Ordering" onChange={value => set('ordering', value)} onToggleDirection={() => set('orderingDirection', settings.orderingDirection === 'asc' ? 'desc' : 'asc')} value={settings.ordering} />
     </div>
@@ -179,21 +187,37 @@ export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY
         key={group.id}
         onClick={() => toggleProperty(projectLabelGroupProperty(group.id))}
         type="button"
-      ><span data-i18n-ignore>{group.name}</span></button>)}</div>
-      {labelGroups.length > 0 && <div className="lp-projects-display__label-groups">
-        <button aria-expanded={labelGroupsOpen} onClick={() => setLabelGroupsOpen(open => !open)} type="button"><Plus size={12}/>Add label group…</button>
-        {labelGroupsOpen && <div aria-label="Add label group" role="listbox">{labelGroups.map(group => {
-          const property = projectLabelGroupProperty(group.id)
-          const selected = settings.properties.includes(property)
-          return <button aria-selected={selected} key={group.id} onClick={() => { if (!selected) toggleProperty(property); setLabelGroupsOpen(false) }} role="option" type="button"><span data-i18n-ignore>{group.name}</span>{selected && <CheckIcon/>}</button>
-        })}</div>}
-      </div>}
+      ><span data-i18n-ignore>{group.name}</span></button>)}{labelGroups.length > 0 && <AddLabelGroup groups={labelGroups} onToggle={toggleProperty} selectedProperties={settings.properties}/>}</div>
     </section>
 
     {modified && <footer className="lp-projects-display__footer">
       <button aria-label="Reset to view default" onClick={onReset} type="button">Reset</button>
       <button aria-label="Save as default for view" onClick={onSetDefault} type="button">Set default for everyone</button>
     </footer>}
+  </div>
+}
+
+/** The "Add label group…" chip that ends the display properties, and its listbox (a portal: the menu clips its own overflow). */
+function AddLabelGroup({ groups, onToggle, selectedProperties }: { groups: Array<{ id: string; name: string }>; onToggle: (property: string) => void; selectedProperties: string[] }) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const open = anchor !== null
+  const close = () => setAnchor(null)
+  useDismissibleLayer({ open, refs: [buttonRef, listRef], onDismiss: close, restoreFocusRef: buttonRef })
+  useEffect(() => {
+    if (!open) return
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>('button')?.focus())
+    window.addEventListener('resize', close)
+    return () => window.removeEventListener('resize', close)
+  }, [open])
+  return <div className="lp-projects-display__label-groups">
+    <button aria-expanded={open} onClick={() => setAnchor(current => current ? null : buttonRef.current?.getBoundingClientRect() ?? null)} ref={buttonRef} type="button">Add label group…</button>
+    {anchor && createPortal(<div aria-label="Add label group" className="lp-projects-display__label-listbox" ref={listRef} role="listbox" style={{ left: Math.max(8, Math.min(anchor.left, window.innerWidth - 175 - 8)), top: anchor.bottom - 2 }}>{groups.map(group => {
+      const property = projectLabelGroupProperty(group.id)
+      const selected = selectedProperties.includes(property)
+      return <button aria-selected={selected} key={group.id} onClick={() => { if (!selected) onToggle(property); close() }} role="option" type="button"><LabelGroupIcon size={14}/><span data-i18n-ignore>{group.name}</span>{selected && <CheckIcon/>}</button>
+    })}</div>, document.body)}
   </div>
 }
 

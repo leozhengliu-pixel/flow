@@ -185,11 +185,17 @@ export function groupProjectsForView(projects: ProjectPageItem[], state: Project
       projects: [],
       subgroups: makeGroups(orderedProjects, display.subGrouping, includeEmptyRows, projectStatuses, { ...context, labelGroupId: subLabelGroupId }).map(subgroup => ({
         ...subgroup,
+        // Under a real label, the sub-level's empty bucket is "No other label" (the reference); under "No label" it stays "No label".
+        ...(inLabelGroup(group) && LABEL_LEVELS.has(display.subGrouping) && subgroup.name === 'No label' ? { name: 'No other label' } : {}),
         projects: orderProjects(subgroup.projects, state.display.ordering, state.display.orderingDirection, projectStatuses, relevanceViewer),
       })),
     }
   })
 }
+
+const LABEL_LEVELS = new Set(['Label', 'Label group'])
+/** A group bucketed by one of the project's labels (not the empty "No label" bucket). */
+const inLabelGroup = (group: { id: string; name: string }) => /^label(group)?-(?!none$)/.test(group.id)
 
 function includeProject(project: ProjectPageItem, window: ProjectsDisplaySettings['showClosed'], projectStatuses: ProjectStatus[]) {
   const closed = CLOSED_STATUS_TYPES.has(statusForProject(project, projectStatuses)?.type ?? project.statusType ?? '')

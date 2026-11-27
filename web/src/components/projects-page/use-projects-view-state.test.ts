@@ -176,5 +176,8 @@ describe('project label groupings', () => {
     // No stored group: the first one alphabetically (Size); the sub-grouping defaults to the other group.
     const nested = groups({ grouping: 'Label group', subGrouping: 'Label group', layout: 'list' })
     expect(nested.map(group => [group.name, group.subgroups?.map(sub => sub.name)])).toEqual([['Small', ['Beta']], ['No label', ['Alpha', 'No label']]])
+    // Under a real label the sub-level's empty bucket is "No other label"; under "No label" it stays "No label".
+    const stageFirst = groups({ grouping: 'Label group', subGrouping: 'Label group', layout: 'list', labelGroupId: 'stage', subLabelGroupId: 'size' })
+    expect(stageFirst.map(group => [group.name, group.subgroups?.map(sub => sub.name)])).toEqual([['Alpha', ['No other label']], ['Beta', ['Small']], ['No label', ['No label']]])
   })
 })

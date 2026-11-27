@@ -59,6 +59,50 @@ describe('ProjectsDisplayMenu', () => {
     expect(screen.getByRole('checkbox', { name: 'Show empty columns' })).toBeVisible()
   })
 
+  describe('sub-grouping by label group', () => {
+    const stage = { id: 'stage', name: 'Stage', heading: 'Workspace' }
+    const phase = { id: 'phase', name: 'Phase', heading: 'Workspace' }
+    async function subOptions(settings: ProjectsDisplaySettings, groups: Array<{ id: string; name: string; heading: string }>, name = 'Sub-grouping') {
+      const user = userEvent.setup()
+      render(<ProjectsDisplayMenu groupingLabelGroups={groups} onChange={vi.fn()} settings={settings}/>)
+      const row = screen.getByText(name).parentElement!
+      await user.click(within(row).getByRole('combobox'))
+      return screen.getAllByRole('option').map(option => option.textContent)
+    }
+    const byLabelGroup = { ...ungrouped, grouping: 'Label group', labelGroupId: 'stage' }
+
+    it('leaves "Label group" out of the sub-grouping when the only group is the grouping', async () => {
+      const options = await subOptions(byLabelGroup, [stage])
+      expect(options).not.toContain('Label group')
+      expect(options).toContain('Status')
+      expect(options).toContain('Label')
+    })
+
+    it('offers "Label group" in the sub-grouping when the grouping is something else, or a second group exists', async () => {
+      expect(await subOptions({ ...ungrouped, grouping: 'Priority' }, [stage])).toContain('Label group')
+      document.body.innerHTML = ''
+      expect(await subOptions(byLabelGroup, [stage, phase])).toContain('Label group')
+    })
+
+    it('leaves what the grouping already uses out of the sub-grouping', async () => {
+      const options = await subOptions({ ...ungrouped, grouping: 'Status' }, [stage])
+      expect(options).not.toContain('Status')
+      expect(options).not.toContain('Status type')
+      expect(options).toContain('Priority')
+    })
+
+    it('defaults the second selector to the other group and swaps when the same group is picked', async () => {
+      const user = userEvent.setup()
+      const onChange = vi.fn()
+      render(<ProjectsDisplayMenu groupingLabelGroups={[stage, phase]} onChange={onChange} settings={{ ...byLabelGroup, subGrouping: 'Label group' }}/>)
+      const rows = screen.getAllByText('Label group').map(label => label.parentElement!).filter(row => row.querySelector('[role="combobox"]'))
+      expect(within(rows[1]!).getByRole('combobox')).toHaveTextContent('Phase')
+      await user.click(within(rows[1]!).getByRole('combobox'))
+      await user.click(screen.getByRole('option', { name: 'Stage' }))
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ labelGroupId: 'phase', subLabelGroupId: 'stage' }))
+    })
+  })
+
   it('offers "Only show lead team projects" only on a team page', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

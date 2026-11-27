@@ -777,7 +777,7 @@ function ProjectLabelDot({ color }: { color: string }) {
 }
 
 /** Generated group names (empty buckets, status types) translate; other names are data. */
-const GENERATED_GROUP_NAMES = new Set(['No label', 'No customer', 'No lead team', 'No initiative', 'Backlog', 'Planned', 'Started', 'Paused', 'Completed', 'Canceled'])
+const GENERATED_GROUP_NAMES = new Set(['No label', 'No other label', 'No customer', 'No lead team', 'No initiative', 'Backlog', 'Planned', 'Started', 'Paused', 'Completed', 'Canceled'])
 
 /**
  * A group named after a project status reads like the status picker (default names have a Chinese entry); leads, labels and the like are data.

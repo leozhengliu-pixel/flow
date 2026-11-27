@@ -42,6 +42,7 @@ export const labelSettingsZhCN: Record<string, string> = {
   "Single-select": "单选",
   "Multi-select": "多选",
   "No label": "无标签",
+  "No other label": "无其他标签",
   "No customer": "无客户",
   "Rows": "行",
   "Show empty rows": "显示空行",

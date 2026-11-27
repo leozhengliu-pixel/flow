@@ -5,7 +5,7 @@ describe('label grouping strings', () => {
   it('translates the grouping, label group and group type copy', () => {
     const strings = [
       'Status type', 'Label', 'Label group', 'Grouping', 'Sub-grouping', 'Columns', 'Rows', 'Show empty groups', 'Show empty columns', 'Show empty rows',
-      'Workspace', 'No label', 'No customer', 'No lead team', 'No initiative', 'Lead team', 'Customer', 'Initiative',
+      'Workspace', 'No label', 'No other label', 'No customer', 'No lead team', 'No initiative', 'Lead team', 'Customer', 'Initiative',
       'Triage', 'Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled', 'Planned', 'Paused',
       'Group type', 'Single-select', 'Multi-select',
     ]
