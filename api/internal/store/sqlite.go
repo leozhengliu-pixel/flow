@@ -1858,6 +1858,9 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		if fieldScoped {
 			current = metadataRecordFieldSnapshot(ctx, stored, fields)
 		} else {
+			if labelAutomationScope(ctx) != nil {
+				current.WorkflowDefinitions, current.Loops = nil, nil
+			}
 			current = cloneBootstrap(current)
 		}
 		traceMark(ctx, "clone")
@@ -1923,6 +1926,22 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		}
 		next.FormerMembers = s.formerMemberLookup(ctx, s.db, &next)
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, s.db, workspaceKey)
+		var labelTx *sqlTx
+		var labelAutomations labelAutomationProjection
+		if labelAutomationScope(ctx) != nil {
+			// The full fallback may load more issue records, but the automation
+			// projection is still selected and locked in the write transaction.
+			var err error
+			labelTx, err = s.db.BeginTx(ctx, s.recordTxOptions())
+			if err != nil {
+				return err
+			}
+			defer labelTx.Rollback()
+			labelAutomations, err = loadLabelAutomations(ctx, labelTx, workspaceKey, &next)
+			if err != nil {
+				return err
+			}
+		}
 		aggregateID, err := mutate(&next)
 		next.CollaborationUpdates = nil
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers = originalViewerRole, nil, nil
@@ -1962,8 +1981,25 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// realtime envelope with the post-mutation entity. Clients can apply a
 		// delta for common entities without downloading another full bootstrap.
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
-		if err := s.persistWorkspaceOnto(ctx, workspaceKey, &stored, &next, &event, base); err != nil {
-			return err
+		if labelTx == nil {
+			if err := s.persistWorkspaceOnto(ctx, workspaceKey, &stored, &next, &event, base); err != nil {
+				return err
+			}
+		} else {
+			changes, err := writeLabelAutomations(ctx, labelTx, workspaceKey, labelAutomations, &next, stored)
+			if err != nil {
+				return err
+			}
+			if err := s.persistWorkspaceTx(ctx, labelTx, workspaceKey, &stored, &next, nil, &event, base); err != nil {
+				return err
+			}
+			if next, err = applyLabelMetadataChanges(next, changes); err != nil {
+				return err
+			}
+			if err := labelTx.Commit(); err != nil {
+				return err
+			}
+			s.dropMetadataCache(ctx, workspaceKey)
 		}
 		traceMark(ctx, "persist")
 		next = collectionMetadata(next)

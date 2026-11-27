@@ -17,7 +17,7 @@ type labelMergeInput struct {
 
 // mergeLabels folds labels into one target label "Merge labels…":
 // every issue, project and initiative carrying a merged label gets the target
-// instead, templates, triage and SLA rules and saved views are re-pointed, and
+// instead, templates, triage and SLA rules, saved views and workflows are re-pointed, and
 // the merged labels are deleted. Labels must share a resource type and either
 // all be ungrouped or all belong to the target's group; a team label can only
 // be merged into its own team or a workspace label.
@@ -41,6 +41,7 @@ func (s *server) mergeLabels(w http.ResponseWriter, r *http.Request) {
 	ids := append([]string{input.ToLabelID}, from...)
 	// Only issues carrying one of the labels change.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{LabelIssues: ids})
+	ctx = store.WithLabelAutomationScope(ctx, func(domain.Bootstrap) []string { return from })
 	var merged domain.IssueLabel
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label.merged", input, func(data *domain.Bootstrap) (string, error) {
 		target, err := applyLabelMerge(data, input.ToLabelID, from)
@@ -160,6 +161,10 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 	for index := range data.SavedViews {
 		data.SavedViews[index].Filters = replaceLabelReferencesInJSON(data.SavedViews[index].Filters, merged, toID)
 	}
+	rewriteWorkflowLabelReferences(data, func(id string) (string, bool) {
+		_, ok := merged[id]
+		return toID, ok
+	})
 	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { _, ok := merged[label.ID]; return ok })
 	for id := range merged {
 		removeResourcePreferences(data, "label", id)

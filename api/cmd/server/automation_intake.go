@@ -738,30 +738,41 @@ func workflowConditionsMatch(data *domain.Bootstrap, definition domain.WorkflowD
 	if err != nil {
 		return false
 	}
-	for key, expected := range definition.Conditions {
-		switch key {
+	match := func(field, operator string, value any) bool {
+		expected := fmt.Sprint(value)
+		var matched bool
+		switch field {
 		case "teamId":
-			if issue.Team.ID != expected {
-				return false
-			}
+			matched = automationOperandMatches(value, func(id string) bool { return id != "" && id == issue.Team.ID })
+		case "team":
+			matched = automationTeamMatches(issue.Team, value)
 		case "priority":
-			if strconv.Itoa(issue.Priority) != expected {
-				return false
-			}
+			matched = strconv.Itoa(issue.Priority) == expected
 		case "stateId":
-			if issue.State.ID != expected {
-				return false
-			}
-		case "labelId":
-			if !slices.ContainsFunc(issue.Labels, func(label domain.IssueLabel) bool { return label.ID == expected }) {
-				return false
-			}
+			matched = issue.State.ID == expected
+		case "labelId", "labels", "labelIds", "label":
+			return automationLabelFilterMatches(issue.Labels, value, operator, false)
 		case "titleContains":
-			if !strings.Contains(strings.ToLower(issue.Title), strings.ToLower(expected)) {
+			matched = strings.Contains(strings.ToLower(issue.Title), strings.ToLower(expected))
+		default:
+			return false
+		}
+		return matched != negativeAutomationFilter(operator)
+	}
+	for key, expected := range definition.Conditions {
+		switch {
+		case workflowFilterField(key):
+			if !workflowFilterMatches(key, workflowParamValue(expected), match) {
+				return false
+			}
+		case workflowLabelField(key):
+			if !match(key, "is", workflowParamValue(expected)) {
 				return false
 			}
 		default:
-			return false
+			if !match(key, "is", expected) {
+				return false
+			}
 		}
 	}
 	return true

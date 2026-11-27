@@ -172,6 +172,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "scoped")
 	apply := func(ctx context.Context) error {
+		scope := scope
 		// The callback works on a clone; readers keep the committed snapshot
 		// while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
@@ -200,7 +201,11 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			fields = discussionCallbackFields
 			current = metadataFieldSnapshot(stored, fields)
 		} else {
-			current = cloneBootstrap(collectionMetadata(stored))
+			current = collectionMetadata(stored)
+			if labelAutomationScope(ctx) != nil {
+				current.WorkflowDefinitions, current.Loops = nil, nil
+			}
+			current = cloneBootstrap(current)
 		}
 		if discussionOnly {
 			current.IssueSLAs = nil
@@ -318,6 +323,13 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		if webhookEnabled {
 			next = cloneBootstrap(current)
 		}
+		var labelAutomations labelAutomationProjection
+		if labelAutomationScope(ctx) != nil {
+			labelAutomations, err = loadLabelAutomations(ctx, tx, workspaceKey, &next)
+			if err != nil {
+				return err
+			}
+		}
 		// Snapshot clones drop json:"-" fields such as the next issue number.
 		next.NextIssueNumber = nextIssueNumber
 		if len(fields) > 0 {
@@ -380,6 +392,13 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		if err != nil {
 			return err
 		}
+		var automationChanges map[string]map[string]json.RawMessage
+		if labelAutomationScope(ctx) != nil {
+			automationChanges, err = writeLabelAutomations(ctx, tx, workspaceKey, labelAutomations, &next, stored)
+			if err != nil {
+				return err
+			}
+		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {
 			previousValues = aggregatePreviousValues(current, next, aggregateID)
@@ -429,6 +448,9 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "progress")
 		metadata := collectionMetadata(next)
 		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, &metadata, nil, &event, nil); err != nil {
+			return err
+		}
+		if metadata, err = applyLabelMetadataChanges(metadata, automationChanges); err != nil {
 			return err
 		}
 		traceMark(ctx, "metadata")
