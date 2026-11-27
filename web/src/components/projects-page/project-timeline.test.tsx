@@ -153,8 +153,9 @@ describe('ProjectTimeline first open', () => {
     try {
       const { container } = render(<I18nProvider><Probe><ProjectTimeline groups={[{ id: 'g', name: 'In Progress', projects: many }]} today={today}/></Probe></I18nProvider>)
       expect(firstCommit).toEqual([0])
-      // Phone rows are 36px below a 32px group header; the window is 300px plus 256px of overscan above and twice that below.
-      expect(container.querySelectorAll('.lp-project-timeline__row')).toHaveLength(Math.ceil((300 + 2 * 256 - 32) / 36))
+      // Rows are 72px (the reference's timeline row) below a 32px group header; the window is 300px plus 256px of
+      // overscan above and twice that below.
+      expect(container.querySelectorAll('.lp-project-timeline__row')).toHaveLength(Math.ceil((300 + 2 * 256 - 32) / 72))
     } finally {
       vi.restoreAllMocks()
     }
