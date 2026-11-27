@@ -69,6 +69,18 @@ describe('scale-p19 ProjectsPage integration', () => {
     expect(api.listProjectRecords).not.toHaveBeenCalled()
   })
 
+  it('lists active projects only: archived projects stay in the archive', async () => {
+    vi.stubEnv('VITE_PROJECT_QUERY_WINDOWS', 'false')
+    const data = makeBootstrap({ projects: [] })
+    render(page(data))
+    await waitFor(() => expect(ids()).toHaveLength(100))
+    expect(api.listProjectRecords.mock.calls.every(([query]) => query.archived === 'false')).toBe(true)
+    api.listProjectRecords.mockClear()
+    // Local data (seeded projects, or one archived while the page is open) leaves archived projects out too.
+    render(page(data, [{ ...project, id: 'active' }, { ...project, id: 'archived', archivedAt: '2026-11-20T00:00:00Z' }]))
+    expect(ids()).toEqual(['active'])
+  })
+
   it('ignores seed-array length and replaces rather than appending the next window', async () => {
     const { data } = scope()
     render(page(data, Array(150).fill(project)))
