@@ -257,8 +257,7 @@ func (s *SQLiteStore) issueTextSelection(workspace, term string) (string, []any)
 	match := "LOWER(s.content) LIKE ? ESCAPE '!'"
 	value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
 	if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
-		value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
-		return "SELECT s.issue_id FROM issue_search_fts JOIN issue_search_documents s ON issue_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND issue_search_fts MATCH ?", []any{workspace, value}
+		return sqliteIssueTextSelection(workspace, sqliteIssuePhrase(term))
 	}
 	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
 		match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
@@ -270,11 +269,39 @@ func (s *SQLiteStore) issueTextSelection(workspace, term string) (string, []any)
 	return "SELECT s.issue_id FROM issue_search_documents s WHERE s.workspace_key=? AND " + match, []any{workspace, value}
 }
 
+func sqliteIssueTextSelection(workspace, match string) (string, []any) {
+	return "SELECT s.issue_id FROM issue_search_fts JOIN issue_search_documents s ON issue_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND issue_search_fts MATCH ?", []any{workspace, match}
+}
+
+func sqliteIssuePhrase(term string) string {
+	return `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
+}
+
+func sqliteIssueCandidatePhrases(terms []string) []string {
+	var phrases []string
+	for _, term := range terms {
+		redundant := false
+		if utf8.ValidString(term) && strings.IndexByte(term, 0) < 0 {
+			for _, other := range terms {
+				// Every trigram hit for a longer phrase is also a hit for
+				// an included phrase. Keep the query's first term for ranking.
+				if len(other) < len(term) && utf8.ValidString(other) && strings.IndexByte(other, 0) < 0 && strings.Contains(term, other) {
+					redundant = true
+					break
+				}
+			}
+		}
+		if !redundant {
+			phrases = append(phrases, sqliteIssuePhrase(term))
+		}
+	}
+	return phrases
+}
+
 // issueTextVisibleSelection narrows a full-text selection to the viewer's
 // visible teams and explicitly shared issues before the outer query reads
 // rows. shared_issues is the CTE issueAccessCTE defines for q.
-func (s *SQLiteStore) issueTextVisibleSelection(q IssueRecordQuery, term string) (string, []any) {
-	selection, values := s.issueTextSelection(q.Workspace, term)
+func (s *SQLiteStore) issueTextVisibleSelection(q IssueRecordQuery, selection string, values []any) (string, []any) {
 	teams, teamArgs := bindList("vis.team_id", q.Access.VisibleTeamIDs)
 	join := " JOIN "
 	if s.dialect == "mysql" {
@@ -340,13 +367,25 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	var textArgs []any
 	if len(terms) > 0 {
 		var selections []string
-		for _, term := range terms {
-			selection, values := s.issueTextSelection(q.Workspace, term)
+		addSelection := func(selection string, values []any) {
 			if pushVisibility {
-				selection, values = s.issueTextVisibleSelection(q, term)
+				selection, values = s.issueTextVisibleSelection(q, selection, values)
 			}
 			selections = append(selections, selection)
 			textArgs = append(textArgs, values...)
+		}
+		var ftsTerms []string
+		for _, term := range terms {
+			if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
+				ftsTerms = append(ftsTerms, term)
+			} else {
+				addSelection(s.issueTextSelection(q.Workspace, term))
+			}
+		}
+		if len(ftsTerms) > 0 {
+			// FTS can union the phrase hits before looking up documents and
+			// applying visibility. Short terms still use the LIKE path.
+			addSelection(sqliteIssueTextSelection(q.Workspace, strings.Join(sqliteIssueCandidatePhrases(ftsTerms), " OR ")))
 		}
 		// Apply the issue access predicate before limiting the result rows. Raw
 		// index hits may include private teams and must not consume the page cap.

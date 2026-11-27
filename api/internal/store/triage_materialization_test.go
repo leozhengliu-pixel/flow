@@ -108,6 +108,147 @@ func TestScaleP21SW185CandidateSpoolOwnership(t *testing.T) {
 	}
 }
 
+func TestIssueSuggestionTransitionBatchesRowsAndJournal(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
+	f := scaleP09Database(t)
+	f.db.boundedCatalog.Store(true)
+	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
+	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.releaseMetadataLogicalSources()
+	const field = "issueSuggestions"
+	count := MetadataRecordBatchMaxKeys*2 + 1
+	data := domain.Bootstrap{}
+	for i := range count {
+		data.IssueSuggestions = append(data.IssueSuggestions, domain.IssueSuggestion{
+			ID: fmt.Sprintf("suggestion-%03d", i), IssueID: "issue", Type: "label",
+		})
+	}
+	// The catalog still streams a canonical body above the batch read cap.
+	data.IssueSuggestions[count-1].Metadata = map[string]any{"reasons": strings.Repeat("body", metadataRecordChunkBytes)}
+	target, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Release()
+	spec, _ := metadataFieldByName(field)
+	change := legacyMetadataWriteField{field: spec, next: target.fields[spec.index]}
+	var upserts, moves, deletes, catalogWrites int
+	ctx := WithSQLStatementObserver(t.Context(), func(query string) {
+		switch {
+		case strings.HasPrefix(query, "INSERT INTO workspace_metadata_records("):
+			upserts++
+		case strings.HasPrefix(query, "UPDATE workspace_metadata_records SET collection_order="):
+			moves++
+		case strings.HasPrefix(query, "DELETE FROM workspace_metadata_records "):
+			deletes++
+		case strings.HasPrefix(query, "INSERT INTO metadata_catalog("):
+			catalogWrites++
+		}
+	})
+	before := scaleP09Head(t, f)
+	write := func(run func(*legacyMetadataWritePlan) error) {
+		t.Helper()
+		tx, err := f.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		plan := &legacyMetadataWritePlan{store: view, tx: tx, workspace: workspace, workspaceID: workspaceID}
+		if err := run(plan); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(func(plan *legacyMetadataWritePlan) error {
+		return plan.writeArrayTransition(ctx, &change)
+	})
+	if upserts != 3 || catalogWrites > 4 {
+		t.Fatalf("%d suggestions used %d canonical and %d catalog upserts", count, upserts, catalogWrites)
+	}
+	page, err := f.ReadCommittedChanges(ctx, workspaceID, before, 10, 256<<10)
+	if err != nil || page.ResyncRequired || len(page.Transactions) != 1 || len(page.Transactions[0].Records) < count {
+		t.Fatalf("suggestion journal page lost its deltas: %+v, %v", page, err)
+	}
+	for i, suggestion := range data.IssueSuggestions {
+		version, deleted, err := f.RecordVersion(ctx, workspace, RecordKey{field, suggestion.ID})
+		if err != nil || version != "1" || deleted {
+			t.Fatalf("insert %s version = %q, deleted = %t, err = %v", suggestion.ID, version, deleted, err)
+		}
+		var order, size int
+		var digest string
+		var raw, summary []byte
+		if err := f.db.QueryRowContext(ctx, `SELECT m.collection_order,c.body_bytes,c.version,m.data,c.summary
+			FROM workspace_metadata_records m JOIN metadata_catalog c ON c.workspace_key=m.workspace_key AND c.field=m.field AND c.record_key=m.record_key
+			WHERE m.workspace_key=? AND m.field=? AND m.record_key=?`, workspace, field, suggestion.ID).Scan(&order, &size, &digest, &raw, &summary); err != nil {
+			t.Fatal(err)
+		}
+		var projected struct{ ID, IssueID string }
+		if err := json.Unmarshal(summary, &projected); err != nil || projected.ID != suggestion.ID || projected.IssueID != suggestion.IssueID ||
+			order != i || size != len(raw) || digest != metadataFingerprint(raw) {
+			t.Fatalf("canonical or catalog row %d changed: order=%d size=%d summary=%s err=%v", i, order, size, summary, err)
+		}
+		change.oldOrder = append(change.oldOrder, i)
+		change.order = append(change.order, count-1-i)
+		change.rows = append(change.rows, legacyMetadataWriteRow{
+			id: suggestion.ID, before: metadataLogicalNode{typ: reflect.TypeFor[domain.IssueSuggestion]()},
+		})
+	}
+	retain := data.IssueSuggestions[count-1].ID
+	write(func(plan *legacyMetadataWritePlan) error {
+		return plan.writeArrayReorder(ctx, &change)
+	})
+	if moves != 2 || upserts != 3 {
+		t.Fatalf("reordering %d suggestions used %d order updates and %d extra upserts", count, moves, upserts-3)
+	}
+	var mismatches int
+	if err := f.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records m
+		JOIN metadata_catalog c ON c.workspace_key=m.workspace_key AND c.field=m.field AND c.record_key=m.record_key
+		WHERE m.workspace_key=? AND m.field=? AND m.collection_order<>c.collection_order`, workspace, field).Scan(&mismatches); err != nil || mismatches != 0 {
+		t.Fatalf("%d catalog ordinals differ from the canonical order: %v", mismatches, err)
+	}
+	var firstID string
+	if err := f.db.QueryRowContext(ctx, `SELECT record_key FROM workspace_metadata_records WHERE workspace_key=? AND field=? ORDER BY collection_order LIMIT 1`,
+		workspace, field).Scan(&firstID); err != nil || firstID != retain {
+		t.Fatalf("first suggestion after reorder = %q, want %q: %v", firstID, retain, err)
+	}
+	page, err = f.ReadCommittedChanges(ctx, workspaceID, page.Next, 10, 256<<10)
+	if err != nil || page.ResyncRequired || len(page.Transactions) != 1 || len(page.Transactions[0].Records) != count-1 {
+		t.Fatalf("suggestion journal lost order updates: %+v, %v", page, err)
+	}
+	write(func(plan *legacyMetadataWritePlan) error {
+		return plan.deleteArrayDropped(ctx, &change, map[string]bool{retain: true})
+	})
+	for table, want := range map[string]int{"workspace_metadata_records": 1, "metadata_catalog": 1, "metadata_catalog_relations": 2} {
+		var rows int
+		if err := f.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE workspace_key=? AND field=?", workspace, field).Scan(&rows); err != nil || rows != want {
+			t.Fatalf("%s retained %d rows, want %d: %v", table, rows, want, err)
+		}
+	}
+	if deletes != 2 {
+		t.Fatalf("removed %d suggestions in %d statements", count-1, deletes)
+	}
+	page, err = f.ReadCommittedChanges(ctx, workspaceID, page.Next, 10, 256<<10)
+	if err != nil || page.ResyncRequired || len(page.Transactions) != 1 || len(page.Transactions[0].Records) != count-1 {
+		t.Fatalf("suggestion journal lost deletions: %+v, %v", page, err)
+	}
+	for _, delta := range page.Transactions[0].Records {
+		version := "3"
+		if delta.Key.ID == data.IssueSuggestions[count/2].ID {
+			version = "2" // The middle row did not move.
+		}
+		if !delta.Deleted || delta.Version != version || delta.Key.ID == retain {
+			t.Fatalf("unexpected removal delta: %+v", delta)
+		}
+	}
+}
+
 func TestScaleP21SW185InlineFieldMaterializationOwnership(t *testing.T) {
 	before := domain.Bootstrap{IssueSuggestions: []domain.IssueSuggestion{{ID: "duplicate"}, {ID: "duplicate"}}}
 	after := cloneBootstrap(before)

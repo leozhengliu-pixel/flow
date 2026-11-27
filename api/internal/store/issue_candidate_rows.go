@@ -56,9 +56,17 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 	from := " FROM (" + inner + ") candidates JOIN issue_records output ON output.id=candidates.id AND output.workspace_key=?"
 	length := wire.byteLength
 	var count, listBytes, maximumList, maximumID int64
-	if err := tx.QueryRowContext(ctx, prefix+"SELECT COUNT(*),COALESCE(SUM("+length("output.list_data")+"),0),"+
-		"COALESCE(MAX("+length("output.list_data")+"),0),COALESCE(MAX("+length("output.id")+"),0)"+from, params...).
-		Scan(&count, &listBytes, &maximumList, &maximumID); err != nil {
+	preflight := prefix + "SELECT COUNT(*),COALESCE(SUM(" + length("output.list_data") + "),0)," +
+		"COALESCE(MAX(" + length("output.list_data") + "),0),COALESCE(MAX(" + length("output.id") + "),0)"
+	headers := []any{&count, &listBytes, &maximumList, &maximumID}
+	var locators []byte
+	if s.dialect == "sqlite" {
+		// Keep at most 500 integer locators from the size check. The body
+		// query can then reuse the selected hits in this snapshot.
+		preflight += ",json_group_array(output.rowid)"
+		headers = append(headers, &locators)
+	}
+	if err := tx.QueryRowContext(ctx, preflight+from, params...).Scan(headers...); err != nil {
 		return err
 	}
 	if count < 0 || count > 500 || listBytes < 0 || maximumList < 0 || maximumID < 0 ||
@@ -77,15 +85,25 @@ func (s *SQLiteStore) searchIssueCandidateRows(ctx context.Context, workspace, p
 		return err
 	}
 	storage := "0"
+	var values []any
 	if s.dialect == "sqlite" {
+		if count == 0 {
+			return nil
+		}
 		storage = "CASE WHEN typeof(output.id)='blob' THEN 1 ELSE 0 END"
+		prefix = ""
+		// Drive the join from the selected hits. A workspace predicate with
+		// rowid IN (...) can otherwise scan the workspace index per query.
+		from = " FROM json_each(?) hits CROSS JOIN issue_records output NOT INDEXED ON output.rowid=hits.value WHERE output.workspace_key=?"
+		values = []any{maximumList, string(locators), workspace}
+	} else {
+		// Prefix arguments (e.g. PostgreSQL's search CTE) precede this
+		// SELECT's size guard and the inner query parameters.
+		values = append(slices.Clone(params[:prefixCount]), maximumList)
+		values = append(values, params[prefixCount:]...)
 	}
 	query := prefix + "SELECT CASE WHEN " + length("output.list_data") + "<=? THEN output.list_data ELSE NULL END," +
 		"output.id,COALESCE(" + length("output.list_data") + ",0)," + length("output.data") + "," + storage + from + order
-	// Prefix arguments (e.g. PostgreSQL's search CTE) precede this SELECT's
-	// size guard. Count their placeholders before the inner query parameters.
-	values := append(slices.Clone(params[:prefixCount]), maximumList)
-	values = append(values, params[prefixCount:]...)
 	values = append(values, orderArgs...)
 	rows, err := tx.QueryContext(ctx, query, values...)
 	if err != nil {

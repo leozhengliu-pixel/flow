@@ -5,11 +5,13 @@ import (
 	"database/sql"
 )
 
-// Canonical statement text is unchanged. Reuse these two hot statements so
-// SQLite does not recompile their installed capture triggers on every write.
+// Reuse hot statements so SQLite compiles the installed capture triggers
+// once per connection. The materializing writer also sets collection_order.
 var recordJournalPreparedWrites = [...]string{
 	`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`,
 	`INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id,seq,actor_id) VALUES(?,?,?,?,?,?,?,?,?)`,
+	`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`,
+	`DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`,
 }
 
 func (s *SQLiteStore) ensureSQLiteRecordJournalWrites(ctx context.Context) error {

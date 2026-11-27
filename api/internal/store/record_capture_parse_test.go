@@ -32,6 +32,9 @@ func TestRecordCaptureAnalysesEveryWriterLiteral(t *testing.T) {
 		"issue_list_projection.go:migrateIssueListProjectionPass": true,
 		// "... VALUES(?,?,?,?," + staged value + ")": see "staged row".
 		"metadata_sql_stage_accounting.go:statementQuery": true,
+		// The batch values and CASE arms are assembled at runtime.
+		"legacy_array_reorder.go:flushUpserts": true,
+		"legacy_array_reorder.go:flushMoves":   true,
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -93,6 +96,12 @@ func TestRecordCaptureDynamicStatements(t *testing.T) {
 		limited     bool
 	}{
 		{name: "metadata upsert", query: recordJournalPreparedWrites[0], verb: captureInsert, table: "workspace_metadata_records", tuples: 1, conflict: conflictUpdate, assigned: []string{"data"}},
+		{name: "suggestion batch", query: `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?),(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`,
+			verb: captureInsert, table: "workspace_metadata_records", tuples: 2, conflict: conflictUpdate, assigned: []string{"collection_order", "data"}},
+		{name: "suggestion batch delete", query: `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key IN (?,?)`,
+			verb: captureDelete, table: "workspace_metadata_records", filter: 4},
+		{name: "suggestion batch move", query: `UPDATE workspace_metadata_records SET collection_order=CASE record_key WHEN ? THEN ? WHEN ? THEN ? ELSE collection_order END WHERE workspace_key=? AND field=? AND record_key IN (?,?)`,
+			verb: captureUpdate, table: "workspace_metadata_records", filter: 4, assigned: []string{"collection_order"}},
 		{name: "event insert", query: recordJournalPreparedWrites[1], verb: captureInsert, table: "domain_events", tuples: 1},
 		{name: "api key use", query: "UPDATE workspace_metadata_records SET data=JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?) WHERE workspace_key=? AND field=? AND record_key=? AND JSON_UNQUOTE(JSON_EXTRACT(data,'$.revokedAt')) IS NULL",
 			verb: captureUpdate, table: "workspace_metadata_records", filter: 3, assigned: []string{"data"}},
