@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW0SnapshotFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
+func snapshotFixture(t *testing.T) (scaleFixture, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -52,8 +52,8 @@ func scaleP21SW0SnapshotFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
 	return f, view
 }
 
-func TestScaleP21SW0SnapshotPoolOneReplayAndOwnership(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotPoolOneReplayAndOwnership(t *testing.T) {
+	f, view := snapshotFixture(t)
 	f.db.SetMaxOpenConns(1)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
@@ -205,8 +205,8 @@ func TestScaleP21SW0SnapshotPoolOneReplayAndOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotRootOnly(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotRootOnly(t *testing.T) {
+	f, view := snapshotFixture(t)
 	workspace := f.data.Workspace.URLKey
 	// Root-only callers do not apply unselected collection type validation.
 	root := []byte(`{"workspace":{"id":"original","name":"retained"},"WORKSPACE":{"id":"final"},"users":17}`)
@@ -241,8 +241,8 @@ func TestScaleP21SW0SnapshotRootOnly(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotPhysicalNULWorkspace(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotPhysicalNULWorkspace(t *testing.T) {
+	f, view := snapshotFixture(t)
 	if f.dialect == "postgres" {
 		t.Skip("Postgres text storage excludes NUL")
 	}
@@ -306,8 +306,8 @@ func TestScaleP21SW0SnapshotPhysicalNULWorkspace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotMissingCancellationAndAdmission(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotMissingCancellationAndAdmission(t *testing.T) {
+	f, view := snapshotFixture(t)
 	ctx, release, err := view.admitMetadataWork(t.Context(), 2<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -379,8 +379,8 @@ func TestScaleP21SW0SnapshotMissingCancellationAndAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotInvalidSourceKeepsCallerOwnership(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotInvalidSourceKeepsCallerOwnership(t *testing.T) {
+	f, view := snapshotFixture(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_states SET data=? WHERE workspace_key=?`, []byte(`{"users":{},"Users":[]}`), workspace); err != nil {
 		t.Fatal(err)
@@ -414,8 +414,8 @@ func TestScaleP21SW0SnapshotInvalidSourceKeepsCallerOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotRepeatableRead(t *testing.T) {
-	f, view := scaleP21SW0SnapshotFixture(t)
+func TestSnapshotRepeatableRead(t *testing.T) {
+	f, view := snapshotFixture(t)
 	ctx, release, err := view.admitMetadataWork(t.Context(), 2<<20)
 	if err != nil {
 		t.Fatal(err)

@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW228GenericJSONOwnedDifferential(t *testing.T) {
+func TestGenericJSONOwnedDifferential(t *testing.T) {
 	for _, input := range []string{
 		`null`, `true`, `42`, `"scalar"`, `[]`, `{}`,
 		`{"id":"first","id":"last","n":9007199254740993,"negative":-0,"small":1e-7}`,
@@ -102,13 +102,13 @@ func TestScaleP21SW228GenericJSONOwnedDifferential(t *testing.T) {
 	})
 }
 
-type scaleP21SW228CancelContext struct {
+type genericOwnedCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	target string
 }
 
-func (ctx *scaleP21SW228CancelContext) Err() error {
+func (ctx *genericOwnedCancelContext) Err() error {
 	var callers [24]uintptr
 	count := runtime.Callers(2, callers[:])
 	for _, caller := range callers[:count] {
@@ -120,7 +120,7 @@ func (ctx *scaleP21SW228CancelContext) Err() error {
 	return ctx.Context.Err()
 }
 
-func TestScaleP21SW228GenericOwnershipCancellationAndBudgetRecovery(t *testing.T) {
+func TestGenericOwnershipCancellationAndBudgetRecovery(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	raw := json.RawMessage(`{"body":"` + strings.Repeat("<>&", 1<<20) + `"}`)
 	for _, phase := range []string{"decode", "encode"} {
@@ -157,7 +157,7 @@ func TestScaleP21SW228GenericOwnershipCancellationAndBudgetRecovery(t *testing.T
 			if phase == "encode" {
 				target = "metadataLogicalByteReader).Read"
 			}
-			ctx := &scaleP21SW228CancelContext{Context: cancelled, cancel: cancel, target: target}
+			ctx := &genericOwnedCancelContext{Context: cancelled, cancel: cancel, target: target}
 			if phase == "decode" {
 				_, _, err = read.DecodeGeneric(ctx, raw)
 			} else {

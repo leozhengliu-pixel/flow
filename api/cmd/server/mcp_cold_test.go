@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW556: MCP is a COLD route (SW550 resolves its local handler to mcpHTTP,
+// MCP is a COLD route (route temperature guard resolves its local handler to mcpHTTP,
 // whose tool dispatch reaches COLD consumers), but a COLD scope holds nothing
 // by itself, so MCP traffic is serialized only by the tools that need legacy
 // state, per operation:
@@ -29,14 +29,14 @@ import (
 //     optional share and unshare still take the slot for their own writes.
 //
 // Every answer equals flag off.
-func TestScaleP21SW556MCPToolsColdPerOperation(t *testing.T) {
+func TestMCPToolsColdPerOperation(t *testing.T) {
 	// A production bounded store requires both flags. The test view
 	// bypasses activation, so set them before creating the fixture.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	if scaleP21RouteHot("POST /mcp") || scaleP21RouteTemperature["POST /mcp"] == "cold: unresolved-handler" {
-		t.Fatalf("SW556 POST /mcp is %q", scaleP21RouteTemperature["POST /mcp"])
+	if scaleRouteHot("POST /mcp") || scaleRouteTemperature["POST /mcp"] == "cold: unresolved-handler" {
+		t.Fatalf("SW556 POST /mcp is %q", scaleRouteTemperature["POST /mcp"])
 	}
 	f := newMCPContractFixture(t)
 	workspace := f.data.Workspace.URLKey
@@ -48,7 +48,7 @@ func TestScaleP21SW556MCPToolsColdPerOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var observed []string
-	probe.SetSkeletalReadObserverForTesting(func(accessor string) { observed = append(observed, accessor+" from "+sw530Caller()) })
+	probe.SetSkeletalReadObserverForTesting(func(accessor string) { observed = append(observed, accessor+" from "+routeSweepCaller()) })
 	t.Cleanup(func() { probe.SetSkeletalReadObserverForTesting(nil) })
 	legacy := f.host.Config.Handler
 	bounded := newHandler(&server{store: probe, uploadPath: t.TempDir()})

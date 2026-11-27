@@ -59,7 +59,7 @@ func (s *SQLiteStore) syncMemberDirectory(ctx context.Context, workspaceKey stri
 
 // memberDirectorySource is the workspace (its record and users) the directory
 // sync compares against. A bounded image holds no users, so every member
-// looked missing and each sign-in (and startup) wrote a join (SW559): bounded,
+// looked missing and each sign-in (and startup) wrote a join: bounded,
 // the users come from the workspace's legacy view, which answers a workspace
 // it cannot read as missing, as the legacy accessors do.
 func (s *SQLiteStore) memberDirectorySource(ctx context.Context, workspaceKey string) (domain.Bootstrap, bool) {

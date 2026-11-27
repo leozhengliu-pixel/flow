@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21HotLogoStore(t *testing.T, values map[string]domain.Bootstrap) *SQLiteStore {
+func scaleHotLogoStore(t *testing.T, values map[string]domain.Bootstrap) *SQLiteStore {
 	t.Helper()
 	repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency()}
 	for key, data := range values {
@@ -27,7 +27,7 @@ func scaleP21HotLogoStore(t *testing.T, values map[string]domain.Bootstrap) *SQL
 	return repo
 }
 
-func TestScaleP21HotOAuthLogoNativeProjection(t *testing.T) {
+func TestScaleHotOAuthLogoNativeProjection(t *testing.T) {
 	logo := "/uploads/oauth_app_icon_native.png"
 	stamp := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("unrelated-zone", 7*3600+123))
 	apps := make([]domain.OAuthApplication, 0, 66)
@@ -40,7 +40,7 @@ func TestScaleP21HotOAuthLogoNativeProjection(t *testing.T) {
 	)
 	values := map[string]domain.Bootstrap{"physical\x00key": {OAuthApplications: apps}}
 	literal := &SQLiteStore{workspaces: values}
-	repo := scaleP21HotLogoStore(t, values)
+	repo := scaleHotLogoStore(t, values)
 	want := literal.OAuthApplicationsWithLogo(logo)
 	var got []OAuthApplicationLogoRef
 	var expired OAuthApplicationLogoMatch
@@ -68,13 +68,13 @@ func TestScaleP21HotOAuthLogoNativeProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotOAuthLogoAtomicRegistryAndErrors(t *testing.T) {
+func TestScaleHotOAuthLogoAtomicRegistryAndErrors(t *testing.T) {
 	logo := "same\x00logo"
 	values := map[string]domain.Bootstrap{
 		"physical-a": {Workspace: domain.Workspace{URLKey: "logical-old"}, OAuthApplications: []domain.OAuthApplication{{ClientID: "a-old", LogoURL: logo}}},
 		"physical-b": {OAuthApplications: []domain.OAuthApplication{{ClientID: "b-old", LogoURL: logo}}},
 	}
-	repo := scaleP21HotLogoStore(t, values)
+	repo := scaleHotLogoStore(t, values)
 	var seen []string
 	_, err := repo.VisitOAuthApplicationLogos(t.Context(), logo, nil, func(match OAuthApplicationLogoMatch) (bool, error) {
 		if len(seen) == 0 {
@@ -121,9 +121,9 @@ func TestScaleP21HotOAuthLogoAtomicRegistryAndErrors(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotOAuthLogoInstallationsDetached(t *testing.T) {
+func TestScaleHotOAuthLogoInstallationsDetached(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	f.db.SetMaxOpenConns(1)
 	clientID := "hot-logo-client-" + f.data.Viewer.ID
 	second, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "Logo second", "hot-logo-"+f.data.Viewer.ID, "us")
@@ -179,10 +179,10 @@ func TestScaleP21HotOAuthLogoInstallationsDetached(t *testing.T) {
 	t.Logf("installation extraction SQL: literal=%d bounded=%d (one scalar maximum-byte preflight)", legacySQL, boundedSQL)
 }
 
-func TestScaleP21HotOAuthLogoWarmAndReloaded(t *testing.T) {
+func TestScaleHotOAuthLogoWarmAndReloaded(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	logo := "/uploads/" + f.data.Viewer.ID + "\x00.png"
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "oauthApplications"), workspace, "scale_p21.hot_logo_seed", "", nil, func(data *domain.Bootstrap) error {

@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21AgentSessionHeaders(data domain.Bootstrap, match AgentSessionMatch) []domain.AgentSession {
+func scaleAgentSessionHeaders(data domain.Bootstrap, match AgentSessionMatch) []domain.AgentSession {
 	var result []domain.AgentSession
 	for _, session := range data.AgentSessions {
 		if match.ID != nil && session.ID != *match.ID || match.UserID != nil && session.UserID != *match.UserID {
@@ -30,7 +30,7 @@ func scaleP21AgentSessionHeaders(data domain.Bootstrap, match AgentSessionMatch)
 	return result
 }
 
-func scaleP21AgentMessage(data domain.Bootstrap, sessionID, userID, messageID string) (domain.AgentMessage, bool) {
+func scaleAgentMessage(data domain.Bootstrap, sessionID, userID, messageID string) (domain.AgentMessage, bool) {
 	for _, session := range data.AgentSessions {
 		if session.ID == sessionID && session.UserID == userID {
 			for _, message := range session.Messages {
@@ -43,9 +43,9 @@ func scaleP21AgentMessage(data domain.Bootstrap, sessionID, userID, messageID st
 	return domain.AgentMessage{}, false
 }
 
-func scaleP21AgentSessionEqual(t *testing.T, r *AgentSessionRead, data domain.Bootstrap, match AgentSessionMatch) {
+func scaleAgentSessionEqual(t *testing.T, r *AgentSessionRead, data domain.Bootstrap, match AgentSessionMatch) {
 	t.Helper()
-	expected := scaleP21AgentSessionHeaders(data, match)
+	expected := scaleAgentSessionHeaders(data, match)
 	first, found, err := r.FirstHeader(t.Context(), match)
 	if err != nil || found != (len(expected) != 0) {
 		t.Fatal("first session selection changed", found, err)
@@ -68,7 +68,7 @@ func scaleP21AgentSessionEqual(t *testing.T, r *AgentSessionRead, data domain.Bo
 	}
 }
 
-func TestScaleP21AgentSessionNativeOwnership(t *testing.T) {
+func TestScaleAgentSessionNativeOwnership(t *testing.T) {
 	at := time.Now()
 	data := domain.Bootstrap{AgentSessions: []domain.AgentSession{
 		{ID: "duplicate", UserID: "owner", SlugID: "not-a-selector", DeletedAt: &at},
@@ -85,7 +85,7 @@ func TestScaleP21AgentSessionNativeOwnership(t *testing.T) {
 		{ID: "", UserID: "", Messages: []domain.AgentMessage{{ID: "", Content: "empty selected"}}},
 		{ID: "session\x00id", UserID: "owner\x00id", Messages: []domain.AgentMessage{{ID: "message\x00id", Content: "NUL selected"}}},
 	}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, key := range []string{"physical", ""} {
 		statements := 0
@@ -96,13 +96,13 @@ func TestScaleP21AgentSessionNativeOwnership(t *testing.T) {
 		base := view.metadataResidency.work.used
 		for _, pair := range [][2]string{{"duplicate", "owner"}, {"", ""}, {"session\x00id", "owner\x00id"}, {"not-a-selector", "owner"}, {"missing", "owner"}} {
 			id, userID := pair[0], pair[1]
-			scaleP21AgentSessionEqual(t, r, data, AgentSessionMatch{ID: &id, UserID: &userID})
-			scaleP21AgentSessionEqual(t, r, data, AgentSessionMatch{ID: &id})
-			scaleP21AgentSessionEqual(t, r, data, AgentSessionMatch{UserID: &userID})
+			scaleAgentSessionEqual(t, r, data, AgentSessionMatch{ID: &id, UserID: &userID})
+			scaleAgentSessionEqual(t, r, data, AgentSessionMatch{ID: &id})
+			scaleAgentSessionEqual(t, r, data, AgentSessionMatch{UserID: &userID})
 		}
-		scaleP21AgentSessionEqual(t, r, data, AgentSessionMatch{})
+		scaleAgentSessionEqual(t, r, data, AgentSessionMatch{})
 		for _, ids := range [][3]string{{"duplicate", "owner", "message"}, {"duplicate", "owner", "empty-parts"}, {"duplicate", "owner", "nil-parts"}, {"duplicate", "owner", ""}, {"", "", ""}, {"session\x00id", "owner\x00id", "message\x00id"}, {"duplicate", "owner", "missing"}} {
-			expected, exists := scaleP21AgentMessage(data, ids[0], ids[1], ids[2])
+			expected, exists := scaleAgentMessage(data, ids[0], ids[1], ids[2])
 			point, found, err := r.FirstMessage(t.Context(), ids[0], ids[1], ids[2])
 			if err != nil || found != exists {
 				t.Fatal("message occurrence selection changed", ids, found, err)
@@ -223,10 +223,10 @@ func TestScaleP21AgentSessionNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21AgentSessionWarmReloadAndPin(t *testing.T) {
+func TestScaleAgentSessionWarmReloadAndPin(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	sessionID, userID := "session-selected", f.data.Viewer.ID
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
@@ -274,7 +274,7 @@ func TestScaleP21AgentSessionWarmReloadAndPin(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			scaleP21AgentSessionEqual(t, r, legacy, AgentSessionMatch{})
+			scaleAgentSessionEqual(t, r, legacy, AgentSessionMatch{})
 			readerWork := view.metadataResidency.work.used
 			header, _, err := r.FirstHeader(ctx, AgentSessionMatch{ID: &sessionID, UserID: &userID})
 			if err != nil {
@@ -282,7 +282,7 @@ func TestScaleP21AgentSessionWarmReloadAndPin(t *testing.T) {
 			}
 			headerWork := view.metadataResidency.work.used
 			message, found, err := r.FirstMessage(ctx, sessionID, userID, "selected")
-			expected, _ := scaleP21AgentMessage(legacy, sessionID, userID, "selected")
+			expected, _ := scaleAgentMessage(legacy, sessionID, userID, "selected")
 			if err != nil || !found || !reflect.DeepEqual(message.Data, expected) {
 				t.Fatal("reloaded complete message changed", found, err)
 			}
@@ -320,7 +320,7 @@ func TestScaleP21AgentSessionWarmReloadAndPin(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent.Close()
-	scaleP21AgentSessionEqual(t, r, old, AgentSessionMatch{})
+	scaleAgentSessionEqual(t, r, old, AgentSessionMatch{})
 	point, found, err := r.FirstMessage(t.Context(), sessionID, userID, "selected")
 	if err != nil || !found || point.Data.Content != "selected" {
 		t.Fatal("pinned reader replaced selected message", found, err)

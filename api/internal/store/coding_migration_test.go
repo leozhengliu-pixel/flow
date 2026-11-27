@@ -19,7 +19,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW17CodingRows(t *testing.T, repo *SQLiteStore, workspace string) []any {
+func codingMigrationRows(t *testing.T, repo *SQLiteStore, workspace string) []any {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT id,name,code_host,host_name,repository,active_repo_key,archived_at,version,data,created_at,updated_at FROM coding_environments WHERE workspace_key=? ORDER BY id`, workspace)
 	if err != nil {
@@ -43,7 +43,7 @@ func scaleP21SW17CodingRows(t *testing.T, repo *SQLiteStore, workspace string) [
 	return result
 }
 
-func scaleP21SW17CodingSettings(t *testing.T, repo *SQLiteStore, workspace string) []byte {
+func codingMigrationSettings(t *testing.T, repo *SQLiteStore, workspace string) []byte {
 	t.Helper()
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='workspaceSettings' AND record_key='codingAgentSettings'`, workspace).Scan(&raw); err != nil {
@@ -52,7 +52,7 @@ func scaleP21SW17CodingSettings(t *testing.T, repo *SQLiteStore, workspace strin
 	return raw
 }
 
-func scaleP21SW17CodingUnrelated(t *testing.T, repo *SQLiteStore, workspace string) [32]byte {
+func codingMigrationUnrelated(t *testing.T, repo *SQLiteStore, workspace string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND NOT (field='workspaceSettings' AND record_key='codingAgentSettings') ORDER BY field,record_key`, workspace)
@@ -76,7 +76,7 @@ func scaleP21SW17CodingUnrelated(t *testing.T, repo *SQLiteStore, workspace stri
 	return [32]byte(hash.Sum(nil))
 }
 
-func scaleP21SW17SeedCoding(t *testing.T, repo *SQLiteStore, workspace string, legacy []domain.CodingAgentEnvironment) {
+func seedCodingMigration(t *testing.T, repo *SQLiteStore, workspace string, legacy []domain.CodingAgentEnvironment) {
 	t.Helper()
 	if _, err := repo.db.ExecContext(t.Context(), `DELETE FROM coding_environments WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
@@ -97,10 +97,10 @@ func scaleP21SW17SeedCoding(t *testing.T, repo *SQLiteStore, workspace string, l
 	}
 }
 
-func TestScaleP21SW17CodingMigrationDifferential(t *testing.T) {
+func TestCodingMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw17-env-")
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -129,14 +129,14 @@ func TestScaleP21SW17CodingMigrationDifferential(t *testing.T) {
 	}
 	var outcomes []outcome
 	for _, source := range []*SQLiteStore{f.SQLiteStore, view} {
-		scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
-		if len(scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) <= MetadataRecordPageMaxBytes {
+		seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
+		if len(codingMigrationSettings(t, f.SQLiteStore, workspace)) <= MetadataRecordPageMaxBytes {
 			t.Fatal("fixture must exceed a selected metadata page")
 		}
 		if err := f.insertCodingEnvironment(t.Context(), f.db, existing); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21SW17CodingUnrelated(t, f.SQLiteStore, workspace)
+		before := codingMigrationUnrelated(t, f.SQLiteStore, workspace)
 		published := 0
 		source.SetWebhookSink(func(string, domain.DomainEvent) { published++ })
 		source.SetRealtimeSink(func(string, domain.RealtimeEvent) { published++ })
@@ -148,8 +148,8 @@ func TestScaleP21SW17CodingMigrationDifferential(t *testing.T) {
 		if err != nil || count != len(legacy)-2 {
 			t.Fatalf("migrated=%d want=%d err=%v", count, len(legacy)-2, err)
 		}
-		rows := scaleP21SW17CodingRows(t, f.SQLiteStore, workspace)
-		settings := scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)
+		rows := codingMigrationRows(t, f.SQLiteStore, workspace)
+		settings := codingMigrationSettings(t, f.SQLiteStore, workspace)
 		large, err := f.CodingEnvironment(t.Context(), workspace, prefix+"-large")
 		if err != nil || large.PrepareScript != legacy[0].SetupCommand || large.Name != legacy[0].Name {
 			t.Fatal("migration truncated or changed a legal large escaped script", err)
@@ -162,10 +162,10 @@ func TestScaleP21SW17CodingMigrationDifferential(t *testing.T) {
 		if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID).Scan(&afterEvents); err != nil || afterEvents != eventCount || published != 0 {
 			t.Fatal("migration added a domain event or publication", err)
 		}
-		if scaleP21SW17CodingUnrelated(t, f.SQLiteStore, workspace) != before {
+		if codingMigrationUnrelated(t, f.SQLiteStore, workspace) != before {
 			t.Fatal("coding migration rewrote unrelated canonical metadata")
 		}
-		if count, err := source.migrateWorkspaceCodingEnvironments(t.Context(), workspace); err != nil || count != 0 || !reflect.DeepEqual(rows, scaleP21SW17CodingRows(t, f.SQLiteStore, workspace)) || !bytes.Equal(settings, scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) {
+		if count, err := source.migrateWorkspaceCodingEnvironments(t.Context(), workspace); err != nil || count != 0 || !reflect.DeepEqual(rows, codingMigrationRows(t, f.SQLiteStore, workspace)) || !bytes.Equal(settings, codingMigrationSettings(t, f.SQLiteStore, workspace)) {
 			t.Fatal("migration is not idempotent", err)
 		}
 		if source.BoundedMetadataEnabled() {
@@ -189,10 +189,10 @@ func TestScaleP21SW17CodingMigrationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CodingMigrationZeroCreatedAt(t *testing.T) {
+func TestCodingMigrationZeroCreatedAt(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw17-env-zero-")
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -203,7 +203,7 @@ func TestScaleP21SW17CodingMigrationZeroCreatedAt(t *testing.T) {
 		{ID: prefix + "-duplicate", Repository: "acme/" + prefix},
 	}
 	for _, source := range []*SQLiteStore{f.SQLiteStore, view} {
-		scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
+		seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
 		if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "workspaceSettings"), workspace, "scale_p21_sw17.zero_time", "", nil, func(data *domain.Bootstrap) error {
 			data.WorkspaceSettings.UpdatedAt = time.Time{}
 			return nil
@@ -229,10 +229,10 @@ func TestScaleP21SW17CodingMigrationZeroCreatedAt(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
+func TestCodingMigrationFailures(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw17-env-failure-")
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -246,8 +246,8 @@ func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			var outcomes []any
 			for _, source := range []*SQLiteStore{f.SQLiteStore, view} {
-				scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
-				original := scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)
+				seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
+				original := codingMigrationSettings(t, f.SQLiteStore, workspace)
 				cancelled, cancel := context.WithCancel(t.Context())
 				inserts := 0
 				ctx := WithSQLStatementObserver(cancelled, func(query string) {
@@ -267,8 +267,8 @@ func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
 				if phase == "metadata-write" {
 					want = len(legacy)
 				}
-				rows := scaleP21SW17CodingRows(t, f.SQLiteStore, workspace)
-				if !errors.Is(err, context.Canceled) || count != want || len(rows) != want || !bytes.Equal(original, scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) {
+				rows := codingMigrationRows(t, f.SQLiteStore, workspace)
+				if !errors.Is(err, context.Canceled) || count != want || len(rows) != want || !bytes.Equal(original, codingMigrationSettings(t, f.SQLiteStore, workspace)) {
 					t.Fatalf("partial migration count=%d rows=%d want=%d err=%v", count, len(rows), want, err)
 				}
 				outcomes = append(outcomes, []any{count, rows})
@@ -282,22 +282,22 @@ func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
 		})
 	}
 	t.Run("spool-budget", func(t *testing.T) {
-		scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
-		before := scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)
+		seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
+		before := codingMigrationSettings(t, f.SQLiteStore, workspace)
 		used := recordSpoolBytes.Load()
 		t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", "0")
-		if count, err := view.migrateWorkspaceCodingEnvironments(t.Context(), workspace); count != 0 || !errors.Is(err, ErrRecordSpoolBudget) || len(scaleP21SW17CodingRows(t, f.SQLiteStore, workspace)) != 0 || !bytes.Equal(before, scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) || recordSpoolBytes.Load() != used {
+		if count, err := view.migrateWorkspaceCodingEnvironments(t.Context(), workspace); count != 0 || !errors.Is(err, ErrRecordSpoolBudget) || len(codingMigrationRows(t, f.SQLiteStore, workspace)) != 0 || !bytes.Equal(before, codingMigrationSettings(t, f.SQLiteStore, workspace)) || recordSpoolBytes.Load() != used {
 			t.Fatalf("spool failure mutated metadata or leaked disk budget: count=%d err=%v", count, err)
 		}
 	})
 	t.Run("policy-candidate-budget", func(t *testing.T) {
-		scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
-		before := scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)
+		seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
+		before := codingMigrationSettings(t, f.SQLiteStore, workspace)
 		limit := view.metadataResidency.policyLimit
 		view.metadataResidency.policyLimit = 1
 		count, err := view.migrateWorkspaceCodingEnvironments(t.Context(), workspace)
 		view.metadataResidency.policyLimit = limit
-		if count != len(legacy) || !errors.Is(err, ErrMetadataWorkBudget) || !bytes.Equal(before, scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) || len(scaleP21SW17CodingRows(t, f.SQLiteStore, workspace)) != len(legacy) {
+		if count != len(legacy) || !errors.Is(err, ErrMetadataWorkBudget) || !bytes.Equal(before, codingMigrationSettings(t, f.SQLiteStore, workspace)) || len(codingMigrationRows(t, f.SQLiteStore, workspace)) != len(legacy) {
 			t.Fatalf("candidate failure did not roll back only metadata: count=%d err=%v", count, err)
 		}
 		if count, err := view.migrateWorkspaceCodingEnvironments(t.Context(), workspace); count != 0 || err != nil {
@@ -305,11 +305,11 @@ func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
 		}
 	})
 	t.Run("cancelled-and-missing", func(t *testing.T) {
-		scaleP21SW17SeedCoding(t, f.SQLiteStore, workspace, legacy)
-		before := scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)
+		seedCodingMigration(t, f.SQLiteStore, workspace, legacy)
+		before := codingMigrationSettings(t, f.SQLiteStore, workspace)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		if count, err := view.migrateWorkspaceCodingEnvironments(ctx, workspace); count != 0 || !errors.Is(err, context.Canceled) || !bytes.Equal(before, scaleP21SW17CodingSettings(t, f.SQLiteStore, workspace)) {
+		if count, err := view.migrateWorkspaceCodingEnvironments(ctx, workspace); count != 0 || !errors.Is(err, context.Canceled) || !bytes.Equal(before, codingMigrationSettings(t, f.SQLiteStore, workspace)) {
 			t.Fatalf("cancelled migration count=%d err=%v", count, err)
 		}
 		if count, err := view.migrateWorkspaceCodingEnvironments(t.Context(), idgen.New("sw17-missing-")); count != 0 || err != nil {
@@ -321,10 +321,10 @@ func TestScaleP21SW17CodingMigrationFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CodingMigrationConcurrentMetadata(t *testing.T) {
+func TestCodingMigrationConcurrentMetadata(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, config := scaleP04OwnedStore(t)
+	repo, config := scaleOwnedStore(t)
 	repo.mu.RLock()
 	workspace := repo.lastWorkspaceKey
 	repo.mu.RUnlock()
@@ -346,7 +346,7 @@ func TestScaleP21SW17CodingMigrationConcurrentMetadata(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			var outcomes []any
 			for _, source := range []*SQLiteStore{repo, view} {
-				scaleP21SW17SeedCoding(t, repo, workspace, legacy)
+				seedCodingMigration(t, repo, workspace, legacy)
 				changed := false
 				ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 					if changed || !strings.HasPrefix(query, "INSERT INTO coding_environments(") {
@@ -388,7 +388,7 @@ func TestScaleP21SW17CodingMigrationConcurrentMetadata(t *testing.T) {
 				if count != len(legacy) || err != nil {
 					t.Fatalf("peer migration count=%d conflict=%t err=%v", count, conflict, err)
 				}
-				settings := scaleP21SW17CodingSettings(t, repo, workspace)
+				settings := codingMigrationSettings(t, repo, workspace)
 				var decoded domain.CodingAgentSettings
 				if err := json.Unmarshal(settings, &decoded); err != nil {
 					t.Fatal(err)
@@ -403,7 +403,7 @@ func TestScaleP21SW17CodingMigrationConcurrentMetadata(t *testing.T) {
 				if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='workspaceSettings' AND record_key='welcomeMessage'`, workspace).Scan(&welcome); err != nil || string(welcome) != `"Peer changed another settings property"` {
 					t.Fatal("migration overwrote an unchanged settings property", err)
 				}
-				outcomes = append(outcomes, []any{count, conflict, scaleP21SW17CodingRows(t, repo, workspace), string(settings), string(welcome)})
+				outcomes = append(outcomes, []any{count, conflict, codingMigrationRows(t, repo, workspace), string(settings), string(welcome)})
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 				t.Fatal("two-store concurrent metadata effects differ")
@@ -412,10 +412,10 @@ func TestScaleP21SW17CodingMigrationConcurrentMetadata(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CodingMigrationMeasurement(t *testing.T) {
+func TestCodingMigrationMeasurement(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw17-env-measure-")
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

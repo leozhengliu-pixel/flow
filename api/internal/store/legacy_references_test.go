@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW81Data(repetitions int) domain.Bootstrap {
+func legacyReferencesData(repetitions int) domain.Bootstrap {
 	at, native := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC), time.Now()
 	body := strings.Repeat("Complete unrelated reference body. ", repetitions)
 	stale := domain.User{ID: "user", Name: "Stale embedded user", AppScopes: nil, AppTeamIDs: []string{}}
@@ -55,9 +55,9 @@ func scaleP21SW81Data(repetitions int) domain.Bootstrap {
 	}
 }
 
-func scaleP21SW81Compare(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, releaseInput func()) {
+func legacyReferencesCompare(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, releaseInput func()) {
 	t.Helper()
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	before, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -76,8 +76,8 @@ func scaleP21SW81Compare(t *testing.T, view *SQLiteStore, source *metadataLogica
 		t.Fatal("legacy display composition failed", err)
 	}
 	t.Cleanup(result.Release)
-	scaleP21SW72Compare(t, result, scope, want)
-	scaleP21SW72Compare(t, source, scope, before)
+	legacyIssueImageCompare(t, result, scope, want)
+	legacyIssueImageCompare(t, source, scope, before)
 	for index, node := range source.fields {
 		name := reflect.TypeFor[domain.Bootstrap]().Field(index).Tag.Get("json")
 		switch name {
@@ -93,7 +93,7 @@ func scaleP21SW81Compare(t *testing.T, view *SQLiteStore, source *metadataLogica
 	}
 	releaseInput()
 	cancel()
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	result.Release()
 	result.Release()
 	if _, err := result.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) || view.MetadataWorkUsedForTesting() != 0 {
@@ -101,12 +101,12 @@ func scaleP21SW81Compare(t *testing.T, view *SQLiteStore, source *metadataLogica
 	}
 }
 
-func TestScaleP21SW81LegacyReferencesLiteral(t *testing.T) {
+func TestLegacyReferencesLiteral(t *testing.T) {
 	for _, variant := range []string{"last-id-winners", "native-via", "nil-directories", "empty-directories", "nil-collections", "empty-collections", "large-bodies"} {
 		t.Run(variant, func(t *testing.T) {
-			data := scaleP21SW81Data(1000)
+			data := legacyReferencesData(1000)
 			if variant == "large-bodies" {
-				data = scaleP21SW81Data(20000)
+				data = legacyReferencesData(20000)
 			}
 			switch variant {
 			case "nil-directories":
@@ -144,7 +144,7 @@ func TestScaleP21SW81LegacyReferencesLiteral(t *testing.T) {
 					t.Fatal("native Via fixture was not installed", err)
 				}
 			}
-			scaleP21SW81Compare(t, view, source, release)
+			legacyReferencesCompare(t, view, source, release)
 			if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 				t.Fatal("released reference composition leaked storage")
 			}
@@ -152,11 +152,11 @@ func TestScaleP21SW81LegacyReferencesLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW81LegacyReferencesWarmReload(t *testing.T) {
+func TestLegacyReferencesWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -199,7 +199,7 @@ func TestScaleP21SW81LegacyReferencesWarmReload(t *testing.T) {
 					}
 				})
 				disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-				scaleP21SW81Compare(t, view, source, func() { source.Release(); owned = false })
+				legacyReferencesCompare(t, view, source, func() { source.Release(); owned = false })
 				if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 					t.Fatal("warm reference composition retained temporary storage")
 				}
@@ -208,14 +208,14 @@ func TestScaleP21SW81LegacyReferencesWarmReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW81LegacyReferencesCancellation(t *testing.T) {
+func TestLegacyReferencesCancellation(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	source, err := captureMetadataLogicalSource(t.Context(), scaleP21SW81Data(1000), copyStamp{workspaceID: "native", revision: -1})
+	source, err := captureMetadataLogicalSource(t.Context(), legacyReferencesData(1000), copyStamp{workspaceID: "native", revision: -1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer source.Release()
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	before, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestScaleP21SW81LegacyReferencesCancellation(t *testing.T) {
 	if result != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("canceled display composition escaped or leaked", err)
 	}
-	scaleP21SW72Compare(t, source, scope, before)
+	legacyIssueImageCompare(t, source, scope, before)
 	source.Release()
 	if result, err := view.refreshLegacyDisplayImage(t.Context(), source); result != nil || !errors.Is(err, errMetadataLogicalClosed) {
 		if result != nil {

@@ -501,17 +501,17 @@ func TestLoadBootstrapProfile(t *testing.T) {
 // FLOW_LOAD_ACCESS_EVERY (10), and with FLOW_LOAD_LEGACY=1 FLOW_LOAD_PRESENCE_MINIMAL (0; 1 sends the negotiated heartbeat header).
 func TestLoadUsers(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_LEGACY") == "1" {
-		scaleP01LegacyUsers(t)
+		scaleLegacyUsers(t)
 		return
 	}
-	scaleP01RunLocal(t)
+	scaleRunLocal(t)
 }
 
 // Kept verbatim so earlier incident reports can be reproduced with the same
 // five-account fixture and success-only freshness calculation.
-func scaleP01LegacyUsers(t *testing.T) {
-	var streamStats scaleP06LoadStreams
-	var transportStats scaleP06LoadTransport
+func scaleLegacyUsers(t *testing.T) {
+	var streamStats scaleLoadStreams
+	var transportStats scaleLoadTransport
 	users := loadEnvInt("FLOW_LOAD_USERS", 100)
 	minimalPresence := loadEnvInt("FLOW_LOAD_PRESENCE_MINIMAL", 0) != 0
 	accessEvery := max(loadEnvInt("FLOW_LOAD_ACCESS_EVERY", 10), 1)
@@ -848,7 +848,7 @@ func scaleP01LegacyUsers(t *testing.T) {
 	byKind := map[string]any{}
 	for kind, values := range freshness {
 		all = append(all, values...)
-		byKind[kind] = scaleP06PropagationSummary(changeCounts[kind], values)
+		byKind[kind] = scalePropagationSummary(changeCounts[kind], values)
 	}
 	for _, value := range byKind {
 		kind := value.(map[string]any)
@@ -878,7 +878,7 @@ type loadRealtimeEvent struct {
 
 // loadRealtimeStream reads the user's realtime stream until ctx ends,
 // reconnecting after a drop like the browser's EventSource.
-func loadRealtimeStream(ctx context.Context, client *http.Client, base string, stats *scaleP06LoadStreams, handle func(loadRealtimeEvent)) {
+func loadRealtimeStream(ctx context.Context, client *http.Client, base string, stats *scaleLoadStreams, handle func(loadRealtimeEvent)) {
 	connected := false
 	for ctx.Err() == nil {
 		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/realtime/events?workspace=test-workspace", nil)

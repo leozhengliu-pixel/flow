@@ -11,15 +11,15 @@ import (
 	"testing"
 )
 
-// scaleP21SW228Chunks returns its bytes in reads of cycling small sizes, so
+// chunks returns its bytes in reads of cycling small sizes, so
 // buffered runs end inside escapes and multi-byte sequences.
-type scaleP21SW228Chunks struct {
+type jsonRunsChunks struct {
 	data  []byte
 	sizes []int
 	next  int
 }
 
-func (r *scaleP21SW228Chunks) Read(p []byte) (int, error) {
+func (r *jsonRunsChunks) Read(p []byte) (int, error) {
 	if len(r.data) == 0 {
 		return 0, io.EOF
 	}
@@ -30,11 +30,11 @@ func (r *scaleP21SW228Chunks) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// TestScaleP21SW228JSONRuns pins the run-based string scanner and raw
+// TestJSONRuns pins the run-based string scanner and raw
 // compactor to their byte-at-a-time contracts: the scanner accepts exactly
 // json.Valid's strings (offsets included) and the compactor writes exactly
 // json.Marshal's bytes for a RawMessage, however the input is chunked.
-func TestScaleP21SW228JSONRuns(t *testing.T) {
+func TestJSONRuns(t *testing.T) {
 	valid := []string{
 		`""`, `"plain"`, `"<>&"`, `"\"\\\/\b\f\n\r\t"`, `"ꯍꯍ\u0000"`,
 		`"` + strings.Repeat(`<`, 5000) + `"`, `"` + strings.Repeat(`x\"`, 4000) + `"`,
@@ -50,7 +50,7 @@ func TestScaleP21SW228JSONRuns(t *testing.T) {
 	chunkings := [][]int{{1 << 20}, {1}, {2, 3, 5, 7}, {4093, 6, 1, 11}, {16383, 5}}
 	for _, input := range append(valid, invalid...) {
 		for _, sizes := range chunkings {
-			reader := &scaleP21SW228Chunks{data: []byte(input), sizes: sizes}
+			reader := &jsonRunsChunks{data: []byte(input), sizes: sizes}
 			scanner := metadataCollectionScanner{ctx: t.Context(), input: bufio.NewReaderSize(reader, metadataRecordChunkBytes)}
 			_, err := scanner.value(0)
 			if err == nil {
@@ -71,7 +71,7 @@ func TestScaleP21SW228JSONRuns(t *testing.T) {
 			}
 			var got bytes.Buffer
 			stream := &logicalJSONStream{ctx: t.Context(), out: bufio.NewWriterSize(&got, 64)}
-			if err := stream.compactRaw(&scaleP21SW228Chunks{data: []byte(input), sizes: sizes}); err != nil {
+			if err := stream.compactRaw(&jsonRunsChunks{data: []byte(input), sizes: sizes}); err != nil {
 				t.Fatal(err)
 			}
 			if err := stream.out.Flush(); err != nil {
@@ -82,10 +82,10 @@ func TestScaleP21SW228JSONRuns(t *testing.T) {
 			}
 		}
 	}
-	reader := &scaleP21SW228Chunks{data: []byte(`"` + strings.Repeat("x", 1<<20) + `"`), sizes: []int{4096}}
+	reader := &jsonRunsChunks{data: []byte(`"` + strings.Repeat("x", 1<<20) + `"`), sizes: []int{4096}}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	stream := &logicalJSONStream{ctx: &scaleP21SW205CancelContext{Context: ctx, cancel: cancel, at: 2}, out: bufio.NewWriter(io.Discard)}
+	stream := &logicalJSONStream{ctx: &aggregatePublicationCancelContext{Context: ctx, cancel: cancel, at: 2}, out: bufio.NewWriter(io.Discard)}
 	if err := stream.compactRaw(reader); !errors.Is(err, context.Canceled) {
 		t.Fatal("compactor stopped observing cancellation", err)
 	}

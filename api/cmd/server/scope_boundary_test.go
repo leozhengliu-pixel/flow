@@ -8,7 +8,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP17UnmigratedDocumentHandlersKeepCompleteInputs(t *testing.T) {
+func TestScaleUnmigratedDocumentHandlersKeepCompleteInputs(t *testing.T) {
 	for _, path := range []string{"/api/documents?first=10", "/api/documents?connection=true", "/api/documents/id/drafts", "/api/documents/id/attachments", "/api/documents/id/reminders", "/api/documents/id/future-detail", "/api/documents/id/comments/comment/attachments"} {
 		if documentRecordRequest(httptest.NewRequest("GET", path, nil)) {
 			t.Fatalf("unmigrated handler received a partial handoff: %s", path)
@@ -16,10 +16,10 @@ func TestScaleP17UnmigratedDocumentHandlersKeepCompleteInputs(t *testing.T) {
 	}
 }
 
-func TestScaleP17DevelopmentReadUsesTheDefaultWorkspace(t *testing.T) {
+func TestScaleDevelopmentReadUsesTheDefaultWorkspace(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, domain.Document{ID: "p17-default", Title: "Default workspace", Creator: data.Viewer})
 		return nil

@@ -11,20 +11,20 @@ import (
 
 // These are the runes accepted by Go's unicode.IsSpace. Removing all
 // of them tests TrimSpace(value)=="" without transferring a large SQL string.
-var scaleP21SW24Spaces = []rune{
+var coldReadNativeReadsSpaces = []rune{
 	'\t', '\n', '\v', '\f', '\r', ' ', '\u0085', '\u00a0', '\u1680',
 	'\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006',
 	'\u2007', '\u2008', '\u2009', '\u200a', '\u2028', '\u2029', '\u202f',
 	'\u205f', '\u3000',
 }
 
-func (s *SQLiteStore) scaleP21SW24NonWhitespace(column string) (string, []any) {
+func (s *SQLiteStore) nonWhitespace(column string) (string, []any) {
 	value := "COALESCE(" + column + ",'')"
 	if s.dialect == "mysql" {
 		value = "CAST(" + value + " AS BINARY)"
 	}
-	args := make([]any, 0, len(scaleP21SW24Spaces))
-	for _, space := range scaleP21SW24Spaces {
+	args := make([]any, 0, len(coldReadNativeReadsSpaces))
+	for _, space := range coldReadNativeReadsSpaces {
 		value = "REPLACE(" + value + ",?,'')"
 		args = append(args, string(space))
 	}
@@ -51,8 +51,8 @@ func (s *SQLiteStore) ClassicGitHubSyncConfigured(ctx context.Context, workspace
 		return false, err
 	}
 	defer release()
-	secret, secretArgs := s.scaleP21SW24NonWhitespace(s.jsonText("data", "config.webhookSecret"))
-	env, envArgs := s.scaleP21SW24NonWhitespace(s.jsonText("data", "config.webhookSecretEnv"))
+	secret, secretArgs := s.nonWhitespace(s.jsonText("data", "config.webhookSecret"))
+	env, envArgs := s.nonWhitespace(s.jsonText("data", "config.webhookSecretEnv"))
 	provider, status := s.jsonText("data", "provider"), s.jsonText("data", "status")
 	query := `SELECT CASE WHEN EXISTS(SELECT 1 FROM workspace_metadata_records
 		WHERE workspace_key=? AND field='integrationConnections' AND ` +

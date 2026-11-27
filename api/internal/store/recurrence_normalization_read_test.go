@@ -15,14 +15,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW157Fixture struct {
-	scaleP09Fixture
+type recurrenceNormalizationReadFixture struct {
+	scaleFixture
 	issues []domain.Issue
 }
 
-func scaleP21SW157Seed(t *testing.T) scaleP21SW157Fixture {
+func recurrenceNormalizationReadSeed(t *testing.T) recurrenceNormalizationReadFixture {
 	t.Helper()
-	f := scaleP21SW157Fixture{scaleP09Fixture: scaleP09Database(t)}
+	f := recurrenceNormalizationReadFixture{scaleFixture: journalScaleDatabase(t)}
 	at := time.Date(2026, 11, 15, 1, 2, 3, 456, time.UTC)
 	prefix := idgen.New("sw157-")
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw157_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -71,19 +71,19 @@ func scaleP21SW157Seed(t *testing.T) scaleP21SW157Fixture {
 	return f
 }
 
-func scaleP21SW157Headers(issues []domain.Issue) []domain.Issue {
-	headers := scaleP21IssueAuthorizationHeaders(issues)
+func recurrenceNormalizationReadHeaders(issues []domain.Issue) []domain.Issue {
+	headers := scaleIssueAuthorizationHeaders(issues)
 	for index, issue := range issues {
 		headers[index].Recurrence, headers[index].DueDate, headers[index].NextOccurrenceAt = issue.Recurrence, issue.DueDate, issue.NextOccurrenceAt
 	}
 	return headers
 }
 
-func scaleP21SW157Query(workspace string, ids []string) IssueRecordQuery {
+func recurrenceNormalizationReadQuery(workspace string, ids []string) IssueRecordQuery {
 	return IssueRecordQuery{Workspace: workspace, IssueIDs: ids, RestrictToIssueIDs: true, Archived: "all", Summary: true, Limit: 500}
 }
 
-func scaleP21SW157Install(t *testing.T, view *SQLiteStore, workspace string, data domain.Bootstrap) {
+func recurrenceNormalizationReadInstall(t *testing.T, view *SQLiteStore, workspace string, data domain.Bootstrap) {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID, revision: -1})
 	if err != nil {
@@ -92,10 +92,10 @@ func scaleP21SW157Install(t *testing.T, view *SQLiteStore, workspace string, dat
 	view.installMetadataLogicalSource(workspace, source)
 }
 
-func TestScaleP21SW157RecurringNormalizationWarmReload(t *testing.T) {
+func TestRecurringNormalizationWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
 	for _, state := range []string{"warm", "reloaded", "unknown-revision"} {
 		t.Run(state, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestScaleP21SW157RecurringNormalizationWarmReload(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+			view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 			wantIDs, err := f.RecurringIssueIDs(t.Context(), workspace, time.Time{}, 0)
 			if err != nil {
 				t.Fatal(err)
@@ -131,7 +131,7 @@ func TestScaleP21SW157RecurringNormalizationWarmReload(t *testing.T) {
 				{strings.ToUpper(f.issues[0].ID), f.issues[0].Identifier, f.issues[0].ID + "\x00"},
 				nil, {},
 			} {
-				want, err := f.QueryIssueRecords(t.Context(), scaleP21SW157Query(workspace, ids))
+				want, err := f.QueryIssueRecords(t.Context(), recurrenceNormalizationReadQuery(workspace, ids))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -139,8 +139,8 @@ func TestScaleP21SW157RecurringNormalizationWarmReload(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !reflect.DeepEqual(page.Data.Issues, scaleP21SW157Headers(want.Items)) {
-					t.Fatal("trusted first-page headers differ", ids, page.Data.Issues, scaleP21SW157Headers(want.Items))
+				if !reflect.DeepEqual(page.Data.Issues, recurrenceNormalizationReadHeaders(want.Items)) {
+					t.Fatal("trusted first-page headers differ", ids, page.Data.Issues, recurrenceNormalizationReadHeaders(want.Items))
 				}
 				for _, issue := range page.Data.Issues {
 					settings, _ := f.TeamSettingsFor(workspace, issue.Team.ID)
@@ -172,10 +172,10 @@ func TestScaleP21SW157RecurringNormalizationWarmReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW157RecurringNormalizationFirstPage(t *testing.T) {
+func TestRecurringNormalizationFirstPage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
 	ids := []string{f.issues[0].ID, f.issues[1].ID, f.issues[2].ID}
 	for _, index := range []int{0, 1} {
@@ -189,17 +189,17 @@ func TestScaleP21SW157RecurringNormalizationFirstPage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want, err := f.QueryIssueRecords(t.Context(), scaleP21SW157Query(workspace, ids))
+	want, err := f.QueryIssueRecords(t.Context(), recurrenceNormalizationReadQuery(workspace, ids))
 	if err != nil || len(want.Items) != 1 || !want.HasMore {
 		t.Fatal("literal fixture did not hit summary byte boundary", len(want.Items), want.HasMore, err)
 	}
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	read, err := view.BeginRecurringNormalizationRead(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	page, err := read.Page(t.Context(), ids)
-	if err != nil || !reflect.DeepEqual(page.Data.Issues, scaleP21SW157Headers(want.Items)) {
+	if err != nil || !reflect.DeepEqual(page.Data.Issues, recurrenceNormalizationReadHeaders(want.Items)) {
 		t.Fatal("normalizer fetched a second page or an ancestor", err)
 	}
 	read.Close()
@@ -213,13 +213,13 @@ func TestScaleP21SW157RecurringNormalizationFirstPage(t *testing.T) {
 	t.Logf("literal_first_page=%d selected_ids=%d summary_limit=%d", len(want.Items), len(ids), 4<<20)
 }
 
-func TestScaleP21SW157RecurringNormalizationTimezoneSources(t *testing.T) {
+func TestRecurringNormalizationTimezoneSources(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
-	parent := scaleP21SW152Parent(t, view, workspace)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
+	parent := commentActionReadParent(t, view, workspace)
 	pinned, err := parent.Context(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +236,7 @@ func TestScaleP21SW157RecurringNormalizationTimezoneSources(t *testing.T) {
 		" raw\x00":                             {Timezone: "invalid/location"},
 		strings.Repeat("unrelated-key", 10000): {Timezone: strings.Repeat("unrelated-timezone", 10000)},
 	}
-	scaleP21SW157Install(t, view, workspace, data)
+	recurrenceNormalizationReadInstall(t, view, workspace, data)
 	for _, key := range []string{"physical", "", " raw\x00", "missing", "PHYSICAL", "physical "} {
 		want := data.TeamSettings[key].Timezone
 		if got, err := read.TeamTimezone(key); err != nil || got != want {
@@ -247,7 +247,7 @@ func TestScaleP21SW157RecurringNormalizationTimezoneSources(t *testing.T) {
 	data.TeamSettings["physical"] = domain.TeamSettings{Timezone: "Pacific/Auckland"}
 	data.TeamSettings["decoded"] = domain.TeamSettings{Timezone: "Europe/London"}
 	data.TeamSettings["missing"] = domain.TeamSettings{Timezone: "UTC"}
-	scaleP21SW157Install(t, view, workspace, data)
+	recurrenceNormalizationReadInstall(t, view, workspace, data)
 	if got, err := read.TeamTimezone("physical"); err != nil || got != "America/New_York" || view.MetadataWorkUsedForTesting() != held {
 		t.Fatal("cached first timezone changed after registry replacement", got, err)
 	}
@@ -270,12 +270,12 @@ func TestScaleP21SW157RecurringNormalizationTimezoneSources(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW157RecurringNormalizationCancellationAdmission(t *testing.T) {
+func TestRecurringNormalizationCancellationAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if read, err := view.BeginRecurringNormalizationRead(canceled, workspace); read != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
@@ -372,12 +372,12 @@ func TestScaleP21SW157RecurringNormalizationCancellationAdmission(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW157RecurringNormalizationBodyIndependent(t *testing.T) {
+func TestRecurringNormalizationBodyIndependent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	data, _ := f.WorkspaceMetadata(workspace)
 	retained := 0
 	for _, size := range []int{1024, 16384} {
@@ -392,7 +392,7 @@ func TestScaleP21SW157RecurringNormalizationBodyIndependent(t *testing.T) {
 		}
 		data.TeamSettings[issue.Team.ID] = domain.TeamSettings{Timezone: "Asia/Tokyo", Description: strings.Repeat("ignored", size)}
 		data.TeamSettings[strings.Repeat("unselected-key", size)] = domain.TeamSettings{Timezone: strings.Repeat("unselected", size)}
-		scaleP21SW157Install(t, view, workspace, data)
+		recurrenceNormalizationReadInstall(t, view, workspace, data)
 		read, err := view.BeginRecurringNormalizationRead(t.Context(), workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -421,16 +421,16 @@ func TestScaleP21SW157RecurringNormalizationBodyIndependent(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW157RecurringNormalizationIDSnapshot(t *testing.T) {
+func TestRecurringNormalizationIDSnapshot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
 	want, err := f.RecurringIssueIDs(t.Context(), workspace, time.Time{}, 0)
 	if err != nil || len(want) == 0 {
 		t.Fatal("sparse index fixture missing", err)
 	}
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	changed := false
 	var mutationErr error
 	ctx := WithSQLStatementObserver(t.Context(), func(query string) {
@@ -456,12 +456,12 @@ func TestScaleP21SW157RecurringNormalizationIDSnapshot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW157RecurringNormalizationStaleCallerSnapshot(t *testing.T) {
+func TestRecurringNormalizationStaleCallerSnapshot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21SW157Seed(t)
+	f := recurrenceNormalizationReadSeed(t)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
 	if err != nil {
 		t.Fatal(err)
@@ -497,10 +497,10 @@ func TestScaleP21SW157RecurringNormalizationStaleCallerSnapshot(t *testing.T) {
 	t.Logf("caller_snapshot_ids=%d fresh_ids=%d owned_ids=%d", len(before), len(current), len(want))
 }
 
-func TestScaleP21SW157RecurringNormalizationIndexLimit(t *testing.T) {
+func TestRecurringNormalizationIndexLimit(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite bulk fixture; indexed reader/oracle comparisons run on every configured database")
 	}
@@ -518,7 +518,7 @@ func TestScaleP21SW157RecurringNormalizationIndexLimit(t *testing.T) {
 	if err != nil || len(want) != 10000 || slices.Contains(want, prefix+"1") || want[0] != prefix+"2" {
 		t.Fatal("literal index limit fixture differs", len(want), err)
 	}
-	view := scaleP21IssueAuthorizationView(t, f, false)
+	view := scaleIssueAuthorizationView(t, f, false)
 	read, err := view.BeginRecurringNormalizationRead(t.Context(), workspace)
 	if err != nil || !reflect.DeepEqual(read.IDs, want) {
 		t.Fatal("normalizer changed sparse index ordering/limit/archived exclusion", err)

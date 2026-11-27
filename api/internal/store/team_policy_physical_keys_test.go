@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-func TestScaleP21TeamPolicyPhysicalKeys(t *testing.T) {
+func TestScaleTeamPolicyPhysicalKeys(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false

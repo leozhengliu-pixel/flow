@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW601: GET /api/teams/{id}/settings migrated from the COLD facade to the
+// GET /api/teams/{id}/settings migrated from the COLD facade to the
 // bounded team settings read, served through the real cookie/Bearer
 // authentication, authorization and route mux on the legacy store, a warm
 // bounded view and a bounded view loaded from SQL: a team with settings, a
@@ -21,17 +21,17 @@ import (
 // Responses and every owned row must agree byte for byte; bounded, the route
 // does not decode the whole workspace.
 
-func sw601Handler(s *server) http.Handler {
+func teamSettingsReadHandler(s *server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/teams/{id}/settings", s.getTeamSettings)
 	return s.withColdMetadataRouteMux(mux, s.authenticate(mux))
 }
 
-func TestScaleP21SW601TeamSettingsRead(t *testing.T) {
+func TestTeamSettingsRead(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
 	t.Cleanup(func() { webhookDeliverySlots = oldSlots })
@@ -81,10 +81,10 @@ func TestScaleP21SW601TeamSettingsRead(t *testing.T) {
 		return func(s *server, out *trace) {
 			r := httptest.NewRequest(http.MethodGet, "/api/teams/"+team+"/settings", nil)
 			r.Header.Set("X-Workspace-Key", workspace)
-			r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sw410Session(user)})
+			r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: oAuthClientLookupSession(user)})
 			w := httptest.NewRecorder()
-			sw601Handler(s).ServeHTTP(w, r)
-			out.lines = append(out.lines, sw410Response("settings "+user.Name+" "+team, w))
+			teamSettingsReadHandler(s).ServeHTTP(w, r)
+			out.lines = append(out.lines, oauthClientLookupResponse("settings "+user.Name+" "+team, w))
 		}
 	}
 	bearer := func(secret, team string) step {
@@ -93,9 +93,9 @@ func TestScaleP21SW601TeamSettingsRead(t *testing.T) {
 			r.Header.Set("X-Workspace-Key", workspace)
 			r.Header.Set("Authorization", "Bearer "+secret)
 			w := httptest.NewRecorder()
-			sw601Handler(s).ServeHTTP(w, r)
-			out.lines = append(out.lines, sw410Response("settings key "+secret+" "+team, w))
-			sw430Quiet(current, s, workspace, secret)
+			teamSettingsReadHandler(s).ServeHTTP(w, r)
+			out.lines = append(out.lines, oauthClientLookupResponse("settings key "+secret+" "+team, w))
+			oAuthCOLDQuiet(current, s, workspace, secret)
 		}
 	}
 	teams := []string{f.public, f.private, "sw601-child", "tm-parent", "tm-sub", "tm-bare", "tm-triage", "sw601-global", "sw601-missing"}
@@ -122,7 +122,7 @@ func TestScaleP21SW601TeamSettingsRead(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			current = t
-			outcomes := f.sw600Differential(t, "sw601-"+test.name, []string{"teamSettings", "states"}, test.setup, test.call)
+			outcomes := f.labelRoutesDifferential(t, "sw601-"+test.name, []string{"teamSettings", "states"}, test.setup, test.call)
 			t.Logf("legacy result %s", outcomes[0].Result)
 		})
 	}

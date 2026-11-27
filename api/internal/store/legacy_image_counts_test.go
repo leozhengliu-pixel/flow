@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW92Data(workspace domain.Workspace, repetitions int) domain.Bootstrap {
+func legacyImageCountsData(workspace domain.Workspace, repetitions int) domain.Bootstrap {
 	body := strings.Repeat("Unrelated complete image body. ", repetitions)
 	at, zero := time.Now(), time.Time{}
 	return domain.Bootstrap{
@@ -55,9 +55,9 @@ func scaleP21SW92Data(workspace domain.Workspace, repetitions int) domain.Bootst
 	}
 }
 
-func scaleP21SW92Compare(t *testing.T, view *SQLiteStore, source *metadataLogicalSource) *metadataLogicalSource {
+func legacyImageCountsCompare(t *testing.T, view *SQLiteStore, source *metadataLogicalSource) *metadataLogicalSource {
 	t.Helper()
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	before, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -73,8 +73,8 @@ func scaleP21SW92Compare(t *testing.T, view *SQLiteStore, source *metadataLogica
 		t.Fatal("complete-image counts failed", err)
 	}
 	t.Cleanup(result.Release)
-	scaleP21SW72Compare(t, result, scope, want)
-	scaleP21SW72Compare(t, source, scope, before)
+	legacyIssueImageCompare(t, result, scope, want)
+	legacyIssueImageCompare(t, source, scope, before)
 	for index, node := range source.fields {
 		name := reflect.TypeFor[domain.Bootstrap]().Field(index).Tag.Get("json")
 		if name != "-" && name != "labels" && name != "projects" && name != "issues" && result.fields[index] != node {
@@ -88,10 +88,10 @@ func scaleP21SW92Compare(t *testing.T, view *SQLiteStore, source *metadataLogica
 	return result
 }
 
-func TestScaleP21SW92LegacyImageCountsLiteral(t *testing.T) {
+func TestLegacyImageCountsLiteral(t *testing.T) {
 	for _, variant := range []string{"duplicates-and-native-archive", "nil-directories", "empty-directories", "nil-issues", "empty-issues", "large-unrelated-bodies"} {
 		t.Run(variant, func(t *testing.T) {
-			data := scaleP21SW92Data(domain.Workspace{ID: "image", URLKey: "image"}, 1000)
+			data := legacyImageCountsData(domain.Workspace{ID: "image", URLKey: "image"}, 1000)
 			switch variant {
 			case "nil-directories":
 				data.Labels, data.Projects, data.Initiatives = nil, nil, nil
@@ -112,9 +112,9 @@ func TestScaleP21SW92LegacyImageCountsLiteral(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(source.Release)
-			result := scaleP21SW92Compare(t, view, source)
+			result := legacyImageCountsCompare(t, view, source)
 			source.Release()
-			scope := scaleP21SW72FullScope(t, result)
+			scope := fullScope(t, result)
 			want, err := result.Select(t.Context(), scope, 64<<20)
 			if err != nil {
 				t.Fatal(err)
@@ -124,7 +124,7 @@ func TestScaleP21SW92LegacyImageCountsLiteral(t *testing.T) {
 			if _, err := result.Select(cancelled, scope, 64<<20); !errors.Is(err, context.Canceled) {
 				t.Fatal("canceled result read did not cancel", err)
 			}
-			scaleP21SW72Compare(t, result, scope, want)
+			legacyIssueImageCompare(t, result, scope, want)
 			result.Release()
 			result.Release()
 			if _, err := result.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) {
@@ -138,10 +138,10 @@ func TestScaleP21SW92LegacyImageCountsLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW92LegacyImageCountsFrozenSource(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyImageCountsFrozenSource(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
-	seed := scaleP21SW92Data(f.data.Workspace, 100)
+	seed := legacyImageCountsData(f.data.Workspace, 100)
 	f.db.SetMaxOpenConns(4)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "labels", "projects", "initiatives", "documents"), workspace,
 		"scale_p21.sw92_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -184,9 +184,9 @@ func TestScaleP21SW92LegacyImageCountsFrozenSource(t *testing.T) {
 			f.put(t, tx, workspace, "later-physical", 1,
 				[]byte(`{"id":"later-issue","labels":[{"id":"shared"},{"id":"project-only"}],"project":{"id":"project"}}`))
 			f.put(t, tx, workspace, "later-malformed", 2, []byte(`{"id":`))
-			result := scaleP21SW92Compare(t, f.view, source)
+			result := legacyImageCountsCompare(t, f.view, source)
 			result.Release()
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}
@@ -194,10 +194,10 @@ func TestScaleP21SW92LegacyImageCountsFrozenSource(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW92LegacyImageCountsHeaderBound(t *testing.T) {
+func TestLegacyImageCountsHeaderBound(t *testing.T) {
 	for _, size := range []int{1 << 14, 10 << 14} {
 		t.Run(fmt.Sprintf("body-%d", size), func(t *testing.T) {
-			data := scaleP21SW92Data(domain.Workspace{ID: "bounded-image", URLKey: "bounded-image"}, 100)
+			data := legacyImageCountsData(domain.Workspace{ID: "bounded-image", URLKey: "bounded-image"}, 100)
 			data.Issues[0].Description = strings.Repeat("Ignored complete issue body. ", size)
 			view := &SQLiteStore{metadataResidency: newMetadataResidency()}
 			source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID, revision: -1})
@@ -205,18 +205,18 @@ func TestScaleP21SW92LegacyImageCountsHeaderBound(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer source.Release()
-			// Reuse SW71's proved working ceiling. Tenfold body growth must
+			// Reuse legacy resource counts's proved working ceiling. Tenfold body growth must
 			// not turn one projected issue header into a complete body decode.
 			view.metadataResidency.work.limit = 8 << 20
-			result := scaleP21SW92Compare(t, view, source)
+			result := legacyImageCountsCompare(t, view, source)
 			result.Release()
 		})
 	}
 }
 
-func TestScaleP21SW92LegacyImageCountsFailureRelease(t *testing.T) {
+func TestLegacyImageCountsFailureRelease(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	data := scaleP21SW92Data(domain.Workspace{ID: "failure-image", URLKey: "failure-image"}, 100)
+	data := legacyImageCountsData(domain.Workspace{ID: "failure-image", URLKey: "failure-image"}, 100)
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID})
 	if err != nil {
@@ -242,7 +242,7 @@ func TestScaleP21SW92LegacyImageCountsFailureRelease(t *testing.T) {
 		}
 		t.Fatal("count image admission escaped or leaked", err)
 	}
-	result = scaleP21SW92Compare(t, view, source)
+	result = legacyImageCountsCompare(t, view, source)
 	result.Release()
 	source.Release()
 	if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {

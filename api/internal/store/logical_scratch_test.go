@@ -37,7 +37,7 @@ func TestLogicalBuilderKeepsDiskBudgetForItsLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21LogicalScratchContention(t *testing.T) {
+func TestScaleLogicalScratchContention(t *testing.T) {
 	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", "1024")
 	ctx, _ := withMetadataWorkDemand(t.Context())
 	before := metadataLogicalDiskUsed.Load()
@@ -77,7 +77,7 @@ func TestScaleP21LogicalScratchContention(t *testing.T) {
 	}
 }
 
-func TestScaleP21FullLogicalDiskHoldOutlastsConcurrentScratch(t *testing.T) {
+func TestScaleFullLogicalDiskHoldOutlastsConcurrentScratch(t *testing.T) {
 	before := metadataLogicalDiskUsed.Load()
 	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", strconv.FormatInt(before+1024, 10))
 	ctx, _ := withMetadataWorkDemand(t.Context())

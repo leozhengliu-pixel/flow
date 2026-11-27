@@ -27,14 +27,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW18WebhookSelectionDifferential(t *testing.T) {
+func TestWebhookSelectionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_INTEGRATION_SW18_WEBHOOK", "environment-webhook")
 	t.Setenv("FLOW_INTEGRATION_SW18_SLACK", "environment-slack")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		targetID := idgen.New("sw18-webhook-")
 		for _, provider := range []string{"github", "gitlab", "slack"} {
@@ -67,7 +67,7 @@ func TestScaleP21SW18WebhookSelectionDifferential(t *testing.T) {
 					}); err != nil {
 						t.Fatal(err)
 					}
-					hash := scaleP21M3Fingerprint(t, repo, workspace, "integrationConnections")
+					hash := pointRecordFingerprint(t, repo, workspace, "integrationConnections")
 					f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 						var results []any
 						for _, source := range []*store.SQLiteStore{repo, f.probe} {
@@ -116,7 +116,7 @@ func TestScaleP21SW18WebhookSelectionDifferential(t *testing.T) {
 							t.Fatal("credential projection differs across representations")
 						}
 					})
-					if scaleP21M3Fingerprint(t, repo, workspace, "integrationConnections") != hash || f.probe.WorkspaceMetadataDecodes() != 0 {
+					if pointRecordFingerprint(t, repo, workspace, "integrationConnections") != hash || f.probe.WorkspaceMetadataDecodes() != 0 {
 						t.Fatal("webhook selection changed records or decoded complete metadata")
 					}
 				})
@@ -161,13 +161,13 @@ func TestScaleP21SW18WebhookSelectionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
+func TestTeamResourcesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "sw18-test-key")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, teamID := f.data.Workspace.URLKey, f.public
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		sections := []domain.TeamResourceSection{}
@@ -192,8 +192,8 @@ func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
 		}
 		expected := projectTeamResources(domain.Bootstrap{TeamResourceSections: sections, TeamPinnedResources: resources}, teamID)
 		expected.TeamID = ""
-		beforeSections := scaleP21M3Fingerprint(t, repo, workspace, "teamResourceSections")
-		beforeResources := scaleP21M3Fingerprint(t, repo, workspace, "teamPinnedResources")
+		beforeSections := pointRecordFingerprint(t, repo, workspace, "teamResourceSections")
+		beforeResources := pointRecordFingerprint(t, repo, workspace, "teamPinnedResources")
 		for _, spoolBytes := range []string{"0", "1024", "268435456"} {
 			t.Run("spool="+spoolBytes, func(t *testing.T) {
 				t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", spoolBytes)
@@ -257,14 +257,14 @@ func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
 				ctx, cancel := context.WithCancel(r.Context())
 				defer cancel()
 				r = r.WithContext(ctx)
-				w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+				w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 					if failure == "cancelled" {
 						cancel()
 						return nil
 					}
 					return errors.New("client disconnected")
 				}}
-				scaleP15ExpectAbort(t, func() {
+				scaleExpectAbort(t, func() {
 					(&server{store: f.probe, authDisabled: true}).listTeamResources(w, r)
 				})
 				next, response := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
@@ -324,7 +324,7 @@ func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
 		}
 		member := f.principals[2].user
 		queued := []*http.Request{}
-		for _, credential := range scaleP21M3Credentials() {
+		for _, credential := range pointSettingsCredentialCases() {
 			r := f.request(member, credential.key, nil)
 			r.SetPathValue("id", teamID)
 			r = r.WithContext(context.WithValue(r.Context(), teamResourcesReadKey{}, teamResourcesRead{TeamID: teamID, Sections: []domain.TeamResourceSection{}, Resources: []domain.TeamPinnedResource{}}))
@@ -337,15 +337,15 @@ func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				for _, r := range queued {
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).listTeamResources)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).listTeamResources)
 					if w.Code != http.StatusForbidden {
 						t.Fatalf("%s resource request reused revoked authorization: %d", phase, w.Code)
 					}
 				}
 			}
 		}
-		if scaleP21M3Fingerprint(t, repo, workspace, "teamResourceSections") != beforeSections ||
-			scaleP21M3Fingerprint(t, repo, workspace, "teamPinnedResources") != beforeResources ||
+		if pointRecordFingerprint(t, repo, workspace, "teamResourceSections") != beforeSections ||
+			pointRecordFingerprint(t, repo, workspace, "teamPinnedResources") != beforeResources ||
 			f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("team resource reads changed canonical rows or decoded full metadata")
 		}

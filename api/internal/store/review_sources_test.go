@@ -7,10 +7,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW19ReviewSourceTrustedMutationHold(t *testing.T) {
+func TestReviewSourceTrustedMutationHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -39,7 +39,7 @@ func TestScaleP21SW19ReviewSourceTrustedMutationHold(t *testing.T) {
 			if !found || warm.IntegrationConnections[0].Provider != spec.provider || warm.IntegrationConnections[0].Status != spec.status {
 				t.Fatal("trusted typed producer no longer preserves its installed fields")
 			}
-			canonical, found, err := scaleP21SW30CanonicalMetadataWitness(t.Context(), view, workspace, MetadataRecordScope{Read: []RecordKey{{Kind: "integrationConnections", ID: "sw19-trusted-source"}}})
+			canonical, found, err := canonicalMetadataWitness(t.Context(), view, workspace, MetadataRecordScope{Read: []RecordKey{{Kind: "integrationConnections", ID: "sw19-trusted-source"}}})
 			if err != nil || !found || len(canonical.IntegrationConnections) != 1 {
 				t.Fatal("read canonical witness", found, err)
 			}

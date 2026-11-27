@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW210Request(t *testing.T, f *scaleP21TriageWriterFixture, service *server, actor domain.User, key *domain.APIKey, issue, target, kind string, alias, cancelled bool) *httptest.ResponseRecorder {
+func issueRelationRoutesRequest(t *testing.T, f *scaleTriageWriterFixture, service *server, actor domain.User, key *domain.APIKey, issue, target, kind string, alias, cancelled bool) *httptest.ResponseRecorder {
 	t.Helper()
 	r := f.literalRequest(actor, key, domain.RelationCreateInput{RelatedIssueID: target, Type: kind})
 	family := "issues"
@@ -70,9 +70,9 @@ func scaleP21SW210Request(t *testing.T, f *scaleP21TriageWriterFixture, service 
 	return w
 }
 
-func scaleP21SW210Setup(t *testing.T) (scaleP21TriageWriterFixture, string) {
+func issueRelationRoutesSetup(t *testing.T) (scaleTriageWriterFixture, string) {
 	t.Helper()
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	prefix := idgen.New("sw210-")
 	parentID := prefix + "old-parent"
 	owner := f.principals[0].user
@@ -111,7 +111,7 @@ func scaleP21SW210Setup(t *testing.T) (scaleP21TriageWriterFixture, string) {
 	return f, prefix
 }
 
-func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
+func TestIssueRelationRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -124,13 +124,13 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 			name = "records"
 		}
 		t.Run(name, func(t *testing.T) {
-			f, prefix := scaleP21SW210Setup(t)
+			f, prefix := issueRelationRoutesSetup(t)
 			owner := f.principals[0].user
 			for _, kind := range []string{"related", "blocks", "blocked_by", "duplicate", "parent_of", "sub_issue_of"} {
 				t.Run(kind, func(t *testing.T) {
 					outcomes := f.differential(t, kind, func(service *server) *httptest.ResponseRecorder {
 						service.authDisabled = !alias
-						return scaleP21SW210Request(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, kind, alias, false)
+						return issueRelationRoutesRequest(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, kind, alias, false)
 					})
 					if outcomes[0].Code != http.StatusCreated {
 						t.Fatalf("legacy relation status=%d body=%s", outcomes[0].Code, outcomes[0].Body)
@@ -152,7 +152,7 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 						service.authDisabled = !alias
-						return scaleP21SW210Request(t, &f, service, owner, nil, f.triage.ID, test.target, test.kind, alias, test.cancelled)
+						return issueRelationRoutesRequest(t, &f, service, owner, nil, f.triage.ID, test.target, test.kind, alias, test.cancelled)
 					})
 					if outcomes[0].Code == http.StatusCreated || len(outcomes[0].State.Events) != 0 {
 						t.Fatal("refused relation wrote an event")
@@ -165,14 +165,14 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 		})
 	}
 	t.Run("ordinary-authenticated-legacy-gate", func(t *testing.T) {
-		f, _ := scaleP21SW210Setup(t)
+		f, _ := issueRelationRoutesSetup(t)
 		owner := f.principals[0].user
 		// The current authenticated legacy route projects a paged issue list
 		// and refuses this path. Keep that behavior; development above reaches
 		// the literal ordinary handler through its existing auth bypass.
 		for _, kind := range []string{"related", "blocks", "blocked_by", "duplicate", "parent_of", "sub_issue_of"} {
 			outcomes := f.differential(t, kind, func(service *server) *httptest.ResponseRecorder {
-				return scaleP21SW210Request(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, kind, false, false)
+				return issueRelationRoutesRequest(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, kind, false, false)
 			})
 			if outcomes[0].Code != http.StatusForbidden || len(outcomes[0].State.Events) != 0 {
 				t.Fatal("authenticated ordinary legacy gate changed")
@@ -180,7 +180,7 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 		}
 	})
 	t.Run("parent-cycle", func(t *testing.T) {
-		f, _ := scaleP21SW210Setup(t)
+		f, _ := issueRelationRoutesSetup(t)
 		owner := f.principals[0].user
 		f.prepare = func(t *testing.T) {
 			if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw210_cycle", "", nil, func(data *domain.Bootstrap) error {
@@ -197,14 +197,14 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 		}
 		defer func() { f.prepare = nil }()
 		outcomes := f.differential(t, "parent-cycle", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW210Request(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, "parent_of", true, false)
+			return issueRelationRoutesRequest(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, "parent_of", true, false)
 		})
 		if outcomes[0].Code != http.StatusBadRequest || len(outcomes[0].State.Events) != 0 {
 			t.Fatalf("legacy cycle status=%d body=%s", outcomes[0].Code, outcomes[0].Body)
 		}
 	})
 	t.Run("legal-large-selected-record", func(t *testing.T) {
-		f, _ := scaleP21SW210Setup(t)
+		f, _ := issueRelationRoutesSetup(t)
 		owner := f.principals[0].user
 		f.prepare = func(t *testing.T) {
 			if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw210_large", "", nil, func(data *domain.Bootstrap) error {
@@ -220,25 +220,25 @@ func TestScaleP21SW210IssueRelationRoutesDifferential(t *testing.T) {
 		}
 		defer func() { f.prepare = nil }()
 		outcomes := f.differential(t, "legal-large-selected-record", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW210Request(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, "related", true, false)
+			return issueRelationRoutesRequest(t, &f, service, owner, nil, f.triage.ID, f.visible.ID, "related", true, false)
 		})
 		if outcomes[0].Code != http.StatusCreated {
 			t.Fatalf("legacy large relation status=%d body=%s", outcomes[0].Code, outcomes[0].Body)
 		}
 	})
 	t.Run("permission-matrix", func(t *testing.T) {
-		f, _ := scaleP21SW210Setup(t)
+		f, _ := issueRelationRoutesSetup(t)
 		f.matrix(t, func(t *testing.T, actor domain.User, key *domain.APIKey) {
 			for _, target := range []string{f.visible.ID, f.hidden.ID} {
 				f.differential(t, "M/"+target, func(service *server) *httptest.ResponseRecorder {
-					return scaleP21SW210Request(t, &f, service, actor, key, f.triage.ID, target, "related", true, false)
+					return issueRelationRoutesRequest(t, &f, service, actor, key, f.triage.ID, target, "related", true, false)
 				})
 			}
 		})
 	})
 	for _, length := range []int{64, 65} {
 		t.Run(fmt.Sprintf("literal-ancestor-boundary-%d", length), func(t *testing.T) {
-			f, prefix := scaleP21SW210Setup(t)
+			f, prefix := issueRelationRoutesSetup(t)
 			owner := f.principals[0].user
 			f.prepare = func(t *testing.T) {
 				if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw210_ancestors", "", nil, func(data *domain.Bootstrap) error {

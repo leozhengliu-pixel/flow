@@ -6,8 +6,8 @@ import type { AppRoute } from '@/lib/app-routes'
 import type { BootstrapData, Comment, DocumentRevision, FlowDocument, SyncPageRequest, TrashEntry, User, WorkspaceMember } from '@/types/flow'
 import type { QueryWindow } from '@/lib/query-window-store'
 import { findDocumentBySlugSuffix } from '@/lib/document-slug'
-import { modelRecordKind } from '@/lib/scale-p13-wire'
-import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable } from '@/lib/scale-p20-transport'
+import { modelRecordKind } from '@/lib/sync-wire'
+import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable } from '@/lib/resource-window-transport'
 
 export type ResourceSurface = 'documents' | 'trash' | 'people' | 'pickers'
 const documentRefreshes = new WeakMap<SyncClient, Promise<BootstrapData>>()

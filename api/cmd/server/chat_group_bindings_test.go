@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW51ChatGroupBindingsDifferential(t *testing.T) {
+func TestChatGroupBindingsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {

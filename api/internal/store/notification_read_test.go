@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW15DueSwitchContext struct {
+type dueSwitchContext struct {
 	context.Context
 	switchSource func()
 }
 
-func (c *scaleP21SW15DueSwitchContext) Err() error {
+func (c *dueSwitchContext) Err() error {
 	if c.switchSource != nil {
 		switchSource := c.switchSource
 		c.switchSource = nil
@@ -27,11 +27,11 @@ func (c *scaleP21SW15DueSwitchContext) Err() error {
 	return c.Context.Err()
 }
 
-func scaleP21SW15DueFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, time.Time) {
+func dueFixture(t *testing.T) (scaleFixture, *SQLiteStore, time.Time) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	now := time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC)
 	past, future := now.Add(-time.Hour), now.Add(time.Hour)
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21_sw15.delivery_fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -53,7 +53,7 @@ func scaleP21SW15DueFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, time.T
 	return f, view, now
 }
 
-func TestScaleP21SW15NotificationReadDueDifferential(t *testing.T) {
+func TestNotificationReadDueDifferential(t *testing.T) {
 	kind := reflect.TypeFor[domain.NotificationDelivery]()
 	for index := range kind.NumField() {
 		field := kind.Field(index)
@@ -62,7 +62,7 @@ func TestScaleP21SW15NotificationReadDueDifferential(t *testing.T) {
 			t.Fatal("review flat typed delivery budget", field)
 		}
 	}
-	f, view, now := scaleP21SW15DueFixture(t)
+	f, view, now := dueFixture(t)
 	workspace := f.data.Workspace.URLKey
 	for _, statuses := range [][]string{{"pending"}, {"failed"}, {"pending", "failed"}, {"missing"}, {}} {
 		expected, err := f.NotificationDeliveries(t.Context(), workspace, statuses, now)
@@ -107,8 +107,8 @@ func TestScaleP21SW15NotificationReadDueDifferential(t *testing.T) {
 	t.Logf("due selection allocations/op: legacy=%.0f owned=%.0f; lifetime bound, no speed claim", before, after)
 }
 
-func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
-	f, view, now := scaleP21SW15DueFixture(t)
+func TestNotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
+	f, view, now := dueFixture(t)
 	workspace := f.data.Workspace.URLKey
 	parent, releaseParent, err := view.admitMetadataWork(t.Context(), 2<<20)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	releaseParent()
-	if scaleP21SW15DueUsed(view) != scaleP21SW15DueDeliveryWork {
+	if dueUsed(view) != dueDeliveryWork {
 		t.Fatal("parent release revoked owned result")
 	}
 	retained, _ := json.Marshal(read.Deliveries)
@@ -128,11 +128,11 @@ func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, _ := json.Marshal(read.Deliveries)
-	if string(current) != string(retained) || scaleP21SW15DueUsed(view) != scaleP21SW15DueDeliveryWork {
+	if string(current) != string(retained) || dueUsed(view) != dueDeliveryWork {
 		t.Fatal("SQL replacement changed or uncharged owned generation")
 	}
 	read.Close()
-	if scaleP21SW15DueUsed(view) != 0 {
+	if dueUsed(view) != 0 {
 		t.Fatal("due read leaked allowance")
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
@@ -151,7 +151,7 @@ func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 	}
 	view.metadataResidency.work.mu.Lock()
 	originalLimit := view.metadataResidency.work.limit
-	view.metadataResidency.work.limit = scaleP21SW15DueDeliveryWork - 1
+	view.metadataResidency.work.limit = dueDeliveryWork - 1
 	view.metadataResidency.work.mu.Unlock()
 	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), "missing", []string{"pending"}, now); read != nil || err == nil || err.Error() != "workspace not found" {
 		t.Fatal("missing workspace lost precedence over work saturation", err)
@@ -162,7 +162,7 @@ func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 	view.metadataResidency.work.mu.Lock()
 	view.metadataResidency.work.limit = originalLimit
 	view.metadataResidency.work.mu.Unlock()
-	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{strings.Repeat("x", scaleP21SW15DueDeliveryWork/33+1)}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
+	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{strings.Repeat("x", dueDeliveryWork/33+1)}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("status arguments escaped pre-bind budget", err)
 	}
 	for _, raw := range []string{"", `{"id":7}`, `{"id":"oversized","error":"` + strings.Repeat("x", MetadataRecordPageMaxBytes) + `"}`} {
@@ -178,14 +178,14 @@ func TestScaleP21SW15NotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 		} else if read != nil || err == nil || legacyErr == nil || err.Error() != legacyErr.Error() {
 			t.Fatal("typed delivery decode error changed", err, legacyErr)
 		}
-		if scaleP21SW15DueUsed(view) != 0 {
+		if dueUsed(view) != 0 {
 			t.Fatal("failed reader leaked allowance")
 		}
 	}
 }
 
-func TestScaleP21SW15NotificationReadDueLimitAndOffConnections(t *testing.T) {
-	f, view, now := scaleP21SW15DueFixture(t)
+func TestNotificationReadDueLimitAndOffConnections(t *testing.T) {
+	f, view, now := dueFixture(t)
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -229,8 +229,8 @@ func TestScaleP21SW15NotificationReadDueLimitAndOffConnections(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW15NotificationReadDefaultSwitch(t *testing.T) {
-	f, view, now := scaleP21SW15DueFixture(t)
+func TestNotificationReadDefaultSwitch(t *testing.T) {
+	f, view, now := dueFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view.mu.Lock()
 	source := view.workspaces[workspace]
@@ -238,7 +238,7 @@ func TestScaleP21SW15NotificationReadDefaultSwitch(t *testing.T) {
 	view.workspaces["new-physical"] = source
 	view.lastWorkspaceKey = "old-physical"
 	view.mu.Unlock()
-	ctx := &scaleP21SW15DueSwitchContext{Context: t.Context(), switchSource: func() {
+	ctx := &dueSwitchContext{Context: t.Context(), switchSource: func() {
 		view.mu.Lock()
 		prior := view.workspaces["old-physical"]
 		prior.Workspace.URLKey = "changed-old-logical"
@@ -257,7 +257,7 @@ func TestScaleP21SW15NotificationReadDefaultSwitch(t *testing.T) {
 	}
 }
 
-func scaleP21SW15DueUsed(s *SQLiteStore) int {
+func dueUsed(s *SQLiteStore) int {
 	s.metadataResidency.work.mu.Lock()
 	defer s.metadataResidency.work.mu.Unlock()
 	return s.metadataResidency.work.used

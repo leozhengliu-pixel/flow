@@ -21,7 +21,7 @@ func (s *SQLiteStore) ResourceWindowRevision(ctx context.Context, workspace stri
 	return strconv.FormatInt(stamp.revision, 10), err
 }
 
-// ResourceWindowMetadata uses the P17 immutable record snapshot and projection.
+// ResourceWindowMetadata uses the resource windows immutable record snapshot and projection.
 // Only directory headers are copied; unrelated bodies and restore payloads stay
 // in the canonical records. Membership projection retains the legacy policy.
 func (s *SQLiteStore) ResourceWindowMetadata(ctx context.Context, workspace, userID string, key *domain.APIKey, kind string) (domain.Bootstrap, string, error) {

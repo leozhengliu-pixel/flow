@@ -10,13 +10,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW255ResourceAuthorizationRequest(r *http.Request) (kind, ref string, handled bool) {
+func resourceAuthorizationRequestShape(r *http.Request) (kind, ref string, handled bool) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return "", "", false
 	}
 	for _, kind := range []string{"projects", "initiatives"} {
 		for _, tail := range []string{"", "/relations", "/updates", "/updates/diff-preview", "/history"} {
-			parts, matched := scaleP21EscapedRouteParts(r, "/api/"+kind+"/{id}"+tail)
+			parts, matched := scaleEscapedRouteParts(r, "/api/"+kind+"/{id}"+tail)
 			if !matched {
 				continue
 			}
@@ -35,7 +35,7 @@ func (s *server) boundedPointResourceAuthorization(r *http.Request, workspace, u
 	if !s.store.BoundedMetadataEnabled() {
 		return false, false
 	}
-	kind, ref, selected := scaleP21SW255ResourceAuthorizationRequest(r)
+	kind, ref, selected := resourceAuthorizationRequestShape(r)
 	if !selected {
 		return false, false
 	}

@@ -13,22 +13,22 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW24ClassicGitHubPredicate(t *testing.T) {
+func TestClassicGitHubPredicate(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for value := rune(0); value <= unicode.MaxRune; value++ {
-		if unicode.IsSpace(value) != slices.Contains(scaleP21SW24Spaces, value) {
+		if unicode.IsSpace(value) != slices.Contains(coldReadNativeReadsSpaces, value) {
 			t.Fatalf("SQL whitespace predicate differs from Go for U+%04X", value)
 		}
 	}
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	whitespace := string(scaleP21SW24Spaces)
+	whitespace := string(coldReadNativeReadsSpaces)
 	for _, spec := range []struct {
 		name, provider, status, secret, env string
 	}{
@@ -80,11 +80,11 @@ func TestScaleP21SW24ClassicGitHubPredicate(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ExportNativePage(t *testing.T) {
+func TestExportNativePage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, owner := f.data.Workspace.URLKey, f.data.Viewer.ID
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "exportJobs"), workspace, "scale_p21_sw24.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.ExportJobs = []domain.ExportJob{{ID: "sw24-export-other", UserID: owner + "-other", Error: strings.Repeat("hidden export ", 30000)}}

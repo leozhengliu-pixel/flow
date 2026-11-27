@@ -23,15 +23,15 @@ import (
 // generate suggestions for every triage issue (a bounded generation failure
 // would be logged and dropped, so it surfaces as a difference).
 
-const scaleP21SW400Team = "sw400-team"
+const triageBatchTeam = "sw400-team"
 
-// scaleP21SW400Bulk adds two triage teams' worth of issues so the batch names
+// bulk adds two triage teams' worth of issues so the batch names
 // size issues, keeping triage on. Titles share tokens only inside groups of
 // twenty, so every issue has a bounded candidate set of its own; groups mix
 // both teams, assignees (a member and a suspended former member), labels,
 // projects, duplicates, non-triage states and stored suggestions. Archived,
 // completed and unbatched open issues of each group are candidates only.
-func scaleP21SW400Bulk(t *testing.T, f scaleP21IssueUpdateFixture, size int) []string {
+func triageBatchBulk(t *testing.T, f scaleIssueUpdateFixture, size int) []string {
 	t.Helper()
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	ids := []string{f.triage.ID, f.visible.ID}
@@ -44,7 +44,7 @@ func scaleP21SW400Bulk(t *testing.T, f scaleP21IssueUpdateFixture, size int) []s
 				public = existing
 			}
 		}
-		second := domain.Team{ID: scaleP21SW400Team, Name: "Triage bulk", Key: "SWT"}
+		second := domain.Team{ID: triageBatchTeam, Name: "Triage bulk", Key: "SWT"}
 		data.Teams = append(data.Teams, second)
 		data.TeamSettings[second.ID] = domain.TeamSettings{TeamID: second.ID, TriageEnabled: true, DefaultStateID: "sw400-backlog"}
 		data.States = append(data.States,
@@ -160,7 +160,7 @@ func scaleP21SW400Bulk(t *testing.T, f scaleP21IssueUpdateFixture, size int) []s
 	return ids
 }
 
-func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.TriageIntelligenceSettings)) func(*testing.T) {
+func triageBatchActions(f scaleIssueUpdateFixture, edit func(*domain.TriageIntelligenceSettings)) func(*testing.T) {
 	return func(t *testing.T) {
 		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw400_actions", "", nil, func(data *domain.Bootstrap) error {
 			edit(&data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
@@ -172,41 +172,41 @@ func scaleP21SW400Actions(f scaleP21IssueUpdateFixture, edit func(*domain.Triage
 }
 
 // Keep the batch cases and the expensive auto-action sources independently shardable.
-func TestScaleP21SW400ThousandIssueBatchTriageDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-suggest", "warm", "reloaded")
+func TestThousandIssueBatchTriageDifferential(t *testing.T) {
+	triageBatchRun(t, "priority-suggest", "warm", "reloaded")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageAutoDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-auto", "warm")
+func TestThousandIssueBatchTriageAutoDifferential(t *testing.T) {
+	triageBatchRun(t, "priority-auto", "warm")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageAutoReloadedDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "priority-auto", "reloaded")
+func TestThousandIssueBatchTriageAutoReloadedDifferential(t *testing.T) {
+	triageBatchRun(t, "priority-auto", "reloaded")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageMoveDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "team-auto-move", "warm")
+func TestThousandIssueBatchTriageMoveDifferential(t *testing.T) {
+	triageBatchRun(t, "team-auto-move", "warm")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageMoveReloadedDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "team-auto-move", "reloaded")
+func TestThousandIssueBatchTriageMoveReloadedDifferential(t *testing.T) {
+	triageBatchRun(t, "team-auto-move", "reloaded")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageMoveIntoTriageDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "batch-move-into-triage-team", "warm")
+func TestThousandIssueBatchTriageMoveIntoTriageDifferential(t *testing.T) {
+	triageBatchRun(t, "batch-move-into-triage-team", "warm")
 }
 
-func TestScaleP21SW400ThousandIssueBatchTriageMoveIntoTriageReloadedDifferential(t *testing.T) {
-	scaleP21SW400Run(t, "batch-move-into-triage-team", "reloaded")
+func TestThousandIssueBatchTriageMoveIntoTriageReloadedDifferential(t *testing.T) {
+	triageBatchRun(t, "batch-move-into-triage-team", "reloaded")
 }
 
-func scaleP21SW400Run(t *testing.T, name string, sources ...string) {
+func triageBatchRun(t *testing.T, name string, sources ...string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21SW400Bulk(t, f, 1000)
+	f := scaleIssueUpdateSetup(t)
+	ids := triageBatchBulk(t, f, 1000)
 	owner := f.data.Viewer
 	for _, test := range []struct {
 		name   string
@@ -216,20 +216,20 @@ func scaleP21SW400Run(t *testing.T, name string, sources ...string) {
 		moved int
 	}{
 		{name: "priority-suggest", update: map[string]any{"priority": 2}},
-		{name: "priority-auto", setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+		{name: "priority-auto", setup: triageBatchActions(f, func(settings *domain.TriageIntelligenceSettings) {
 			settings.AssigneeAction, settings.ProjectAction, settings.LabelAction = "auto", "auto", "auto"
 			settings.DuplicateAction, settings.RelatedAction = "auto", "auto"
 		}), update: map[string]any{"priority": 3}},
-		{name: "team-auto-move", setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+		{name: "team-auto-move", setup: triageBatchActions(f, func(settings *domain.TriageIntelligenceSettings) {
 			settings.TeamAction, settings.LabelAction = "auto", "auto"
 		}), update: map[string]any{"priority": 1}, moved: 100},
-		{name: "batch-move-into-triage-team", update: map[string]any{"teamId": scaleP21SW400Team}},
+		{name: "batch-move-into-triage-team", update: map[string]any{"teamId": triageBatchTeam}},
 	} {
 		if test.name != name {
 			continue
 		}
 		t.Run(test.name, func(t *testing.T) {
-			f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{setup: test.setup, issue: f.triage.ID}))
+			f.prepareTriageReset(t, f.prepare(scaleIssueUpdateCase{setup: test.setup, issue: f.triage.ID}))
 			var logged []string
 			started := time.Now().UTC()
 			outcomes := f.differentialSources(t, test.name, append([]string{"legacy"}, sources...), func(service *server) *httptest.ResponseRecorder {
@@ -308,12 +308,12 @@ func scaleP21SW400Run(t *testing.T, name string, sources ...string) {
 // The same 1000-issue batch with triage off over issues that already carry
 // an update history (activities and notifications to their subscribers):
 // the batch writer alone, legacy against bounded.
-func TestScaleP21SW402ThousandIssueBatchWithHistoryDifferential(t *testing.T) {
+func TestThousandIssueBatchWithHistoryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21SW400Bulk(t, f, 1000)
+	f := scaleIssueUpdateSetup(t)
+	ids := triageBatchBulk(t, f, 1000)
 	at := time.Date(2026, 1, 3, 4, 5, 6, 0, time.UTC)
 	member := f.principals[2].user
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw402_history", "", nil, func(data *domain.Bootstrap) error {
@@ -339,7 +339,7 @@ func TestScaleP21SW402ThousandIssueBatchWithHistoryDifferential(t *testing.T) {
 	if f.baseline, err = json.Marshal(full); err != nil {
 		t.Fatal(err)
 	}
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "1000-with-history", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusOK},
 	})
 }

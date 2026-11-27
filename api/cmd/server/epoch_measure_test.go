@@ -17,21 +17,21 @@ import (
 )
 
 // Include the last authorization check and transport write in the comparison.
-func TestScaleP12EpochFanoutMeasurements(t *testing.T) {
+func TestScaleEpochFanoutMeasurements(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P12_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P12_MEASURE=1 to measure delivery")
 	}
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		_, user := scaleP03Join(t, f, "P12 epoch measurement", fmt.Sprintf("p12-epoch-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		_, user := resourceAccessScaleJoin(t, f, "P12 epoch measurement", fmt.Sprintf("p12-epoch-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
 		issue := authRequest[domain.Issue](t, f.admin, "POST", f.host.URL+"/api/issue-records", map[string]any{"title": "P12 delivery measurement", "teamId": f.data.Teams[0].ID}, f.data.Workspace.URLKey, 201)
 		for _, viewers := range []int{1, 100, 2000} {
 			for pass := range 3 {
 				for _, mode := range []string{"off", "on"} {
 					t.Setenv("FLOW_SYNC_V2", mode)
 					event := domain.RealtimeEvent{ID: fmt.Sprintf("p12-delivery-%d-%d-%s", viewers, pass, mode), Type: "issue.updated", AggregateID: issue.ID, Payload: []byte(`{}`)}
-					request := scaleP12Request(f.data.Workspace.URLKey, user)
+					request := scaleRequest(f.data.Workspace.URLKey, user)
 					runtime.GC()
 					var before, after runtime.MemStats
 					runtime.ReadMemStats(&before)
@@ -62,14 +62,14 @@ func TestScaleP12EpochFanoutMeasurements(t *testing.T) {
 	}
 }
 
-func TestScaleP12LiveFanoutMeasurements(t *testing.T) {
+func TestScaleLiveFanoutMeasurements(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P12_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P12_MEASURE=1 to measure registered live fan-out")
 	}
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		_, user := scaleP03Join(t, f, "P12 live measurement", fmt.Sprintf("p12-live-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		_, user := resourceAccessScaleJoin(t, f, "P12 live measurement", fmt.Sprintf("p12-live-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
 		issue := authRequest[domain.Issue](t, f.admin, "POST", f.host.URL+"/api/issue-records", map[string]any{"title": "P12 registered viewers", "teamId": f.data.Teams[0].ID}, f.data.Workspace.URLKey, 201)
 		for _, viewers := range []int{1, 100, 2000} {
 			t.Run(fmt.Sprint(viewers), func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestScaleP12LiveFanoutMeasurements(t *testing.T) {
 					began := time.Now()
 					for i := range viewers {
 						workers.Go(func() {
-							request := scaleP12Request(f.data.Workspace.URLKey, user)
+							request := scaleRequest(f.data.Workspace.URLKey, user)
 							if observed {
 								ctx := store.WithSQLStatementObserver(request.Context(), func(query string) {
 									statements.Add(1)

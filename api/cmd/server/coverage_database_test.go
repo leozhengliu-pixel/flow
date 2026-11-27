@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/store"
 )
 
-const scaleP02FixturePassword = "p02-fixture-password"
+const coverageDatabaseScaleFixturePassword = "p02-fixture-password"
 
-func scaleP02ServerStore(t *testing.T) *store.SQLiteStore {
+func scaleServerStore(t *testing.T) *store.SQLiteStore {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -36,7 +36,7 @@ func scaleP02ServerStore(t *testing.T) *store.SQLiteStore {
 	return repo
 }
 
-type scaleP02ServerFixture struct {
+type scaleServerFixture struct {
 	repo       *store.SQLiteStore
 	srv        *server
 	host       *httptest.Server
@@ -46,9 +46,9 @@ type scaleP02ServerFixture struct {
 	users      []domain.User
 }
 
-func scaleP02NewServerFixture(t *testing.T, repo *store.SQLiteStore) *scaleP02ServerFixture {
+func scaleNewServerFixture(t *testing.T, repo *store.SQLiteStore) *scaleServerFixture {
 	t.Helper()
-	fixture := &scaleP02ServerFixture{repo: repo, srv: &server{store: repo, uploadPath: t.TempDir()}}
+	fixture := &scaleServerFixture{repo: repo, srv: &server{store: repo, uploadPath: t.TempDir()}}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -79,11 +79,11 @@ func scaleP02NewServerFixture(t *testing.T, repo *store.SQLiteStore) *scaleP02Se
 	return fixture
 }
 
-func (f *scaleP02ServerFixture) register(t *testing.T, name string) (*http.Client, domain.User) {
+func (f *scaleServerFixture) register(t *testing.T, name string) (*http.Client, domain.User) {
 	t.Helper()
 	// Register directly to avoid the public signup rate limit; requests under
 	// test still use a verified identity and a real HTTP cookie login.
-	user, verification, err := f.repo.Register(t.Context(), name, idgen.New("scale-p02-user-")+"@example.test", scaleP02FixturePassword)
+	user, verification, err := f.repo.Register(t.Context(), name, idgen.New("scale-p02-user-")+"@example.test", coverageDatabaseScaleFixturePassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,11 +93,11 @@ func (f *scaleP02ServerFixture) register(t *testing.T, name string) (*http.Clien
 	}
 	user.EmailVerified = true
 	client := authClient(t)
-	authRequest[domain.AuthSession](t, client, http.MethodPost, f.host.URL+"/api/auth/login", map[string]string{"email": user.Email, "password": scaleP02FixturePassword}, "", http.StatusOK)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, f.host.URL+"/api/auth/login", map[string]string{"email": user.Email, "password": coverageDatabaseScaleFixturePassword}, "", http.StatusOK)
 	return client, user
 }
 
-func (f *scaleP02ServerFixture) join(t *testing.T, name, role string, teams ...string) (*http.Client, domain.User) {
+func (f *scaleServerFixture) join(t *testing.T, name, role string, teams ...string) (*http.Client, domain.User) {
 	t.Helper()
 	client, user := f.register(t, name)
 	endpoint := f.host.URL + "/api/workspaces/" + f.data.Workspace.URLKey + "/invitations"
@@ -106,12 +106,12 @@ func (f *scaleP02ServerFixture) join(t *testing.T, name, role string, teams ...s
 	return client, user
 }
 
-func TestScaleP02FixturePreservesExistingAccount(t *testing.T) {
-	repo := scaleP02ServerStore(t)
-	existing := scaleP02NewServerFixture(t, repo)
-	var owned *scaleP02ServerFixture
+func TestScaleFixturePreservesExistingAccountCoverageDatabase(t *testing.T) {
+	repo := scaleServerStore(t)
+	existing := scaleNewServerFixture(t, repo)
+	var owned *scaleServerFixture
 	t.Run("isolated-fixture", func(t *testing.T) {
-		owned = scaleP02NewServerFixture(t, repo)
+		owned = scaleNewServerFixture(t, repo)
 		if owned.data.Viewer.ID == existing.data.Viewer.ID || owned.data.Workspace.ID == existing.data.Workspace.ID {
 			t.Fatal("fixture reused an existing identity or workspace")
 		}
@@ -120,10 +120,10 @@ func TestScaleP02FixturePreservesExistingAccount(t *testing.T) {
 	if repo.HasWorkspace(owned.data.Workspace.URLKey) {
 		t.Fatal("owned workspace survived cleanup")
 	}
-	if _, _, err := repo.Login(t.Context(), owned.data.Viewer.Email, scaleP02FixturePassword); err == nil {
+	if _, _, err := repo.Login(t.Context(), owned.data.Viewer.Email, coverageDatabaseScaleFixturePassword); err == nil {
 		t.Fatal("owned account survived cleanup")
 	}
-	if session, _, err := repo.Login(t.Context(), existing.data.Viewer.Email, scaleP02FixturePassword); err != nil || session.User.ID != existing.data.Viewer.ID {
+	if session, _, err := repo.Login(t.Context(), existing.data.Viewer.Email, coverageDatabaseScaleFixturePassword); err != nil || session.User.ID != existing.data.Viewer.ID {
 		t.Fatalf("fixture changed existing credentials: %v", err)
 	}
 	if data, ok := repo.BootstrapFor(existing.data.Workspace.URLKey); !ok || data.Workspace.Name != existing.data.Workspace.Name {

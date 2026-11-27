@@ -65,7 +65,7 @@
 @media(max-width:760px){.pulse-header-top{padding-left:8px}.pulse-toolbar{overflow:hidden}.pulse-new-view{width:calc(100% - 8px);height:97.5px;min-height:97.5px;flex-wrap:nowrap;margin:0 4px}.pulse-new-view-top{padding:12px 8px}.pulse-new-view-identity{overflow:hidden}.pulse-new-view-identity>input{width:auto}.pulse-new-view-filters{order:initial;width:auto;padding:0 8px}.pulse-new-view-actions{gap:2px}}
 
 
-/* Wave 14 — Feed last-seen separator + Pulse welcome (LS-0270/0731/0767) */
+/* Feed last-seen separator and Pulse welcome */
 .pulse-unread-badge{height:22px;display:inline-flex;align-items:center;margin-right:6px;padding:0 8px;border-radius:9999px;background:var(--bg-active);color:var(--theme-text-secondary);font-size:11px;font-weight:500}
 .pulse-feed-separator{height:34px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin:8px 0 18px;color:var(--theme-text-tertiary);font-size:11px;font-weight:500}
 .pulse-feed-separator>i{display:block;height:.5px;background:var(--theme-border)}

@@ -17,43 +17,43 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW113Response struct {
+type issuePermissionReadResponse struct {
 	Code   int
 	Header http.Header
 	Body   []byte
 }
 
-type scaleP21SW113Writer struct {
+type issuePermissionReadWriter struct {
 	*httptest.ResponseRecorder
 	t      *testing.T
 	source *store.SQLiteStore
 	writes int
 }
 
-func (w *scaleP21SW113Writer) checkOwner(code int) {
+func (w *issuePermissionReadWriter) checkOwner(code int) {
 	if w.source.BoundedMetadataEnabled() && code == http.StatusOK && w.source.MetadataWorkUsedForTesting() == 0 {
 		w.t.Fatal("permission response lost its retained read before output")
 	}
 }
 
-func (w *scaleP21SW113Writer) WriteHeader(code int) {
+func (w *issuePermissionReadWriter) WriteHeader(code int) {
 	w.checkOwner(code)
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW113Writer) Write(raw []byte) (int, error) {
+func (w *issuePermissionReadWriter) Write(raw []byte) (int, error) {
 	w.checkOwner(w.Code)
 	w.writes++
 	return w.ResponseRecorder.Write(raw)
 }
 
-func scaleP21SW113Serve(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool) scaleP21SW113Response {
+func issuePermissionReadServe(t *testing.T, f policyDifferentialFixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool) issuePermissionReadResponse {
 	t.Helper()
-	return scaleP21SW113ServeMethod(t, f, source, user, key, token, prefix, ref, development, http.MethodGet)
+	return serveMethod(t, f, source, user, key, token, prefix, ref, development, http.MethodGet)
 }
 
-// scaleP21SW113ServeMethod also serves HEAD, which the GET patterns accept.
-func scaleP21SW113ServeMethod(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool, method string) scaleP21SW113Response {
+// serveMethod also serves HEAD, which the GET patterns accept.
+func serveMethod(t *testing.T, f policyDifferentialFixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, prefix, ref string, development bool, method string) issuePermissionReadResponse {
 	t.Helper()
 	path := prefix + ref + "/permissions"
 	var request *http.Request
@@ -70,7 +70,7 @@ func scaleP21SW113ServeMethod(t *testing.T, f scaleP21M2Fixture, source *store.S
 	decodes := source.WorkspaceMetadataDecodes()
 	var retained *store.IssueWriteAuthorizationRead
 	var handoff *issueRecordAuthorization
-	w := &scaleP21SW113Writer{ResponseRecorder: httptest.NewRecorder(), t: t, source: source}
+	w := &issuePermissionReadWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source}
 	func() {
 		request, closeOutput := beginRequestResourceReads(request)
 		defer closeOutput()
@@ -166,14 +166,14 @@ func scaleP21SW113ServeMethod(t *testing.T, f scaleP21M2Fixture, source *store.S
 	if w.Code == http.StatusOK && w.writes == 0 {
 		t.Fatal("permission GET did not write its response")
 	}
-	return scaleP21SW113Response{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}
+	return issuePermissionReadResponse{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}
 }
 
-func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
+func TestIssuePermissionGETMiddlewareDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		privateTeam := ""
 		metadata, ok := repo.WorkspaceMetadata(workspace)
@@ -257,8 +257,8 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 			for _, prefix := range []string{"/api/issue-records/", "/api/issues/"} {
 				for _, test := range tests {
 					t.Run(prefix+test.name, func(t *testing.T) {
-						old := scaleP21SW113Serve(t, f, repo, user, key, sessions[user.ID], prefix, test.ref, false)
-						bounded := scaleP21SW113Serve(t, f, f.probe, user, key, sessions[user.ID], prefix, test.ref, false)
+						old := issuePermissionReadServe(t, f, repo, user, key, sessions[user.ID], prefix, test.ref, false)
+						bounded := issuePermissionReadServe(t, f, f.probe, user, key, sessions[user.ID], prefix, test.ref, false)
 						if !reflect.DeepEqual(old, bounded) {
 							t.Fatalf("actual permission GET middleware/status/header/body differs: literal=%+v bounded=%+v", old, bounded)
 						}
@@ -282,10 +282,10 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 								t.Fatalf("permission fields, dates, order or null shape changed: got=%s want=%s", old.Body, want)
 							}
 						}
-						// SW287: GET patterns serve HEAD; with the flag on it takes
+						// GET patterns serve HEAD; with the flag on it takes
 						// the same retained read instead of the literal bootstrap.
-						oldHead := scaleP21SW113ServeMethod(t, f, repo, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
-						boundedHead := scaleP21SW113ServeMethod(t, f, f.probe, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
+						oldHead := serveMethod(t, f, repo, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
+						boundedHead := serveMethod(t, f, f.probe, user, key, sessions[user.ID], prefix, test.ref, false, http.MethodHead)
 						if !reflect.DeepEqual(oldHead, boundedHead) || !reflect.DeepEqual(oldHead, old) {
 							t.Fatalf("permission HEAD differs: literal=%+v bounded=%+v GET=%+v", oldHead, boundedHead, old)
 						}
@@ -296,13 +296,13 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 		})
 		for _, test := range tests {
 			t.Run("development/legacy/"+test.name, func(t *testing.T) {
-				old := scaleP21SW113Serve(t, f, repo, f.data.Viewer, nil, "", "/api/issues/", test.ref, true)
-				bounded := scaleP21SW113Serve(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true)
+				old := issuePermissionReadServe(t, f, repo, f.data.Viewer, nil, "", "/api/issues/", test.ref, true)
+				bounded := issuePermissionReadServe(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true)
 				if !reflect.DeepEqual(old, bounded) {
 					t.Fatalf("development legacy permission GET differs: literal=%+v bounded=%+v", old, bounded)
 				}
-				oldHead := scaleP21SW113ServeMethod(t, f, repo, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
-				boundedHead := scaleP21SW113ServeMethod(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
+				oldHead := serveMethod(t, f, repo, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
+				boundedHead := serveMethod(t, f, f.probe, f.data.Viewer, nil, "", "/api/issues/", test.ref, true, http.MethodHead)
 				if !reflect.DeepEqual(oldHead, boundedHead) || !reflect.DeepEqual(oldHead, old) {
 					t.Fatalf("development permission HEAD differs: literal=%+v bounded=%+v GET=%+v", oldHead, boundedHead, old)
 				}
@@ -328,7 +328,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 		// shapes on a real retained read without depending on serialization.
 		for _, permissions := range [][]domain.IssuePermission{nil, {}} {
 			t.Run(fmt.Sprintf("retained-empty=%t", permissions != nil), func(t *testing.T) {
-				request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodGet, "/api/issue-records/"+public.ID+"/permissions", public.ID, "", nil)
+				request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodGet, "/api/issue-records/"+public.ID+"/permissions", public.ID, "", nil)
 				request, closeOutput := beginRequestResourceReads(request)
 				defer closeOutput()
 				service := &server{store: f.probe}
@@ -341,7 +341,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 					t.Fatal("retained permission fixture missing")
 				}
 				read.Data.Issues[index].Permissions = permissions
-				w := &scaleP21SW113Writer{ResponseRecorder: httptest.NewRecorder(), t: t, source: f.probe}
+				w := &issuePermissionReadWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: f.probe}
 				service.listIssuePermissions(w, request)
 				want := "null\n"
 				if permissions != nil {
@@ -356,7 +356,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 				}
 			})
 		}
-		request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodGet, "/api/issue-records/"+public.ID+"/permissions", public.ID, "", nil)
+		request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodGet, "/api/issue-records/"+public.ID+"/permissions", public.ID, "", nil)
 		missingReadSQL := 0
 		request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(string) { missingReadSQL++ }))
 		beforeMissingDecodes := f.probe.WorkspaceMetadataDecodes()
@@ -366,7 +366,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 			t.Fatal("bounded permissions GET without retained read did not fail closed")
 		}
 		t.Run("legacy-canceled-read", func(t *testing.T) {
-			request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodGet, "/api/issues/"+public.ID+"/permissions", public.ID, "", nil)
+			request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodGet, "/api/issues/"+public.ID+"/permissions", public.ID, "", nil)
 			ctx, cancel := context.WithCancel(request.Context())
 			cancel()
 			request = request.WithContext(ctx)
@@ -379,7 +379,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 			}
 		})
 		t.Run("legacy-policy-budget", func(t *testing.T) {
-			request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodGet, "/api/issues/"+public.ID+"/permissions", public.ID, "", nil)
+			request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodGet, "/api/issues/"+public.ID+"/permissions", public.ID, "", nil)
 			request = request.WithContext(context.WithValue(request.Context(), issueRequestAccessKey{}, issueRequestAccess{
 				workspace: workspace, userID: f.data.Viewer.ID, err: store.ErrMetadataWorkBudget,
 			}))
@@ -394,7 +394,7 @@ func TestScaleP21SW113IssuePermissionGETMiddlewareDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW113PermissionReadDispatchIsExact(t *testing.T) {
+func TestPermissionReadDispatchIsExact(t *testing.T) {
 	for _, test := range []struct {
 		method, path string
 		want         bool

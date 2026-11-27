@@ -12,7 +12,7 @@ import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { toast } from '@/lib/toast'
 import { documentBodyLoaded, loadResourceMembers, resourceWindowEnabled } from '@/lib/resource-window-adapters'
-import { useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
+import { useResourcePeople } from '@/hooks/resource-pickers'
 import { syncClientFor } from '@/lib/sync-client'
 
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'

@@ -68,7 +68,7 @@ func (s *server) registerSyncRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/sync/manifest", s.syncManifest)
 	mux.HandleFunc("GET /api/sync/records", s.syncRecords)
 	mux.HandleFunc("POST /api/sync/batch", s.syncBatch)
-	// P14 supplies recipient state when its independently reviewed package lands.
+	// inbox recipients supplies recipient state when its independently reviewed package lands.
 	if handler, ok := any(s).(notificationStateReader); ok {
 		mux.HandleFunc("GET /api/notifications/state", handler.notificationState)
 	}
@@ -88,7 +88,7 @@ func (s *server) syncAccess(w http.ResponseWriter, r *http.Request) (store.Acces
 }
 
 func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
-	if s.scaleP20Manifest(w, r) {
+	if s.resourceReadsScaleManifest(w, r) {
 		return
 	}
 	if r.URL.Query().Get("surface") == "local-store" {
@@ -107,7 +107,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has("surface") {
-		s.scaleP19Manifest(w, r)
+		s.manifestScaleManifest(w, r)
 		return
 	}
 	// H0 must precede every snapshot/page read. Never replace it with a later

@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW250ProjectionScalarAdmission(t *testing.T) {
+func TestProjectionScalarAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW2AuthenticationPolicyDifferential(t *testing.T) {
+func TestAuthenticationPolicyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw2.auth", "", nil, func(data *domain.Bootstrap) error {
 			data.IdentityProviders = make([]domain.IdentityProvider, 75)
@@ -59,10 +59,10 @@ func TestScaleP21SW2AuthenticationPolicyDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 						allowed := s.authorizeAuthenticationPolicy(w, r, domain.Bootstrap{WorkspaceSettings: settings}, role)
-						outcomes = append(outcomes, []any{allowed, w.Code, scaleP21M2Response(t, w, false)})
+						outcomes = append(outcomes, []any{allowed, w.Code, policyDifferentialResponse(t, w, false)})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("auth %s/%s settings=%+v: %s", auth.AuthProvider, auth.AuthIssuer, settings, scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("auth %s/%s settings=%+v: %s", auth.AuthProvider, auth.AuthIssuer, settings, policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				}
 			}

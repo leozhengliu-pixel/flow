@@ -14,19 +14,19 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW580Tables are the issue side tables a workflow run may change
-// besides the issue, content and metadata rows SW500 already compares.
-var scaleP21SW580Tables = []string{
+// tables are the issue side tables a workflow run may change
+// besides the issue, content and metadata rows workflow close already compares.
+var workflowPointTables = []string{
 	"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records",
 	"issue_permission_records", "issue_identifier_aliases", "issue_attribute_records",
 	"issue_attachment_records", "issue_search_documents", "issue_scope_counts",
 	"issue_number_sequences", "issue_collection_counts", "issue_records_migrations",
 }
 
-// scaleP21SW580Rows dumps every row of those tables for the workspace, in a
+// workflowPointRows dumps every row of those tables for the workspace, in a
 // stable order, with the writer's own clock values (inside [started,
 // finished], also inside JSON columns) replaced by a marker.
-func scaleP21SW580Rows(t *testing.T, database *scaleP04Database, started, finished time.Time) map[string][]string {
+func workflowPointRows(t *testing.T, database *scaleDatabase, started, finished time.Time) map[string][]string {
 	t.Helper()
 	low, high := started, finished
 	var normalize func(any) any
@@ -54,7 +54,7 @@ func scaleP21SW580Rows(t *testing.T, database *scaleP04Database, started, finish
 		return value
 	}
 	result := map[string][]string{}
-	for _, table := range scaleP21SW580Tables {
+	for _, table := range workflowPointTables {
 		rows := database.query(t, `SELECT * FROM `+table+` WHERE workspace_key=?`, database.key)
 		columns, err := rows.Columns()
 		if err != nil {
@@ -100,36 +100,36 @@ func scaleP21SW580Rows(t *testing.T, database *scaleP04Database, started, finish
 	return result
 }
 
-// scaleP21SW580Installed reads the bounded source's installed workflow and
+// workflowPointInstalled reads the bounded source's installed workflow and
 // user fields, then reloads it from SQL and requires the same. Labels are
-// compared through their SQL rows (SW500 metadata): a bounded SQL load derives
+// compared through their SQL rows (workflow close metadata): a bounded SQL load derives
 // IssueCount without the issue records, so it never equals a warm image.
-func scaleP21SW580Installed(t *testing.T, env *scaleP21SW500Env, source *store.SQLiteStore) {
+func workflowPointInstalled(t *testing.T, env *workflowCloseEnv, source *store.SQLiteStore) {
 	t.Helper()
 	fields := []string{"workflowDefinitions", "workflowRuns", "users", "viewer"}
-	installed := scaleP21WriterInstalled(t, env.workspace, source, fields)
-	scaleP21SW201ReloadSource(t, env.database, source)
-	reloaded := scaleP21WriterInstalled(t, env.workspace, source, fields)
+	installed := scaleWriterInstalled(t, env.workspace, source, fields)
+	metadataReloadSourceReloadSource(t, env.database, source)
+	reloaded := scaleWriterInstalled(t, env.workspace, source, fields)
 	nul := strings.NewReplacer(`\u0000`, "")
 	if a, b := nul.Replace(string(installed)), nul.Replace(string(reloaded)); a != b {
-		t.Fatalf("installed image differs from the SQL reload: %s", scaleP21M2Diff(a, b))
+		t.Fatalf("installed image differs from the SQL reload: %s", policyFirstDifference(a, b))
 	}
 }
 
-// TestScaleP21SW580WorkflowPointWriterBounded: the bounded workflow-run
+// TestWorkflowPointWriterBounded: the bounded workflow-run
 // writer's SQL work does not grow with the workspace's issues and content,
 // and it never falls back to the full-image writer for ordinary runs, while
-// the result stays the literal writer's (SW500 compares every row).
-func TestScaleP21SW580WorkflowPointWriterBounded(t *testing.T) {
-	env := scaleP21SW500Setup(t)
-	cases := []scaleP21SW500Case{
+// the result stays the literal writer's (workflow close compares every row).
+func TestWorkflowPointWriterBounded(t *testing.T) {
+	env := workflowCloseSetup(t)
+	cases := []workflowCloseCase{
 		{name: "schedule-notify", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "* * * * *",
-			actions: scaleP21SW500Actions(scaleP21SW500Action("notify")), want: "succeeded"},
+			actions: workflowCloseActions(workflowCloseAction("notify")), want: "succeeded"},
 		{name: "retry-issue-multi-action", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true,
-			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-				actions := scaleP21SW500AllActions(env)
+			actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+				actions := allActions(env)
 				return actions
-			}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
 			}, want: "succeeded"},
 	}
@@ -162,7 +162,7 @@ func TestScaleP21SW580WorkflowPointWriterBounded(t *testing.T) {
 			for _, size := range []int{0, 400} {
 				test := test
 				seed := test.seed
-				test.seed = func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+				test.seed = func(env *workflowCloseEnv, data *domain.Bootstrap) {
 					extra(size)(data)
 					if seed != nil {
 						seed(env, data)
@@ -176,7 +176,7 @@ func TestScaleP21SW580WorkflowPointWriterBounded(t *testing.T) {
 				}
 				service := &server{store: source}
 				fallbacks := store.WorkflowRunFullImageAttemptsForTesting()
-				result := env.outcome(t, source, scaleP21SW500Call{aggregates: []string{env.workflowID}, schedules: []string{test.schedule},
+				result := env.outcome(t, source, workflowCloseCall{aggregates: []string{env.workflowID}, schedules: []string{test.schedule},
 					run: func(ctx context.Context) (domain.WorkflowRun, error) {
 						return service.runWorkflow(ctx, env.workspace, env.workflowID, test.trigger, resourceType, resourceID, test.dueOnly)
 					}})
@@ -196,17 +196,17 @@ func TestScaleP21SW580WorkflowPointWriterBounded(t *testing.T) {
 	}
 }
 
-// scaleP21SW580Equal reports the first differing table between two dumps.
-func scaleP21SW580Equal(want, got map[string][]string) string {
+// workflowPointEqual reports the first differing table between two dumps.
+func workflowPointEqual(want, got map[string][]string) string {
 	if reflect.DeepEqual(want, got) {
 		return ""
 	}
-	for _, table := range scaleP21SW580Tables {
+	for _, table := range workflowPointTables {
 		if !reflect.DeepEqual(want[table], got[table]) {
 			a, _ := json.Marshal(want[table])
 			b, _ := json.Marshal(got[table])
 			return fmt.Sprintf("%s\nlegacy:  %.3000s\nbounded: %.3000s", table,
-				scaleP21SW500FirstDifference(a, b), scaleP21SW500FirstDifference(b, a))
+				workflowCloseFirstDifference(a, b), workflowCloseFirstDifference(b, a))
 		}
 	}
 	return "table set differs"

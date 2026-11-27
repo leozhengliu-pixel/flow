@@ -5,7 +5,7 @@
     "WorkspaceMetadataFields": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Closed by reachability: TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) finds no HOT consumer reaching WorkspaceMetadataFields with FLOW_BOUNDED_METADATA on. The application-webhook reconcile is bounded: applicationWebhookClients reads BeginApplicationWebhookClientsRead and reconcileApplicationWebhooksWith reads BeginApplicationWebhookReconcileRead with the flag on (TestScaleP21SW295ApplicationWebhookClients and TestScaleP21SW295ApplicationWebhookReconcileDifferential); oauthApplicationsByClient is a guard-closed consumer that nothing references with the flag on. Pulse scheduling reads only through its retained source (pinned by SW288). The literal wrapper is unchanged for flag-off callers.",
+      "reason": "Closed by reachability: TestStoreWrapperHotBoundaries (with the store wrapper boundary probe) finds no HOT consumer reaching WorkspaceMetadataFields with FLOW_BOUNDED_METADATA on. The application-webhook reconcile is bounded: applicationWebhookClients reads BeginApplicationWebhookClientsRead and reconcileApplicationWebhooksWith reads BeginApplicationWebhookReconcileRead with the flag on (TestApplicationWebhookClients and TestApplicationWebhookReconcileDifferential); oauthApplicationsByClient is a guard-closed consumer that nothing references with the flag on. Pulse scheduling reads only through its retained source (pinned by pulse schedule source). The literal wrapper is unchanged for flag-off callers.",
       "accessors": [
         "Bootstrap"
       ],

@@ -24,7 +24,7 @@ import (
 // write lock after the membership transaction's reads and gives it back when
 // the transaction runs again.
 
-type scaleP21SW280Race struct {
+type teamCreateMembershipRaceRace struct {
 	t        *testing.T
 	database *sql.DB
 	conn     *sql.Conn
@@ -34,7 +34,7 @@ type scaleP21SW280Race struct {
 // hook runs after the membership transaction's reads, before its first
 // write: the first time it takes the write lock, the second time it gives
 // it back.
-func (race *scaleP21SW280Race) hook() {
+func (race *teamCreateMembershipRaceRace) hook() {
 	race.writes++
 	switch race.writes {
 	case 1:
@@ -54,7 +54,7 @@ func (race *scaleP21SW280Race) hook() {
 	}
 }
 
-func (race *scaleP21SW280Race) release() {
+func (race *teamCreateMembershipRaceRace) release() {
 	if race.conn == nil {
 		return
 	}
@@ -67,11 +67,11 @@ func (race *scaleP21SW280Race) release() {
 	race.conn = nil
 }
 
-func scaleP21SW280Differential(t *testing.T, cases []scaleP21TeamCreateCase) {
+func teamCreateMembershipRaceDifferential(t *testing.T, cases []scaleTeamCreateCase) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	if f.reader.config.Driver != "sqlite" {
 		t.Skip("the injected lost write race is SQLite's refused read-to-write upgrade")
 	}
@@ -83,10 +83,10 @@ func scaleP21SW280Differential(t *testing.T, cases []scaleP21TeamCreateCase) {
 	database.SetMaxOpenConns(1)
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test.setup)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test.setup)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
-				race := &scaleP21SW280Race{t: t, database: database}
+				race := &teamCreateMembershipRaceRace{t: t, database: database}
 				defer race.release()
 				g := f
 				g.wrap = func(ctx context.Context) context.Context {
@@ -145,8 +145,8 @@ func scaleP21SW280Differential(t *testing.T, cases []scaleP21TeamCreateCase) {
 	}
 }
 
-func TestScaleP21SW280TeamCreateMembershipRace(t *testing.T) {
-	scaleP21SW280Differential(t, []scaleP21TeamCreateCase{
+func TestTeamCreateMembershipRace(t *testing.T) {
+	teamCreateMembershipRaceDifferential(t, []scaleTeamCreateCase{
 		{name: "top-level", body: map[string]any{"name": "Race", "key": "RCE"}},
 		{name: "copy", body: map[string]any{"name": "Race copy", "key": "RCC", "copyFromTeamId": "tm-parent"}},
 		{name: "private", body: map[string]any{"name": "Race private", "key": "RCP", "private": true}},
@@ -155,9 +155,9 @@ func TestScaleP21SW280TeamCreateMembershipRace(t *testing.T) {
 
 // The rerun also adds the creator to the new sub-team's ancestors it is not
 // on yet, each once (the checks above), as the inherited audit entries show.
-func TestScaleP21SW281TeamCreateSubTeamMembershipRace(t *testing.T) {
-	scaleP21SW280Differential(t, []scaleP21TeamCreateCase{
-		{name: "sub-team", body: map[string]any{"name": "Race sub", "key": "RCS", "parentTeamId": "tm-sub"}, check: func(t *testing.T, got scaleP21TeamCreateOutcome) {
+func TestTeamCreateSubTeamMembershipRace(t *testing.T) {
+	teamCreateMembershipRaceDifferential(t, []scaleTeamCreateCase{
+		{name: "sub-team", body: map[string]any{"name": "Race sub", "key": "RCS", "parentTeamId": "tm-sub"}, check: func(t *testing.T, got scaleTeamCreateOutcome) {
 			ancestors := map[string]bool{}
 			for _, row := range got.State.Audit {
 				if text := fmt.Sprint(row[9]); strings.Contains(text, `"inherited":true`) {

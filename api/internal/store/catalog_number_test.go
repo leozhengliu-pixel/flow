@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW31CatalogNumberGrammar(t *testing.T) {
+func TestCatalogNumberGrammar(t *testing.T) {
 	cases := []string{"", " ", "-", "+", ".", "1.", "1e", "1E", "1e+", "1e-", "--1", "01", "-01", "+1", ".1", "00", "-00", "1.e1", "1e1e1", "1..0", "NaN", "Infinity", "-Infinity", "0x1", "1_0", "1+2", "1e+e", "[1", "{}", `"1"`, "tru", "nul", "]", "1\x00", "1\xff", "1\\", "1 2", "1,2", "1}garbage", "0", "-0", "1", "-1", "12", "0.0", "-0.125", "1e0", "1E+2", "1e-2", "-12.5E-7", " 1", "\n-0.125", "1 \t\r\n", "1e9999999999999999999999999999999999999999999"}
 	for _, integer := range []string{"0", "1", "12", "-0", "-12"} {
 		for _, fraction := range []string{"", ".0", ".125"} {

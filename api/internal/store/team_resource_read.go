@@ -53,7 +53,7 @@ func (s *SQLiteStore) BeginTeamResourceAuthorizationRead(ctx context.Context, wo
 	teamID := s.ResolveTeamID(workspace, ref)
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == s.db &&
 		(workspace == "" || workspace == snapshot.workspace) {
-		source, err := read.sw307CallerSource(ctx, snapshot.metadata, teamID, output)
+		source, err := read.teamResourceReadCallerSource(ctx, snapshot.metadata, teamID, output)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func (s *SQLiteStore) BeginTeamResourceAuthorizationRead(ctx context.Context, wo
 
 // A caller snapshot already owns its strings and timestamps. Frame only the
 // policy headers and matching output, retaining inline order and duplicates.
-func (r *ResourceRead) sw307CallerSource(ctx context.Context, data domain.Bootstrap, teamID string, output bool) (*metadataLogicalSource, error) {
+func (r *ResourceRead) teamResourceReadCallerSource(ctx context.Context, data domain.Bootstrap, teamID string, output bool) (*metadataLogicalSource, error) {
 	candidate := domain.Bootstrap{
 		Workspace:    domain.Workspace{ID: data.Workspace.ID, URLKey: data.Workspace.URLKey},
 		TeamSettings: map[string]domain.TeamSettings{},

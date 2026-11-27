@@ -15,16 +15,16 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW63Business struct {
+type discussionWriterBusiness struct {
 	IssueVersion int64
 	Issue        json.RawMessage
 	Content      []any
-	Threads      scaleP21IssuePhysicalField
+	Threads      scaleIssuePhysicalField
 }
 
-func scaleP21SW63BusinessRows(t *testing.T, repo *SQLiteStore, workspace, issue string) scaleP21SW63Business {
+func businessRows(t *testing.T, repo *SQLiteStore, workspace, issue string) discussionWriterBusiness {
 	t.Helper()
-	var result scaleP21SW63Business
+	var result discussionWriterBusiness
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT version,data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, issue).Scan(&result.IssueVersion, &raw); err != nil {
 		t.Fatal(err)
@@ -48,11 +48,11 @@ func scaleP21SW63BusinessRows(t *testing.T, repo *SQLiteStore, workspace, issue 
 	if err != nil {
 		t.Fatal(err)
 	}
-	result.Threads = scaleP21IssuePhysical(t, repo, workspace, "threadSubscriptions")
+	result.Threads = scaleIssuePhysical(t, repo, workspace, "threadSubscriptions")
 	return result
 }
 
-func scaleP21SW63EventIDs(t *testing.T, repo *SQLiteStore, workspace string) map[string]bool {
+func eventIDs(t *testing.T, repo *SQLiteStore, workspace string) map[string]bool {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT id FROM domain_events WHERE workspace_id=(SELECT workspace_id FROM workspace_states WHERE workspace_key=?)`, workspace)
 	if err != nil {
@@ -73,7 +73,7 @@ func scaleP21SW63EventIDs(t *testing.T, repo *SQLiteStore, workspace string) map
 	return result
 }
 
-func scaleP21SW63NewEvents(t *testing.T, repo *SQLiteStore, workspace string, before map[string]bool) []any {
+func newEvents(t *testing.T, repo *SQLiteStore, workspace string, before map[string]bool) []any {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=(SELECT workspace_id FROM workspace_states WHERE workspace_key=?) ORDER BY created_at,id`, workspace)
 	if err != nil {
@@ -105,7 +105,7 @@ func scaleP21SW63NewEvents(t *testing.T, repo *SQLiteStore, workspace string, be
 	return result
 }
 
-func scaleP21SW63JSON(t *testing.T, value any) any {
+func discussionWriterJSON(t *testing.T, value any) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -120,7 +120,7 @@ func scaleP21SW63JSON(t *testing.T, value any) any {
 	return result
 }
 
-func scaleP21SW63Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time) {
+func discussionWriterSeed(t *testing.T, f scaleFixture, issue domain.Issue, at time.Time) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	f.SetWebhookSink(nil)
@@ -156,29 +156,29 @@ func scaleP21SW63Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at ti
 	}
 }
 
-func TestScaleP21SW63DiscussionWriterDifferential(t *testing.T) {
+func TestDiscussionWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, reload := range []bool{false, true} {
 		for _, mode := range []string{"changed", "deleted", "noop", "retry"} {
 			t.Run(fmt.Sprintf("reload=%t/%s", reload, mode), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected project"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected project"}}, nil)
 				workspace, at := f.data.Workspace.URLKey, time.Now().UTC().Add(-time.Minute)
 				actor := f.data.Viewer
 				actor.Via = &domain.ActorBot{ID: "sw63-via", Type: domain.ActorBotTypeOAuthApplication, Name: "Exact writer attribution"}
 				type outcome struct {
-					Rows                       scaleP21SW63Business
+					Rows                       discussionWriterBusiness
 					Captures                   []json.RawMessage
 					Events, Webhooks, Realtime []any
 					Calls                      int
 				}
 				var outputs []any
 				for _, bounded := range []bool{false, true} {
-					scaleP21SW63Seed(t, f, issue, at)
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
-					before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					discussionWriterSeed(t, f, issue, at)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
+					before := businessRows(t, repo, workspace, issue.ID)
+					prior := eventIDs(t, repo, workspace)
 					var closes []func()
 					closeOutput := func() {
 						for _, close := range closes {
@@ -323,12 +323,12 @@ func TestScaleP21SW63DiscussionWriterDifferential(t *testing.T) {
 						}
 						got.Captures = append(got.Captures, raw)
 					}
-					got.Rows = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+					got.Rows = businessRows(t, repo, workspace, issue.ID)
+					got.Events = newEvents(t, repo, workspace, prior)
 					if len(got.Events) != wantEvents || mode == "noop" && !reflect.DeepEqual(before, got.Rows) {
 						t.Fatal("writer no-op or durable event semantics changed")
 					}
-					outputs = append(outputs, scaleP21SW63JSON(t, got))
+					outputs = append(outputs, discussionWriterJSON(t, got))
 					closeOutput()
 					if bounded {
 						for _, data := range captured {
@@ -349,18 +349,18 @@ func TestScaleP21SW63DiscussionWriterDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW63DiscussionWriterRollbackAndOwnership(t *testing.T) {
+func TestDiscussionWriterRollbackAndOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, mode := range []string{"missing-owner", "canceled-before", "canceled-callback", "callback-error"} {
 		t.Run(mode, func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+			f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 			workspace, at := f.data.Workspace.URLKey, time.Now().UTC().Add(-time.Minute)
-			scaleP21SW63Seed(t, f, issue, at)
-			repo := scaleP21IssuePersistenceView(t, f, true, false)
-			before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-			prior := scaleP21SW63EventIDs(t, repo, workspace)
+			discussionWriterSeed(t, f, issue, at)
+			repo := scaleIssuePersistenceView(t, f, true, false)
+			before := businessRows(t, repo, workspace, issue.ID)
+			prior := eventIDs(t, repo, workspace)
 			source, err := repo.retainMetadataLogicalSource(t.Context(), workspace)
 			if err != nil {
 				t.Fatal(err)
@@ -414,8 +414,8 @@ func TestScaleP21SW63DiscussionWriterRollbackAndOwnership(t *testing.T) {
 				wantCalls = 0
 			}
 			if !errors.Is(err, want) || calls != wantCalls || publications != 0 ||
-				!reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) ||
-				len(scaleP21SW63NewEvents(t, repo, workspace, prior)) != 0 {
+				!reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) ||
+				len(newEvents(t, repo, workspace, prior)) != 0 {
 				t.Fatal("failed writer changed callback/SQL/publication semantics", err, calls, publications)
 			}
 			current, err := repo.retainMetadataLogicalSource(t.Context(), workspace)

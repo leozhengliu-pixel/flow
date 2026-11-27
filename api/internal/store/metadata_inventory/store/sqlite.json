@@ -5,7 +5,7 @@
     "Account": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The literal full accessor remains unchanged and is bypassed by every supported bounded production caller: DefaultViewer handles the two scalar consumers and owned AccountRead handles both account responses. SW125 scans the entire production API callset and rejects any reachable bounded Account call, including adapter fallback mistakes; SW118/SW123 prove their respective native ownership and SQL bounds. This review does not claim direct Account() is bounded; direct tests retain it as the literal oracle.",
+      "reason": "The literal full accessor remains unchanged and is bypassed by every supported bounded production caller: DefaultViewer handles the two scalar consumers and owned AccountRead handles both account responses. account routes scans the entire production API callset and rejects any reachable bounded Account call, including adapter fallback mistakes; default viewer/account read prove their respective native ownership and SQL bounds. This review does not claim direct Account() is bounded; direct tests retain it as the literal oracle.",
       "accessors": [
         "resident-state"
       ],
@@ -21,7 +21,7 @@
     "Bootstrap": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With FLOW_BOUNDED_METADATA on no HOT inventory route, ticker or consumer reaches it: PATCH /api/issues/{id} is rewritten to the record route before dispatch (updateIssue is unrouted), the coding runtime Bootstrap is internal/coding's protocol (pinned name collision), and every other caller (deleteIssue, MCP/agent tools) is COLD. The literal body is unchanged and still clones and hydrates; this review certifies only HOT unreachability, not a bounded body.",
+      "reason": "TestStoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With FLOW_BOUNDED_METADATA on no HOT inventory route, ticker or consumer reaches it: PATCH /api/issues/{id} is rewritten to the record route before dispatch (updateIssue is unrouted), the coding runtime Bootstrap is internal/coding's protocol (pinned name collision), and every other caller (deleteIssue, MCP/agent tools) is COLD. The literal body is unchanged and still clones and hydrates; this review certifies only HOT unreachability, not a bounded body.",
       "accessors": [
         "Bootstrap",
         "BootstrapFor"
@@ -36,7 +36,7 @@
     "BootstrapFor": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With the flag on its only HOT-classified reachers are the compatibility relays workspaceData and findIssueForPermissions: every GET or HEAD permission list reads the retained authorized issue headers (SW113, now including HEAD), the COLD permission writers and other COLD callers keep the literal read, and the workspace administration callers (updateWorkspace, logo, shared dashboard/view, invite preview, cancel/delete/purge) are COLD. The literal hydrating body is unchanged; this review certifies HOT unreachability only.",
+      "reason": "TestStoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. With the flag on its only HOT-classified reachers are the compatibility relays workspaceData and findIssueForPermissions: every GET or HEAD permission list reads the retained authorized issue headers (issue permission read, now including HEAD), the COLD permission writers and other COLD callers keep the literal read, and the workspace administration callers (updateWorkspace, logo, shared dashboard/view, invite preview, cancel/delete/purge) are COLD. The literal hydrating body is unchanged; this review certifies HOT unreachability only.",
       "accessors": [
         "Bootstrap",
         "BootstrapForContext"
@@ -65,7 +65,7 @@
     "BootstrapForContext": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "TestScaleP21SW286StoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. It is reached only through Bootstrap, BootstrapFor and BootstrapForUser, each closed by the same guard. The literal body still clones the resident copy and hydrates issues and content; this review certifies only that no HOT route or ticker executes it with the flag on.",
+      "reason": "TestStoreWrapperHotBoundaries (cmd/server) type-checks cmd/server and internal/store together and walks every flag-on reference to this wrapper backwards: direct calls, function and method values, interface method sets, goroutine launches and captured literals, with flag-off-only branches (negated/conjoined flag conditions, flag locals, handled results, rebound function values, returning bounded branches) excluded. It is reached only through Bootstrap, BootstrapFor and BootstrapForUser, each closed by the same guard. The literal body still clones the resident copy and hydrates issues and content; this review certifies only that no HOT route or ticker executes it with the flag on.",
       "accessors": [
         "Bootstrap"
       ],
@@ -143,7 +143,7 @@
     "MutateWorkspace": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Forwarding adapter only: the unchanged callback adapter preserves the fixed aggregate/context, payload, callback result/error and ErrNoMutation while the reviewed dispatcher owns bounded selection and admission. SW103 compares literal and bounded supported point writes, default workspace, empty aggregate, errors, results and events. This review does not certify any leaf callback; those consumers retain their independent guards.",
+      "reason": "Forwarding adapter only: the unchanged callback adapter preserves the fixed aggregate/context, payload, callback result/error and ErrNoMutation while the reviewed dispatcher owns bounded selection and admission. mutate workspace compares literal and bounded supported point writes, default workspace, empty aggregate, errors, results and events. This review does not certify any leaf callback; those consumers retain their independent guards.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
@@ -497,7 +497,7 @@
     "ReloadAllWorkspaces": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "Bootstrap",
         "decodeWorkspaceMetadata"
@@ -506,7 +506,7 @@
     "ReloadWorkspace": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "loadWorkspaceStamped"
       ]
@@ -540,7 +540,7 @@
     "WorkspaceKeys": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "resident-state"
       ]
@@ -561,7 +561,7 @@
     "dispatchMutation": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests. Desktop acknowledgements dispatch only with the private certified callback marker and exact event, so arbitrary callbacks sharing the public event cannot receive a sparse input. SW134/SW135 prove ordinary full-writer hydration, actor/count/aggregate effects, canonical rebasing, audit transaction/rollback, account and last-workspace publication, empty aggregates, opt-in rejection and the actual route permission matrix; flag-off remains the original dispatcher.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests. Desktop acknowledgements dispatch only with the private certified callback marker and exact event, so arbitrary callbacks sharing the public event cannot receive a sparse input. desktop ack write/desktop ack routes prove ordinary full-writer hydration, actor/count/aggregate effects, canonical rebasing, audit transaction/rollback, account and last-workspace publication, empty aggregates, opt-in rejection and the actual route permission matrix; flag-off remains the original dispatcher.",
       "accessors": [
         "Bootstrap",
         "mutateFull",
@@ -572,7 +572,7 @@
     "loadOrSeed": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "Bootstrap",
         "decodeWorkspaceMetadata"
@@ -581,7 +581,7 @@
     "loadWorkspaceStamped": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "Bootstrap",
         "decodeWorkspaceMetadata"
@@ -603,7 +603,7 @@
     "mutateFull": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "Bootstrap",
         "storedWorkspace"
@@ -612,7 +612,7 @@
     "storedWorkspace": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Exact O(1) installed-map borrow under the store read lock and caller writeMu. The bounded representation contains only globally capped core/policy state; this helper does not clone or hydrate record bodies and preserves physical key and missing semantics. TestScaleP21SW18StoredWorkspaceResidentBoundary compares real legacy/resident sources with large unrelated records, verifies omitted fields, zero full decodes, no leaked work and zero allocations. Callers must still declare complete callback inputs and remain independently guarded; this review does not certify source loading or those writers.",
+      "reason": "Exact O(1) installed-map borrow under the store read lock and caller writeMu. The bounded representation contains only globally capped core/policy state; this helper does not clone or hydrate record bodies and preserves physical key and missing semantics. TestStoredWorkspaceResidentBoundary compares real legacy/resident sources with large unrelated records, verifies omitted fields, zero full decodes, no leaked work and zero allocations. Callers must still declare complete callback inputs and remain independently guarded; this review does not certify source loading or those writers.",
       "accessors": [
         "Bootstrap"
       ]
@@ -633,7 +633,7 @@
     "webhookNeeded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The original complete predicate is retained only off or inside the serialized cold view. SW102 closes all nine direct references and four upstream mutation-helper callsets, rejecting aliases, new callers and bypasses of the bounded dispatcher. Bounded HOT writers use their owned logical predicate; SW97 proves exact native/reloaded enabled webhook, loop, connection and authoritative chat fallback behavior with cancellation, admission, persistent SQLite and race coverage.",
+      "reason": "The original complete predicate is retained only off or inside the serialized cold view. webhook boundary closes all nine direct references and four upstream mutation-helper callsets, rejecting aliases, new callers and bypasses of the bounded dispatcher. Bounded HOT writers use their owned logical predicate; legacy webhook needed proves exact native/reloaded enabled webhook, loop, connection and authoritative chat fallback behavior with cancellation, admission, persistent SQLite and race coverage.",
       "accessors": [
         "resident-state"
       ],

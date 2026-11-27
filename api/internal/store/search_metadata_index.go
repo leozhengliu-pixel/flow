@@ -421,7 +421,7 @@ func (s *SQLiteStore) mysqlMetadataSearchPageContent(ctx context.Context, pageAr
 
 func (s *SQLiteStore) migrateMetadataSearchIndex(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
-		return s.sw17MigrateMetadataSearchIndexBounded(ctx)
+		return s.migrateMetadataSearchIndexBounded(ctx)
 	}
 	for workspace := range s.workspaces {
 		for _, kind := range searchMetadataKinds {

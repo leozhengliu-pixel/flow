@@ -15,14 +15,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW155Outcome struct {
-	scaleP21SW149Outcome
+type issueRecurrenceTimingOutcome struct {
+	issueAttachmentWriteOutcome
 	Updated   domain.Issue
 	Timezones []string
 	ScopeIDs  [][]string
 }
 
-func scaleP21SW155EventPreviousTiming(outcome any) map[string]any {
+func eventPreviousTiming(outcome any) map[string]any {
 	events, _ := outcome.(map[string]any)["Events"].([]any)
 	selected := map[string]any{}
 	if len(events) == 0 {
@@ -37,8 +37,8 @@ func scaleP21SW155EventPreviousTiming(outcome any) map[string]any {
 	return selected
 }
 
-func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
-	scaleP21SW149Setup(t)
+func TestIssueRecurrenceTimingDifferential(t *testing.T) {
+	issueAttachmentWriteSetup(t)
 	for _, reload := range []bool{false, true} {
 		for _, mode := range []string{
 			"set-missing-due", "replace-due", "clear-due", "clear-next", "clock-only", "iana-next", "whitespace-dual-id",
@@ -46,7 +46,7 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 			"callback-error", "no-actor", "foreign-actor", "nested-aggregate", "stale-progress",
 		} {
 			t.Run(fmt.Sprint("reload=", reload, "/", mode), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Recurrence timing progress"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Recurrence timing progress"}}, nil)
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
 				tick := time.Date(2026, 11, 15, 23, 45, 12, 567890123, time.Local)
@@ -98,7 +98,7 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 					settings.UpdatedAt, preference.UpdatedAt = at, at
 					metadata.UserSettings[user.ID], metadata.NotificationPreferences[user.ID] = settings, preference
 				}
-				actor := scaleP21SW69OwnedActor(f.data.Viewer)
+				actor := ownedActor(f.data.Viewer)
 				actor.Name = "Recurring request actor"
 				actor.Via = &domain.ActorBot{ID: "sw155-request-app", Name: "Recurring attribution", Type: domain.ActorBotTypeOAuthApplication}
 				if mode == "foreign-actor" {
@@ -108,15 +108,15 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 				var queries []int64
 				for _, bounded := range []bool{false, true} {
 					writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadata))
-					scaleP21SW116Seed(t, f, issue, at, mode)
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+					issueReactionWriteSeed(t, f, issue, at, mode)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
 					repo.mu.Lock()
 					repo.lastWorkspaceKey = ""
 					repo.mu.Unlock()
-					before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					beforeMetadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-					beforeIndexes := scaleP21SW98Indexes(t, repo, workspace)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					before := businessRows(t, repo, workspace, issue.ID)
+					beforeMetadata := metadataImage(t, repo.db, workspace)
+					beforeIndexes := legacyDiscussionWriteIndexes(t, repo, workspace)
+					prior := eventIDs(t, repo, workspace)
 					ctx := t.Context()
 					if mode != "no-actor" {
 						ctx = ContextWithActor(ctx, actor)
@@ -143,7 +143,7 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 					if mode == "cancel-before" {
 						cancel()
 					}
-					got := scaleP21SW155Outcome{}
+					got := issueRecurrenceTimingOutcome{}
 					var captured []*domain.Bootstrap
 					checkOwner := func() {
 						t.Helper()
@@ -201,7 +201,7 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 						target.Version++
 						target.UpdatedAt = tick
 						got.Updated = *target
-						got.Callback = append(got.Callback, scaleP21SW116Capture{
+						got.Callback = append(got.Callback, issueReactionWriteCapture{
 							Viewer: data.Viewer, Via: data.Viewer.Via, Role: data.ViewerRole, Saved: *target, BeforeLabels: slices.Clone(target.Labels),
 						})
 						got.Timezones = append(got.Timezones, data.TeamSettings[target.Team.ID].Timezone)
@@ -235,12 +235,12 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 					if mode == "cancel-persist" && !persistCanceled {
 						t.Fatal("recurrence cancellation never reached event persistence")
 					}
-					got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					got.Metadata = scaleP21SW76MetadataImage(t, repo.db, workspace)
-					got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
-					got.Installed = scaleP21SW98Installed(t, repo, workspace)
+					got.Business = businessRows(t, repo, workspace, issue.ID)
+					got.Metadata = metadataImage(t, repo.db, workspace)
+					got.Indexes = legacyDiscussionWriteIndexes(t, repo, workspace)
+					got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
 					got.InstalledVia = got.Installed.Viewer.Via
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+					got.Events = newEvents(t, repo, workspace, prior)
 					if err := repo.db.QueryRowContext(t.Context(), `SELECT last_workspace_key,viewer FROM account_state WHERE id=1`).Scan(&got.AccountKey, &got.AccountViewer); err != nil {
 						t.Fatal(err)
 					}
@@ -295,7 +295,7 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					outcomes = append(outcomes, scaleP21SW63JSON(t, got))
+					outcomes = append(outcomes, discussionWriterJSON(t, got))
 					if bounded {
 						owner.Close()
 						owner.Close()
@@ -310,10 +310,10 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					oldTiming, _ := json.Marshal(scaleP21SW155EventPreviousTiming(outcomes[0]))
-					boundedTiming, _ := json.Marshal(scaleP21SW155EventPreviousTiming(outcomes[1]))
+					oldTiming, _ := json.Marshal(eventPreviousTiming(outcomes[0]))
+					boundedTiming, _ := json.Marshal(eventPreviousTiming(outcomes[1]))
 					t.Logf("event_previous_timing legacy=%s bounded=%s", oldTiming, boundedTiming)
-					t.Fatal("literal/bounded recurrence differs", scaleP21SW98FirstDiff(outcomes[0], outcomes[1], "recurrence"))
+					t.Fatal("literal/bounded recurrence differs", firstDiff(outcomes[0], outcomes[1], "recurrence"))
 				}
 				t.Logf("reload=%t mode=%s legacy_SQL=%d bounded_SQL=%d", reload, mode, queries[0], queries[1])
 			})
@@ -321,13 +321,13 @@ func TestScaleP21SW155IssueRecurrenceTimingDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW155IssueRecurrenceTimingQuotaAndProfile(t *testing.T) {
-	scaleP21SW149Setup(t)
-	f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Recurrence timing profile"}}, nil)
+func TestIssueRecurrenceTimingQuotaAndProfile(t *testing.T) {
+	issueAttachmentWriteSetup(t)
+	f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Recurrence timing profile"}}, nil)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-	scaleP21SW116Seed(t, f, issue, at, "nil-map")
-	repo := scaleP21IssuePersistenceView(t, f, true, false)
+	issueReactionWriteSeed(t, f, issue, at, "nil-map")
+	repo := scaleIssuePersistenceView(t, f, true, false)
 	for _, mode := range []string{
 		"quota", "unowned", "missing-marker", "unscoped", "wrong-event", "title", "recurrence",
 		"reactions", "attachments", "description", "description-state", "document-content",
@@ -335,9 +335,9 @@ func TestScaleP21SW155IssueRecurrenceTimingQuotaAndProfile(t *testing.T) {
 		"workspace", "policy", "issue-scope",
 	} {
 		t.Run(mode, func(t *testing.T) {
-			before, metadata, indexes := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID),
-				scaleP21SW76MetadataImage(t, repo.db, workspace), scaleP21SW98Indexes(t, repo, workspace)
-			actor := scaleP21SW69OwnedActor(f.data.Viewer)
+			before, metadata, indexes := businessRows(t, repo, workspace, issue.ID),
+				metadataImage(t, repo.db, workspace), legacyDiscussionWriteIndexes(t, repo, workspace)
+			actor := ownedActor(f.data.Viewer)
 			actor.Via = &domain.ActorBot{ID: "sw155-profile-app", Name: "Original attribution", Type: domain.ActorBotTypeOAuthApplication}
 			ctx := ContextWithActor(t.Context(), actor)
 			if mode != "unscoped" {
@@ -421,9 +421,9 @@ func TestScaleP21SW155IssueRecurrenceTimingQuotaAndProfile(t *testing.T) {
 			if slices.Contains([]string{"quota", "unowned", "missing-marker", "unscoped", "wrong-event"}, mode) && calls != 0 {
 				t.Fatal("undeclared recurrence callback ran", mode, calls)
 			}
-			if !reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) ||
-				!reflect.DeepEqual(metadata, scaleP21SW76MetadataImage(t, repo.db, workspace)) ||
-				!reflect.DeepEqual(indexes, scaleP21SW98Indexes(t, repo, workspace)) {
+			if !reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) ||
+				!reflect.DeepEqual(metadata, metadataImage(t, repo.db, workspace)) ||
+				!reflect.DeepEqual(indexes, legacyDiscussionWriteIndexes(t, repo, workspace)) {
 				t.Fatal("rejected recurrence callback persisted effects")
 			}
 			if owner != nil {

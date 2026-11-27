@@ -18,11 +18,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP17Measurements(t *testing.T) {
+func TestScaleMeasurementsRecordSelectionMeasurement(t *testing.T) {
 	if os.Getenv("FLOW_P17_MEASURE") != "1" {
 		t.Skip("set FLOW_P17_MEASURE=1 to measure request allocations")
 	}
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	ctx := store.ContextWithActor(context.Background(), db.users[0])
 	err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 		for i := range 32 {

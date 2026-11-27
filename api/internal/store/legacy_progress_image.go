@@ -15,7 +15,7 @@ import (
 type legacyProgressImage struct {
 	store  *SQLiteStore
 	source *metadataLogicalSource
-	stage  *sw26MigrationStage
+	stage  *migrationStage
 	work   *ResourceRead
 	index  *legacyProgressIndex
 	closed bool
@@ -48,7 +48,7 @@ func (s *SQLiteStore) prepareLegacyProgressImage(ctx context.Context, source *me
 	if err := p.work.reserve(ctx, 128<<10); err != nil {
 		return nil, err
 	}
-	p.stage, err = sw26NewMigrationStage(ctx)
+	p.stage, err = newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,8 +238,8 @@ func (p *legacyProgressImage) Rebuild(ctx context.Context, tx *sqlTx, workspace 
 	})
 }
 
-func newLegacyProgressPatches(ctx context.Context) (*sw26MigrationStage, error) {
-	stage, err := sw26NewMigrationStage(ctx)
+func newLegacyProgressPatches(ctx context.Context) (*migrationStage, error) {
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func newLegacyProgressPatches(ctx context.Context) (*sw26MigrationStage, error) 
 	return stage, nil
 }
 
-func stageLegacyProgressPatch(ctx context.Context, stage *sw26MigrationStage, values *metadataLogicalBuilder, ordinal int, project domain.Project) error {
+func stageLegacyProgressPatch(ctx context.Context, stage *migrationStage, values *metadataLogicalBuilder, ordinal int, project domain.Project) error {
 	patch, err := values.writeValue(reflect.ValueOf(project), 0, false)
 	if err != nil {
 		return err
@@ -520,7 +520,7 @@ func (g *legacyProgressGroup) rebuildSQL(ctx context.Context, tx *sqlTx, workspa
 type legacyProgressIndex struct {
 	store  *SQLiteStore
 	source *metadataLogicalSource
-	stage  *sw26MigrationStage
+	stage  *migrationStage
 }
 
 func legacyProgressTable(field string) string {
@@ -681,7 +681,7 @@ func (x *legacyProgressIndex) lookup(ctx context.Context, field, id string) (met
 
 type legacyProgressCollection struct {
 	base    metadataLogicalNode
-	patches *sw26MigrationStage
+	patches *migrationStage
 	values  *metadataLogicalStorage
 }
 

@@ -11,10 +11,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW482: the loaded exit of the large-row rebase charges long string tokens
+// The loaded exit of the large-row rebase charges long string tokens
 // at their decode copies, so a legal document whose resolved current body and
 // current-version body total 8 MiB reaches its exact typed comparison.
-func TestScaleP21SW482LargeRowTypedWork(t *testing.T) {
+func TestLargeRowTypedWork(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	kind := reflect.TypeFor[domain.Document]()
 	small := domain.Document{ID: "small", Title: "Small", Content: "body", ContentData: map[string]any{"type": "doc"}, CreatedAt: at}
@@ -22,7 +22,7 @@ func TestScaleP21SW482LargeRowTypedWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{})
 	owner := &ResourceRead{store: view}
 	defer owner.Close()
 	generic, err := resourceWindowTypedJSONWork(t.Context(), raw, kind)

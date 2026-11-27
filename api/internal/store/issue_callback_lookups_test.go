@@ -8,7 +8,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21IssueCallbackLookupBridge(t *testing.T) {
+func TestScaleIssueCallbackLookupBridge(t *testing.T) {
 	owner := &SQLiteStore{}
 	tx := &sqlTx{}
 	formerCalls, updateCalls, callbacks := 0, 0, 0

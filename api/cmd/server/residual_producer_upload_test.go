@@ -22,18 +22,18 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW334 covers issue/customer-request uploads. This table covers the other
+// producer upload authorization covers issue/customer-request uploads. This table covers the other
 // actual producers that preserve a literal percent-slash filename in their URL.
-func TestScaleP21SW346ResidualProducerUploadAuthorization(t *testing.T) {
+func TestResidualProducerUploadAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	foreign := scaleP03Fixture(t, repo)
+	foreign := resourceAccessScaleFixture(t, repo)
 	prefix := idgen.New("sw346-")
 	documentID, projectID, initiativeID, updateID := prefix+"document", prefix+"project", prefix+"initiative", prefix+"update"
 	issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
@@ -234,7 +234,7 @@ func TestScaleP21SW346ResidualProducerUploadAuthorization(t *testing.T) {
 				}
 			}
 			if phase == "reloaded" {
-				scaleP21SW201ReloadSource(t, f.reader, source)
+				metadataReloadSourceReloadSource(t, f.reader, source)
 			}
 			request := f.literalRequest(user, key, nil)
 			var err error

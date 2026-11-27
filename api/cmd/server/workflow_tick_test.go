@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
+func TestWorkflowScheduleTickDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	_, database, issue := scaleP21SW44ChatFixture(t)
+	_, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	baseline, found := repo.BootstrapFor(workspace)
 	if !found {
@@ -27,7 +27,7 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlFixture := scaleP21SW10Fixture{reader: database}
+	sqlFixture := notificationsFixture{reader: database}
 	sqlFixture.data.Workspace.URLKey = workspace
 	prefix := idgen.New("sw342-")
 	scheduledID, retryID := prefix+"scheduled", prefix+"retry"
@@ -96,7 +96,7 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 					}
 					reloaded := mode == "legacy-reloaded" || mode == "bounded-reloaded"
 					if reloaded {
-						scaleP21SW201ReloadSource(t, database, repo)
+						metadataReloadSourceReloadSource(t, database, repo)
 					}
 					source := repo
 					bounded := mode == "bounded-warm" || mode == "bounded-reloaded"
@@ -106,11 +106,11 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 						if reloaded {
-							scaleP21SW201ReloadSource(t, database, source)
+							metadataReloadSourceReloadSource(t, database, source)
 						}
 					}
 					service := &server{store: source}
-					before := scaleP21SW59SQL(t, sqlFixture)
+					before := discussionWriteSql(t, sqlFixture)
 					priorIDs := map[string]bool{}
 					for _, workflowID := range workflowIDs {
 						events, err := repo.Events(t.Context(), workflowID)
@@ -121,16 +121,16 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 							priorIDs[event.ID] = true
 						}
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					var order []string
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 						if event.Type == "workflow_run.executed" {
 							order = append(order, event.AggregateID)
 						}
 					})
 					captureRealtime := func(_ string, event domain.RealtimeEvent) {
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					}
 					source.SetRealtimeSink(captureRealtime)
 					repo.SetRealtimeSink(captureRealtime)
@@ -195,7 +195,7 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 					if err != nil || afterIssue.Priority != 1 {
 						t.Fatal("later issue retry lost its successful action", afterIssue.Priority, err)
 					}
-					got.Rows = scaleP21SW59SQL(t, sqlFixture)
+					got.Rows = discussionWriteSql(t, sqlFixture)
 					notices := map[string]int{}
 					for _, record := range got.Rows.Content {
 						if record.Kind == "notification" {
@@ -225,11 +225,11 @@ func TestScaleP21SW342WorkflowScheduleTickDifferential(t *testing.T) {
 					if len(got.Events) != 2 || len(got.Webhooks) == 0 || len(got.Realtime) == 0 {
 						t.Fatal("tick lost committed events or publication", len(got.Events), len(got.Webhooks), len(got.Realtime))
 					}
-					got.Response, err = json.Marshal(scaleP21SW201Metadata(t, database))
+					got.Response, err = json.Marshal(workflowWriteMetadata(t, database))
 					if err != nil {
 						t.Fatal(err)
 					}
-					normalized := scaleP21SW201Normalize(t, scaleP21SW59Normalized(t, got, before, started, finished), "", started, finished)
+					normalized := workflowWriteNormalize(t, discussionWriteNormalized(t, got, before, started, finished), "", started, finished)
 					ids := map[string]string{runs[5].ID: "<tick-run:0>", runs[6].ID: "<tick-run:1>"}
 					var normalizeRuns func(any) any
 					normalizeRuns = func(value any) any {

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW248Repo(t *testing.T) *SQLiteStore {
+func genericJSONRepo(t *testing.T) *SQLiteStore {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "1")
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
@@ -33,7 +33,7 @@ func scaleP21SW248Repo(t *testing.T) *SQLiteStore {
 	return repo
 }
 
-func scaleP21SW248Builder(t *testing.T) *metadataLogicalBuilder {
+func genericJsonBuilder(t *testing.T) *metadataLogicalBuilder {
 	t.Helper()
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
@@ -43,7 +43,7 @@ func scaleP21SW248Builder(t *testing.T) *metadataLogicalBuilder {
 	return builder
 }
 
-func scaleP21SW248Oracle(t *testing.T, typ reflect.Type, raw string) (reflect.Value, []byte) {
+func genericJsonOracle(t *testing.T, typ reflect.Type, raw string) (reflect.Value, []byte) {
 	t.Helper()
 	value := reflect.New(typ)
 	if err := json.Unmarshal([]byte(raw), value.Interface()); err != nil {
@@ -56,7 +56,7 @@ func scaleP21SW248Oracle(t *testing.T, typ reflect.Type, raw string) (reflect.Va
 	return value.Elem(), wire
 }
 
-func scaleP21SW248Frame(t *testing.T, repo *SQLiteStore, builder *metadataLogicalBuilder, typ reflect.Type, raw string) metadataLogicalNode {
+func genericJSONFrame(t *testing.T, repo *SQLiteStore, builder *metadataLogicalBuilder, typ reflect.Type, raw string) metadataLogicalNode {
 	t.Helper()
 	before := repo.MetadataWorkUsedForTesting()
 	node, err := builder.writeGenericJSON(t.Context(), repo, typ, legacySessionJSONPart{bytes.NewReader([]byte(raw)), 0, int64(len(raw))})
@@ -69,7 +69,7 @@ func scaleP21SW248Frame(t *testing.T, repo *SQLiteStore, builder *metadataLogica
 	return node
 }
 
-func scaleP21SW248AssertValue(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, want reflect.Value, wire []byte) {
+func assertValue(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, want reflect.Value, wire []byte) {
 	t.Helper()
 	owner := &ResourceRead{store: repo}
 	defer owner.Close()
@@ -105,7 +105,7 @@ func scaleP21SW248AssertValue(t *testing.T, repo *SQLiteStore, node metadataLogi
 	}
 }
 
-func scaleP21SW248Walk(t *testing.T, node metadataLogicalNode, expected reflect.Value) {
+func genericJsonWalk(t *testing.T, node metadataLogicalNode, expected reflect.Value) {
 	t.Helper()
 	type pair struct {
 		node  metadataLogicalNode
@@ -193,7 +193,7 @@ func scaleP21SW248Walk(t *testing.T, node metadataLogicalNode, expected reflect.
 	}
 }
 
-func TestScaleP21SW248GenericJSONStdlibTypesAndChildren(t *testing.T) {
+func TestGenericJSONStdlibTypesAndChildren(t *testing.T) {
 	if metadataLogicalDepth != 128 {
 		t.Fatal("generic JSON support changed the ordinary typed codec depth bound")
 	}
@@ -219,22 +219,22 @@ func TestScaleP21SW248GenericJSONStdlibTypesAndChildren(t *testing.T) {
 		{"deep-interface", deep, reflect.TypeFor[any]()},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			repo := scaleP21SW248Repo(t)
-			builder := scaleP21SW248Builder(t)
-			node := scaleP21SW248Frame(t, repo, builder, test.typ, test.raw)
-			oracle, wire := scaleP21SW248Oracle(t, test.typ, test.raw)
-			scaleP21SW248AssertValue(t, repo, node, oracle, wire)
+			repo := genericJSONRepo(t)
+			builder := genericJsonBuilder(t)
+			node := genericJSONFrame(t, repo, builder, test.typ, test.raw)
+			oracle, wire := genericJsonOracle(t, test.typ, test.raw)
+			assertValue(t, repo, node, oracle, wire)
 			owner := &ResourceRead{store: repo}
 			defer owner.Close()
 			if err := owner.reserve(t.Context(), node.cost); err != nil {
 				t.Fatal(err)
 			}
-			scaleP21SW248Walk(t, node, oracle)
+			genericJsonWalk(t, node, oracle)
 		})
 	}
 }
 
-func TestScaleP21SW248GenericJSONSupportedLargeDeepSuccess(t *testing.T) {
+func TestGenericJSONSupportedLargeDeepSuccess(t *testing.T) {
 	const blocks, textBytes = 256, 3 << 20
 	document := `{"type":"doc","content":[` +
 		strings.Repeat(`{"type":"blockquote","content":[`, blocks) +
@@ -258,22 +258,22 @@ func TestScaleP21SW248GenericJSONSupportedLargeDeepSuccess(t *testing.T) {
 	if metadataLogicalDepth != 128 || metadataWorkBytes() != 256<<20 {
 		t.Fatal("large/deep support changed an ordinary depth or production work quota")
 	}
-	repo := scaleP21SW248Repo(t)
+	repo := genericJSONRepo(t)
 	if repo.metadataResidency.work.limit != metadataWorkBytes() {
 		t.Fatal("large/deep default-success fixture changed the process work limit")
 	}
-	origin := scaleP21SW248Builder(t)
+	origin := genericJsonBuilder(t)
 	if _, err := origin.writeValue(reflect.ValueOf("large-deep-input-offset"), 0, false); err != nil {
 		t.Fatal(err)
 	}
-	node := scaleP21SW248Frame(t, repo, origin, reflect.TypeFor[map[string]any](), document)
+	node := genericJSONFrame(t, repo, origin, reflect.TypeFor[map[string]any](), document)
 	oracle := reflect.ValueOf(input.DescriptionData)
 	// A work-budget refusal is a failure, even if every representation
 	// returns the same error. Native and complete wire output must succeed.
-	scaleP21SW248AssertValue(t, repo, node, oracle, expected)
+	assertValue(t, repo, node, oracle, expected)
 	var copies []metadataLogicalNode
 	for _, mode := range []string{"copy", "import"} {
-		target := scaleP21SW248Builder(t)
+		target := genericJsonBuilder(t)
 		if _, err := target.writeValue(reflect.ValueOf(strings.Repeat(mode+"-different-offset", 5)), 0, false); err != nil {
 			t.Fatal(err)
 		}
@@ -292,14 +292,14 @@ func TestScaleP21SW248GenericJSONSupportedLargeDeepSuccess(t *testing.T) {
 	}
 	origin.Close()
 	for _, copied := range copies {
-		scaleP21SW248AssertValue(t, repo, copied, oracle, expected)
+		assertValue(t, repo, copied, oracle, expected)
 	}
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("successful large/deep value, wire or copy retained temporary native ownership")
 	}
 }
 
-func TestScaleP21SW248GenericJSONEquality(t *testing.T) {
+func TestGenericJSONEquality(t *testing.T) {
 	deep := func(end string) string {
 		return strings.Repeat(`{"next":[`, 256) + end + strings.Repeat(`]}`, 256)
 	}
@@ -321,12 +321,12 @@ func TestScaleP21SW248GenericJSONEquality(t *testing.T) {
 		{"deep-difference", deep(`{"n":1}`), deep(`{"n":2}`), reflect.TypeFor[map[string]any](), false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			repo := scaleP21SW248Repo(t)
-			builder := scaleP21SW248Builder(t)
-			a := scaleP21SW248Frame(t, repo, builder, test.typ, test.left)
-			b := scaleP21SW248Frame(t, repo, builder, test.typ, test.right)
-			left, leftWire := scaleP21SW248Oracle(t, test.typ, test.left)
-			right, rightWire := scaleP21SW248Oracle(t, test.typ, test.right)
+			repo := genericJSONRepo(t)
+			builder := genericJsonBuilder(t)
+			a := genericJSONFrame(t, repo, builder, test.typ, test.left)
+			b := genericJSONFrame(t, repo, builder, test.typ, test.right)
+			left, leftWire := genericJsonOracle(t, test.typ, test.left)
+			right, rightWire := genericJsonOracle(t, test.typ, test.right)
 			want := reflect.DeepEqual(left.Interface(), right.Interface())
 			if test.name == "signed-zero" && bytes.Equal(leftWire, rightWire) {
 				t.Fatal("signed-zero fixture no longer distinguishes canonical bytes from value equality")
@@ -351,7 +351,7 @@ func TestScaleP21SW248GenericJSONEquality(t *testing.T) {
 	}
 }
 
-func scaleP21SW248Source(t *testing.T, builder *metadataLogicalBuilder, settings metadataLogicalNode, revision int64) *metadataLogicalSource {
+func genericJsonSource(t *testing.T, builder *metadataLogicalBuilder, settings metadataLogicalNode, revision int64) *metadataLogicalSource {
 	t.Helper()
 	typ := reflect.TypeFor[domain.Bootstrap]()
 	for index := 0; index < typ.NumField(); index++ {
@@ -374,7 +374,7 @@ func scaleP21SW248Source(t *testing.T, builder *metadataLogicalBuilder, settings
 	return source
 }
 
-func scaleP21SW248Install(t *testing.T, repo *SQLiteStore, source *metadataLogicalSource) {
+func genericJsonInstall(t *testing.T, repo *SQLiteStore, source *metadataLogicalSource) {
 	t.Helper()
 	if err := source.Retain(); err != nil {
 		t.Fatal(err)
@@ -382,21 +382,21 @@ func scaleP21SW248Install(t *testing.T, repo *SQLiteStore, source *metadataLogic
 	repo.installMetadataLogicalSource("sw248", source)
 }
 
-func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
-	repo := scaleP21SW248Repo(t)
+func TestGenericJSONCopyImportInstall(t *testing.T) {
+	repo := genericJSONRepo(t)
 	raw := `{"deep":` + strings.Repeat(`{"n":[`, 256) + `{"v":-0,"null":null}` + strings.Repeat(`]}`, 256) + `}`
 	typ := reflect.TypeFor[map[string]any]()
-	oracle, wire := scaleP21SW248Oracle(t, typ, raw)
-	input := scaleP21SW248Builder(t)
+	oracle, wire := genericJsonOracle(t, typ, raw)
+	input := genericJsonBuilder(t)
 	if _, err := input.writeValue(reflect.ValueOf("input-padding"), 0, false); err != nil {
 		t.Fatal(err)
 	}
-	node := scaleP21SW248Frame(t, repo, input, typ, raw)
+	node := genericJSONFrame(t, repo, input, typ, raw)
 	parent := t
 	var copies []metadataLogicalNode
 	for _, mode := range []string{"copy", "import", "aggregate"} {
 		t.Run(mode, func(t *testing.T) {
-			target := scaleP21SW248Builder(parent)
+			target := genericJsonBuilder(parent)
 			// A foreign type registry must not reinterpret a generic range.
 			target.storage.types = []reflect.Type{reflect.TypeFor[[]string](), reflect.TypeFor[map[string]int64]()}
 			if _, err := target.writeValue(reflect.ValueOf(strings.Repeat("target-padding", 7)), 0, false); err != nil {
@@ -415,11 +415,11 @@ func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
 			if err != nil {
 				t.Fatal("deep generic leaf was recursively reframed or its registry changed", err)
 			}
-			scaleP21SW248AssertValue(t, repo, copied, oracle, wire)
+			assertValue(t, repo, copied, oracle, wire)
 			copies = append(copies, copied)
 		})
 	}
-	target := scaleP21SW248Builder(t)
+	target := genericJsonBuilder(t)
 	if _, err := target.writeValue(reflect.ValueOf("different-install-offset"), 0, false); err != nil {
 		t.Fatal(err)
 	}
@@ -427,23 +427,23 @@ func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := scaleP21SW248Source(t, target, copied, 1)
+	source := genericJsonSource(t, target, copied, 1)
 	input.Close()
 	for _, copied := range copies {
-		scaleP21SW248AssertValue(t, repo, copied, oracle, wire)
+		assertValue(t, repo, copied, oracle, wire)
 	}
-	scaleP21SW248Install(t, repo, source)
+	genericJsonInstall(t, repo, source)
 	pinned, err := repo.retainMetadataLogicalSource(t.Context(), "sw248")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer pinned.Release()
-	nextBuilder := scaleP21SW248Builder(t)
-	nextNode := scaleP21SW248Frame(t, repo, nextBuilder, typ, `{"generation":"next"}`)
-	next := scaleP21SW248Source(t, nextBuilder, nextNode, 2)
-	scaleP21SW248Install(t, repo, next)
+	nextBuilder := genericJsonBuilder(t)
+	nextNode := genericJSONFrame(t, repo, nextBuilder, typ, `{"generation":"next"}`)
+	next := genericJsonSource(t, nextBuilder, nextNode, 2)
+	genericJsonInstall(t, repo, next)
 	index, _, _ := metadataLogicalField("settings")
-	scaleP21SW248AssertValue(t, repo, pinned.fields[index], oracle, wire)
+	assertValue(t, repo, pinned.fields[index], oracle, wire)
 	firstOwner := &ResourceRead{store: repo}
 	if err := firstOwner.reserve(t.Context(), pinned.fields[index].cost); err != nil {
 		t.Fatal(err)
@@ -456,7 +456,7 @@ func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
 	first.Interface().(map[string]any)["mutated"] = true
 	first = reflect.Value{}
 	firstOwner.Close()
-	scaleP21SW248AssertValue(t, repo, pinned.fields[index], oracle, wire)
+	assertValue(t, repo, pinned.fields[index], oracle, wire)
 	generation := pinned
 	if err := generation.Retain(); err != nil {
 		t.Fatal(err)
@@ -475,10 +475,10 @@ func TestScaleP21SW248GenericJSONCopyImportInstall(t *testing.T) {
 			t.Fatal("generic copy retained a chain of prior source storage owners")
 		}
 	}
-	scaleP21SW248AssertValue(t, repo, generation.fields[index], oracle, wire)
+	assertValue(t, repo, generation.fields[index], oracle, wire)
 }
 
-func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
+func TestGenericJSONNestedLookupAndOverlay(t *testing.T) {
 	deep := func(body string) string {
 		return strings.Repeat(`{"next":[`, 256) + body + strings.Repeat(`]}`, 256)
 	}
@@ -489,11 +489,11 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 		{"typed-terminal-prefix", `{"root":` + deep(`{"id":"team_resource_sw248","teamId":"allowed"}`) + `}`, "team_resource_sw248"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			repo := scaleP21SW248Repo(t)
-			builder := scaleP21SW248Builder(t)
-			node := scaleP21SW248Frame(t, repo, builder, reflect.TypeFor[map[string]any](), test.raw)
-			source := scaleP21SW248Source(t, builder, node, 1)
-			settings, _ := scaleP21SW248Oracle(t, reflect.TypeFor[map[string]any](), test.raw)
+			repo := genericJSONRepo(t)
+			builder := genericJsonBuilder(t)
+			node := genericJSONFrame(t, repo, builder, reflect.TypeFor[map[string]any](), test.raw)
+			source := genericJsonSource(t, builder, node, 1)
+			settings, _ := genericJsonOracle(t, reflect.TypeFor[map[string]any](), test.raw)
 			data := domain.Bootstrap{Settings: settings.Interface().(map[string]any)}
 			owner := &ResourceRead{store: repo}
 			defer owner.Close()
@@ -513,14 +513,14 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(got, expectedJSON) {
 				t.Fatal("typed nested aggregate/own-ID/prefix precedence changed", err)
 			}
-			scaleP21SW248Install(t, repo, source)
+			genericJsonInstall(t, repo, source)
 			read, found, err := repo.BeginWebhookAggregateRead(t.Context(), "sw248")
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
 			defer read.Close()
 			for _, teams := range [][]string{nil, {"allowed"}, {"hidden"}, {"allowed", "hidden"}} {
-				want := scaleP21WebhookJSONLiteral(t, data, test.target, teams)
+				want := scaleWebhookJSONLiteral(t, data, test.target, teams)
 				got, err := read.TeamsAllowed(t.Context(), test.target, teams)
 				if err != nil || got != want {
 					t.Fatal("JSON-view nested own-ID/team precedence changed", teams, got, want, err)
@@ -529,11 +529,11 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 		})
 	}
 	t.Run("selected-point-before-retained-subtree", func(t *testing.T) {
-		repo := scaleP21SW248Repo(t)
-		builder := scaleP21SW248Builder(t)
+		repo := genericJSONRepo(t)
+		builder := genericJsonBuilder(t)
 		raw := `{"slot":{"id":"sw248-overlay","teamId":"hidden","nested":{"id":"sw248-overlay","teamId":"hidden"}},"unrelated":` + deep(`{"id":"different","teamId":"hidden"}`) + `}`
-		node := scaleP21SW248Frame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
-		source := scaleP21SW248Source(t, builder, node, 1)
+		node := genericJSONFrame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
+		source := genericJsonSource(t, builder, node, 1)
 		selected := domain.Bootstrap{Settings: map[string]any{
 			"slot": map[string]any{"id": "sw248-overlay", "teamId": "allowed", "nested": map[string]any{"id": "sw248-overlay", "teamId": "hidden"}},
 		}}
@@ -548,14 +548,14 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(got, selected.Settings["slot"]) {
 			t.Fatal("selected overlay lost own-ID precedence or searched the retained replaced record", err)
 		}
-		old, _ := scaleP21SW248Oracle(t, reflect.TypeFor[map[string]any](), raw)
+		old, _ := genericJsonOracle(t, reflect.TypeFor[map[string]any](), raw)
 		before := domain.Bootstrap{Settings: map[string]any{"slot": old.Interface().(map[string]any)["slot"]}}
 		fork, err := source.Fork(t.Context(), before, selected, scope, copyStamp{workspaceID: "sw248", revision: 2})
 		if err != nil {
 			t.Fatal("point overlay could not copy unrelated deep generic leaves", err)
 		}
 		defer fork.Release()
-		scaleP21SW248Install(t, repo, fork)
+		genericJsonInstall(t, repo, fork)
 		read, found, err := repo.BeginWebhookAggregateRead(t.Context(), "sw248")
 		if err != nil || !found {
 			t.Fatal(found, err)
@@ -570,21 +570,21 @@ func TestScaleP21SW248GenericJSONNestedLookupAndOverlay(t *testing.T) {
 	})
 }
 
-type scaleP21SW248ReaderAt func([]byte, int64) (int, error)
+type genericJsonReaderAt func([]byte, int64) (int, error)
 
-func (read scaleP21SW248ReaderAt) ReadAt(dst []byte, offset int64) (int, error) {
+func (read genericJsonReaderAt) ReadAt(dst []byte, offset int64) (int, error) {
 	return read(dst, offset)
 }
 
-type scaleP21SW248Writer func([]byte) (int, error)
+type genericJsonWriter func([]byte) (int, error)
 
-func (write scaleP21SW248Writer) Write(data []byte) (int, error) { return write(data) }
+func (write genericJsonWriter) Write(data []byte) (int, error) { return write(data) }
 
-func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
+func TestGenericJSONCancellationAndDenial(t *testing.T) {
 	for _, moment := range []string{"before", "during-input"} {
 		t.Run(moment, func(t *testing.T) {
-			repo := scaleP21SW248Repo(t)
-			builder := scaleP21SW248Builder(t)
+			repo := genericJSONRepo(t)
+			builder := genericJsonBuilder(t)
 			prior, err := builder.writeValue(reflect.ValueOf("prior"), 0, false)
 			if err != nil {
 				t.Fatal(err)
@@ -594,7 +594,7 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 			raw := []byte(`{"deep":` + strings.Repeat(`{"next":[`, 256) + `"tail"` + strings.Repeat(`]}`, 256) + `}`)
 			reader := bytes.NewReader(raw)
 			calls := 0
-			input := scaleP21SW248ReaderAt(func(dst []byte, offset int64) (int, error) {
+			input := genericJsonReaderAt(func(dst []byte, offset int64) (int, error) {
 				calls++
 				n, err := reader.ReadAt(dst, offset)
 				cancel()
@@ -617,9 +617,9 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 		})
 	}
 	t.Run("traversal-and-size-cap", func(t *testing.T) {
-		repo := scaleP21SW248Repo(t)
-		builder := scaleP21SW248Builder(t)
-		node := scaleP21SW248Frame(t, repo, builder, reflect.TypeFor[map[string]any](), `{"a":{"x":1},"b":{"x":2}}`)
+		repo := genericJSONRepo(t)
+		builder := genericJsonBuilder(t)
+		node := genericJSONFrame(t, repo, builder, reflect.TypeFor[map[string]any](), `{"a":{"x":1},"b":{"x":2}}`)
 		ctx, cancel := context.WithCancel(t.Context())
 		visits := 0
 		err := node.MapEntries(ctx, func(_, _ metadataLogicalNode) error {
@@ -638,8 +638,8 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 		}
 	})
 	t.Run("constructor-budget-denial", func(t *testing.T) {
-		repo := scaleP21SW248Repo(t)
-		builder := scaleP21SW248Builder(t)
+		repo := genericJSONRepo(t)
+		builder := genericJsonBuilder(t)
 		ctx, release, err := repo.tryAdmitAdditionalMetadataWork(t.Context(), 4096)
 		if err != nil {
 			t.Fatal(err)
@@ -656,15 +656,15 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 		}
 	})
 	t.Run("stream-output", func(t *testing.T) {
-		repo := scaleP21SW248Repo(t)
-		builder := scaleP21SW248Builder(t)
+		repo := genericJSONRepo(t)
+		builder := genericJsonBuilder(t)
 		raw := `{"body":"` + strings.Repeat("body", 64<<10) + `"}`
-		node := scaleP21SW248Frame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
+		node := genericJSONFrame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		writes := 0
 		owner := &ResourceRead{store: repo}
-		err := legacyProjectStreamNode(ctx, owner, node, scaleP21SW248Writer(func(data []byte) (int, error) {
+		err := legacyProjectStreamNode(ctx, owner, node, genericJsonWriter(func(data []byte) (int, error) {
 			writes++
 			cancel()
 			return len(data), nil
@@ -675,9 +675,9 @@ func TestScaleP21SW248GenericJSONCancellationAndDenial(t *testing.T) {
 		}
 	})
 	t.Run("invalid-root-and-json", func(t *testing.T) {
-		repo := scaleP21SW248Repo(t)
+		repo := genericJSONRepo(t)
 		for _, raw := range []string{`[]`, `true`, `{"x":`, `{"n":1e400}`} {
-			builder := scaleP21SW248Builder(t)
+			builder := genericJsonBuilder(t)
 			var oracle map[string]any
 			if json.Unmarshal([]byte(raw), &oracle) == nil {
 				t.Fatal("invalid generic map fixture was accepted by the standard decoder")

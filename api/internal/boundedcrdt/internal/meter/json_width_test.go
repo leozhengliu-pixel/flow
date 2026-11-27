@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21JSONRetainedStringWidthMatchesStandardDecoder(t *testing.T) {
+func TestScaleJSONRetainedStringWidthMatchesStandardDecoder(t *testing.T) {
 	cases := [][]byte{
 		[]byte(`""`), []byte(`"ASCII"`), []byte(`"\u0000"`),
 		[]byte(`"\u003c\u003e\u0026"`), []byte(`"\u07ff\u0800"`),
@@ -40,7 +40,7 @@ func TestScaleP21JSONRetainedStringWidthMatchesStandardDecoder(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONTemporaryScratchDoesNotChangeIterationQuota(t *testing.T) {
+func TestScaleJSONTemporaryScratchDoesNotChangeIterationQuota(t *testing.T) {
 	exhausted := errors.New("step quota remains bounded")
 	used := uint64(0)
 	m, err := NewMeter(context.Background(), func(size uint64) (func(), error) {

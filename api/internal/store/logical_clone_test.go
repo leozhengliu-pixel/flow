@@ -17,17 +17,17 @@ import (
 
 // This fixture supplies callback-native dropped fields that ordinary persisted
 // capture correctly zeros already. Its bodies still use stored typed frames.
-type scaleP21SW96NativeView struct {
+type nativeView struct {
 	base  metadataLogicalNode
 	value reflect.Value
 }
 
-func (n scaleP21SW96NativeView) nodeType() reflect.Type           { return n.base.typ }
-func (n scaleP21SW96NativeView) logicalBase() metadataLogicalNode { return n.base }
-func (n scaleP21SW96NativeView) nodeValue(context.Context, int) (reflect.Value, error) {
+func (n nativeView) nodeType() reflect.Type           { return n.base.typ }
+func (n nativeView) logicalBase() metadataLogicalNode { return n.base }
+func (n nativeView) nodeValue(context.Context, int) (reflect.Value, error) {
 	return reflect.Value{}, ErrBoundedMetadataCoverage
 }
-func (n scaleP21SW96NativeView) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+func (n nativeView) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	return n.base.Children(ctx, func(key reflect.Value, child metadataLogicalNode) error {
 		var native reflect.Value
 		switch n.value.Kind() {
@@ -47,10 +47,10 @@ func (n scaleP21SW96NativeView) nodeChildren(ctx context.Context, visit func(ref
 		default:
 			return ErrMetadataRecordQuery
 		}
-		return visit(key, scaleP21SW96NativeNode(child, native))
+		return visit(key, nativeNode(child, native))
 	})
 }
-func (n scaleP21SW96NativeView) logicalMapEntries(ctx context.Context, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
+func (n nativeView) logicalMapEntries(ctx context.Context, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
 	return n.base.MapEntries(ctx, func(key, child metadataLogicalNode) error {
 		nativeKey, err := key.Value(ctx, 2<<20)
 		if err != nil {
@@ -60,11 +60,11 @@ func (n scaleP21SW96NativeView) logicalMapEntries(ctx context.Context, visit fun
 		if !native.IsValid() {
 			return ErrMetadataRecordQuery
 		}
-		return visit(metadataAggregateStoredNode{value: key}, scaleP21SW96NativeNode(child, native))
+		return visit(metadataAggregateStoredNode{value: key}, nativeNode(child, native))
 	})
 }
 
-func scaleP21SW96NativeNode(base metadataLogicalNode, value reflect.Value) metadataAggregateNode {
+func nativeNode(base metadataLogicalNode, value reflect.Value) metadataAggregateNode {
 	if value.Type() == reflect.TypeFor[time.Time]() {
 		return metadataAggregateStoredNode{value: base}
 	}
@@ -73,13 +73,13 @@ func scaleP21SW96NativeNode(base metadataLogicalNode, value reflect.Value) metad
 		if value.Kind() == reflect.Slice && value.Type().Elem().Kind() == reflect.Uint8 {
 			return metadataAggregateStoredNode{value: base}
 		}
-		return scaleP21SW96NativeView{base: base, value: value}
+		return nativeView{base: base, value: value}
 	default:
 		return metadataAggregateStoredNode{value: base}
 	}
 }
 
-func scaleP21SW96Source(t *testing.T, data domain.Bootstrap) *metadataLogicalSource {
+func logicalCloneSource(t *testing.T, data domain.Bootstrap) *metadataLogicalSource {
 	t.Helper()
 	base, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
 	if err != nil {
@@ -92,7 +92,7 @@ func scaleP21SW96Source(t *testing.T, data domain.Bootstrap) *metadataLogicalSou
 		if !found {
 			return nil, false, ErrMetadataRecordQuery
 		}
-		return scaleP21SW96NativeNode(node, value.Field(index)), true, nil
+		return nativeNode(node, value.Field(index)), true, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func scaleP21SW96Source(t *testing.T, data domain.Bootstrap) *metadataLogicalSou
 	return source
 }
 
-func scaleP21SW96Value(t *testing.T, source *metadataLogicalSource) domain.Bootstrap {
+func logicalCloneValue(t *testing.T, source *metadataLogicalSource) domain.Bootstrap {
 	t.Helper()
 	var data domain.Bootstrap
 	target := reflect.ValueOf(&data).Elem()
@@ -126,7 +126,7 @@ func scaleP21SW96Value(t *testing.T, source *metadataLogicalSource) domain.Boots
 	return data
 }
 
-func TestScaleP21SW96LogicalCloneLiteral(t *testing.T) {
+func TestLogicalCloneLiteral(t *testing.T) {
 	type key struct {
 		ID      string
 		Ignored string `json:"-"`
@@ -165,8 +165,8 @@ func TestScaleP21SW96LogicalCloneLiteral(t *testing.T) {
 		},
 	}
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-	source := scaleP21SW96Source(t, data)
-	before := scaleP21SW96Value(t, source)
+	source := logicalCloneSource(t, data)
+	before := logicalCloneValue(t, source)
 	if !reflect.DeepEqual(before, data) {
 		t.Fatal("native fixture lost a dropped field before the clone boundary")
 	}
@@ -176,7 +176,7 @@ func TestScaleP21SW96LogicalCloneLiteral(t *testing.T) {
 		t.Fatal(err)
 	}
 	source.Release()
-	got := scaleP21SW96Value(t, cloned)
+	got := logicalCloneValue(t, cloned)
 	want := cloneBootstrap(data)
 	if !reflect.DeepEqual(got, want) || got.Viewer.Via != nil || got.Users[0].Via != nil {
 		cloned.Release()
@@ -192,7 +192,7 @@ func TestScaleP21SW96LogicalCloneLiteral(t *testing.T) {
 	}
 	got.Documents[0].ContentData["user"] = "caller mutation"
 	got.Users[0].Name = "caller mutation"
-	again := scaleP21SW96Value(t, cloned)
+	again := logicalCloneValue(t, cloned)
 	if !reflect.DeepEqual(again, want) {
 		cloned.Release()
 		t.Fatal("materialized clone aliased another selection")
@@ -203,7 +203,7 @@ func TestScaleP21SW96LogicalCloneLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW96LogicalCloneNativeTimeCoverage(t *testing.T) {
+func TestLogicalCloneNativeTimeCoverage(t *testing.T) {
 	type droppedTime struct {
 		At   time.Time `json:"-"`
 		Kept string
@@ -217,7 +217,7 @@ func TestScaleP21SW96LogicalCloneNativeTimeCoverage(t *testing.T) {
 		"user":         domain.User{ID: "native", Via: via},
 		"dropped-time": droppedTime{At: unknown, Kept: "retained"},
 	}}
-	source := scaleP21SW96Source(t, data)
+	source := logicalCloneSource(t, data)
 	defer source.Release()
 	index, _, _ := metadataLogicalField("settings")
 	before := source.fields[index]
@@ -263,21 +263,21 @@ func TestScaleP21SW96LogicalCloneNativeTimeCoverage(t *testing.T) {
 	}
 }
 
-type scaleP21SW96CancelContext struct {
+type logicalCloneCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	calls  atomic.Int64
 	after  int64
 }
 
-func (ctx *scaleP21SW96CancelContext) Err() error {
+func (ctx *logicalCloneCancelContext) Err() error {
 	if ctx.calls.Add(1) >= ctx.after {
 		ctx.cancel()
 	}
 	return ctx.Context.Err()
 }
 
-func TestScaleP21SW96LogicalCloneCancellationAndLargeBodies(t *testing.T) {
+func TestLogicalCloneCancellationAndLargeBodies(t *testing.T) {
 	var retainedDescriptors int64
 	for _, scale := range []int{1, 10} {
 		body := strings.Repeat("large native body\x00", scale*100000)
@@ -291,7 +291,7 @@ func TestScaleP21SW96LogicalCloneCancellationAndLargeBodies(t *testing.T) {
 			},
 		}
 		disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-		source := scaleP21SW96Source(t, data)
+		source := logicalCloneSource(t, data)
 		beforeDisk, beforeDescriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
@@ -301,7 +301,7 @@ func TestScaleP21SW96LogicalCloneCancellationAndLargeBodies(t *testing.T) {
 			t.Fatal("pre-canceled clone allocated or retained a source", err)
 		}
 		parent, cancel := context.WithCancel(t.Context())
-		mid := &scaleP21SW96CancelContext{Context: parent, cancel: cancel, after: 100}
+		mid := &logicalCloneCancelContext{Context: parent, cancel: cancel, after: 100}
 		if clone, err := cloneMetadataLogicalSnapshot(mid, source); clone != nil || !errors.Is(err, context.Canceled) ||
 			metadataLogicalDiskUsed.Load() != beforeDisk || metadataLogicalDescriptorsUsed.Load() != beforeDescriptors {
 			cancel()
@@ -378,10 +378,10 @@ func TestScaleP21SW96LogicalCloneCancellationAndLargeBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW96LogicalCloneWarmReload(t *testing.T) {
+func TestLogicalCloneWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -408,13 +408,13 @@ func TestScaleP21SW96LogicalCloneWarmReload(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := cloneBootstrap(scaleP21SW96Value(t, image.Source()))
+		want := cloneBootstrap(logicalCloneValue(t, image.Source()))
 		cloned, err := cloneMetadataLogicalSnapshot(t.Context(), image.Source())
 		image.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := scaleP21SW96Value(t, cloned)
+		got := logicalCloneValue(t, cloned)
 		cloned.Release()
 		if !reflect.DeepEqual(got, want) || got.Viewer.Via != nil || view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("warm/reloaded logical clone changed literal values or leaked")
@@ -426,7 +426,7 @@ func TestScaleP21SW96LogicalCloneWarmReload(t *testing.T) {
 // rewrite: a second clone of the same generation reads none of its large
 // collections again and decodes the same, and a write over a frame drops what
 // was remembered of it.
-func TestScaleP21LogicalCloneCheckMemo(t *testing.T) {
+func TestScaleLogicalCloneCheckMemo(t *testing.T) {
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "memo", URLKey: "memo", Name: "Memo"}}
 	for i := range 400 {
 		lead := domain.User{ID: "user-" + strings.Repeat("u", i%5), Name: "Lead"}

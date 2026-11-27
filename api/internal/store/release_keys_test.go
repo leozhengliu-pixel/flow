@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW25ReleaseKeyScalars(t *testing.T) {
+func TestReleaseKeyScalars(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	now := time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)
 	before, after := now.Add(-time.Nanosecond), now.Add(time.Nanosecond)

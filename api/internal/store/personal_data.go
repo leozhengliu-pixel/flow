@@ -598,14 +598,14 @@ func (s *SQLiteStore) ScrubPersonCopies(ctx context.Context, workspaceKey, userI
 			budget.mu.Lock()
 			// ReloadWorkspace borrows this same caller lease after commit:
 			// it needs the resident policy allowance plus its 2 MiB parser.
-			insufficient := parent.live && parent.bytes < metadataPolicyBytes+scaleP21SW21ScrubFixedWork
+			insufficient := parent.live && parent.bytes < metadataPolicyBytes+scrubFixedWork
 			budget.mu.Unlock()
 			if insufficient {
 				return 0, ErrMetadataWorkBudget
 			}
 		}
 		var err error
-		writeCtx, release, err = s.admitMetadataWork(ctx, scaleP21SW21ScrubFixedWork)
+		writeCtx, release, err = s.admitMetadataWork(ctx, scrubFixedWork)
 		if err != nil {
 			return 0, err
 		}

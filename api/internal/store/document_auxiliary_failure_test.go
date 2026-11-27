@@ -11,11 +11,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW129DocumentAuxiliaryFailureAfterCapture(t *testing.T) {
+func TestDocumentAuxiliaryFailureAfterCapture(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, ref := f.data.Workspace.URLKey, idgen.New("sw129-late-")
 	app, err := f.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{
 		ClientID: idgen.New("sw129-client-"), Name: "Auxiliary directory app",

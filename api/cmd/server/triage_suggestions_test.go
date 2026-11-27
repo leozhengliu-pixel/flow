@@ -15,8 +15,8 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21TriageFixture struct {
-	scaleP21M2Fixture
+type scaleTriageFixture struct {
+	policyDifferentialFixture
 	reloaded              *store.SQLiteStore
 	private, child        string
 	triage, visible, gone domain.Issue
@@ -28,14 +28,14 @@ type scaleP21TriageFixture struct {
 // private, sub-team, mixed, unscoped, archived and missing projects;
 // visible, private, inherited and missing teams; visible, granted-private and
 // missing issues; inactive states, other issues' rows and duplicate IDs.
-func scaleP21TriageSetup(t *testing.T, repo *store.SQLiteStore) scaleP21TriageFixture {
+func scaleTriageSetup(t *testing.T, repo *store.SQLiteStore) scaleTriageFixture {
 	t.Helper()
-	return scaleP21TriageSeed(t, scaleP21M2Setup(t, repo))
+	return scaleTriageSeed(t, setupPolicyDifferential(t, repo))
 }
 
-func scaleP21TriageSeed(t *testing.T, m2 scaleP21M2Fixture) scaleP21TriageFixture {
+func scaleTriageSeed(t *testing.T, m2 policyDifferentialFixture) scaleTriageFixture {
 	t.Helper()
-	f := scaleP21TriageFixture{scaleP21M2Fixture: m2}
+	f := scaleTriageFixture{policyDifferentialFixture: m2}
 	repo := m2.repository
 	workspace := f.data.Workspace.URLKey
 	triage := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
@@ -167,7 +167,7 @@ func scaleP21TriageSeed(t *testing.T, m2 scaleP21M2Fixture) scaleP21TriageFixtur
 	return f
 }
 
-func (f scaleP21TriageFixture) services(agent bool) []*server {
+func (f scaleTriageFixture) services(agent bool) []*server {
 	services := []*server{{store: f.repository}, {store: f.probe}, {store: f.reloaded}}
 	for _, service := range services {
 		service.agent.Enabled = agent
@@ -175,12 +175,12 @@ func (f scaleP21TriageFixture) services(agent bool) []*server {
 	return services
 }
 
-func TestScaleP21TriageListSuggestionsDifferential(t *testing.T) {
+func TestScaleTriageListSuggestionsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21TriageSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := scaleTriageSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
 		cases, distinct, statuses := 0, map[string]bool{}, map[int]bool{}
 		call := func(t *testing.T, services []*server, prepare func() *http.Request, id string) {
@@ -268,12 +268,12 @@ func TestScaleP21TriageListSuggestionsDifferential(t *testing.T) {
 // The primitives are compared directly with the literal accessors they
 // replace: all states, duplicates and order of one issue's suggestions, and
 // the paged projection's team rows and project filter for every principal.
-func TestScaleP21TriageSuggestionPrimitivesDifferential(t *testing.T) {
+func TestScaleTriageSuggestionPrimitivesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21TriageSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := scaleTriageSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
 		legacy, ok := repo.WorkspaceMetadata(workspace)
 		if !ok {
@@ -290,7 +290,7 @@ func TestScaleP21TriageSuggestionPrimitivesDifferential(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if a, b := scaleP21TriageJSON(t, want), scaleP21TriageJSON(t, read.Suggestions); a != b {
+				if a, b := scaleTriageJSON(t, want), scaleTriageJSON(t, read.Suggestions); a != b {
 					t.Fatalf("suggestions for %q changed:\nlegacy:  %s\nbounded: %s", id, a, b)
 				}
 				if id == f.triage.ID && len(read.Suggestions) < 20 {
@@ -360,7 +360,7 @@ func TestScaleP21TriageSuggestionPrimitivesDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21TriageJSON(t *testing.T, value any) string {
+func scaleTriageJSON(t *testing.T, value any) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -373,12 +373,12 @@ func scaleP21TriageJSON(t *testing.T, value any) string {
 // triage scorers read, for every principal and credential, including an
 // application key without initiative scope; the AI prompt and the preview
 // response built from it are byte-identical.
-func TestScaleP21TriageProjectedWorkspaceDifferential(t *testing.T) {
+func TestScaleTriageProjectedWorkspaceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21TriageSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := scaleTriageSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
 		at := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.triage_projection_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -420,7 +420,7 @@ func TestScaleP21TriageProjectedWorkspaceDifferential(t *testing.T) {
 		}
 		views = append(views, reloaded)
 		pick := func(data domain.Bootstrap) string {
-			return scaleP21TriageJSON(t, map[string]any{
+			return scaleTriageJSON(t, map[string]any{
 				"viewer": data.Viewer, "role": data.ViewerRole, "teams": data.Teams, "teamSettings": data.TeamSettings,
 				"workspaceSettings": data.WorkspaceSettings, "users": data.Users, "members": data.Members, "teamMembers": data.TeamMembers,
 				"projects": data.Projects, "labels": data.Labels, "labelGroups": data.LabelGroups, "initiatives": data.Initiatives,
@@ -447,11 +447,11 @@ func TestScaleP21TriageProjectedWorkspaceDifferential(t *testing.T) {
 				}
 				if err == nil {
 					if a, b := pick(legacy), pick(bounded); a != b {
-						t.Fatalf("projected workspace changed: %s", scaleP21M2Diff(a, b))
+						t.Fatalf("projected workspace changed: %s", policyFirstDifference(a, b))
 					}
 					left, right := buildTriageAIContext(&legacy, issue, pool), buildTriageAIContext(&bounded, issue, pool)
 					if a, b := triageAIPrompt(&left), triageAIPrompt(&right); a != b {
-						t.Fatalf("triage AI prompt changed: %s", scaleP21M2Diff(a, b))
+						t.Fatalf("triage AI prompt changed: %s", policyFirstDifference(a, b))
 					}
 				}
 				release()

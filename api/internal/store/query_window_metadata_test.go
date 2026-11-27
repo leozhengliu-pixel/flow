@@ -8,8 +8,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
-	for driver, repo := range scaleP03Stores(t) {
+func TestScaleSummaryInputsPreserveCanonicalBodies(t *testing.T) {
+	for driver, repo := range resourceAccessScaleStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			workspace := repo.data.Workspace.URLKey
 			body := strings.Repeat("p19-body", 64<<10)
@@ -22,7 +22,7 @@ func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, unfiltered := range []bool{false, true} {
-				data, err := repo.ScaleP19Metadata(scaleP21ResourceOutputContext(t), workspace, repo.data.Viewer.ID, unfiltered)
+				data, err := repo.ScaleMetadata(scaleResourceOutputContext(t), workspace, repo.data.Viewer.ID, unfiltered)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -44,7 +44,7 @@ func TestScaleP19SummaryInputsPreserveCanonicalBodies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			project, err := repo.AuthorizedProjectRecord(scaleP21ResourceOutputContext(t), access, "p19-project")
+			project, err := repo.AuthorizedProjectRecord(scaleResourceOutputContext(t), access, "p19-project")
 			if err != nil || project.Description != body {
 				t.Fatal("summary read modified canonical detail", err)
 			}

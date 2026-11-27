@@ -10,10 +10,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW17StartupMigrationInstalledSource(t *testing.T) {
+func TestStartupMigrationInstalledSource(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	cycleID := "sw17-startup-source-cycle"
 	ctx := WithMetadataFields(t.Context(), "cycles", "cycleSettings", "userSettings")

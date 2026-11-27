@@ -61,7 +61,7 @@ func (s *SQLiteStore) BeginAccountRead(ctx context.Context) (_ *AccountRead, err
 	if err = scratch.reserve(ctx, 4<<20); err != nil {
 		return nil, err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (s *SQLiteStore) BeginAccountRead(ctx context.Context) (_ *AccountRead, err
 	return r, nil
 }
 
-func (s *SQLiteStore) stageAccountCounts(ctx context.Context, stage *sw26MigrationStage, scratch *ResourceRead) (bool, error) {
+func (s *SQLiteStore) stageAccountCounts(ctx context.Context, stage *migrationStage, scratch *ResourceRead) (bool, error) {
 	// The count's decimal text, as SQLite's CAST(total AS BLOB) measures it;
 	// PostgreSQL has no OCTET_LENGTH(bigint), which failed the scan and staged
 	// no counts there.

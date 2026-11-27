@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW181RoleInputs(data domain.Bootstrap, document domain.Document) domain.Bootstrap {
+func roleInputs(data domain.Bootstrap, document domain.Document) domain.Bootstrap {
 	result := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: data.Workspace.ID, URLKey: data.Workspace.URLKey},
 		Viewer: domain.User{
@@ -69,11 +69,11 @@ func scaleP21SW181RoleInputs(data domain.Bootstrap, document domain.Document) do
 	return result
 }
 
-func TestScaleP21SW181CollaborationBorrowedSnapshotDropsTransientTeams(t *testing.T) {
+func TestCollaborationBorrowedSnapshotDropsTransientTeams(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("sw181-")
 	teamID, documentID, collaborationID := prefix+"team", prefix+"document", prefix+"generation"
@@ -127,7 +127,7 @@ func TestScaleP21SW181CollaborationBorrowedSnapshotDropsTransientTeams(t *testin
 		reload bool
 	}{{"warm", false}, {"reloaded", true}} {
 		t.Run(mode.name, func(t *testing.T) {
-			view := scaleP21IssueAuthorizationView(t, f, mode.reload)
+			view := scaleIssueAuthorizationView(t, f, mode.reload)
 			caller, found := f.WorkspaceMetadata(workspace)
 			if !found {
 				t.Fatal("owned caller snapshot missing")
@@ -166,7 +166,7 @@ func TestScaleP21SW181CollaborationBorrowedSnapshotDropsTransientTeams(t *testin
 			if len(read.Data.ViewerTeamIDs) != 0 {
 				t.Fatal("bounded collaboration leaked transient caller memberships", read.Data.ViewerTeamIDs)
 			}
-			want, got := scaleP21SW181RoleInputs(legacy, document), scaleP21SW181RoleInputs(read.Data, read.Document)
+			want, got := roleInputs(legacy, document), roleInputs(read.Data, read.Document)
 			if !reflect.DeepEqual(want, got) {
 				t.Fatalf("literal documentRole inputs differ:\nlegacy=%#v\nbounded=%#v", want, got)
 			}

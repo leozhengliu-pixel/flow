@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21MemberDirectoryExpected(data domain.Bootstrap, members []domain.WorkspaceMember) (map[string]domain.User, map[string]domain.Team) {
+func scaleMemberDirectoryExpected(data domain.Bootstrap, members []domain.WorkspaceMember) (map[string]domain.User, map[string]domain.Team) {
 	users, teams := map[string]domain.User{}, map[string]domain.Team{}
 	for _, user := range data.Users {
 		users[user.ID] = domain.User{ID: user.ID, Name: user.Name, DisplayName: user.DisplayName, Email: user.Email}
@@ -29,7 +29,7 @@ func scaleP21MemberDirectoryExpected(data domain.Bootstrap, members []domain.Wor
 	return users, teams
 }
 
-func TestScaleP21HotMemberDirectoryInstalledScalars(t *testing.T) {
+func TestScaleHotMemberDirectoryInstalledScalars(t *testing.T) {
 	values := map[string]domain.Bootstrap{"physical\x00key": {
 		Workspace: domain.Workspace{ID: "workspace\x00id", URLKey: "logical"},
 		Users: []domain.User{
@@ -45,11 +45,11 @@ func TestScaleP21HotMemberDirectoryInstalledScalars(t *testing.T) {
 		Projects: []domain.Project{{ID: "ignored", Description: strings.Repeat("unrelated ", 500000)}},
 	}}
 	literal := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical\x00key"}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = "physical\x00key"
 	for _, key := range []string{"physical\x00key", ""} {
 		want, found := literal.WorkspaceMetadataFields(key, "users", "teams")
-		users, teams := scaleP21MemberDirectoryExpected(want, nil)
+		users, teams := scaleMemberDirectoryExpected(want, nil)
 		read, gotFound, err := view.BeginMemberDirectoryRead(t.Context(), key, false)
 		if err != nil || found != gotFound || !reflect.DeepEqual(users, read.Users) || !reflect.DeepEqual(teams, read.Teams) {
 			t.Fatal("installed scalar directory changed", key, gotFound, err)
@@ -82,7 +82,7 @@ func TestScaleP21HotMemberDirectoryInstalledScalars(t *testing.T) {
 	if view.metadataResidency.work.used != 0 {
 		t.Fatal("failed directory read leaked admission")
 	}
-	oversized := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"large": {
+	oversized := scaleHotLogoStore(t, map[string]domain.Bootstrap{"large": {
 		Users: []domain.User{{ID: "large", DisplayName: strings.Repeat("x", 3<<20)}},
 	}})
 	if _, _, err := oversized.BeginMemberDirectoryRead(t.Context(), "large", false); !errors.Is(err, ErrMetadataWorkBudget) {
@@ -93,7 +93,7 @@ func TestScaleP21HotMemberDirectoryInstalledScalars(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotMemberDirectoryInstallationProjection(t *testing.T) {
+func TestScaleHotMemberDirectoryInstallationProjection(t *testing.T) {
 	for _, raw := range []string{
 		`null`,
 		`{}`,
@@ -131,10 +131,10 @@ func TestScaleP21HotMemberDirectoryInstallationProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotMemberDirectoryMembershipOverlay(t *testing.T) {
+func TestScaleHotMemberDirectoryMembershipOverlay(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	f.db.SetMaxOpenConns(1)
 	workspace := f.data.Workspace.URLKey
 	ctx := ContextWithActor(t.Context(), f.data.Viewer)
@@ -208,7 +208,7 @@ func TestScaleP21HotMemberDirectoryMembershipOverlay(t *testing.T) {
 		if fixture.malformed != (listErr != nil) {
 			t.Fatal("fixture lost all-or-none member error", listErr)
 		}
-		users, teams := scaleP21MemberDirectoryExpected(data, members)
+		users, teams := scaleMemberDirectoryExpected(data, members)
 		var queries []string
 		readCtx := WithSQLStatementObserver(t.Context(), func(query string) { queries = append(queries, query) })
 		read, found, err := view.BeginMemberDirectoryRead(readCtx, workspace, true)

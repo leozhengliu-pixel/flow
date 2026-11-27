@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M2IdentityDifferential(t *testing.T) {
+func TestScaleIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_m2.auth_policy", "", nil, func(data *domain.Bootstrap) error {
 			data.IdentityProviders = []domain.IdentityProvider{{ID: "m2-idp", Enabled: true, Enforced: true, Issuer: "https://idp.example.test"}}
@@ -44,10 +44,10 @@ func TestScaleP21M2IdentityDifferential(t *testing.T) {
 					}
 					allowed := s.authorizeAuthenticationPolicy(w, r, data, role)
 					binding := domain.ChatBinding{TeamID: f.public, Authorization: &domain.ChatBindingAuthorization{UserID: user.ID, PrivateTeam: true}}
-					outcomes = append(outcomes, []any{allowed, w.Code, scaleP21M2Response(t, w, false), s.codingMemberRoleOf(workspace, user.ID), s.chatBindingAuthorizerValid(t.Context(), workspace, binding), s.scimRole(workspace, "developer"), s.scimRole(workspace, "invalid"), scaleP21M2JSON(t, s.scimWorkspaceSettings(workspace), false)})
+					outcomes = append(outcomes, []any{allowed, w.Code, policyDifferentialResponse(t, w, false), s.codingMemberRoleOf(workspace, user.ID), s.chatBindingAuthorizerValid(t.Context(), workspace, binding), s.scimRole(workspace, "developer"), s.scimRole(workspace, "invalid"), normalizePolicyJSON(t, s.scimWorkspaceSettings(workspace), false)})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("identity differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("identity differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})
@@ -74,7 +74,7 @@ func TestScaleP21M2IdentityDifferential(t *testing.T) {
 			}
 			entry := entries[0]
 			entry.ID, entry.CreatedAt, entry.Seq, entry.Hash = "", time.Time{}, 0, ""
-			audits = append(audits, scaleP21M2JSON(t, entry, false))
+			audits = append(audits, normalizePolicyJSON(t, entry, false))
 			if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +88,7 @@ func TestScaleP21M2IdentityDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21M2CodingBootstrapIsRuntimeProtocol(t *testing.T) {
+func TestScaleCodingBootstrapIsRuntimeProtocol(t *testing.T) {
 	w := httptest.NewRecorder()
 	(&server{}).codingRuntimeBootstrap(w, httptest.NewRequest(http.MethodGet, "/internal/coding-runtime/bootstrap", nil))
 	if w.Code != http.StatusNotFound {

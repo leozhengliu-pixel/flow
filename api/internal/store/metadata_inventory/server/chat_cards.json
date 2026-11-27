@@ -5,7 +5,7 @@
     "chatIssueCard": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Owned display directory preserves ordered native person labels and the migrated quick-control helper supplies the proven workflow closure. Off mode keeps the literal users accessor and all durable action/card logic unchanged. SW53 compares actual enabled group cards and all four persisted live actions across 18 workflow, inheritance, default, duplicate, stable-tie, cycle and 100-option cases; it explicitly asserts the Status selector that the earlier partial migration omitted. The shared SW54 workflow reader passes Tier A proof; chatSendUpdateForm's independent supplied bootstrap remains pending.",
+      "reason": "Owned display directory preserves ordered native person labels and the migrated quick-control helper supplies the proven workflow closure. Off mode keeps the literal users accessor and all durable action/card logic unchanged. chat workflow compares actual enabled group cards and all four persisted live actions across 18 workflow, inheritance, default, duplicate, stable-tie, cycle and 100-option cases; it explicitly asserts the Status selector that the earlier partial migration omitted. The shared chat workflow read workflow reader passes Tier A proof; chatSendUpdateForm's independent supplied bootstrap remains pending.",
       "accessors": [
         "WorkspaceMetadataFields",
         "chatCardMetadata"
@@ -20,7 +20,7 @@
     "chatSendUpdateForm": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "The proven point GET and operation lifetime retain their existing SW43 five-case proof through role/binding checks, durable form actions and personal sends/errors. Its only supplied bootstrap now comes from processChatInbound's proven declared workflow-header gateway, closing the remaining language/role/workflow/assignee dependency. SW175's one actual inbound differential table reaches state, assignee and comment forms through that gateway and compares complete platform payloads and persisted action choices, with work held through sending and released after return. SW174 supplies the shared full permission/source/default/template matrix proof once. No new loading, cache or lock is introduced here; later action writers remain independently guarded.",
+      "reason": "The proven point GET and operation lifetime retain their existing member directory five-case proof through role/binding checks, durable form actions and personal sends/errors. Its only supplied bootstrap now comes from processChatInbound's proven declared workflow-header gateway, closing the remaining language/role/workflow/assignee dependency. chat inbound headers's one actual inbound differential table reaches state, assignee and comment forms through that gateway and compares complete platform payloads and persisted action choices, with work held through sending and released after return. workflow headers supplies the shared full permission/source/default/template matrix proof once. No new loading, cache or lock is introduced here; later action writers remain independently guarded.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedPointRead"

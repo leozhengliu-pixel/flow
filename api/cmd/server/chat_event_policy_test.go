@@ -16,13 +16,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ChatEventAdaptersDifferential(t *testing.T) {
+func TestScaleChatEventAdaptersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Chat event issue", "teamId": f.public}, workspace, http.StatusCreated)
 		actor := f.principals[2].user
@@ -283,7 +283,7 @@ func TestScaleP21ChatEventAdaptersDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("event adapter output changed", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("event adapter output changed", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

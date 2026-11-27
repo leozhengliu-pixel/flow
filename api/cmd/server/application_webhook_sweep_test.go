@@ -14,15 +14,15 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ApplicationWebhookSweepQueueDifferential(t *testing.T) {
+func TestScaleApplicationWebhookSweepQueueDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("app-sweep-")
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	var apps []domain.ApplicationInstallation

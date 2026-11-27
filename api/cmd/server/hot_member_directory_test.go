@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21MemberNameScalars(names teamMemberNames) teamMemberNames {
+func scaleMemberNameScalars(names teamMemberNames) teamMemberNames {
 	result := teamMemberNames{users: map[string]domain.User{}, teams: map[string]domain.Team{}}
 	for id, user := range names.users {
 		result.users[id] = domain.User{ID: user.ID, Name: user.Name, DisplayName: user.DisplayName, Email: user.Email}
@@ -22,15 +22,15 @@ func scaleP21MemberNameScalars(names teamMemberNames) teamMemberNames {
 	return result
 }
 
-func TestScaleP21HotMemberDirectoryNamesDifferential(t *testing.T) {
+func TestScaleHotMemberDirectoryNamesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace := f.data.Workspace.URLKey
 	for _, development := range []bool{false, true} {
 		literal, bounded := &server{store: repo, authDisabled: development}, &server{store: f.probe, authDisabled: development}
@@ -40,7 +40,7 @@ func TestScaleP21HotMemberDirectoryNamesDifferential(t *testing.T) {
 			want, got := literal.teamMemberNames(request.Context(), workspace), bounded.teamMemberNames(request.Context(), workspace)
 			defer want.closeUnscoped()
 			defer got.closeUnscoped()
-			if got.err != nil || !reflect.DeepEqual(scaleP21MemberNameScalars(want), scaleP21MemberNameScalars(got)) {
+			if got.err != nil || !reflect.DeepEqual(scaleMemberNameScalars(want), scaleMemberNameScalars(got)) {
 				t.Fatal("trusted names depend on principal/key or lost display scalars", got.err)
 			}
 			changes := []domain.TeamMemberChange{
@@ -76,25 +76,25 @@ func TestScaleP21HotMemberDirectoryNamesDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21MemberEncodingWriter struct {
+type scaleMemberEncodingWriter struct {
 	*httptest.ResponseRecorder
 	check func()
 }
 
-func (w scaleP21MemberEncodingWriter) Write(body []byte) (int, error) {
+func (w scaleMemberEncodingWriter) Write(body []byte) (int, error) {
 	w.check()
 	return w.ResponseRecorder.Write(body)
 }
 
-func TestScaleP21HotMemberDirectoryResponseLifetime(t *testing.T) {
+func TestScaleHotMemberDirectoryResponseLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 	seed := func(display string) {
 		t.Helper()
@@ -145,7 +145,7 @@ func TestScaleP21HotMemberDirectoryResponseLifetime(t *testing.T) {
 	if scope.closed || len(scope.closers) != 2 {
 		t.Fatal("local cleanup released the outer response's owners")
 	}
-	writer := scaleP21MemberEncodingWriter{ResponseRecorder: httptest.NewRecorder(), check: func() {
+	writer := scaleMemberEncodingWriter{ResponseRecorder: httptest.NewRecorder(), check: func() {
 		if scope.closed || len(scope.closers) != 2 {
 			t.Fatal("member names admission ended before response encoding")
 		}

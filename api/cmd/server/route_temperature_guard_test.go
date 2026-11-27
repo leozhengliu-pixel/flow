@@ -21,14 +21,14 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW550: with bounded metadata on, a route runs COLD (the store's COLD scope:
+// With bounded metadata on, a route runs COLD (the store's COLD scope:
 // full legacy behaviour behind the per-replica COLD slot) unless it is proven
 // bounded, and a proven-bounded route never runs COLD.
 //
 // A route is proven bounded when no flag-on path from its handler reaches a
 // consumer still on the legacy whole-workspace path: an "unmigrated"
 // inventory consumer, or a reviewed consumer whose dispatch is the
-// registered COLD facade (coldDispatch). Paths are the SW286 reference graph
+// registered COLD facade (coldDispatch). Paths are the store wrapper reference graph
 // of cmd/server and internal/store (calls, function values, goroutines,
 // interface and by-name dispatch; flag-off-only references are not edges)
 // with its pinned boundaries; every registered handler reference of the
@@ -41,25 +41,25 @@ import (
 // unmigrated consumer, a consumer marked reviewed, a new or removed route
 // each fail until the table is regenerated (FLOW_SW550_WRITE=1) and the diff
 // is reviewed. A route that leaves the HOT set must also be named in
-// scaleP21SW550HotDemotions with its reason, so no HOT route is pushed onto
+// hotDemotions with its reason, so no HOT route is pushed onto
 // the COLD path silently.
 
-// scaleP21SW550HotDemotions names routes that leave the HOT set relative to
+// hotDemotions names routes that leave the HOT set relative to
 // the table's previous version (empty while nothing was demoted).
-var scaleP21SW550HotDemotions = map[string]string{}
+var hotDemotions = map[string]string{}
 
-type scaleP21SW550Review struct {
+type routeTemperatureGuardReview struct {
 	Status            string `json:"status"`
 	Temperature       string `json:"temperature"`
 	TemperatureReason string `json:"temperatureReason"`
 	ColdDispatch      string `json:"coldDispatch"`
 }
 
-func scaleP21SW550Inventory(t *testing.T) map[string]scaleP21SW550Review {
+func routeTemperatureGuardInventory(t *testing.T) map[string]routeTemperatureGuardReview {
 	t.Helper()
-	result := map[string]scaleP21SW550Review{}
+	result := map[string]routeTemperatureGuardReview{}
 	for _, pkg := range []string{"server", "store"} {
-		paths, err := filepath.Glob(filepath.Join(scaleP21SW286Root, "../../internal/store/metadata_inventory", pkg, "*.json"))
+		paths, err := filepath.Glob(filepath.Join(storeWrapperBoundaryRoot, "../../internal/store/metadata_inventory", pkg, "*.json"))
 		if err != nil || len(paths) == 0 {
 			t.Fatalf("%s inventory missing: %v", pkg, err)
 		}
@@ -69,7 +69,7 @@ func scaleP21SW550Inventory(t *testing.T) map[string]scaleP21SW550Review {
 				t.Fatal(err)
 			}
 			var file struct {
-				Consumers map[string]scaleP21SW550Review `json:"consumers"`
+				Consumers map[string]routeTemperatureGuardReview `json:"consumers"`
 			}
 			if err := json.Unmarshal(raw, &file); err != nil {
 				t.Fatal(err)
@@ -83,13 +83,13 @@ func scaleP21SW550Inventory(t *testing.T) map[string]scaleP21SW550Review {
 	return result
 }
 
-// scaleP21SW550Classify returns, for every registered pattern, "hot" or the
+// classify returns, for every registered pattern, "hot" or the
 // reason it runs COLD: the first legacy consumer a flag-on path reaches and
 // that path.
-func scaleP21SW550Classify(t *testing.T) map[string]string {
+func classify(t *testing.T) map[string]string {
 	t.Helper()
-	graph := scaleP21SW286Load(t)
-	inventory := scaleP21SW550Inventory(t)
+	graph := storeWrapperBoundaryLoad(t)
+	inventory := routeTemperatureGuardInventory(t)
 	isCold := func(key string) bool {
 		review, ok := inventory[graph.inventoryKey(key)]
 		// An unmigrated COLD consumer keeps the legacy path; a reviewed
@@ -128,7 +128,7 @@ func scaleP21SW550Classify(t *testing.T) map[string]string {
 			queue = queue[1:]
 			for _, index := range out[current] {
 				ref := graph.refs[index]
-				if ref.offOnly || ref.kind == "route" || ref.byName || scaleP21SW286Cut(ref) || paths[ref.to] != "" {
+				if ref.offOnly || ref.kind == "route" || ref.byName || storeWrapperBoundaryCut(ref) || paths[ref.to] != "" {
 					continue
 				}
 				path := fmt.Sprintf("%s -(%s %s:%d)-> %s", paths[current], ref.kind, ref.file, ref.line, ref.to)
@@ -143,9 +143,9 @@ func scaleP21SW550Classify(t *testing.T) map[string]string {
 		reach[start] = result
 		return result
 	}
-	locals := scaleP21SW550LocalHandlers(t)
+	locals := localHandlers(t)
 	table := map[string]string{}
-	for _, pattern := range scaleP21SW490Patterns(t) {
+	for _, pattern := range authFallbackClosurePatterns(t) {
 		targets := roots[pattern]
 		if len(targets) == 0 {
 			// A handler held in a local (the MCP endpoints) is the server
@@ -169,19 +169,19 @@ func scaleP21SW550Classify(t *testing.T) map[string]string {
 	return table
 }
 
-// scaleP21SW550Source renders the generated table.
-func scaleP21SW550Source(t *testing.T, table map[string]string) []byte {
+// routeTemperatureGuardSource renders the generated table.
+func routeTemperatureGuardSource(t *testing.T, table map[string]string) []byte {
 	t.Helper()
 	var text bytes.Buffer
-	text.WriteString(`// Code generated by TestScaleP21SW550DefaultColdRouteTable (FLOW_SW550_WRITE=1); DO NOT EDIT.
+	text.WriteString(`// Code generated by TestDefaultColdRouteTable (FLOW_SW550_WRITE=1); DO NOT EDIT.
 
 package main
 
-// scaleP21RouteTemperature is the HOT/COLD decision of every registered
+// scaleRouteTemperature is the HOT/COLD decision of every registered
 // route with bounded metadata on (route_temperature_guard_test.go): "hot"
 // for a route proven bounded, else "cold" with the first legacy consumer a
 // flag-on path from its handler reaches. A pattern missing here runs COLD.
-var scaleP21RouteTemperature = map[string]string{
+var scaleRouteTemperature = map[string]string{
 `)
 	patterns := make([]string, 0, len(table))
 	for pattern := range table {
@@ -204,10 +204,10 @@ var scaleP21RouteTemperature = map[string]string{
 	return formatted
 }
 
-const scaleP21SW550TableFile = "route_temperature.go"
+const tableFile = "route_temperature.go"
 
-func TestScaleP21SW550DefaultColdRouteTable(t *testing.T) {
-	table := scaleP21SW550Classify(t)
+func TestDefaultColdRouteTable(t *testing.T) {
+	table := classify(t)
 	hot, cold := 0, 0
 	for pattern, value := range table {
 		if value == "hot" {
@@ -220,45 +220,45 @@ func TestScaleP21SW550DefaultColdRouteTable(t *testing.T) {
 		}
 	}
 	t.Logf("SW550 route table: %d routes, %d HOT, %d COLD", len(table), hot, cold)
-	want := scaleP21SW550Source(t, table)
+	want := routeTemperatureGuardSource(t, table)
 	if os.Getenv("FLOW_SW550_WRITE") == "1" {
-		if err := os.WriteFile(scaleP21SW550TableFile, want, 0o644); err != nil {
+		if err := os.WriteFile(tableFile, want, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-	got, err := os.ReadFile(scaleP21SW550TableFile)
+	got, err := os.ReadFile(tableFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
 		for pattern, value := range table {
-			if current, ok := scaleP21RouteTemperature[pattern]; !ok {
-				t.Errorf("route %s is missing from %s (computed %s)", pattern, scaleP21SW550TableFile, value)
+			if current, ok := scaleRouteTemperature[pattern]; !ok {
+				t.Errorf("route %s is missing from %s (computed %s)", pattern, tableFile, value)
 			} else if (current == "hot") != (value == "hot") {
-				t.Errorf("route %s is %q in %s but computes %s", pattern, current, scaleP21SW550TableFile, value)
+				t.Errorf("route %s is %q in %s but computes %s", pattern, current, tableFile, value)
 			}
 		}
-		for pattern := range scaleP21RouteTemperature {
+		for pattern := range scaleRouteTemperature {
 			if _, ok := table[pattern]; !ok {
-				t.Errorf("route %s in %s is no longer registered", pattern, scaleP21SW550TableFile)
+				t.Errorf("route %s in %s is no longer registered", pattern, tableFile)
 			}
 		}
-		t.Fatalf("%s is stale: regenerate it with FLOW_SW550_WRITE=1 and review the diff", scaleP21SW550TableFile)
+		t.Fatalf("%s is stale: regenerate it with FLOW_SW550_WRITE=1 and review the diff", tableFile)
 	}
-	for pattern, reason := range scaleP21SW550HotDemotions {
+	for pattern, reason := range hotDemotions {
 		if table[pattern] == "hot" || reason == "" {
 			t.Errorf("stale HOT demotion %s: %q", pattern, reason)
 		}
 	}
 }
 
-// TestScaleP21SW550ColdRoutingFollowsTheTable sends every registered pattern
+// TestColdRoutingFollowsTheTable sends every registered pattern
 // through the production route classifier (withColdMetadataRouteMux) of a
 // bounded server: a HOT route runs without a COLD scope, every other route
 // with one; flag off no route does.
-func TestScaleP21SW550ColdRoutingFollowsTheTable(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+func TestColdRoutingFollowsTheTable(t *testing.T) {
+	f, workspace := routeTemperatureGuardFixture(t)
 	for _, bounded := range []bool{false, true} {
 		repo := f.repository
 		if bounded {
@@ -267,13 +267,13 @@ func TestScaleP21SW550ColdRoutingFollowsTheTable(t *testing.T) {
 		s := &server{store: repo}
 		mux := http.NewServeMux()
 		seen := map[string]bool{}
-		for _, pattern := range scaleP21SW490Patterns(t) {
+		for _, pattern := range authFallbackClosurePatterns(t) {
 			mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 				_, scoped := store.ColdScopeFromContext(r.Context())
 				seen[pattern] = scoped
 			})
 		}
-		for _, pattern := range scaleP21SW490Patterns(t) {
+		for _, pattern := range authFallbackClosurePatterns(t) {
 			method, path, found := strings.Cut(pattern, " ")
 			if !found {
 				method, path = http.MethodGet, pattern
@@ -295,9 +295,9 @@ func TestScaleP21SW550ColdRoutingFollowsTheTable(t *testing.T) {
 			if !ran {
 				t.Fatalf("SW550 %s did not reach its handler", pattern)
 			}
-			wantCold := bounded && scaleP21RouteTemperature[pattern] != "hot"
+			wantCold := bounded && scaleRouteTemperature[pattern] != "hot"
 			if scoped != wantCold {
-				t.Errorf("SW550 bounded=%v %s: COLD scope %v, want %v (table %q)", bounded, pattern, scoped, wantCold, scaleP21RouteTemperature[pattern])
+				t.Errorf("SW550 bounded=%v %s: COLD scope %v, want %v (table %q)", bounded, pattern, scoped, wantCold, scaleRouteTemperature[pattern])
 			}
 		}
 	}
@@ -306,22 +306,22 @@ func TestScaleP21SW550ColdRoutingFollowsTheTable(t *testing.T) {
 	}
 }
 
-type scaleP21SW550Stores struct {
+type routeTemperatureGuardStores struct {
 	repository, probe *store.SQLiteStore
 }
 
-// scaleP21SW550Fixture opens a flag-off store with one workspace and a
+// routeTemperatureGuardFixture opens a flag-off store with one workspace and a
 // bounded view of it.
-func scaleP21SW550Fixture(t *testing.T) (scaleP21SW550Stores, string) {
+func routeTemperatureGuardFixture(t *testing.T) (routeTemperatureGuardStores, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	view, err := repo.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -329,15 +329,15 @@ func scaleP21SW550Fixture(t *testing.T) (scaleP21SW550Stores, string) {
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), repo, f.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
-	return scaleP21SW550Stores{repository: repo, probe: view}, f.data.Workspace.URLKey
+	return routeTemperatureGuardStores{repository: repo, probe: view}, f.data.Workspace.URLKey
 }
 
-// scaleP21SW550BackgroundRoots lists asynchronous references, with the first
+// backgroundRoots lists asynchronous references, with the first
 // legacy consumer each flag-on walk reaches ("" when bounded).
-func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
+func backgroundRoots(t *testing.T) map[string]string {
 	t.Helper()
-	graph := scaleP21SW286Load(t)
-	inventory := scaleP21SW550Inventory(t)
+	graph := storeWrapperBoundaryLoad(t)
+	inventory := routeTemperatureGuardInventory(t)
 	isCold := func(key string) bool {
 		review, ok := inventory[graph.inventoryKey(key)]
 		cold := review.Temperature == "cold" && strings.TrimSpace(review.TemperatureReason) != ""
@@ -347,7 +347,7 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 	for index, ref := range graph.refs {
 		out[ref.from] = append(out[ref.from], index)
 	}
-	walk := func(start string, follow func(scaleP21SW286Ref) bool) map[string]string {
+	walk := func(start string, follow func(storeWrapperBoundaryRef) bool) map[string]string {
 		paths := map[string]string{start: start}
 		queue := []string{start}
 		for len(queue) > 0 {
@@ -355,7 +355,7 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 			queue = queue[1:]
 			for _, index := range out[current] {
 				ref := graph.refs[index]
-				if ref.offOnly || ref.kind == "route" || ref.byName || scaleP21SW286Cut(ref) || paths[ref.to] != "" || !follow(ref) {
+				if ref.offOnly || ref.kind == "route" || ref.byName || storeWrapperBoundaryCut(ref) || paths[ref.to] != "" || !follow(ref) {
 					continue
 				}
 				paths[ref.to] = fmt.Sprintf("%s -(%s %s:%d)-> %s", paths[current], ref.kind, ref.file, ref.line, ref.to)
@@ -375,7 +375,7 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 				continue
 			}
 			result[root] = ""
-			for target, path := range walk(ref.to, func(scaleP21SW286Ref) bool { return true }) {
+			for target, path := range walk(ref.to, func(storeWrapperBoundaryRef) bool { return true }) {
 				if isCold(target) && (result[root] == "" || len(path) < len(result[root])) {
 					result[root] = path
 				}
@@ -385,14 +385,14 @@ func scaleP21SW550BackgroundRoots(t *testing.T) map[string]string {
 	return result
 }
 
-// scaleP21SW550BackgroundWork names every goroutine root
+// backgroundWork names every goroutine root
 // whose flag-on walk reaches a legacy consumer, with how its COLD needs run
 // with bounded metadata on. Legacy whole-workspace reads are served from the
 // legacy view whatever the context (default_cold.go); a write no
 // migrated writer serves, a legacy projection and a legacy snapshot need a
 // COLD context: a request's COLD scope (inherited by work the request leaves
 // running, then per operation) or store.WithColdWork (per operation).
-var scaleP21SW550BackgroundWork = map[string]string{
+var backgroundWork = map[string]string{
 	"server/main go server/server.runApplicationAgentWorker":                                  "COLD work: main passes store.WithColdWork",
 	"server/main go server/server.runReviewImportScheduler":                                   "COLD work: main passes store.WithColdWork",
 	"server/main go server/server.runStorageMaintenance":                                      "COLD work: main passes store.WithColdWork",
@@ -412,31 +412,31 @@ var scaleP21SW550BackgroundWork = map[string]string{
 	"server/server.replyLoopRun go server/server.executeLoopRun":                              "COLD work: registerLoopWork's run context is store.WithColdWork (SW552)",
 }
 
-// TestScaleP21SW550BackgroundColdWork fails on a goroutine root that reaches a
-// legacy consumer and is not named in scaleP21SW550BackgroundWork, and on a
+// TestBackgroundColdWork fails on a goroutine root that reaches a
+// legacy consumer and is not named in backgroundWork, and on a
 // named root that no longer does. The context each root runs on is proven
-// by SW557 (background_cold_context_test.go).
-func TestScaleP21SW550BackgroundColdWork(t *testing.T) {
-	roots := scaleP21SW550BackgroundRoots(t)
+// by bounded startup (background_cold_context_test.go).
+func TestBackgroundColdWork(t *testing.T) {
+	roots := backgroundRoots(t)
 	for root, path := range roots {
 		if path == "" {
 			continue
 		}
-		if scaleP21SW550BackgroundWork[root] == "" {
+		if backgroundWork[root] == "" {
 			t.Errorf("SW550 goroutine %s reaches a legacy consumer and is not classified:\n  %s", root, path)
 		}
 	}
-	for root := range scaleP21SW550BackgroundWork {
+	for root := range backgroundWork {
 		if roots[root] == "" {
 			t.Errorf("SW550 stale background root %s: it no longer reaches a legacy consumer", root)
 		}
 	}
 }
 
-// scaleP21SW550LocalHandlers resolves a registration whose handler is a local
+// localHandlers resolves a registration whose handler is a local
 // variable (readWriteMCP := s.mcpHTTP(false)) to the server methods its
 // assignment in the same function names.
-func scaleP21SW550LocalHandlers(t *testing.T) map[string][]string {
+func localHandlers(t *testing.T) map[string][]string {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
 	if err != nil {

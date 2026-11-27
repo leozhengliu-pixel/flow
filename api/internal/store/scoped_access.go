@@ -683,7 +683,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
 				return err
 			}
-			changes, _, err := scaleP16RecordChanges(before, next)
+			changes, _, err := scaleRecordChanges(before, next)
 			if err != nil {
 				return err
 			}
@@ -736,7 +736,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			if len(appendOrders) > 0 {
 				writeCtx = context.WithValue(ctx, metadataAppendOrdersKey{}, appendOrders)
 			}
-			if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
+			if err := scaleWriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 				return err
 			}
 			if cascade != nil {
@@ -999,7 +999,7 @@ func scopedCollectionKeys(collection metadataCollection) []string {
 }
 
 // ScanMetadataRecords is a trusted, snapshot-consistent reader for exports and
-// background jobs. Each callback owns at most one P15 page; retaining pages
+// background jobs. Each callback owns at most one record hydration page; retaining pages
 // defeats the contract. It never accumulates records between callbacks.
 func (s *SQLiteStore) ScanMetadataRecords(ctx context.Context, workspace, kind string, visit func(RecordBatch) error) error {
 	if workspace == "" || !validMetadataKey(RecordKey{Kind: kind}) || visit == nil {

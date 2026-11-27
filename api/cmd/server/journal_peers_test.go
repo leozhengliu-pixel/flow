@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP20CanonicalWriterAndBoundedReplica(t *testing.T) {
+func TestScaleCanonicalWriterAndBoundedReplica(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
-	peers := newScaleP03PeerServers(t)
-	f := scaleP03CreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
+	peers := newScalePeerServers(t)
+	f := scaleCreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
 	workspace := f.data.Workspace.URLKey
 	peers.stopListening(0)
 	peers.stopListening(1)
@@ -49,12 +49,12 @@ func TestScaleP20CanonicalWriterAndBoundedReplica(t *testing.T) {
 	}
 }
 
-func TestScaleP20QueuedVersionRevocation(t *testing.T) {
+func TestScaleQueuedVersionRevocation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	peers := newScaleP03PeerServers(t)
-	f := scaleP03CreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
+	peers := newScalePeerServers(t)
+	f := scaleCreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
 	workspace := f.data.Workspace.URLKey
-	member, user := scaleP03Join(t, f, "P20 version reader", idgen.New("p20-reader-")+"@example.test", "member", f.data.Teams[0].ID)
+	member, user := resourceAccessScaleJoin(t, f, "P20 version reader", idgen.New("p20-reader-")+"@example.test", "member", f.data.Teams[0].ID)
 	peers.stopListening(0)
 	peers.stopListening(1)
 	doc := authRequest[domain.Document](t, f.admin, "POST", peers.first.URL+"/api/documents", map[string]any{"title": "P20 protected version", "content": strings.Repeat("protected history ", 1024)}, workspace, http.StatusCreated)

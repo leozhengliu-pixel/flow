@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW333Target(workspace, workspaceID, field string, size int) metadataSQLStageTarget {
+func integrationSqlChunksTarget(workspace, workspaceID, field string, size int) metadataSQLStageTarget {
 	if field == "" {
 		return metadataSQLStageTarget{
 			workspaceState: true, workspace: workspace, workspaceID: workspaceID,
@@ -23,10 +23,10 @@ func scaleP21SW333Target(workspace, workspaceID, field string, size int) metadat
 	return target
 }
 
-func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
+func TestIntegrationSQLChunks(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	const large = 256 << 10
 	const ordinary = 16 << 10
@@ -57,7 +57,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 				}
 				defer tx.Rollback()
 				ctx := withIntegrationDeliveryStream(t.Context(), test.event)
-				stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW333Target(workspace, workspaceID, test.field, test.size))
+				stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationSqlChunksTarget(workspace, workspaceID, test.field, test.size))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -88,7 +88,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 				appends++
 			}
 		})
-		stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW333Target(workspace, workspaceID, "integrationDeliveries", len(raw)))
+		stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationSqlChunksTarget(workspace, workspaceID, "integrationDeliveries", len(raw)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 				}
 			}
 		})
-		stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW333Target(workspace, workspaceID, "integrationDeliveries", 3*large))
+		stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationSqlChunksTarget(workspace, workspaceID, "integrationDeliveries", 3*large))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 			func() {
 				defer tx.Rollback()
 				ctx := withIntegrationDeliveryStream(t.Context(), event)
-				stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW333Target(workspace, workspaceID, "integrationDeliveries", 2*large))
+				stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationSqlChunksTarget(workspace, workspaceID, "integrationDeliveries", 2*large))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -188,7 +188,7 @@ func TestScaleP21SW333IntegrationSQLChunks(t *testing.T) {
 	t.Run("literal-row-and-root-bills", func(t *testing.T) {
 		raw := []byte(`{"body":"` + strings.Repeat("x", large+37) + `"}`)
 		for _, field := range []string{"integrationDeliveries", ""} {
-			target := scaleP21SW333Target(workspace, workspaceID, field, len(raw))
+			target := integrationSqlChunksTarget(workspace, workspaceID, field, len(raw))
 			bill := len(metadataSQLStageLegacyRowSQL) + len(workspace) + len(field) + len(target.key) + 16 + len(raw)
 			if target.workspaceState {
 				bill = len(metadataSQLStageLegacyRootSQL) + len(workspaceID) + len(raw) + len(target.updatedAt) + len(workspace)

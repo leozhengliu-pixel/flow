@@ -16,16 +16,16 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21IssueAuthorizationFixture struct {
-	scaleP09Fixture
+type scaleIssueAuthorizationFixture struct {
+	scaleFixture
 	guest                           domain.User
 	public, private, child, sibling string
 	comment, foreignIssue           string
 }
 
-func scaleP21IssueAuthorizationSeed(t *testing.T) scaleP21IssueAuthorizationFixture {
+func scaleIssueAuthorizationSeed(t *testing.T) scaleIssueAuthorizationFixture {
 	t.Helper()
-	f := scaleP21IssueAuthorizationFixture{scaleP09Fixture: scaleP09Database(t)}
+	f := scaleIssueAuthorizationFixture{scaleFixture: journalScaleDatabase(t)}
 	workspace := f.data.Workspace.URLKey
 	prefix := idgen.New("issue-auth-")
 	f.public, f.private, f.child, f.sibling, f.comment = prefix+"public", prefix+"private", prefix+"child", prefix+"sibling", prefix+"comment"
@@ -126,7 +126,7 @@ func scaleP21IssueAuthorizationSeed(t *testing.T) scaleP21IssueAuthorizationFixt
 	return f
 }
 
-func scaleP21IssueAuthorizationHeader(issue domain.Issue) domain.Issue {
+func scaleIssueAuthorizationHeader(issue domain.Issue) domain.Issue {
 	out := domain.Issue{ID: issue.ID, Identifier: issue.Identifier, PreviousIdentifiers: issue.PreviousIdentifiers, Number: issue.Number,
 		Team: domain.Team{ID: issue.Team.ID, Key: issue.Team.Key, Private: issue.Team.Private}, Creator: domain.User{ID: issue.Creator.ID},
 		ParentID: issue.ParentID, ArchivedAt: issue.ArchivedAt}
@@ -145,15 +145,15 @@ func scaleP21IssueAuthorizationHeader(issue domain.Issue) domain.Issue {
 	return out
 }
 
-func scaleP21IssueAuthorizationHeaders(issues []domain.Issue) []domain.Issue {
+func scaleIssueAuthorizationHeaders(issues []domain.Issue) []domain.Issue {
 	result := make([]domain.Issue, len(issues))
 	for i, issue := range issues {
-		result[i] = scaleP21IssueAuthorizationHeader(issue)
+		result[i] = scaleIssueAuthorizationHeader(issue)
 	}
 	return result
 }
 
-func scaleP21IssueAuthorizationPolicy(data domain.Bootstrap, key *domain.APIKey, dev bool) any {
+func scaleIssueAuthorizationPolicy(data domain.Bootstrap, key *domain.APIKey, dev bool) any {
 	type team struct {
 		ID, Key, ExternalSource    string
 		Private, Archived, Retired bool
@@ -211,7 +211,7 @@ func scaleP21IssueAuthorizationPolicy(data domain.Bootstrap, key *domain.APIKey,
 }
 
 // This follows the literal child-write alias using full legacy storage reads.
-func scaleP21IssueAuthorizationLegacy(t *testing.T, f scaleP09Fixture, userID string, request IssueWriteAuthorizationRequest) (domain.Bootstrap, error) {
+func scaleIssueAuthorizationLegacy(t *testing.T, f scaleFixture, userID string, request IssueWriteAuthorizationRequest) (domain.Bootstrap, error) {
 	t.Helper()
 	query := request.Query
 	var data domain.Bootstrap
@@ -277,7 +277,7 @@ func scaleP21IssueAuthorizationLegacy(t *testing.T, f scaleP09Fixture, userID st
 	return data, nil
 }
 
-func scaleP21IssueAuthorizationView(t *testing.T, f scaleP09Fixture, reload bool) *SQLiteStore {
+func scaleIssueAuthorizationView(t *testing.T, f scaleFixture, reload bool) *SQLiteStore {
 	t.Helper()
 	if reload {
 		f.mu.Lock()
@@ -295,10 +295,10 @@ func scaleP21IssueAuthorizationView(t *testing.T, f scaleP09Fixture, reload bool
 	return view
 }
 
-func TestScaleP21IssueAuthorizationLegacyHeaders(t *testing.T) {
+func TestScaleIssueAuthorizationLegacyHeaders(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	workspace := f.data.Workspace.URLKey
 	_, access, err := f.IssueQueryAccess(t.Context(), workspace, f.data.Viewer.ID)
 	if err != nil {
@@ -309,7 +309,7 @@ func TestScaleP21IssueAuthorizationLegacyHeaders(t *testing.T) {
 		t.Fatal("legacy reference normalization failed", resolved, err)
 	}
 	for _, reload := range []bool{false, true} {
-		view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, reload)
+		view := scaleIssueAuthorizationView(t, f.scaleFixture, reload)
 		for _, test := range []struct {
 			name    string
 			user    string
@@ -341,7 +341,7 @@ func TestScaleP21IssueAuthorizationLegacyHeaders(t *testing.T) {
 				if test.key != nil {
 					request.Query.AllowedTeamIDs = test.key.TeamIDs
 				}
-				want, err := scaleP21IssueAuthorizationLegacy(t, f.scaleP09Fixture, test.user, request)
+				want, err := scaleIssueAuthorizationLegacy(t, f.scaleFixture, test.user, request)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -349,10 +349,10 @@ func TestScaleP21IssueAuthorizationLegacyHeaders(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if before, after := scaleP21IssueAuthorizationPolicy(want, test.key, test.user == ""), scaleP21IssueAuthorizationPolicy(read.Data, nil, test.user == ""); !reflect.DeepEqual(before, after) {
+				if before, after := scaleIssueAuthorizationPolicy(want, test.key, test.user == ""), scaleIssueAuthorizationPolicy(read.Data, nil, test.user == ""); !reflect.DeepEqual(before, after) {
 					t.Errorf("authorization policy differs:\nlegacy=%+v\nbounded=%+v", before, after)
 				}
-				if before, after := scaleP21IssueAuthorizationHeaders(want.Issues), scaleP21IssueAuthorizationHeaders(read.Data.Issues); !reflect.DeepEqual(before, after) {
+				if before, after := scaleIssueAuthorizationHeaders(want.Issues), scaleIssueAuthorizationHeaders(read.Data.Issues); !reflect.DeepEqual(before, after) {
 					t.Errorf("selected/ancestor headers differ:\nlegacy=%+v\nbounded=%+v", before, after)
 				}
 				if !reflect.DeepEqual(want.Comments, read.Data.Comments) || read.Data.Comments == nil {
@@ -376,11 +376,11 @@ func TestScaleP21IssueAuthorizationLegacyHeaders(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueAuthorizationLargeIgnoredAndCodec(t *testing.T) {
+func TestScaleIssueAuthorizationLargeIgnoredAndCodec(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	f := scaleIssueAuthorizationSeed(t)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: f.data.Workspace.URLKey}, IDs: []string{f.child}, CommentIssueID: f.child, CommentID: f.comment}
 	base, err := f.IssueRecord(t.Context(), request.Query.Workspace, f.child)
 	if err != nil {
@@ -400,7 +400,7 @@ func TestScaleP21IssueAuthorizationLargeIgnoredAndCodec(t *testing.T) {
 		if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_content_records SET data=? WHERE workspace_key=? AND kind='comment' AND resource_id=? AND id=?`, comment, request.Query.Workspace, f.child, f.comment); err != nil {
 			t.Fatal(err)
 		}
-		want, err := scaleP21IssueAuthorizationLegacy(t, f.scaleP09Fixture, f.data.Viewer.ID, request)
+		want, err := scaleIssueAuthorizationLegacy(t, f.scaleFixture, f.data.Viewer.ID, request)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -408,7 +408,7 @@ func TestScaleP21IssueAuthorizationLargeIgnoredAndCodec(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(scaleP21IssueAuthorizationHeaders(want.Issues), scaleP21IssueAuthorizationHeaders(read.Data.Issues)) ||
+		if !reflect.DeepEqual(scaleIssueAuthorizationHeaders(want.Issues), scaleIssueAuthorizationHeaders(read.Data.Issues)) ||
 			!reflect.DeepEqual(want.Comments, read.Data.Comments) {
 			t.Fatal("codec aliases, repeated fields, nil normalization or canonical reference refresh differ")
 		}
@@ -427,10 +427,10 @@ func TestScaleP21IssueAuthorizationLargeIgnoredAndCodec(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueAuthorizationDecodedPaging(t *testing.T) {
+func TestScaleIssueAuthorizationDecodedPaging(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	var issues []domain.Issue
 	var ids []string
 	at := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
@@ -449,9 +449,9 @@ func TestScaleP21IssueAuthorizationDecodedPaging(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, reload := range []bool{false, true} {
-		view := scaleP21IssueAuthorizationView(t, f, reload)
+		view := scaleIssueAuthorizationView(t, f, reload)
 		request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: f.data.Workspace.URLKey, Sort: "sortOrder"}, IDs: ids}
-		want, err := scaleP21IssueAuthorizationLegacy(t, f, f.data.Viewer.ID, request)
+		want, err := scaleIssueAuthorizationLegacy(t, f, f.data.Viewer.ID, request)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -459,7 +459,7 @@ func TestScaleP21IssueAuthorizationDecodedPaging(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(want.Issues) != 500 || !reflect.DeepEqual(scaleP21IssueAuthorizationHeaders(want.Issues), scaleP21IssueAuthorizationHeaders(read.Data.Issues)) {
+		if len(want.Issues) != 500 || !reflect.DeepEqual(scaleIssueAuthorizationHeaders(want.Issues), scaleIssueAuthorizationHeaders(read.Data.Issues)) {
 			t.Fatal("second-page cursor used physical rather than decoded last ID", reload, len(want.Issues), len(read.Data.Issues))
 		}
 		read.Close()
@@ -469,15 +469,15 @@ func TestScaleP21IssueAuthorizationDecodedPaging(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueAuthorizationOwnershipAndFailures(t *testing.T) {
+func TestScaleIssueAuthorizationOwnershipAndFailures(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: f.data.Workspace.URLKey}, IDs: []string{f.child}, CommentIssueID: f.child, CommentID: f.comment}
 	if read, err := f.BeginIssueWriteAuthorizationRead(t.Context(), f.data.Viewer.ID, nil, request); read != nil || !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("literal constructor did not refuse bounded ownership", read, err)
 	}
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	first, err := view.BeginIssueWriteAuthorizationRead(t.Context(), f.data.Viewer.ID, nil, request)
 	if err != nil {
 		t.Fatal(err)
@@ -546,11 +546,11 @@ func TestScaleP21IssueAuthorizationOwnershipAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueAuthorizationTransferLifetime(t *testing.T) {
+func TestScaleIssueAuthorizationTransferLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	f := scaleIssueAuthorizationSeed(t)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: f.data.Workspace.URLKey}, IDs: []string{f.child}}
 	read, err := view.BeginIssueWriteAuthorizationRead(t.Context(), f.data.Viewer.ID, nil, request)
 	if err != nil {

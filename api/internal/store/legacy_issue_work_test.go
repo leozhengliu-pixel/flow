@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW218History(t *testing.T, tx *sqlTx, workspace, invalidID string) map[string]issueFieldHistory {
+func legacyIssueWorkHistory(t *testing.T, tx *sqlTx, workspace, invalidID string) map[string]issueFieldHistory {
 	t.Helper()
 	rows, err := tx.QueryContext(t.Context(), `SELECT id,data FROM workspace_content_records WHERE workspace_key=? AND kind=?`, workspace, issueFieldHistoryKind)
 	if err != nil {
@@ -45,14 +45,14 @@ func scaleP21SW218History(t *testing.T, tx *sqlTx, workspace, invalidID string) 
 	return result
 }
 
-func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyIssueWorkDifferential(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for _, variant := range []string{"legal-four-MiB", "admission-flush", "admission-flush-duplicate", "admission-flush-duplicate-absent-history", "admission-flush-duplicate-nil-fields", "unchanged-invalid-history", "skipped-invalid-history"} {
 		t.Run(variant, func(t *testing.T) {
 			forcedFlush := strings.HasPrefix(variant, "admission-flush")
 			invalidHistory := strings.HasSuffix(variant, "invalid-history")
 			prefix := idgen.New("sw218_")
-			data := scaleP21SW93Data(f, prefix, 0)
+			data := legacyRecordBaseData(f, prefix, 0)
 			for i := range data.Issues {
 				data.Issues[i].Version = 10
 			}
@@ -72,7 +72,7 @@ func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
 			var wantHistory map[string]issueFieldHistory
 			var wantSignals []notificationSignal
 			for _, bounded := range []bool{false, true} {
-				tx, ctx := scaleP21SW93Begin(t, f, data)
+				tx, ctx := legacyRecordBaseBegin(t, f, data)
 				workspace := data.Workspace.URLKey
 				oldBase := newRecordBase()
 				loaded := cloneBootstrap(collectionMetadata(data))
@@ -100,7 +100,7 @@ func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(base.Close)
-				scaleP21SW93Remember(t, base, tx, workspace)
+				legacyRecordBaseRemember(t, base, tx, workspace)
 				prepared, err := captureMetadataLogicalSource(ctx, loaded, stamp)
 				if err != nil {
 					t.Fatal(err)
@@ -185,13 +185,13 @@ func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
 					err = base.Persist(observed, tx, workspace, candidate)
 					view.metadataResidency.work.limit = limit
 				} else {
-					err = scaleP21SW93Literal(observed, f, tx, workspace, target, oldBase)
+					err = legacyRecordBaseLiteral(observed, f, tx, workspace, target, oldBase)
 				}
 				if err != nil {
 					t.Fatalf("bounded=%t legal write refused: %v", bounded, err)
 				}
-				history := scaleP21SW218History(t, tx, workspace, invalidID)
-				rows, counts := scaleP21SW93Rows(t, tx, workspace), scaleP21SW93Counts(tx)
+				history := legacyIssueWorkHistory(t, tx, workspace, invalidID)
+				rows, counts := legacyRecordBaseRows(t, tx, workspace), legacyRecordBaseCounts(tx)
 				if bounded {
 					if forcedFlush && historyWrites.Load() < 2 {
 						t.Fatal("fixture did not force admission flush inside 64-target group")
@@ -226,7 +226,7 @@ func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
 				t.Logf("bounded=%t history write batches=%d", bounded, historyWrites.Load())
 				candidate.Release()
 				prepared.Release()
-				scaleP21SW70Usable(t, tx)
+				legacyIssueScanUsable(t, tx)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
@@ -244,9 +244,9 @@ func TestScaleP21SW218LegacyIssueWorkDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW218LegacyIssueWorkHistoryDenialIsAtomic(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW93Data(f, idgen.New("sw218_history_"), 0)
+func TestLegacyIssueWorkHistoryDenialIsAtomic(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyRecordBaseData(f, idgen.New("sw218_history_"), 0)
 	before := data.Issues[0]
 	before.Version = 10
 	issue := before
@@ -287,13 +287,13 @@ func TestScaleP21SW218LegacyIssueWorkHistoryDenialIsAtomic(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW218LegacyIssueWorkCancellation(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyIssueWorkCancellation(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for _, mode := range []string{"before-write", "after-history-write"} {
 		t.Run(mode, func(t *testing.T) {
 			for _, bounded := range []bool{false, true} {
-				data := scaleP21SW93Data(f, idgen.New("sw218_cancel_"), 0)
-				tx, ctx := scaleP21SW93Begin(t, f, data)
+				data := legacyRecordBaseData(f, idgen.New("sw218_cancel_"), 0)
+				tx, ctx := legacyRecordBaseBegin(t, f, data)
 				oldBase := newRecordBase()
 				loaded := cloneBootstrap(collectionMetadata(data))
 				var err error
@@ -320,7 +320,7 @@ func TestScaleP21SW218LegacyIssueWorkCancellation(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(base.Close)
-				scaleP21SW93Remember(t, base, tx, data.Workspace.URLKey)
+				legacyRecordBaseRemember(t, base, tx, data.Workspace.URLKey)
 				prepared, err := captureMetadataLogicalSource(ctx, loaded, stamp)
 				if err != nil {
 					t.Fatal(err)
@@ -353,7 +353,7 @@ func TestScaleP21SW218LegacyIssueWorkCancellation(t *testing.T) {
 				if bounded {
 					err = base.Persist(cancelled, tx, data.Workspace.URLKey, candidate)
 				} else {
-					err = scaleP21SW93Literal(cancelled, f, tx, data.Workspace.URLKey, target, oldBase)
+					err = legacyRecordBaseLiteral(cancelled, f, tx, data.Workspace.URLKey, target, oldBase)
 				}
 				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("bounded=%t cancellation differs: %v", bounded, err)

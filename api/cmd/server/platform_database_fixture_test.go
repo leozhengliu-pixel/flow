@@ -19,7 +19,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-func scaleP03DatabaseConfig(t *testing.T) store.DatabaseConfig {
+func platformDatabaseFixtureScaleDatabaseConfig(t *testing.T) store.DatabaseConfig {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -37,19 +37,19 @@ func scaleP03DatabaseConfig(t *testing.T) store.DatabaseConfig {
 	return config
 }
 
-type scaleP03FixtureResources struct {
+type scaleFixtureResources struct {
 	repo       *store.SQLiteStore
 	workspaces []string
 	users      []domain.User
 	appUsers   []struct{ workspace, id string }
 }
 
-type scaleP03PlatformFixture struct {
+type scalePlatformFixture struct {
 	platformFixture
-	resources *scaleP03FixtureResources
+	resources *scaleFixtureResources
 }
 
-func scaleP03RetryWrite(ctx context.Context, write func() error) error {
+func scaleRetryWrite(ctx context.Context, write func() error) error {
 	// Credential telemetry can write while a fixture installs or removes apps.
 	for attempt := 0; ; attempt++ {
 		err := write()
@@ -64,9 +64,9 @@ func scaleP03RetryWrite(ctx context.Context, write func() error) error {
 	}
 }
 
-func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03FixtureResources {
+func platformDatabaseFixtureScaleTrackResources(t *testing.T, repo *store.SQLiteStore) *scaleFixtureResources {
 	t.Helper()
-	resources := &scaleP03FixtureResources{repo: repo}
+	resources := &scaleFixtureResources{repo: repo}
 	t.Cleanup(func() {
 		run := func(timeout time.Duration, cleanup func(context.Context) error) error {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -78,7 +78,7 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 		}
 		for _, app := range resources.appUsers {
 			if err := run(time.Minute, func(ctx context.Context) error {
-				return scaleP03RetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) })
+				return scaleRetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) })
 			}); err != nil {
 				t.Errorf("clean up owned application membership: %v", err)
 			}
@@ -103,22 +103,22 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 	return resources
 }
 
-func scaleP03CreateFixture(t *testing.T, repo *store.SQLiteStore, service *server, host *httptest.Server) scaleP03PlatformFixture {
+func scaleCreateFixture(t *testing.T, repo *store.SQLiteStore, service *server, host *httptest.Server) scalePlatformFixture {
 	t.Helper()
 	if err := service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	resources := scaleP03TrackResources(t, repo)
-	admin, user := scaleP03RegisteredClient(t, resources, host.URL, "P03 owner", idgen.New("scale-p03-owner-")+"@example.test")
+	resources := platformDatabaseFixtureScaleTrackResources(t, repo)
+	admin, user := platformDatabaseFixtureScaleRegisteredClient(t, resources, host.URL, "P03 owner", idgen.New("scale-p03-owner-")+"@example.test")
 	data, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), user), "P03 isolated", idgen.New("scale-p03-"), "us")
 	if err != nil {
 		t.Fatal(err)
 	}
 	resources.workspaces = append(resources.workspaces, data.Workspace.URLKey)
-	return scaleP03PlatformFixture{platformFixture{repo, service, host, admin, data}, resources}
+	return scalePlatformFixture{platformFixture{repo, service, host, admin, data}, resources}
 }
 
-func scaleP03RegisteredClient(t *testing.T, resources *scaleP03FixtureResources, baseURL, name, email string) (*http.Client, domain.User) {
+func platformDatabaseFixtureScaleRegisteredClient(t *testing.T, resources *scaleFixtureResources, baseURL, name, email string) (*http.Client, domain.User) {
 	t.Helper()
 	const password = "p03-fixture-password"
 	// Set up identities without consuming the public registration rate limit;
@@ -137,10 +137,10 @@ func scaleP03RegisteredClient(t *testing.T, resources *scaleP03FixtureResources,
 	return client, user
 }
 
-func TestScaleP03FixturePreservesExistingAccount(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleFixturePreservesExistingAccountPlatformDatabaseFixture(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			resources := scaleP03TrackResources(t, repo)
+			resources := platformDatabaseFixtureScaleTrackResources(t, repo)
 			const password = "unrelated-existing-password"
 			user, token, err := repo.Register(t.Context(), "Existing account", idgen.New("p03-existing-")+"@example.test", password)
 			if err != nil {
@@ -156,9 +156,9 @@ func TestScaleP03FixturePreservesExistingAccount(t *testing.T) {
 				t.Fatal(err)
 			}
 			resources.workspaces = append(resources.workspaces, data.Workspace.URLKey)
-			var owned scaleP03PlatformFixture
+			var owned scalePlatformFixture
 			t.Run("isolated-fixture", func(t *testing.T) {
-				owned = scaleP03Fixture(t, repo)
+				owned = resourceAccessScaleFixture(t, repo)
 				if owned.data.Viewer.ID == user.ID || owned.data.Workspace.URLKey == data.Workspace.URLKey {
 					t.Fatal("fixture reused existing identity or workspace")
 				}
@@ -180,9 +180,9 @@ func TestScaleP03FixturePreservesExistingAccount(t *testing.T) {
 	}
 }
 
-func scaleP03ServerTestStores(t *testing.T) map[string]*store.SQLiteStore {
+func scaleServerTestStores(t *testing.T) map[string]*store.SQLiteStore {
 	t.Helper()
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -191,10 +191,10 @@ func scaleP03ServerTestStores(t *testing.T) map[string]*store.SQLiteStore {
 	return map[string]*store.SQLiteStore{config.Driver: repo}
 }
 
-func newScaleP03PeerServers(t *testing.T) peerServers {
+func newScalePeerServers(t *testing.T) peerServers {
 	t.Helper()
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	redisServer := miniredis.RunT(t)
 	prefix := fmt.Sprintf("scale-p03-%d", time.Now().UnixNano())
 	uploads := t.TempDir()

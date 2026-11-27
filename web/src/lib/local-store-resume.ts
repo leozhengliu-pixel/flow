@@ -9,7 +9,7 @@ import {
   localKinds, localRowBytes, localRowFingerprint, localStoreAuthority, localStoreBuildId, localStoreEnabled, localStoreEraseReason, markLocalStoreErase, planLocalChanges,
   projectLocalCollection, projectLocalIssueRecord, type LocalChange, type LocalRow, type LocalStoreAuthority,
 } from './local-store-model'
-import { modelChanges, modelRecordPage, type SyncWireRecord } from './scale-p13-wire'
+import { modelChanges, modelRecordPage, type SyncWireRecord } from './sync-wire'
 
 interface Scope { viewerId: string; workspaceId: string; workspaceKey: string }
 type Checkpoint = Pick<LocalResume, 'revision' | 'eventCursor'>

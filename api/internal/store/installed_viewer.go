@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW20ViewerMaxWork = 64 << 20
+const viewerMaxWork = 64 << 20
 
 // InstalledViewerRead owns a snapshot of the installed core Viewer. Retain the
 // handle through every use of Viewer; it never authorizes or reloads SQL state.
@@ -38,7 +38,7 @@ func (s *SQLiteStore) BeginInstalledViewerRead(ctx context.Context, workspace st
 			selected = s.lastWorkspaceKey
 		}
 		_, found := s.workspaces[selected]
-		cost, err := scaleP21SW20ViewerCost(s.workspaces[selected].Viewer)
+		cost, err := installedViewerViewerCost(s.workspaces[selected].Viewer)
 		s.mu.RUnlock()
 		if !found || err != nil {
 			return nil, found, err
@@ -55,7 +55,7 @@ func (s *SQLiteStore) BeginInstalledViewerRead(ctx context.Context, workspace st
 			selected = s.lastWorkspaceKey
 		}
 		source, found := s.workspaces[selected]
-		current, err := scaleP21SW20ViewerCost(source.Viewer)
+		current, err := installedViewerViewerCost(source.Viewer)
 		if !found || err != nil || current > cost {
 			s.mu.RUnlock()
 			release()
@@ -64,7 +64,7 @@ func (s *SQLiteStore) BeginInstalledViewerRead(ctx context.Context, workspace st
 			}
 			continue
 		}
-		viewer := scaleP21SW20CloneViewer(source.Viewer)
+		viewer := cloneViewer(source.Viewer)
 		s.mu.RUnlock()
 		if err := admitted.Err(); err != nil {
 			release()
@@ -74,7 +74,7 @@ func (s *SQLiteStore) BeginInstalledViewerRead(ctx context.Context, workspace st
 	}
 }
 
-func scaleP21SW20ViewerCost(viewer domain.User) (int, error) {
+func installedViewerViewerCost(viewer domain.User) (int, error) {
 	cost := int64(128<<10) + int64(unsafe.Sizeof(viewer)) + int64(unsafe.Sizeof(InstalledViewerRead{}))
 	value := reflect.ValueOf(viewer)
 	for index := range value.NumField() {
@@ -99,14 +99,14 @@ func scaleP21SW20ViewerCost(viewer domain.User) (int, error) {
 		default:
 			return 0, ErrBoundedMetadataCoverage
 		}
-		if cost > scaleP21SW20ViewerMaxWork {
+		if cost > viewerMaxWork {
 			return 0, ErrMetadataWorkBudget
 		}
 	}
 	return int(cost), nil
 }
 
-func scaleP21SW20CloneViewer(viewer domain.User) domain.User {
+func cloneViewer(viewer domain.User) domain.User {
 	value := reflect.ValueOf(&viewer).Elem()
 	for index := range value.NumField() {
 		field := value.Type().Field(index)

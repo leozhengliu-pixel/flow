@@ -41,7 +41,7 @@ func (s *SQLiteStore) BeginIntegrationWebhookCredentials(ctx context.Context, wo
 	defer tx.Rollback()
 	var workspaceID string
 	var active int
-	if err := tx.QueryRowContext(ctx, `SELECT workspace_id,`+s.scaleP21SW18CollectionState("integrationConnections")+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&workspaceID, &active); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_id,`+s.collectionState("integrationConnections")+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&workspaceID, &active); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IntegrationWebhookCredentials{}, false, emptyRelease, nil
 		}

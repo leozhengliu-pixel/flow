@@ -18,11 +18,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP11CommitBeforePublishKill(t *testing.T) {
+func TestScaleCommitBeforePublishKill(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
-	command := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestScaleP11CommitChild$")
+	f := scaleNewFixture(t, 1)
+	command := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestScaleCommitChild$")
 	databaseURL := f.config.URL
 	if f.config.Driver == "sqlite" {
 		databaseURL = f.config.Path
@@ -64,17 +64,17 @@ func TestScaleP11CommitBeforePublishKill(t *testing.T) {
 	if err := command.Wait(); err == nil {
 		t.Fatal("writer did not crash")
 	}
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "committed before kill" {
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "committed before kill" {
 		t.Fatalf("peer did not recover the killed writer's committed transaction: %v", err)
 	}
 }
 
-func TestScaleP11AtomicPageAndStaleVersionFallback(t *testing.T) {
+func TestScaleAtomicPageAndStaleVersionFallback(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 2)
+	f := scaleNewFixture(t, 2)
 	c := f.service.remoteEvents.consumer(f.workspace)
-	before := scaleP11Name(t, f)
+	before := scaleName(t, f)
 	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "test.p11_atomic", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects[0].Name = "both records committed"
 		data.Projects[1].Description = strings.Repeat("x", 300<<10)
@@ -86,26 +86,26 @@ func TestScaleP11AtomicPageAndStaleVersionFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.peer.ApplyCommittedPage(t.Context(), c.workspaceID, page); !errors.Is(err, store.ErrPeerSnapshotRequired) || scaleP11Name(t, f) != before {
+	if _, err := f.peer.ApplyCommittedPage(t.Context(), c.workspaceID, page); !errors.Is(err, store.ErrPeerSnapshotRequired) || scaleName(t, f) != before {
 		t.Fatalf("oversized transaction installed a partial page: %v", err)
 	}
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "both records committed" {
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "both records committed" {
 		t.Fatalf("complete snapshot fallback failed: %v", err)
 	}
-	scaleP11Rename(t, f, "newer committed version")
+	scaleRename(t, f, "newer committed version")
 	if _, err := f.peer.ApplyCommittedPage(t.Context(), c.workspaceID, page); !errors.Is(err, store.ErrPeerSnapshotRequired) {
 		t.Fatalf("stale page was accepted after a newer commit: %v", err)
 	}
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "newer committed version" {
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "newer committed version" {
 		t.Fatal("stale page moved canonical state backwards")
 	}
 }
 
-func TestScaleP11ConcurrentFreshnessUsesOneConsumer(t *testing.T) {
+func TestScaleConcurrentFreshnessUsesOneConsumer(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
-	scaleP11Rename(t, f, "concurrent requests")
+	f := scaleNewFixture(t, 1)
+	scaleRename(t, f, "concurrent requests")
 	start := make(chan struct{})
 	errors := make(chan error, 32)
 	var requests sync.WaitGroup
@@ -125,12 +125,12 @@ func TestScaleP11ConcurrentFreshnessUsesOneConsumer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(f.service.remoteEvents.consumers) != 1 || scaleP11Name(t, f) != "concurrent requests" {
+	if len(f.service.remoteEvents.consumers) != 1 || scaleName(t, f) != "concurrent requests" {
 		t.Fatal("concurrent requests created multiple consumers or kept stale state")
 	}
 }
 
-func TestScaleP11CommitChild(t *testing.T) {
+func TestScaleCommitChild(t *testing.T) {
 	if os.Getenv("FLOW_P11_COMMIT_CHILD") != "1" {
 		t.Skip("subprocess commit barrier")
 	}
@@ -155,13 +155,13 @@ func TestScaleP11CommitChild(t *testing.T) {
 	<-t.Context().Done()
 }
 
-func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
+func TestScaleFailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
+	f := scaleNewFixture(t, 1)
 	c := f.service.remoteEvents.consumer(f.workspace)
 	before := c.cursor
-	change := scaleP11Rename(t, f, "retry after database recovery")
+	change := scaleRename(t, f, "retry after database recovery")
 	f.service.remoteEvents.push(f.workspace, change, true, func(string) {})
 	channel, stop := f.service.realtime.subscribe(f.workspace)
 	defer stop()
@@ -177,7 +177,7 @@ func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	f.peer, f.service.store = reopened, reopened
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "retry after database recovery" {
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "retry after database recovery" {
 		t.Fatalf("consumer did not recover after a failed apply: %v", err)
 	}
 	select {
@@ -190,10 +190,10 @@ func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	}
 }
 
-func TestScaleP11AuthorizationStopsOnFreshnessError(t *testing.T) {
+func TestScaleAuthorizationStopsOnFreshnessError(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 0)
+	f := scaleNewFixture(t, 0)
 	if err := f.peer.Close(); err != nil {
 		t.Fatal(err)
 	}

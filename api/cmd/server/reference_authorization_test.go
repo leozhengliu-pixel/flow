@@ -10,19 +10,19 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW495: favorite and subscription references of every resource kind,
+// Favorite and subscription references of every resource kind,
 // including application credentials whose missing scopes empty a kind.
-func TestScaleP21SW495ReferenceAuthorizationDifferential(t *testing.T) {
-	scaleP21SW495ReferenceAuthorization(t, 0)
+func TestReferenceAuthorizationDifferential(t *testing.T) {
+	referenceAuthorization(t, 0)
 }
 
-func TestScaleP21SW495ReferenceAuthorizationDifferentialPart2(t *testing.T) {
-	scaleP21SW495ReferenceAuthorization(t, 1)
+func TestReferenceAuthorizationDifferentialPart2(t *testing.T) {
+	referenceAuthorization(t, 1)
 }
 
-func scaleP21SW495ReferenceAuthorization(t *testing.T, part int) {
+func referenceAuthorization(t *testing.T, part int) {
 	t.Helper()
-	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
+	fx := harnessSetup(t, func(fx *harnessFixture, data *domain.Bootstrap) {
 		p := fx.prefix
 		archived := fx.archived
 		member, admin := fx.f.principals[2].user.ID, fx.f.principals[1].user.ID
@@ -76,8 +76,8 @@ func scaleP21SW495ReferenceAuthorization(t *testing.T, part int) {
 		return &domain.APIKey{ID: "m2-app", Actor: "app", Scopes: scopes, TeamRestriction: "all"}
 	}
 	fx.credentials = append(fx.credentials,
-		scaleP21SW491Credential{"app-unscoped", appKey("read", "write")},
-		scaleP21SW491Credential{"app-scoped", appKey("read", "write", "customer:read", "initiative:read", "release:read")},
+		harnessCredential{"app-unscoped", appKey("read", "write")},
+		harnessCredential{"app-scoped", appKey("read", "write", "customer:read", "initiative:read", "release:read")},
 	)
 	p, esc := fx.prefix, url.PathEscape
 	refs := []struct{ kind, id string }{
@@ -99,22 +99,22 @@ func scaleP21SW495ReferenceAuthorization(t *testing.T, part int) {
 		{"ask", p + "ask-public"}, {"ask", p + "ask-private"},
 		{"unknown", p + "x"},
 	}
-	rows := []scaleP21SW491Row{}
+	rows := []harnessRow{}
 	for _, ref := range refs {
 		name := ref.kind + "-" + ref.id
 		rows = append(rows,
-			scaleP21SW491Row{"favorite-" + name, http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/" + ref.kind + "/" + esc(ref.id), ""},
-			scaleP21SW491Row{"unsubscribe-" + name, http.MethodDelete, "DELETE /api/subscriptions/{type}/{id}", "/api/subscriptions/" + ref.kind + "/" + esc(ref.id), ""},
+			harnessRow{"favorite-" + name, http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/" + ref.kind + "/" + esc(ref.id), ""},
+			harnessRow{"unsubscribe-" + name, http.MethodDelete, "DELETE /api/subscriptions/{type}/{id}", "/api/subscriptions/" + ref.kind + "/" + esc(ref.id), ""},
 		)
 	}
 	rows = append(rows,
-		scaleP21SW491Row{"favorite-patch", http.MethodPatch, "PATCH /api/favorites/{type}/{id}", "/api/favorites/view/" + p + "view-personal", `{"folderId":"f"}`},
-		scaleP21SW491Row{"favorite-delete", http.MethodDelete, "DELETE /api/favorites/{type}/{id}", "/api/favorites/dashboard/" + p + "dash-private", ""},
-		scaleP21SW491Row{"subscribe", http.MethodPut, "PUT /api/subscriptions/{type}/{id}", "/api/subscriptions/cycle/" + p + "cycle-public", ""},
-		scaleP21SW491Row{"kind-case", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/%20Project%20/" + fx.ids["pub-project"], ""},
-		scaleP21SW491Row{"escaped-id", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/project/" + esc(fx.ids["pub-project"]+"/x"), ""},
+		harnessRow{"favorite-patch", http.MethodPatch, "PATCH /api/favorites/{type}/{id}", "/api/favorites/view/" + p + "view-personal", `{"folderId":"f"}`},
+		harnessRow{"favorite-delete", http.MethodDelete, "DELETE /api/favorites/{type}/{id}", "/api/favorites/dashboard/" + p + "dash-private", ""},
+		harnessRow{"subscribe", http.MethodPut, "PUT /api/subscriptions/{type}/{id}", "/api/subscriptions/cycle/" + p + "cycle-public", ""},
+		harnessRow{"kind-case", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/%20Project%20/" + fx.ids["pub-project"], ""},
+		harnessRow{"escaped-id", http.MethodPut, "PUT /api/favorites/{type}/{id}", "/api/favorites/project/" + esc(fx.ids["pub-project"]+"/x"), ""},
 	)
-	fx.runPart(t, "SW495", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW495", rows, []harnessControl{
 		{"favorite-team-" + fx.public + "/member-private-outsider/session", true},
 		{"favorite-team-" + fx.privateTeam + "/member-private-outsider/session", false},
 		{"favorite-label-" + p + "label-private/member-private-outsider/session", false},

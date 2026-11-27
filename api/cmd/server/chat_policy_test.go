@@ -19,11 +19,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW19ChatPolicyBaseline(t *testing.T) {
+func TestChatPolicyBaseline(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		manageable := []string{}
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw19.chat_baseline", "", nil, func(data *domain.Bootstrap) error {
@@ -68,11 +68,11 @@ func TestScaleP21SW19ChatPolicyBaseline(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatBindablePolicyDifferential(t *testing.T) {
+func TestChatBindablePolicyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		private := "sw19-chat-private"
@@ -204,7 +204,7 @@ func TestScaleP21SW19ChatBindablePolicyDifferential(t *testing.T) {
 				}
 			}
 		}
-		foreign := scaleP03Fixture(t, repo)
+		foreign := resourceAccessScaleFixture(t, repo)
 		for _, service := range []*server{legacy, native} {
 			request := f.request(foreign.data.Viewer, nil, nil)
 			request.SetPathValue("provider", "lark")
@@ -225,12 +225,12 @@ func TestScaleP21SW19ChatBindablePolicyDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21SW19ChatWriter struct {
+type chatWriter struct {
 	*httptest.ResponseRecorder
 	onWrite func()
 }
 
-func (w *scaleP21SW19ChatWriter) Write(body []byte) (int, error) {
+func (w *chatWriter) Write(body []byte) (int, error) {
 	if w.onWrite != nil {
 		action := w.onWrite
 		w.onWrite = nil
@@ -239,11 +239,11 @@ func (w *scaleP21SW19ChatWriter) Write(body []byte) (int, error) {
 	return w.ResponseRecorder.Write(body)
 }
 
-func TestScaleP21SW19ChatPolicyHTTPAdmission(t *testing.T) {
+func TestChatPolicyHTTPAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {
@@ -273,7 +273,7 @@ func TestScaleP21SW19ChatPolicyHTTPAdmission(t *testing.T) {
 		}
 		held[len(held)-1].Close()
 		held = held[:len(held)-1]
-		response := &scaleP21SW19ChatWriter{ResponseRecorder: httptest.NewRecorder()}
+		response := &chatWriter{ResponseRecorder: httptest.NewRecorder()}
 		encoded := false
 		response.onWrite = func() {
 			encoded = true
@@ -326,7 +326,7 @@ func TestScaleP21SW19ChatPolicyHTTPAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatPolicyTimestampDecisionDifferential(t *testing.T) {
+func TestChatPolicyTimestampDecisionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	dst, err := time.LoadLocation("America/Los_Angeles")
@@ -334,8 +334,8 @@ func TestScaleP21SW19ChatPolicyTimestampDecisionDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	zones := []*time.Location{time.UTC, time.Local, dst, time.FixedZone(strings.Repeat("retired-source-zone", 100000), -18000)}
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		ids := []string{}
 		times := map[string]*time.Time{}

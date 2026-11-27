@@ -14,17 +14,17 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW198State struct {
+type agentSessionLifecycleState struct {
 	Root, Rows [][]any
 	Native     map[string]json.RawMessage
 	Error      string
 	Swept      int
 }
 
-func scaleP21SW198StateFor(t *testing.T, f scaleP21IssueUpdateFixture, repo *store.SQLiteStore) scaleP21SW198State {
+func stateFor(t *testing.T, f scaleIssueUpdateFixture, repo *store.SQLiteStore) agentSessionLifecycleState {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	got := scaleP21SW198State{
+	got := agentSessionLifecycleState{
 		Root:   f.rows(t, `SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?`, workspace),
 		Rows:   f.rows(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace),
 		Native: map[string]json.RawMessage{},
@@ -61,7 +61,7 @@ func scaleP21SW198StateFor(t *testing.T, f scaleP21IssueUpdateFixture, repo *sto
 	return got
 }
 
-func scaleP21SW198ReloadSource(t *testing.T, f scaleP21IssueUpdateFixture, repo *store.SQLiteStore) {
+func agentSessionLifecycleReloadSource(t *testing.T, f scaleIssueUpdateFixture, repo *store.SQLiteStore) {
 	t.Helper()
 	// Both loaders keep an exact installed copy. Advance only the owned
 	// fixture's metadata revision so this test reaches the actual SQL path.
@@ -78,10 +78,10 @@ func scaleP21SW198ReloadSource(t *testing.T, f scaleP21IssueUpdateFixture, repo 
 	}
 }
 
-func scaleP21SW198Seed(t *testing.T, f scaleP21IssueUpdateFixture, owner domain.User, operation, shape string) (domain.AgentMessage, string) {
+func agentSessionLifecycleSeed(t *testing.T, f scaleIssueUpdateFixture, owner domain.User, operation, shape string) (domain.AgentMessage, string) {
 	t.Helper()
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
-	message := scaleP21SW159Message("sw198-reply", at)
+	message := workerReplyMessage("sw198-reply", at)
 	if operation != "sweep" {
 		message.ID = workerChatMessagePrefix + message.ID
 		// The real fixture HTTP server has its own recovery ticker. These
@@ -174,27 +174,27 @@ func scaleP21SW198Seed(t *testing.T, f scaleP21IssueUpdateFixture, owner domain.
 	return message, selected
 }
 
-func scaleP21SW198Case(t *testing.T, f scaleP21IssueUpdateFixture, owner domain.User, key *domain.APIKey, operation, shape string) {
+func agentSessionLifecycleCase(t *testing.T, f scaleIssueUpdateFixture, owner domain.User, key *domain.APIKey, operation, shape string) {
 	t.Helper()
 	t.Run("warm-source", func(t *testing.T) {
-		scaleP21SW198CaseSource(t, f, owner, key, operation, shape, false)
+		caseSource(t, f, owner, key, operation, shape, false)
 	})
 	t.Run("reloaded-source", func(t *testing.T) {
-		scaleP21SW198CaseSource(t, f, owner, key, operation, shape, true)
+		caseSource(t, f, owner, key, operation, shape, true)
 	})
 }
 
-func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner domain.User, key *domain.APIKey, operation, shape string, reload bool) {
+func caseSource(t *testing.T, f scaleIssueUpdateFixture, owner domain.User, key *domain.APIKey, operation, shape string, reload bool) {
 	t.Helper()
 	var saved domain.AgentMessage
 	var sessionID string
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
-		saved, sessionID = scaleP21SW198Seed(t, f, owner, operation, shape)
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
+		saved, sessionID = agentSessionLifecycleSeed(t, f, owner, operation, shape)
 		if reload {
-			scaleP21SW198ReloadSource(t, f, f.repository)
+			agentSessionLifecycleReloadSource(t, f, f.repository)
 		}
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	name := operation + "/" + shape
 	call := func(service *server) *httptest.ResponseRecorder {
 		if reload && service.store.BoundedMetadataEnabled() {
@@ -202,7 +202,7 @@ func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner d
 			// test generation for every matrix row. A distinct SQL stamp
 			// forces the actual bounded loader, rather than its exact-copy
 			// early exit or the test-view constructor's owner capture.
-			scaleP21SW198ReloadSource(t, f, service.store)
+			agentSessionLifecycleReloadSource(t, f, service.store)
 		}
 		ctx := f.literalRequest(owner, key, nil).Context()
 		ctx, cancel := context.WithCancel(ctx)
@@ -280,7 +280,7 @@ func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner d
 			(errors.Is(saveErr, store.ErrMetadataWorkBudget) || errors.Is(saveErr, store.ErrBoundedMetadataCoverage)) {
 			t.Fatal("legal large session refused", saveErr)
 		}
-		result := scaleP21SW198StateFor(t, f, service.store)
+		result := stateFor(t, f, service.store)
 		if shape == "future-updated" {
 			var sessions []domain.AgentSession
 			if err := json.Unmarshal(result.Native["agentSessions"], &sessions); err != nil {
@@ -303,16 +303,16 @@ func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner d
 	// Native warm values and SQL-loaded values can legitimately differ
 	// (NUL persistence and offloaded-body references). Compare both against
 	// their matching literal oracle instead of normalizing that difference.
-	var outcomes []scaleP21IssueUpdateOutcome
+	var outcomes []scaleIssueUpdateOutcome
 	var expected string
 	for index, source := range []string{"legacy", "warm"} {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized := scaleP21IssueUpdateNormalize(t, got, started)
+		normalized := scaleIssueUpdateNormalize(t, got, started)
 		if index == 0 {
 			expected = normalized
 		} else if normalized != expected {
-			t.Fatalf("%s source=%s reload=%t changed: %s", name, source, reload, scaleP21M2Diff(expected, normalized))
+			t.Fatalf("%s source=%s reload=%t changed: %s", name, source, reload, policyFirstDifference(expected, normalized))
 		}
 	}
 	if strings.HasPrefix(shape, "large-user-message") {
@@ -333,11 +333,11 @@ func scaleP21SW198CaseSource(t *testing.T, f scaleP21IssueUpdateFixture, owner d
 // differential (about 1-2 s without the race detector), and a single test of
 // all four operations ran 13 (differential) and 22 (matrix) minutes under
 // the race detector on CI, too long for one shard.
-func scaleP21SW198Differential(t *testing.T, operation string) {
+func agentSessionLifecycleDifferential(t *testing.T, operation string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	for _, shape := range []string{
 		"native", "first-missing-message", "first-finished-message", "duplicate-message", "deleted-first",
 		"foreign-owner-first", "empty-id", "nul-id", "empty-messages", "nil-messages",
@@ -348,7 +348,7 @@ func scaleP21SW198Differential(t *testing.T, operation string) {
 			continue
 		}
 		t.Run(operation+"/"+shape, func(t *testing.T) {
-			scaleP21SW198Case(t, f, f.data.Viewer, nil, operation, shape)
+			agentSessionLifecycleCase(t, f, f.data.Viewer, nil, operation, shape)
 		})
 	}
 	for _, test := range []struct{ operation, shape string }{
@@ -361,97 +361,97 @@ func scaleP21SW198Differential(t *testing.T, operation string) {
 			continue
 		}
 		t.Run(test.operation+"/"+test.shape, func(t *testing.T) {
-			scaleP21SW198Case(t, f, f.data.Viewer, nil, test.operation, test.shape)
+			agentSessionLifecycleCase(t, f, f.data.Viewer, nil, test.operation, test.shape)
 		})
 	}
 }
 
-func TestScaleP21SW198AgentSessionLifecycleDifferentialMarker(t *testing.T) {
-	scaleP21SW198Differential(t, "marker")
+func TestAgentSessionLifecycleDifferentialMarker(t *testing.T) {
+	agentSessionLifecycleDifferential(t, "marker")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleDifferentialWorker(t *testing.T) {
-	scaleP21SW198Differential(t, "worker")
+func TestAgentSessionLifecycleDifferentialWorker(t *testing.T) {
+	agentSessionLifecycleDifferential(t, "worker")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleDifferentialTerminal(t *testing.T) {
-	scaleP21SW198Differential(t, "terminal")
+func TestAgentSessionLifecycleDifferentialTerminal(t *testing.T) {
+	agentSessionLifecycleDifferential(t, "terminal")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleDifferentialSweep(t *testing.T) {
-	scaleP21SW198Differential(t, "sweep")
+func TestAgentSessionLifecycleDifferentialSweep(t *testing.T) {
+	agentSessionLifecycleDifferential(t, "sweep")
 }
 
-func scaleP21SW198Matrix(t *testing.T, operation string) {
+func agentSessionLifecycleMatrix(t *testing.T, operation string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		t.Run(operation, func(t *testing.T) {
-			scaleP21SW198Case(t, f, user, key, operation, "native")
+			agentSessionLifecycleCase(t, f, user, key, operation, "native")
 		})
 	})
 }
 
-func TestScaleP21SW198AgentSessionLifecycleMatrixMarker(t *testing.T) {
-	scaleP21SW198Matrix(t, "marker")
+func TestAgentSessionLifecycleMatrixMarker(t *testing.T) {
+	agentSessionLifecycleMatrix(t, "marker")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleMatrixWorker(t *testing.T) {
-	scaleP21SW198Matrix(t, "worker")
+func TestAgentSessionLifecycleMatrixWorker(t *testing.T) {
+	agentSessionLifecycleMatrix(t, "worker")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleMatrixTerminal(t *testing.T) {
-	scaleP21SW198Matrix(t, "terminal")
+func TestAgentSessionLifecycleMatrixTerminal(t *testing.T) {
+	agentSessionLifecycleMatrix(t, "terminal")
 }
 
-func TestScaleP21SW198AgentSessionLifecycleMatrixSweep(t *testing.T) {
-	scaleP21SW198Matrix(t, "sweep")
+func TestAgentSessionLifecycleMatrixSweep(t *testing.T) {
+	agentSessionLifecycleMatrix(t, "sweep")
 }
 
 // This is an activation gate, not an expected-budget-refusal test. Keep its
 // consumers pending until the complete native/row ownership plan passes.
-func TestScaleP21SW198LargeSessionLifecycleDifferential(t *testing.T) {
+func TestLargeSessionLifecycleDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	for _, operation := range []string{"marker", "worker", "terminal", "sweep"} {
 		for _, shape := range []string{"large-user-message", "large-user-message-duplicate-id"} {
 			t.Run(operation+"/"+shape, func(t *testing.T) {
-				scaleP21SW198Case(t, f, f.data.Viewer, nil, operation, shape)
+				agentSessionLifecycleCase(t, f, f.data.Viewer, nil, operation, shape)
 			})
 		}
 	}
 }
 
-func TestScaleP21SW198SessionLifecycleConcurrentCAS(t *testing.T) {
+func TestSessionLifecycleConcurrentCAS(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	t.Run("warm-source", func(t *testing.T) {
-		scaleP21SW198ConcurrentCAS(t, f, false, false)
+		concurrentCAS(t, f, false, false)
 	})
 	t.Run("reloaded-source", func(t *testing.T) {
-		scaleP21SW198ConcurrentCAS(t, f, true, false)
+		concurrentCAS(t, f, true, false)
 	})
 	t.Run("stale-reloaded-source", func(t *testing.T) {
-		scaleP21SW198ConcurrentCAS(t, f, true, true)
+		concurrentCAS(t, f, true, true)
 	})
 }
 
-func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, reload, advanceRevision bool) {
+func concurrentCAS(t *testing.T, f scaleIssueUpdateFixture, reload, advanceRevision bool) {
 	t.Helper()
 	owner := f.data.Viewer
 	workspace := f.data.Workspace.URLKey
 	var saved domain.AgentMessage
 	var sessionID string
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
-		saved, sessionID = scaleP21SW198Seed(t, f, owner, "worker", "native")
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
+		saved, sessionID = agentSessionLifecycleSeed(t, f, owner, "worker", "native")
 		if reload {
-			scaleP21SW198ReloadSource(t, f, f.repository)
+			agentSessionLifecycleReloadSource(t, f, f.repository)
 			return
 		}
 		// This fixture keeps native offload markers that the SQL image
@@ -460,12 +460,12 @@ func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, relo
 			t.Fatal(err)
 		}
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var expected string
 	for index, source := range []string{"legacy", "warm"} {
 		got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
 			if reload && service.store.BoundedMetadataEnabled() {
-				scaleP21SW198ReloadSource(t, f, service.store)
+				agentSessionLifecycleReloadSource(t, f, service.store)
 			}
 			if advanceRevision {
 				f.exec(t, `UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind='metadata'`, workspace)
@@ -506,9 +506,9 @@ func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, relo
 			if advanceRevision && !service.store.BoundedMetadataEnabled() {
 				// A bounded commit over a stale revision installs the SQL
 				// image. Load that image in the literal arm as its oracle.
-				scaleP21SW198ReloadSource(t, f, service.store)
+				agentSessionLifecycleReloadSource(t, f, service.store)
 			}
-			state := scaleP21SW198StateFor(t, f, service.store)
+			state := stateFor(t, f, service.store)
 			// The saves write the part text and the call result inline over
 			// bodies that were not loaded. Whether a losing save's conflict
 			// refresh replaces the winner's installed record with its SQL
@@ -541,20 +541,20 @@ func scaleP21SW198ConcurrentCAS(t *testing.T, f scaleP21IssueUpdateFixture, relo
 		if len(got.State.Events) != 1 {
 			t.Fatal("concurrent CAS published multiple mutations", len(got.State.Events))
 		}
-		normalized := scaleP21IssueUpdateNormalize(t, got, started)
+		normalized := scaleIssueUpdateNormalize(t, got, started)
 		if index == 0 {
 			expected = normalized
 		} else if normalized != expected {
-			t.Fatalf("concurrent session CAS differs between legacy and bounded writers: %s", scaleP21M2Diff(expected, normalized))
+			t.Fatalf("concurrent session CAS differs between legacy and bounded writers: %s", policyFirstDifference(expected, normalized))
 		}
 	}
 }
 
-func TestScaleP21SW198SessionLifecycleRevokedMembership(t *testing.T) {
+func TestSessionLifecycleRevokedMembership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	member := f.principals[2].user
 	f.exec(t, `UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, member.ID)
 	defer f.exec(t, `UPDATE workspace_memberships SET status='active' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, member.ID)
@@ -563,7 +563,7 @@ func TestScaleP21SW198SessionLifecycleRevokedMembership(t *testing.T) {
 			// These trusted maintenance callbacks never refused suspended
 			// membership. Keep queued work's exact existing persistence;
 			// route/run authorization remains in its reviewed outer boundary.
-			scaleP21SW198Case(t, f, member, nil, operation, "native")
+			agentSessionLifecycleCase(t, f, member, nil, operation, "native")
 		})
 	}
 }

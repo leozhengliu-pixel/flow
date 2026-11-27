@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW602: a resident workspace holds one installed-source charge (128 KiB of
+// A resident workspace holds one installed-source charge (128 KiB of
 // FLOW_METADATA_SOURCE_BYTES), however it was installed and however often it
 // is written. A flag-on e2e run (default budgets, fresh database) refused
 // POST /api/workspaces and POST /api/labels with "installed workspace sources
@@ -31,12 +31,12 @@ import (
 // share exactly one spool group per workspace, the charge is exactly one
 // descriptor per workspace, the in-memory spools stay within the groups'
 // allowance, and the process holds no charge beyond the installed sources.
-func TestScaleP21SW602CreatedWorkspacesHoldOneSourceCharge(t *testing.T) {
+func TestCreatedWorkspacesHoldOneSourceCharge(t *testing.T) {
 	const workspaces = 6
 	const perWorkspace = 128 << 10
-	config, seeded := sw602ChargeDatabase(t)
+	config, seeded := chargeDatabase(t)
 	baseline := (&store.SQLiteStore{}).InstalledSourceChargeForTesting().Process
-	st := sw602ChargeOpen(t, config, seeded)
+	st := chargeOpen(t, config, seeded)
 	defer st.close()
 	t.Setenv("FLOW_BOUNDED_METADATA", "on")
 	peer, err := store.OpenDatabase(config)
@@ -44,7 +44,7 @@ func TestScaleP21SW602CreatedWorkspacesHoldOneSourceCharge(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer peer.Close()
-	run := &sw602Run{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
+	run := &workspaceAccountSettingsRun{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
 
 	check := func(phase string, want int) {
 		t.Helper()
@@ -139,12 +139,12 @@ func TestScaleP21SW602CreatedWorkspacesHoldOneSourceCharge(t *testing.T) {
 	}
 }
 
-// sw602ChargeDatabase is the database the charge test runs on and the number
+// chargeDatabase is the database the charge test runs on and the number
 // of workspaces it holds: a copy of the round trip's seed on SQLite (its
 // fixture workspace), or an empty scratch database beside
 // FLOW_TEST_DATABASE_URL on MySQL, which a bounded server starts on as the
 // e2e run did.
-func sw602ChargeDatabase(t *testing.T) (store.DatabaseConfig, int) {
+func chargeDatabase(t *testing.T) (store.DatabaseConfig, int) {
 	t.Helper()
 	if os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "mysql" {
 		seed := rtSeed(t)
@@ -177,9 +177,9 @@ func sw602ChargeDatabase(t *testing.T) (store.DatabaseConfig, int) {
 	return store.DatabaseConfig{Driver: "mysql", URL: parsed.String(), MaxOpenConns: 8, MaxIdleConns: 8}, 0
 }
 
-// sw602ChargeOpen is rtOpen on config: a flag-on server signed in as the
+// chargeOpen is rtOpen on config: a flag-on server signed in as the
 // fixture admin, or as an owner it registers on an empty database.
-func sw602ChargeOpen(t *testing.T, config store.DatabaseConfig, seeded int) *rtStack {
+func chargeOpen(t *testing.T, config store.DatabaseConfig, seeded int) *rtStack {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "on")
 	repo, err := store.OpenDatabase(config)

@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW130Writer struct {
+type documentAuxiliaryRoutesWriter struct {
 	*httptest.ResponseRecorder
 	t         *testing.T
 	source    *store.SQLiteStore
@@ -26,7 +26,7 @@ type scaleP21SW130Writer struct {
 	preflight int
 }
 
-func (w *scaleP21SW130Writer) sample(code int) {
+func (w *documentAuxiliaryRoutesWriter) sample(code int) {
 	work := w.source.MetadataWorkUsedForTesting()
 	w.held = max(w.held, work)
 	if w.source.BoundedMetadataEnabled() && code == http.StatusOK && work == 0 {
@@ -34,30 +34,30 @@ func (w *scaleP21SW130Writer) sample(code int) {
 	}
 }
 
-func (w *scaleP21SW130Writer) WriteHeader(code int) {
+func (w *documentAuxiliaryRoutesWriter) WriteHeader(code int) {
 	w.sample(code)
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW130Writer) Write(raw []byte) (int, error) {
+func (w *documentAuxiliaryRoutesWriter) Write(raw []byte) (int, error) {
 	w.sample(w.Code)
 	return w.ResponseRecorder.Write(raw)
 }
 
-func scaleP21SW130Key(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
-	value := scaleP21SW104StoredKey(prefix, user, key)
+func documentAuxiliaryRoutesKey(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
+	value := storedKey(prefix, user, key)
 	if value != nil {
 		value.SecretHash = secretHash("sw130-" + value.ID)
 	}
 	return value
 }
 
-func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
+func TestDocumentAuxiliaryRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW115Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := queryWindowRoutesFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw130-")
 		stamp := time.Date(2026, time.November, 15, 5, 6, 7, 123456789, time.UTC)
 		live, deleted, blocked := prefix+"live", prefix+"deleted", prefix+"blocked"
@@ -86,7 +86,7 @@ func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}},
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}},
 				} {
-					data.APIKeys = append(data.APIKeys, *scaleP21SW130Key(prefix, principal.user, &key))
+					data.APIKeys = append(data.APIKeys, *documentAuxiliaryRoutesKey(prefix, principal.user, &key))
 				}
 			}
 			data.DocumentContentDrafts = append(data.DocumentContentDrafts, domain.DocumentContentDraft{
@@ -139,7 +139,7 @@ func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
 				// The registered handler boundary uses live fixture credentials and
 				// identities. Account/authenticate and their independent guards remain
 				// outside this two-route consumer proof.
-				call := func(t *testing.T, index int, user domain.User, key *domain.APIKey, target, path string, outer, development bool) *scaleP21SW130Writer {
+				call := func(t *testing.T, index int, user domain.User, key *domain.APIKey, target, path string, outer, development bool) *documentAuxiliaryRoutesWriter {
 					t.Helper()
 					request := f.literalRequest(user, key, nil)
 					statements, preflights := 0, 0
@@ -169,7 +169,7 @@ func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
 					defer closeOutput()
 					services[index].authDisabled = development
 					beforeDecodes := services[index].store.WorkspaceMetadataDecodes()
-					writer := &scaleP21SW130Writer{ResponseRecorder: httptest.NewRecorder(), t: t, source: services[index].store}
+					writer := &documentAuxiliaryRoutesWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: services[index].store}
 					muxes[index].ServeHTTP(writer, request)
 					writer.sql, writer.preflight = statements, preflights
 					if index == 1 && writer.Code == http.StatusOK && (writer.held == 0 || f.probe.MetadataWorkUsedForTesting() == 0) {
@@ -217,7 +217,7 @@ func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
 					{"missing-history", "/api/documents/" + prefix + "missing/history"},
 				}
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-					key = scaleP21SW130Key(prefix, user, key)
+					key = documentAuxiliaryRoutesKey(prefix, user, key)
 					if key != nil {
 						credential, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, key.SecretHash, nil)
 						if err != nil || credential.User.ID != user.ID || credential.Key.ID != key.ID {
@@ -247,7 +247,7 @@ func TestScaleP21SW130DocumentAuxiliaryRoutesDifferential(t *testing.T) {
 						compare(t, f.data.Viewer, nil, workspace, routes[route].path, true, false)
 					})
 				}
-				developmentKey := scaleP21SW130Key(prefix, f.data.Viewer, &domain.APIKey{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}})
+				developmentKey := documentAuxiliaryRoutesKey(prefix, f.data.Viewer, &domain.APIKey{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}})
 				credential, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, developmentKey.SecretHash, nil)
 				if err != nil {
 					t.Fatal(err)

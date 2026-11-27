@@ -10,19 +10,19 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP01WriteCost struct {
+type scaleWriteCost struct {
 	writeCost
 	statements   int64
 	cpu, elapsed float64
 }
 
-func scaleP01MeasureWrite(t *testing.T, peers peerServers, step func()) scaleP01WriteCost {
+func scaleMeasureWrite(t *testing.T, peers peerServers, step func()) scaleWriteCost {
 	t.Helper()
 	sqlCount := func() int64 {
 		var n int64
 		for _, repo := range peers.stores {
-			if value, ok := scaleP01Probes.Load(repo); ok {
-				sql := value.(*store.ScaleP01Probe).SQLSnapshot()
+			if value, ok := scaleProbes.Load(repo); ok {
+				sql := value.(*store.ScaleProbe).SQLSnapshot()
 				n += sql.Statements
 			}
 		}
@@ -31,14 +31,14 @@ func scaleP01MeasureWrite(t *testing.T, peers peerServers, step func()) scaleP01
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	decodes, statements, cpu, began := peers.metadataDecodes(), sqlCount(), scaleP01CPUTime(), time.Now()
+	decodes, statements, cpu, began := peers.metadataDecodes(), sqlCount(), scaleCPUTime(), time.Now()
 	step()
-	elapsed, cpuAfter := time.Since(began), scaleP01CPUTime()
+	elapsed, cpuAfter := time.Since(began), scaleCPUTime()
 	runtime.ReadMemStats(&after)
-	return scaleP01WriteCost{writeCost: writeCost{peers.metadataDecodes() - decodes, after.TotalAlloc - before.TotalAlloc}, statements: sqlCount() - statements, cpu: cpuAfter.UserSeconds + cpuAfter.SystemSeconds - cpu.UserSeconds - cpu.SystemSeconds, elapsed: elapsed.Seconds()}
+	return scaleWriteCost{writeCost: writeCost{peers.metadataDecodes() - decodes, after.TotalAlloc - before.TotalAlloc}, statements: sqlCount() - statements, cpu: cpuAfter.UserSeconds + cpuAfter.SystemSeconds - cpu.UserSeconds - cpu.SystemSeconds, elapsed: elapsed.Seconds()}
 }
 
-func (cost *scaleP01WriteCost) add(next scaleP01WriteCost) {
+func (cost *scaleWriteCost) add(next scaleWriteCost) {
 	cost.decodes += next.decodes
 	cost.bytes += next.bytes
 	cost.statements += next.statements
@@ -46,7 +46,7 @@ func (cost *scaleP01WriteCost) add(next scaleP01WriteCost) {
 	cost.elapsed += next.elapsed
 }
 
-func scaleP01WriteMetrics(cost scaleP01WriteCost, writes int) map[string]any {
+func scaleWriteMetrics(cost scaleWriteCost, writes int) map[string]any {
 	n := float64(writes)
 	return map[string]any{"statementsPerWrite": float64(cost.statements) / n, "cpuSecondsPerWrite": cost.cpu / n, "meanElapsedMs": cost.elapsed / n * 1000, "scope": "whole process, both replicas; forced GC excluded"}
 }

@@ -13,12 +13,12 @@ import (
 // Compare installed legacy snapshots with canonical reads after policy-only
 // recovery. This certifies the native project/initiative read boundary only;
 // it does not bypass the application's incomplete activation coverage.
-func TestScaleP21ResidentPolicyPermissionDifferential(t *testing.T) {
+func TestScaleResidentPolicyPermissionDifferential(t *testing.T) {
 	for _, journal := range []string{"off", "on"} {
 		t.Run(journal, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_JOURNAL", journal)
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 			public, private, child := "p21-public", "p21-private", "p21-child"
 			if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -77,7 +77,7 @@ func TestScaleP21ResidentPolicyPermissionDifferential(t *testing.T) {
 			if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
-			probe := scaleP21ResidentProbe(f.SQLiteStore)
+			probe := scaleResidentProbe(f.SQLiteStore)
 			if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +105,7 @@ func TestScaleP21ResidentPolicyPermissionDifferential(t *testing.T) {
 						{"selected-set", &domain.APIKey{ID: "p21-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{public}}},
 					} {
 						t.Run(credential.name, func(t *testing.T) {
-							outputContext := scaleP21ResourceOutputContext(t)
+							outputContext := scaleResourceOutputContext(t)
 							legacy, err := f.ResolveAccess(t.Context(), workspace, principal.user.ID, credential.key)
 							if err != nil {
 								t.Fatal(err)

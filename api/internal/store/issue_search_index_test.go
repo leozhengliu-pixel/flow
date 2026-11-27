@@ -14,7 +14,7 @@ import (
 
 func TestIssueSearchCandidateProjectionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	issues := issueSearchProjectionIssues(f.data, 7)
 	ids := make([]string, len(issues))
@@ -123,7 +123,7 @@ func TestIssueSearchCandidateProjectionTiming(t *testing.T) {
 		t.Skip("set FLOW_BENCH_ISSUE_PROJECTION=1 to time search projections")
 	}
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	const size = 120 // The default search request uses 30 results and 4x candidates.
 	workspace := f.data.Workspace.URLKey
 	if err := f.ImportIssues(t.Context(), workspace, issueSearchProjectionIssues(f.data, 2*size)); err != nil {

@@ -14,16 +14,16 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotLoopTickScheduleStamps(t *testing.T) {
+func TestScaleHotLoopTickScheduleStamps(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace := f.data.Workspace.URLKey
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -148,15 +148,15 @@ func TestScaleP21HotLoopTickScheduleStamps(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotLoopTickTriggerSelection(t *testing.T) {
+func TestScaleHotLoopTickTriggerSelection(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, public := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

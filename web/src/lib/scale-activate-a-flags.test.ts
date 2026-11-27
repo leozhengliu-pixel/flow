@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { appliedRealtimeCursorEnabled, boundedBrowserCacheEnabled } from '@/lib/scale-p08'
+import { appliedRealtimeCursorEnabled, boundedBrowserCacheEnabled } from '@/lib/realtime-cache-limits'
 import { syncBootstrapRequestKey, syncV2Enabled } from '@/lib/sync-client'
 
 afterEach(() => vi.unstubAllEnvs())

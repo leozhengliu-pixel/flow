@@ -20,7 +20,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW315TeamMembershipAuthorization(t *testing.T) {
+func TestTeamMembershipAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -33,7 +33,7 @@ func TestScaleP21SW315TeamMembershipAuthorization(t *testing.T) {
 			{http.MethodDelete, "/api/teams/team/members/user"},
 			{http.MethodPost, "/api/teams/team/members/sync"},
 		} {
-			if ref, selected := scaleP21SW315TeamMembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)); !selected || ref != "team" {
+			if ref, selected := teamMembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)); !selected || ref != "team" {
 				t.Fatal("registered membership family not selected", row)
 			}
 		}
@@ -46,7 +46,7 @@ func TestScaleP21SW315TeamMembershipAuthorization(t *testing.T) {
 			{http.MethodPost, "/api/teams/team/members/sync/"}, {http.MethodGet, "/api/teams/team/resources"},
 			{http.MethodGet, "/api/teams/team/settings"}, {http.MethodGet, "/api/workspaces/workspace/teams/team/members"},
 		} {
-			if _, selected := scaleP21SW315TeamMembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)); selected {
+			if _, selected := teamMembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)); selected {
 				t.Fatal("membership hook captured another predicate", row)
 			}
 		}
@@ -105,10 +105,10 @@ func TestScaleP21SW315TeamMembershipAuthorization(t *testing.T) {
 		Body    string
 		Route   string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw315-")
 			data, found := repo.WorkspaceMetadata(workspace)
 			if !found {

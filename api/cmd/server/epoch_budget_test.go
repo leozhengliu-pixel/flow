@@ -13,13 +13,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP12RealtimeBurstWaitsForProjectionBudget(t *testing.T) {
+func TestScaleRealtimeBurstWaitsForProjectionBudget(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_REALTIME_BUDGET_BYTES", "50331648")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := newScaleP12Fixture(t, repo)
+			f := newScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			event := domain.RealtimeEvent{ID: "p12-budget-burst", Type: "issue.updated", AggregateID: f.open.ID, Payload: json.RawMessage(`{}`)}
 			// Warm the source and policy caches, leaving the projection cold.
@@ -44,7 +44,7 @@ func TestScaleP12RealtimeBurstWaitsForProjectionBudget(t *testing.T) {
 				t.Fatal("could not fill the budget")
 			}
 			releaseBurst := sync.OnceFunc(func() { budget.release(room) })
-			request := scaleP12Request(workspace, f.data.Viewer)
+			request := scaleRequest(workspace, f.data.Viewer)
 			ctx, cancel := context.WithCancel(request.Context())
 			request = request.WithContext(ctx)
 			const deliveries = 32
@@ -146,9 +146,9 @@ func TestScaleP12RealtimeBurstWaitsForProjectionBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP12CachedFrameDoesNotReserveAnotherEncoding(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleCachedFrameDoesNotReserveAnotherEncoding(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		event := domain.RealtimeEvent{ID: "p12-cache-budget", Type: "issue.updated", AggregateID: f.open.ID, Payload: mustJSON(t, map[string]string{"note": strings.Repeat("x", 8192)})}
 		source, err := f.service.BuildEventSource(t.Context(), f.data.Workspace.URLKey, event)
 		if err != nil {
@@ -180,7 +180,7 @@ func TestScaleP12CachedFrameDoesNotReserveAnotherEncoding(t *testing.T) {
 	}
 }
 
-func TestScaleP12SharedEncodingFailureIsNotAnInvisibleFrame(t *testing.T) {
+func TestScaleSharedEncodingFailureIsNotAnInvisibleFrame(t *testing.T) {
 	var cache realtimePayloadCache
 	entered, release := make(chan struct{}), make(chan struct{})
 	done := make(chan struct{})

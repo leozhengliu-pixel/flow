@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW339Root(t *testing.T) string {
+func inlineRootPagesRoot(t *testing.T) string {
 	t.Helper()
 	body, err := json.Marshal(strings.Repeat("x\u4e2d\U0001f600", 70000) + "\x00<>&")
 	if err != nil {
@@ -27,9 +27,9 @@ func scaleP21SW339Root(t *testing.T) string {
 	return raw
 }
 
-func TestScaleP21SW339InlineRootScopedPages(t *testing.T) {
-	raw := scaleP21SW339Root(t)
-	f, view := scaleP21SW229Fixture(t, raw)
+func TestInlineRootScopedPages(t *testing.T) {
+	raw := inlineRootPagesRoot(t)
+	f, view := inlineRootSpoolFixture(t, raw)
 	t.Cleanup(view.releaseMetadataLogicalSources)
 	workspace := f.data.Workspace.URLKey
 	var fields map[string]metadataCollectionRange
@@ -37,7 +37,7 @@ func TestScaleP21SW339InlineRootScopedPages(t *testing.T) {
 		t.Run("event="+event, func(t *testing.T) {
 			queries := 0
 			ctx := WithSQLStatementObserver(withIntegrationDeliveryStream(t.Context(), event), func(query string) {
-				if scaleP21SW229RootQuery(query) {
+				if inlineRootSpoolRootQuery(query) {
 					queries++
 				}
 			})
@@ -67,7 +67,7 @@ func TestScaleP21SW339InlineRootScopedPages(t *testing.T) {
 			} else if !reflect.DeepEqual(root.fields, fields) {
 				t.Fatal("SQL page choice changed last-occurrence field ranges")
 			}
-			scaleP21SW229AssertRootBytes(t, root, raw)
+			assertRootBytes(t, root, raw)
 			shapes, err := root.shapes()
 			if err != nil || !reflect.DeepEqual(shapes, map[string]string{"projects": "array", "integrationConnections": "array"}) {
 				t.Fatal("SQL page choice changed manifest", shapes, err)
@@ -90,10 +90,10 @@ func TestScaleP21SW339InlineRootScopedPages(t *testing.T) {
 				borrowed.Close()
 				t.Fatal("borrow did not own exactly its fixed descriptor/file pages")
 			}
-			scaleP21SW229AssertRootBytes(t, borrowed, raw)
+			assertRootBytes(t, borrowed, raw)
 			borrowed.Close()
 			borrowed.Close()
-			scaleP21SW229AssertRootBytes(t, root, raw)
+			assertRootBytes(t, root, raw)
 			if queries != expectedQueries || view.MetadataWorkUsedForTesting()-work != allowance {
 				t.Fatal("borrow reread SQL or released its parent's allowance", queries)
 			}
@@ -116,9 +116,9 @@ func TestScaleP21SW339InlineRootScopedPages(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW339SnapshotReaderPageBoundaries(t *testing.T) {
-	raw := scaleP21SW339Root(t)
-	f, view := scaleP21SW229Fixture(t, raw)
+func TestSnapshotReaderPageBoundaries(t *testing.T) {
+	raw := inlineRootPagesRoot(t)
+	f, view := inlineRootSpoolFixture(t, raw)
 	t.Cleanup(view.releaseMetadataLogicalSources)
 	workspace := f.data.Workspace.URLKey
 	tx, err := view.db.BeginTx(t.Context(), metadataReadOptions(view.dialect))
@@ -129,7 +129,7 @@ func TestScaleP21SW339SnapshotReaderPageBoundaries(t *testing.T) {
 	snapshot := &metadataCollectionSnapshot{store: view, tx: tx, workspace: workspace}
 	observed := func(ctx context.Context, queries *int, cancel context.CancelFunc) context.Context {
 		return WithSQLStatementObserver(ctx, func(query string) {
-			if scaleP21SW229RootQuery(query) {
+			if inlineRootSpoolRootQuery(query) {
 				(*queries)++
 				if *queries == 2 && cancel != nil {
 					cancel()

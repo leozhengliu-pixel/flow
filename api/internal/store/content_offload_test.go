@@ -628,7 +628,7 @@ func TestWithoutReplacedAgentBodyRefsMatchesStoredForm(t *testing.T) {
 // of the same session installed from it (field order, nothing to drop): a
 // conflict refresh must not take the key order for another server's commit.
 func TestInstalledSessionRowStoredIgnoresKeyOrder(t *testing.T) {
-	repo := scaleP21SW198StreamStore(t)
+	repo := streamStore(t)
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	session := domain.AgentSession{ID: "session", UserID: "owner", Title: "Chat", CreatedAt: at, UpdatedAt: at, Messages: []domain.AgentMessage{{
 		ID: "reply", Role: "assistant", Content: "reply", CreatedAt: at, Status: "streaming",

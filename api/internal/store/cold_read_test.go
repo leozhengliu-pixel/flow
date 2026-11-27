@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21ColdReadFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func scaleColdReadFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Now()
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.cold_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -45,7 +45,7 @@ func scaleP21ColdReadFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, strin
 	return f, view, workspace
 }
 
-func TestScaleP21ColdReadOffIdentity(t *testing.T) {
+func TestScaleColdReadOffIdentity(t *testing.T) {
 	repo := &SQLiteStore{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -63,8 +63,8 @@ func TestScaleP21ColdReadOffIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdReadInstalledSourceAndReload(t *testing.T) {
-	f, view, workspace := scaleP21ColdReadFixture(t)
+func TestScaleColdReadInstalledSourceAndReload(t *testing.T) {
+	f, view, workspace := scaleColdReadFixture(t)
 	// Registry identity and default must remain independent of logical URLKey.
 	physical := workspace + "\x00physical"
 	view.mu.Lock()
@@ -159,20 +159,20 @@ func TestScaleP21ColdReadInstalledSourceAndReload(t *testing.T) {
 	}
 }
 
-type scaleP21ColdBlockingWriter struct {
+type scaleColdBlockingWriter struct {
 	started chan struct{}
 	resume  chan struct{}
 }
 
-func (w scaleP21ColdBlockingWriter) Write(data []byte) (int, error) {
+func (w scaleColdBlockingWriter) Write(data []byte) (int, error) {
 	close(w.started)
 	<-w.resume
 	return len(data), nil
 }
 
-func TestScaleP21ColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
-	f, view, workspace := scaleP21ColdReadFixture(t)
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-second-")).Workspace.URLKey
+func TestScaleColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
+	f, view, workspace := scaleColdReadFixture(t)
+	second := selectedExtraWorkspace(t, f, idgen.New("p21-cold-second-")).Workspace.URLKey
 	view.metadataResidency.work.limit = metadataWorkBytes()
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func TestScaleP21ColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
 	old := view.metadataResidency.logical[workspace]
 	path := old.stores[0].Name()
 	view.metadataResidency.mu.Unlock()
-	writer := scaleP21ColdBlockingWriter{make(chan struct{}), make(chan struct{})}
+	writer := scaleColdBlockingWriter{make(chan struct{}), make(chan struct{})}
 	done := make(chan error, 1)
 	go func() {
 		done <- view.withColdMetadataRead(t.Context(), func(ctx context.Context, facade *SQLiteStore) error {
@@ -262,8 +262,8 @@ func TestScaleP21ColdReadGateEncodingLifetimeAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdReadErrorPanicAndMissingSource(t *testing.T) {
-	_, view, workspace := scaleP21ColdReadFixture(t)
+func TestScaleColdReadErrorPanicAndMissingSource(t *testing.T) {
+	_, view, workspace := scaleColdReadFixture(t)
 	view.metadataResidency.mu.Lock()
 	source := view.metadataResidency.logical[workspace]
 	view.metadataResidency.mu.Unlock()
@@ -334,8 +334,8 @@ func TestScaleP21ColdReadErrorPanicAndMissingSource(t *testing.T) {
 	assertReleased()
 }
 
-func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
-	f, parent, workspace := scaleP21ColdReadFixture(t)
+func TestScaleColdReadRefreshLatestInstalledGeneration(t *testing.T) {
+	f, parent, workspace := scaleColdReadFixture(t)
 	physical := workspace + "\x00latest"
 	var facade *SQLiteStore
 	var stale context.Context
@@ -423,9 +423,9 @@ func TestScaleP21ColdReadRefreshLatestInstalledGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdReadRefreshBoundariesAndInheritedSnapshot(t *testing.T) {
-	f, parent, workspace := scaleP21ColdReadFixture(t)
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-refresh-")).Workspace.URLKey
+func TestScaleColdReadRefreshBoundariesAndInheritedSnapshot(t *testing.T) {
+	f, parent, workspace := scaleColdReadFixture(t)
+	second := selectedExtraWorkspace(t, f, idgen.New("p21-cold-refresh-")).Workspace.URLKey
 	parent.metadataResidency.work.limit = metadataWorkBytes()
 	if err := parent.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)

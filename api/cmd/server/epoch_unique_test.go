@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP12EpochTwoThousandCredentialContextsRemainReusable(t *testing.T) {
+func TestScaleEpochTwoThousandCredentialContextsRemainReusable(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		teams := make([]string, 11)
 		for i := range teams {
 			teams[i] = idgen.New("p12-epoch-team-")
@@ -51,7 +51,7 @@ func TestScaleP12EpochTwoThousandCredentialContextsRemainReusable(t *testing.T) 
 		event := domain.RealtimeEvent{ID: "p12-epoch-unique", Type: "issue.updated", AggregateID: f.open.ID, Payload: json.RawMessage(`{}`)}
 		deliver := func(key domain.APIKey, observe func(string)) []byte {
 			t.Helper()
-			request := (scaleP12Principal{user: f.data.Viewer, key: &key}).request(f.data.Workspace.URLKey)
+			request := (scalePrincipal{user: f.data.Viewer, key: &key}).request(f.data.Workspace.URLKey)
 			if observe != nil {
 				request = request.WithContext(store.WithSQLStatementObserver(request.Context(), observe))
 			}

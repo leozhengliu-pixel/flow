@@ -15,14 +15,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP16PermissionDifferential(t *testing.T) {
-	scaleP16PermissionMatrix(t, false)
+func TestScalePermissionDifferentialPermissions(t *testing.T) {
+	permissionsScalePermissionMatrix(t, false)
 }
 
-func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func permissionsScalePermissionMatrix(t *testing.T, mutations bool) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			ctx := t.Context()
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -44,14 +44,14 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 			if err := repo.SetTeamMembership(ctx, f.data.Workspace.ID, "p16-private", f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			member, memberUser := scaleP03Join(t, f, "P16 member", idgen.New("p16-member-")+"@example.test", "member", "p16-open")
-			admin, _ := scaleP03Join(t, f, "P16 outside admin", idgen.New("p16-admin-")+"@example.test", "admin", "p16-open")
-			guest, guestUser := scaleP03Join(t, f, "P16 guest", idgen.New("p16-guest-")+"@example.test", "guest", "p16-open")
-			inherited, _ := scaleP03Join(t, f, "P16 inherited", idgen.New("p16-inherited-")+"@example.test", "member", "p16-private")
+			member, memberUser := resourceAccessScaleJoin(t, f, "P16 member", idgen.New("p16-member-")+"@example.test", "member", "p16-open")
+			admin, _ := resourceAccessScaleJoin(t, f, "P16 outside admin", idgen.New("p16-admin-")+"@example.test", "admin", "p16-open")
+			guest, guestUser := resourceAccessScaleJoin(t, f, "P16 guest", idgen.New("p16-guest-")+"@example.test", "guest", "p16-open")
+			inherited, _ := resourceAccessScaleJoin(t, f, "P16 inherited", idgen.New("p16-inherited-")+"@example.test", "member", "p16-private")
 			issue := authRequest[domain.Issue](t, f.admin, "POST", f.host.URL+"/api/issue-records", map[string]string{"title": "Granted", "teamId": "p16-private", "projectId": "p16-secret-project"}, workspace, 201)
 			authRequest[[]domain.IssuePermission](t, f.admin, "PUT", f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, 200)
-			unrestricted := scaleP03Key(t, f, []string{"read", "write"}, nil)
-			selected := scaleP03Key(t, f, []string{"read", "write"}, []string{"p16-open"})
+			unrestricted := scaleKey(t, f, []string{"read", "write"}, nil)
+			selected := scaleKey(t, f, []string{"read", "write"}, []string{"p16-open"})
 			empty := idgen.New("p16-empty-")
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: idgen.New("p16-key-"), Name: "Selected empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -64,7 +64,7 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 				t.Fatal(err)
 			}
 			f.resources.workspaces = append(f.resources.workspaces, other.Workspace.URLKey)
-			probe := newScaleP16PermissionProbe(t, repo, workspace, mutations)
+			probe := newScalePermissionProbe(t, repo, workspace, mutations)
 			for _, principal := range []struct {
 				name, token string
 				client      *http.Client
@@ -116,7 +116,7 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 								}
 								if mutations {
 									effects := probe.result(t)
-									value = scaleP04Normalize(raw)
+									value = scaleNormalize(raw)
 									if mode == "off" {
 										oldEffects = effects
 									} else if !maps.Equal(oldEffects, effects) {
@@ -149,8 +149,8 @@ func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 	}
 }
 
-func TestScaleP16QueuedAndReplayRevocation(t *testing.T) {
+func TestScaleQueuedAndReplayRevocationPermissions(t *testing.T) {
 	t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
 	t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "on")
-	t.Run("permission-and-replay", TestScaleP15PermissionDifferential)
+	t.Run("permission-and-replay", TestScalePermissionDifferentialRecordHydrationPermissions)
 }

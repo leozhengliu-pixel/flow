@@ -9,15 +9,15 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21RecordPredicate applies a literal record predicate to the unfiltered
+// recordPredicate applies a literal record predicate to the unfiltered
 // headers with the viewer's access policy. An error (a changed policy) retries.
-type scaleP21RecordPredicate func(store.AccessContext, domain.Bootstrap) (bool, error)
+type recordPredicate func(store.AccessContext, domain.Bootstrap) (bool, error)
 
 // boundedRecordDecision reads the unfiltered authorization headers of the
 // records of one kind named by ref and applies decide with the viewer's
-// access policy. It keeps SW255's retry: a changed policy re-resolves access
+// access policy. It keeps resource authorization's retry: a changed policy re-resolves access
 // and re-authenticates an API key against the same request.
-func (s *server) boundedRecordDecision(r *http.Request, workspace, userID, kind, ref string, decide scaleP21RecordPredicate) bool {
+func (s *server) boundedRecordDecision(r *http.Request, workspace, userID, kind, ref string, decide recordPredicate) bool {
 	var credential *domain.APIKey
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		credential = &key
@@ -62,7 +62,7 @@ func (s *server) boundedRecordDecision(r *http.Request, workspace, userID, kind,
 // cycleAllowed: the literal projection keeps a cycle only when the viewer
 // reads its team's content, and the predicate then requires teamAllowed of
 // that same team, so the unfiltered header with TeamContentAllowed decides it.
-func boundedCycleAllowed(ref string) scaleP21RecordPredicate {
+func boundedCycleAllowed(ref string) recordPredicate {
 	return func(access store.AccessContext, data domain.Bootstrap) (bool, error) {
 		for _, item := range data.Cycles {
 			if item.ID == ref && access.TeamContentAllowed(item.TeamID) {
@@ -73,10 +73,10 @@ func boundedCycleAllowed(ref string) scaleP21RecordPredicate {
 	}
 }
 
-// scaleP21SW490RecordPredicate names the record kind to read (none for a
+// recordShapePredicate names the record kind to read (none for a
 // create root or a setting) and the literal predicate of a record shape. For
 // record shapes, output marks a create root.
-func (s *server) scaleP21SW490RecordPredicate(r *http.Request, workspace, userID string, shape scaleP21SW490Shape) (string, scaleP21RecordPredicate) {
+func (s *server) recordShapePredicate(r *http.Request, workspace, userID string, shape fallbackRouteShape) (string, recordPredicate) {
 	switch shape.kind {
 	case "cycles":
 		return "cycles", boundedCycleAllowed(shape.ref)

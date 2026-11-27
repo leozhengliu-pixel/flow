@@ -12,8 +12,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW16FormerMapBytes = 16 << 20
-const scaleP21SW16FormerWorkBytes = 64 << 20
+const formerMapBytes = 16 << 20
+const formerWorkBytes = 64 << 20
 
 // FormerMembersRead owns the returned ID map and its output admission. Members
 // is read-only and must not be retained after Close. Always close a nonnil
@@ -88,7 +88,7 @@ func (s *SQLiteStore) BeginFormerMembersRead(ctx context.Context, workspace stri
 		}
 		defer tx.Rollback()
 	}
-	remaining := scaleP21SW16FormerMapBytes
+	remaining := formerMapBytes
 	add := func(id string) error {
 		if former[id] {
 			return nil
@@ -104,12 +104,12 @@ func (s *SQLiteStore) BeginFormerMembersRead(ctx context.Context, workspace stri
 	var exists int
 	err = tx.QueryRowContext(ctx, `SELECT 1 FROM workspace_memberships WHERE workspace_id=? LIMIT 1`, workspaceID).Scan(&exists)
 	if err == nil {
-		length := s.scaleP21SW16FormerIDLength()
+		length := s.formerIDLength()
 		var count, bytes int64
 		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+length+"),0) FROM ("+formerMembersQuery+") sw16_former", workspaceID, workspaceID).Scan(&count, &bytes); err != nil {
 			return read, err
 		}
-		if count < 0 || bytes < 0 || count > scaleP21SW16FormerMapBytes/128 || bytes > scaleP21SW16FormerMapBytes-count*128 {
+		if count < 0 || bytes < 0 || count > formerMapBytes/128 || bytes > formerMapBytes-count*128 {
 			return read, ErrMetadataWorkBudget
 		}
 		// Owned output, map buckets and one driver's largest page remain
@@ -119,15 +119,15 @@ func (s *SQLiteStore) BeginFormerMembersRead(ctx context.Context, workspace stri
 			return read, err
 		}
 		read.releases = append(read.releases, releaseOutput)
-		return read, s.scaleP21SW16FormerMembershipRows(ctx, tx, workspaceID, &remaining, add)
+		return read, s.formerMembershipRows(ctx, tx, workspaceID, &remaining, add)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return read, err
 	}
-	return s.scaleP21SW16FallbackFormerMembers(ctx, tx, workspace, read, add, false)
+	return s.fallbackFormerMembers(ctx, tx, workspace, read, add, false)
 }
 
-func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx *sqlTx, workspace string, read *FormerMembersRead, add func(string) error, canonicalSource bool) (*FormerMembersRead, error) {
+func (s *SQLiteStore) fallbackFormerMembers(ctx context.Context, tx *sqlTx, workspace string, read *FormerMembersRead, add func(string) error, canonicalSource bool) (*FormerMembersRead, error) {
 	if !canonicalSource {
 		return read, s.readFormerMembersLogicalFallback(ctx, read, add)
 	}
@@ -140,16 +140,16 @@ func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx 
 	if err != nil {
 		return read, err
 	}
-	ctx, releaseFallback, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW16FormerWorkBytes)
+	ctx, releaseFallback, err := s.tryAdmitAdditionalMetadataWork(ctx, formerWorkBytes)
 	if err != nil {
 		return read, err
 	}
 	read.releases = append(read.releases, releaseFallback)
 	if shape.RequiresTypedMerge {
-		return read, s.scaleP21SW16MergedFormerMembers(ctx, collection, add)
+		return read, s.mergedFormerMembers(ctx, collection, add)
 	}
 	err = collection.VisitArray("members", func(recordCtx context.Context, record MetadataArrayRecord) error {
-		cost, err := scaleP21SW16MemberDecodeCost(record)
+		cost, err := memberDecodeCost(record)
 		if err != nil {
 			return err
 		}
@@ -159,7 +159,7 @@ func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx 
 		}
 		defer release()
 		var member domain.WorkspaceMember
-		if err := scaleP21SW16DecodeMember(recordCtx, record, &member); err != nil {
+		if err := decodeMember(recordCtx, record, &member); err != nil {
 			return err
 		}
 		if member.Status == "suspended" {
@@ -170,7 +170,7 @@ func (s *SQLiteStore) scaleP21SW16FallbackFormerMembers(ctx context.Context, tx 
 	return read, err
 }
 
-func (s *SQLiteStore) scaleP21SW16FormerIDLength() string {
+func (s *SQLiteStore) formerIDLength() string {
 	length := "LENGTH(user_id)"
 	if s.dialect == "sqlite" {
 		length = "LENGTH(CAST(user_id AS BLOB))"
@@ -180,8 +180,8 @@ func (s *SQLiteStore) scaleP21SW16FormerIDLength() string {
 	return length
 }
 
-func (s *SQLiteStore) scaleP21SW16FormerMembershipRows(ctx context.Context, tx *sqlTx, workspaceID string, remaining *int, add func(string) error) error {
-	length, order := s.scaleP21SW16FormerIDLength(), "CAST(user_id AS BLOB)"
+func (s *SQLiteStore) formerMembershipRows(ctx context.Context, tx *sqlTx, workspaceID string, remaining *int, add func(string) error) error {
+	length, order := s.formerIDLength(), "CAST(user_id AS BLOB)"
 	if s.dialect == "mysql" {
 		order = "CAST(user_id AS BINARY)"
 	} else if s.dialect == "postgres" {
@@ -253,7 +253,7 @@ func (s *SQLiteStore) scaleP21SW16FormerMembershipRows(ctx context.Context, tx *
 	}
 }
 
-func scaleP21SW16MemberDecodeCost(record MetadataArrayRecord) (int, error) {
+func memberDecodeCost(record MetadataArrayRecord) (int, error) {
 	if record.EncodedBytes < 0 || record.EncodedBytes > (int64(metadataWorkBytes())-(128<<10))/8 {
 		return 0, ErrMetadataWorkBudget
 	}
@@ -299,7 +299,7 @@ func scaleP21SW16MemberDecodeCost(record MetadataArrayRecord) (int, error) {
 	}
 }
 
-func scaleP21SW16DecodeMember(ctx context.Context, record MetadataArrayRecord, member *domain.WorkspaceMember) error {
+func decodeMember(ctx context.Context, record MetadataArrayRecord, member *domain.WorkspaceMember) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -321,13 +321,13 @@ func scaleP21SW16DecodeMember(ctx context.Context, record MetadataArrayRecord, m
 	return nil
 }
 
-func (s *SQLiteStore) scaleP21SW16MergedFormerMembers(ctx context.Context, read *MetadataCollectionRead, add func(string) error) error {
-	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW16FormerWorkBytes)
+func (s *SQLiteStore) mergedFormerMembers(ctx context.Context, read *MetadataCollectionRead, add func(string) error) error {
+	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, formerWorkBytes)
 	if err != nil {
 		return err
 	}
 	defer release()
-	remaining := scaleP21SW16FormerWorkBytes
+	remaining := formerWorkBytes
 	var members []domain.WorkspaceMember
 	err = read.VisitArrayOccurrences("members", func(_ context.Context, occurrence MetadataArrayOccurrence) error {
 		switch {
@@ -345,7 +345,7 @@ func (s *SQLiteStore) scaleP21SW16MergedFormerMembers(ctx context.Context, read 
 			}
 			return nil
 		}
-		cost, err := scaleP21SW16MemberDecodeCost(occurrence.MetadataArrayRecord)
+		cost, err := memberDecodeCost(occurrence.MetadataArrayRecord)
 		if err != nil || cost > remaining {
 			if err != nil {
 				return err
@@ -364,7 +364,7 @@ func (s *SQLiteStore) scaleP21SW16MergedFormerMembers(ctx context.Context, read 
 		} else {
 			return ErrMetadataRecordQuery
 		}
-		return scaleP21SW16DecodeMember(ctx, occurrence.MetadataArrayRecord, &members[index])
+		return decodeMember(ctx, occurrence.MetadataArrayRecord, &members[index])
 	})
 	if err != nil {
 		return err

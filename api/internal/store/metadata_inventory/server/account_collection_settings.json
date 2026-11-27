@@ -5,7 +5,7 @@
     "requestAccountSettings": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Thin settings-only adapter over the certified owned AccountCollectionRead, registered with the containing request/background output owner. Off calls literal AccountCollections; missing/closed owner errors release the graph. SW127 compares exact native/missing values and both owner lifetimes. This helper does not certify unmigrated AccountCollections consumers.",
+      "reason": "Thin settings-only adapter over the certified owned AccountCollectionRead, registered with the containing request/background output owner. Off calls literal AccountCollections; missing/closed owner errors release the graph. account settings compares exact native/missing values and both owner lifetimes. This helper does not certify unmigrated AccountCollections consumers.",
       "accessors": ["BeginAccountCollectionRead"],
       "temperature": "hot",
       "temperatureReason": "Shared adapter prepared for HOT account-settings consumers.",
@@ -14,7 +14,7 @@
     "accountCollections": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "store.AccountCollections reads the installed in-memory image, which a bounded store holds without user settings and passkeys (SW530: GET /api/account/settings answered empty settings). Flag off it calls AccountCollections literally; bounded it copies the same values (workspace existence, the user's settings, passkeys in source order when asked) out of the reviewed BeginAccountCollectionRead before closing it; a failed bounded read reports the workspace missing. Every AccountCollections caller (account settings, passkeys, MFA, commit signing key, comment actions, coding) uses it.",
+      "reason": "store.AccountCollections reads the installed in-memory image, which a bounded store holds without user settings and passkeys (GET /api/account/settings answered empty settings). Flag off it calls AccountCollections literally; bounded it copies the same values (workspace existence, the user's settings, passkeys in source order when asked) out of the reviewed BeginAccountCollectionRead before closing it; a failed bounded read reports the workspace missing. Every AccountCollections caller (account settings, passkeys, MFA, commit signing key, comment actions, coding) uses it.",
       "accessors": ["BeginAccountCollectionRead"],
       "temperature": "hot",
       "temperatureReason": "Account settings, passkey and MFA reads are HOT.",

@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW345AcceptedPayload(t *testing.T, repo *store.SQLiteStore, f scaleP03PlatformFixture, connection string) json.RawMessage {
+func integrationRawUTF8AcceptedPayload(t *testing.T, repo *store.SQLiteStore, f scalePlatformFixture, connection string) json.RawMessage {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw345_producer_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -77,18 +77,18 @@ func scaleP21SW345AcceptedPayload(t *testing.T, repo *store.SQLiteStore, f scale
 		t.Fatal("HTTP producer delivery disappeared", phase)
 	}
 	checkStored("warm")
-	scaleP21SW202ReloadOracle(t, repo, workspace)
+	deliveryWorkerReloadOracle(t, repo, workspace)
 	checkStored("actual SQL reload")
 	t.Logf("HTTP producer accepted status=%d payload_bytes=%d invalid_UTF8_preserved_warm_and_SQL=true", response.StatusCode, len(payload))
 	return bytes.Clone(payload)
 }
 
-type scaleP21SW345Duplicates struct {
+type integrationRawUTF8Duplicates struct {
 	delivery   domain.IntegrationDelivery
 	connection domain.IntegrationConnection
 }
 
-func scaleP21SW345DuplicateWitness(data *domain.Bootstrap) *scaleP21SW345Duplicates {
+func integrationRawUTF8DuplicateWitness(data *domain.Bootstrap) *integrationRawUTF8Duplicates {
 	delivery := &data.IntegrationDeliveries[1]
 	delivery.IdempotencyKey = "later-idempotency"
 	delivery.ResourceID, delivery.Channel = "later-resource", "later-channel"
@@ -99,7 +99,7 @@ func scaleP21SW345DuplicateWitness(data *domain.Bootstrap) *scaleP21SW345Duplica
 	connection.Scopes, connection.Channels = []string{"later-scope"}, []string{"later-channel"}
 	connection.LastError, connection.LastTestStatus = "later connection error", "later test"
 	connection.Config["untouched"] = "complete second occurrence"
-	result := &scaleP21SW345Duplicates{delivery: *delivery, connection: *connection}
+	result := &integrationRawUTF8Duplicates{delivery: *delivery, connection: *connection}
 	result.delivery.Payload = bytes.Clone(delivery.Payload)
 	result.delivery.PreviousValues = bytes.Clone(delivery.PreviousValues)
 	result.connection.Config = maps.Clone(connection.Config)
@@ -108,7 +108,7 @@ func scaleP21SW345DuplicateWitness(data *domain.Bootstrap) *scaleP21SW345Duplica
 	return result
 }
 
-func scaleP21SW345WorkerPayload(t *testing.T, accepted json.RawMessage, result domain.IntegrationDelivery, native map[string]json.RawMessage, stored []domain.IntegrationDelivery, connections []domain.IntegrationConnection, requestBody string, duplicate *scaleP21SW345Duplicates) {
+func workerPayload(t *testing.T, accepted json.RawMessage, result domain.IntegrationDelivery, native map[string]json.RawMessage, stored []domain.IntegrationDelivery, connections []domain.IntegrationConnection, requestBody string, duplicate *integrationRawUTF8Duplicates) {
 	t.Helper()
 	deliveryCount, connectionCount := 1, 2
 	if duplicate != nil {
@@ -140,7 +140,7 @@ func scaleP21SW345WorkerPayload(t *testing.T, accepted json.RawMessage, result d
 
 // The ordinary normalizer replaces invalid UTF-8 while decoding strings.
 // Keep raw-token witnesses for outputs, including publication snapshots.
-func scaleP21SW345RawWitnesses(t *testing.T, value any) []string {
+func rawWitnesses(t *testing.T, value any) []string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -180,10 +180,10 @@ func scaleP21SW345RawWitnesses(t *testing.T, value any) []string {
 	return result
 }
 
-// scaleP21SW345UnrelatedWrite renames a connection after a raw invalid UTF-8
+// unrelatedWrite renames a connection after a raw invalid UTF-8
 // delivery was accepted and processed: the workspace must stay writable on
 // every dialect (PostgreSQL once refused it with SQLSTATE 22021).
-func scaleP21SW345UnrelatedWrite(t *testing.T, repo *store.SQLiteStore, workspace, connection string) {
+func unrelatedWrite(t *testing.T, repo *store.SQLiteStore, workspace, connection string) {
 	t.Helper()
 	renamed := false
 	err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw345_unrelated_write", "", nil, func(data *domain.Bootstrap) error {
@@ -208,6 +208,6 @@ func scaleP21SW345UnrelatedWrite(t *testing.T, repo *store.SQLiteStore, workspac
 	t.Fatal("unrelated write was not stored")
 }
 
-func TestScaleP21SW345IntegrationHTTPRawUTF8(t *testing.T) {
-	scaleP21SW202DeliveryWorkerNetworkAndCAS(t, []string{"http-invalid-utf8-split", "http-invalid-utf8-inline"})
+func TestIntegrationHTTPRawUTF8(t *testing.T) {
+	deliveryWorkerNetworkAndCAS(t, []string{"http-invalid-utf8-split", "http-invalid-utf8-inline"})
 }

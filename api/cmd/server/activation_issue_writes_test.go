@@ -25,7 +25,7 @@ type activationHTTPPeer struct {
 	service *server
 }
 
-func scaleP21ActivationHTTPPeers(t *testing.T, mode string) ([2]activationHTTPPeer, scaleP03PlatformFixture, domain.Issue, string) {
+func scaleActivationHTTPPeers(t *testing.T, mode string) ([2]activationHTTPPeer, scalePlatformFixture, domain.Issue, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
@@ -38,7 +38,7 @@ func scaleP21ActivationHTTPPeers(t *testing.T, mode string) ([2]activationHTTPPe
 	t.Setenv("FLOW_RECORD_JOURNAL", recordMode)
 	t.Setenv("FLOW_SYNC_V2", recordMode)
 
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	open := func() *store.SQLiteStore {
 		t.Helper()
 		repo, err := store.OpenDatabase(config)
@@ -49,7 +49,7 @@ func scaleP21ActivationHTTPPeers(t *testing.T, mode string) ([2]activationHTTPPe
 		return repo
 	}
 	seed := open()
-	f := scaleP03Fixture(t, seed)
+	f := resourceAccessScaleFixture(t, seed)
 	workspace, team := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	project := idgen.New("activation-project-")
 	if err := seed.MutateWorkspace(t.Context(), workspace, "test.activation_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -121,10 +121,10 @@ func activationRequest[T any](ctx context.Context, client *http.Client, method, 
 	return res.StatusCode, result, err
 }
 
-func TestScaleP21ActivationIssueWritesDifferential(t *testing.T) {
+func TestScaleActivationIssueWritesDifferential(t *testing.T) {
 	for _, mode := range []string{"off", "current", "full"} {
 		t.Run(mode, func(t *testing.T) {
-			peers, f, issue, _ := scaleP21ActivationHTTPPeers(t, mode)
+			peers, f, issue, _ := scaleActivationHTTPPeers(t, mode)
 			workspace := f.data.Workspace.URLKey
 			route := "/api/issue-records/" + issue.ID
 			var comments [2]domain.Comment
@@ -192,10 +192,10 @@ func TestScaleP21ActivationIssueWritesDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ActivationIssueWriteBudget(t *testing.T) {
+func TestScaleActivationIssueWriteBudget(t *testing.T) {
 	for _, mode := range []string{"off", "current", "full"} {
 		t.Run(mode, func(t *testing.T) {
-			peers, f, issue, project := scaleP21ActivationHTTPPeers(t, mode)
+			peers, f, issue, project := scaleActivationHTTPPeers(t, mode)
 			service := peers[0].service
 			repo, workspace := service.store, f.data.Workspace.URLKey
 			actor := store.ContextWithActor(t.Context(), f.data.Viewer)

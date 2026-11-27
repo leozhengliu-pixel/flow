@@ -16,12 +16,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW25ReleaseKeyDifferential(t *testing.T) {
+func TestReleaseKeyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		prefix := idgen.New("sw25-pipeline-")
 		current, previous, revoked := prefix+"-current", prefix+"-previous", prefix+"-revoked"
@@ -62,7 +62,7 @@ func TestScaleP21SW25ReleaseKeyDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "releasePipelines")
+		before := pointRecordFingerprint(t, repo, workspace, "releasePipelines")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, secret, id, wantWorkspace, wantID string
@@ -99,12 +99,12 @@ func TestScaleP21SW25ReleaseKeyDifferential(t *testing.T) {
 						outcomes = append(outcomes, []any{gotWorkspace, gotID, gotOK, w.Code, w.Body.String(), w.Header()})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("release authentication differs: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("release authentication differs: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
 		})
-		if scaleP21M3Fingerprint(t, repo, workspace, "releasePipelines") != before {
+		if pointRecordFingerprint(t, repo, workspace, "releasePipelines") != before {
 			t.Fatal("CI authentication changed canonical pipeline rows")
 		}
 		// Request identities and ordinary API-key scopes never replace the
@@ -174,9 +174,9 @@ func TestScaleP21SW25ReleaseKeyDifferential(t *testing.T) {
 		}
 		// The reset uses fresh unrelated IDs; test all-read output ownership
 		// against a stable snapshot independently of those fixture IDs.
-		stable := scaleP21M3Fingerprint(t, repo, workspace, "releasePipelines")
+		stable := pointRecordFingerprint(t, repo, workspace, "releasePipelines")
 		if _, _, _, err := (&server{store: probe}).pipelineForAccessKey(t.Context(), current, targetID); err != nil ||
-			scaleP21M3Fingerprint(t, repo, workspace, "releasePipelines") != stable || probe.WorkspaceMetadataDecodes() != 0 {
+			pointRecordFingerprint(t, repo, workspace, "releasePipelines") != stable || probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("authentication changed canonical state or decoded complete metadata", err)
 		}
 	}

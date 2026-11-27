@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func sw26ShortJSONString(ctx context.Context, source io.ReaderAt, part metadataCollectionRange) (string, error) {
+func shortJSONString(ctx context.Context, source io.ReaderAt, part metadataCollectionRange) (string, error) {
 	var text strings.Builder
 	long := false
 	_, err := VisitMetadataJSONStringChunks(ctx, io.NewSectionReader(source, part.offset, part.size), func(chunk []byte) error {
@@ -30,7 +30,7 @@ func sw26ShortJSONString(ctx context.Context, source io.ReaderAt, part metadataC
 	return text.String(), err
 }
 
-func sw26EventURLKey(ctx context.Context, source *sw26EventReaderAt) (string, error) {
+func eventURLKey(ctx context.Context, source *eventReaderAt) (string, error) {
 	scanner := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(io.NewSectionReader(source, 0, source.size), metadataRecordChunkBytes)}
 	if err := scanner.spaces(); err != nil {
 		if errors.Is(err, io.EOF) {
@@ -50,7 +50,7 @@ func sw26EventURLKey(ctx context.Context, source *sw26EventReaderAt) (string, er
 		_, err = scanner.value(0)
 	} else {
 		err = scanner.object(func(name, value metadataCollectionRange) error {
-			field, err := sw26ShortJSONString(ctx, source, name)
+			field, err := shortJSONString(ctx, source, name)
 			if err != nil || !strings.EqualFold(field, "urlKey") {
 				return err
 			}
@@ -61,7 +61,7 @@ func sw26EventURLKey(ctx context.Context, source *sw26EventReaderAt) (string, er
 			// encoding/json leaves a string unchanged on null or a type
 			// error; its caller deliberately ignores such type errors.
 			if head[0] == '"' {
-				key, err = sw26ShortJSONString(ctx, source, value)
+				key, err = shortJSONString(ctx, source, value)
 			}
 			return err
 		}, 0)
@@ -85,7 +85,7 @@ func (s *SQLiteStore) seedWorkspaceKeyRenamesBounded(ctx context.Context) (recor
 		return 0, err
 	}
 	defer release()
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -115,7 +115,7 @@ func (s *SQLiteStore) seedWorkspaceKeyRenamesBounded(ctx context.Context) (recor
 	s.mu.RUnlock()
 	last := ""
 	for {
-		count, next, err := s.sw26StageRenameEventPage(ctx, stage, last)
+		count, next, err := s.stageRenameEventPage(ctx, stage, last)
 		if err != nil {
 			return 0, err
 		}
@@ -124,10 +124,10 @@ func (s *SQLiteStore) seedWorkspaceKeyRenamesBounded(ctx context.Context) (recor
 			break
 		}
 	}
-	return s.sw26ApplyRenamePairs(ctx, stage)
+	return s.applyRenamePairs(ctx, stage)
 }
 
-func (s *SQLiteStore) sw26ApplyRenamePairs(ctx context.Context, stage *sw26MigrationStage) (int, error) {
+func (s *SQLiteStore) applyRenamePairs(ctx context.Context, stage *migrationStage) (int, error) {
 	recorded, lastID, lastKey, started := 0, "", "", false
 	for {
 		query, args := `SELECT p.id,p.key,p.at FROM pairs p`, []any{}
@@ -181,7 +181,7 @@ func (s *SQLiteStore) sw26ApplyRenamePairs(ctx context.Context, stage *sw26Migra
 	}
 }
 
-func (s *SQLiteStore) sw26StageRenameEventPage(ctx context.Context, stage *sw26MigrationStage, last string) (int, string, error) {
+func (s *SQLiteStore) stageRenameEventPage(ctx context.Context, stage *migrationStage, last string) (int, string, error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return 0, last, err
@@ -236,7 +236,7 @@ func (s *SQLiteStore) sw26StageRenameEventPage(ctx context.Context, stage *sw26M
 			if id == "" {
 				id = item.aggregate.String
 			}
-			key, err = sw26EventURLKey(ctx, &sw26EventReaderAt{ctx: ctx, tx: tx, id: item.id.String, size: item.size})
+			key, err = eventURLKey(ctx, &eventReaderAt{ctx: ctx, tx: tx, id: item.id.String, size: item.size})
 			if err != nil {
 				return 0, last, err
 			}

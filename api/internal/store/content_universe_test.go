@@ -8,11 +8,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28AggregateHydratedIssueUniverse(t *testing.T) {
+func TestAggregateHydratedIssueUniverse(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("issue_sw28_universe_")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21_sw28.seed_issue", "", nil, func(data *domain.Bootstrap) error {
 		data.Issues = append(data.Issues, domain.Issue{

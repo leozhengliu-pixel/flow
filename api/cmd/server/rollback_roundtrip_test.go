@@ -869,7 +869,7 @@ func rtLines(a, b, fa, fb []string) string {
 	return strings.Join(out, "\n")
 }
 
-func TestScaleP21RollbackRoundTrip(t *testing.T) {
+func TestScaleRollbackRoundTrip(t *testing.T) {
 	seed := rtSeed(t)
 	reference := rtScenario(t, seed, "reference-off-off", false, false, true)
 	t.Logf("reference transcript: %d requests, %d unexpected: %v", len(reference.log), len(reference.failed), reference.failed)
@@ -888,7 +888,7 @@ func TestScaleP21RollbackRoundTrip(t *testing.T) {
 // catalog pass covered. Each case logs the outcome; the expectation encodes
 // what the code does today (refuse with ErrBoundedMetadataCoverage, or accept
 // and serve the late writes).
-func TestScaleP21RollbackReopenWithoutCatalogCompletion(t *testing.T) {
+func TestScaleRollbackReopenWithoutCatalogCompletion(t *testing.T) {
 	rtEnv(t)
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	late := func(t *testing.T, path string) {

@@ -13,10 +13,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW0PolicyHeaders(t *testing.T) {
+func TestPolicyHeaders(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

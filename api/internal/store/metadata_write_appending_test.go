@@ -10,18 +10,18 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28AppendingAggregateUsesCreatedRecords(t *testing.T) {
+func TestAppendingAggregateUsesCreatedRecords(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	firstID, secondID := idgen.New("conversation_sw28_first_"), idgen.New("conversation_sw28_second_")
 	when := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	first := domain.AIConversation{ID: firstID, Title: "First created", UserID: f.data.Viewer.ID, CreatedAt: when, UpdatedAt: when}
 	second := domain.AIConversation{ID: secondID, Title: "Second created", UserID: f.data.Viewer.ID, CreatedAt: when, UpdatedAt: when}
 	type outcome struct {
-		rows     []scaleP21SW0AppendRow
+		rows     []appendingAppendRow
 		webhook  domain.DomainEvent
 		realtime domain.RealtimeEvent
 	}
@@ -64,7 +64,7 @@ func TestScaleP21SW28AppendingAggregateUsesCreatedRecords(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got.rows = scaleP21SW0AppendRows(t, repo, workspace)
+		got.rows = appendRows(t, repo, workspace)
 		var envelope struct {
 			Entity domain.AIConversation `json:"entity"`
 		}

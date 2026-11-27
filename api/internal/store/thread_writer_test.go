@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW110Root(comments []domain.Comment, id string) (string, bool) {
+func threadWriterRoot(comments []domain.Comment, id string) (string, bool) {
 	for depth := 0; depth < 16; depth++ {
 		index := slices.IndexFunc(comments, func(comment domain.Comment) bool { return comment.ID == id })
 		if index < 0 {
@@ -27,9 +27,9 @@ func scaleP21SW110Root(comments []domain.Comment, id string) (string, bool) {
 	return "", false
 }
 
-func scaleP21SW110Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time, mode string) {
+func threadWriterSeed(t *testing.T, f scaleFixture, issue domain.Issue, at time.Time, mode string) {
 	t.Helper()
-	scaleP21SW63Seed(t, f, issue, at)
+	discussionWriterSeed(t, f, issue, at)
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw110_seed", "", nil, func(data *domain.Bootstrap) error {
 		first := data.ThreadSubscriptions[0]
 		duplicate := first
@@ -53,7 +53,7 @@ func scaleP21SW110Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 	}
 }
 
-func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
+func TestThreadWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -63,12 +63,12 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 		for _, reload := range []bool{false, true} {
 			for _, mode := range []string{"update-first", "append", "noop", "clear", "clear-missing", "duplicate-id", "duplicate-id-append", "cancel-before", "cancel-callback"} {
 				t.Run(fmt.Sprintf("scoped=%t/reload=%t/%s", scoped, reload, mode), func(t *testing.T) {
-					f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+					f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 					workspace := f.data.Workspace.URLKey
 					metadata, _ := f.WorkspaceMetadata(workspace)
 					at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
 					type outcome struct {
-						Business                   scaleP21SW63Business
+						Business                   discussionWriterBusiness
 						Installed                  domain.Bootstrap
 						Events, Webhooks, Realtime []any
 						Saved                      domain.ThreadSubscription
@@ -79,10 +79,10 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 					var counts []int64
 					for _, bounded := range []bool{false, true} {
 						writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadata))
-						scaleP21SW110Seed(t, f, issue, at, mode)
-						repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
-						before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						prior := scaleP21SW63EventIDs(t, repo, workspace)
+						threadWriterSeed(t, f, issue, at, mode)
+						repo := scaleIssuePersistenceView(t, f, bounded, reload)
+						before := businessRows(t, repo, workspace, issue.ID)
+						prior := eventIDs(t, repo, workspace)
 						ctx := ContextWithActor(t.Context(), f.data.Viewer)
 						if scoped {
 							ctx = WithIssueDiscussionMutation(ctx, issue.ID, issue.ID+"-reply")
@@ -127,7 +127,7 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 						err := repo.MutateWorkspace(mutationCtx, workspace, "comment.thread_subscription", issue.ID, map[string]string{"commentId": issue.ID + "-reply", "state": state}, func(data *domain.Bootstrap) error {
 							got.Calls++
 							captured = data
-							root, ok := scaleP21SW110Root(data.Comments[issue.ID], issue.ID+"-reply")
+							root, ok := threadWriterRoot(data.Comments[issue.ID], issue.ID+"-reply")
 							if !ok || root != issue.ID+"-root" {
 								t.Fatal("thread callback lost its exact ancestor chain")
 							}
@@ -167,9 +167,9 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 						if failed && err == nil || !failed && err != nil {
 							t.Fatal("thread callback success/error changed", "bounded", bounded, err)
 						}
-						got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						got.Installed = scaleP21SW98Installed(t, repo, workspace)
-						got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+						got.Business = businessRows(t, repo, workspace, issue.ID)
+						got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
+						got.Events = newEvents(t, repo, workspace, prior)
 						events := 1
 						if failed || mode == "noop" {
 							events = 0
@@ -180,7 +180,7 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 						if len(got.Events) != events || len(got.Webhooks) != events || len(got.Realtime) != events {
 							t.Fatal("thread event/publication count changed", len(got.Events), len(got.Webhooks), len(got.Realtime), events)
 						}
-						results = append(results, scaleP21SW63JSON(t, got))
+						results = append(results, discussionWriterJSON(t, got))
 						if bounded {
 							if captured != nil && (repo.MetadataWorkUsedForTesting() == 0 || reflect.DeepEqual(*captured, domain.Bootstrap{})) {
 								t.Fatal("thread callback output escaped its response owner")
@@ -196,7 +196,7 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatal("literal/bounded thread writer differs", scaleP21SW98FirstDiff(results[0], results[1], "thread"))
+						t.Fatal("literal/bounded thread writer differs", firstDiff(results[0], results[1], "thread"))
 					}
 					t.Logf("scoped=%t reload=%t operation=%s writer_SQL_old=%d writer_SQL_bounded=%d", scoped, reload, mode, counts[0], counts[1])
 				})
@@ -205,7 +205,7 @@ func TestScaleP21SW110ThreadWriterDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW110ThreadWriterRejectsOtherEdits(t *testing.T) {
+func TestThreadWriterRejectsOtherEdits(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -214,11 +214,11 @@ func TestScaleP21SW110ThreadWriterRejectsOtherEdits(t *testing.T) {
 	for _, scoped := range []bool{false, true} {
 		for _, mode := range []string{"invalid-state", "identity", "owner", "issue", "comment", "created", "reorder", "append-foreign", "append-invalid"} {
 			t.Run(fmt.Sprintf("scoped=%t/%s", scoped, mode), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+				f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 				at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-				scaleP21SW110Seed(t, f, issue, at, "")
+				threadWriterSeed(t, f, issue, at, "")
 				workspace := f.data.Workspace.URLKey
-				repo := scaleP21IssuePersistenceView(t, f, true, false)
+				repo := scaleIssuePersistenceView(t, f, true, false)
 				ctx := ContextWithActor(t.Context(), f.data.Viewer)
 				if scoped {
 					ctx = WithIssueDiscussionMutation(ctx, issue.ID, issue.ID+"-reply")
@@ -228,8 +228,8 @@ func TestScaleP21SW110ThreadWriterRejectsOtherEdits(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer owner.Close()
-				before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-				prior := scaleP21SW63EventIDs(t, repo, workspace)
+				before := businessRows(t, repo, workspace, issue.ID)
+				prior := eventIDs(t, repo, workspace)
 				err = repo.MutateWorkspace(owner.Context(ctx), workspace, "comment.thread_subscription", issue.ID, nil, func(data *domain.Bootstrap) error {
 					index := slices.IndexFunc(data.ThreadSubscriptions, func(thread domain.ThreadSubscription) bool { return thread.IssueID == issue.ID })
 					item := &data.ThreadSubscriptions[index]
@@ -263,7 +263,7 @@ func TestScaleP21SW110ThreadWriterRejectsOtherEdits(t *testing.T) {
 				if !errors.Is(err, ErrBoundedMetadataCoverage) {
 					t.Fatal("unsupported thread edit accepted", mode, err)
 				}
-				if !reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) || len(scaleP21SW63NewEvents(t, repo, workspace, prior)) != 0 {
+				if !reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) || len(newEvents(t, repo, workspace, prior)) != 0 {
 					t.Fatal("unsupported thread edit committed partial SQL/events")
 				}
 				owner.Close()

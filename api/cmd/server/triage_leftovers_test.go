@@ -17,10 +17,10 @@ import (
 	"flow/api/internal/store"
 )
 
-// sw460Reassign reassigns the SW440 document's issue team through writer:
+// reassign reassigns the triage writer budget document's issue team through writer:
 // the canonical store (this legacy server, or another server's write that a
 // bounded view has not installed), or a second legacy server.
-func (f scaleP21IssueUpdateFixture) sw460Reassign(t *testing.T, writer *store.SQLiteStore, team string) {
+func (f scaleIssueUpdateFixture) reassign(t *testing.T, writer *store.SQLiteStore, team string) {
 	t.Helper()
 	at := time.Date(2026, 1, 4, 5, 6, 7, 0, time.UTC)
 	if err := writer.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw441_conflict", "", nil, func(data *domain.Bootstrap) error {
@@ -36,21 +36,21 @@ func (f scaleP21IssueUpdateFixture) sw460Reassign(t *testing.T, writer *store.SQ
 	}
 }
 
-// sw460Run is scaleP21IssueUpdateFixture.run with another server's write
+// triageLeftoversRun is scaleIssueUpdateFixture.run with another server's write
 // between the reset (which installs the bounded views' images) and the call,
 // before any publication is captured. With fresh, the installed image must
 // equal the SQL reload.
-func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer func(*testing.T), call func(*server) *httptest.ResponseRecorder, fresh bool) (scaleP21IssueUpdateOutcome, time.Time) {
+func (f scaleIssueUpdateFixture) triageLeftoversRun(t *testing.T, source string, peer func(*testing.T), call func(*server) *httptest.ResponseRecorder, fresh bool) (scaleIssueUpdateOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.reset(t, source)
 	peer(t)
-	got := scaleP21IssueUpdateOutcome{}
+	got := scaleIssueUpdateOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -58,7 +58,7 @@ func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer f
 	realtime := func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -91,45 +91,45 @@ func (f scaleP21IssueUpdateFixture) sw460Run(t *testing.T, source string, peer f
 	got.Reloaded = f.reloaded(t)
 	nul := strings.NewReplacer(`\u0000`, "")
 	if installed, reloaded := nul.Replace(string(got.Installed)), nul.Replace(string(got.Reloaded)); fresh && installed != reloaded {
-		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, reloaded))
+		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, policyFirstDifference(installed, reloaded))
 	}
 	return got, started
 }
 
-// sw460Differential runs sources in order and requires each to equal the
+// triageLeftoversDifferential runs sources in order and requires each to equal the
 // first byte for byte (stamps and clocks of the call normalized).
-func (f scaleP21IssueUpdateFixture) sw460Differential(t *testing.T, sources []string, peer func(*testing.T), call func(*server) *httptest.ResponseRecorder, fresh bool) []scaleP21IssueUpdateOutcome {
+func (f scaleIssueUpdateFixture) triageLeftoversDifferential(t *testing.T, sources []string, peer func(*testing.T), call func(*server) *httptest.ResponseRecorder, fresh bool) []scaleIssueUpdateOutcome {
 	t.Helper()
-	return scaleP21SW460Compare(t, sources, fresh, func(source string) (scaleP21IssueUpdateOutcome, time.Time) {
-		return f.sw460Run(t, source, peer, call, fresh)
+	return triageLeftoversCompare(t, sources, fresh, func(source string) (scaleIssueUpdateOutcome, time.Time) {
+		return f.triageLeftoversRun(t, source, peer, call, fresh)
 	})
 }
 
-func scaleP21SW460Compare(t *testing.T, sources []string, fresh bool, run func(string) (scaleP21IssueUpdateOutcome, time.Time)) []scaleP21IssueUpdateOutcome {
+func triageLeftoversCompare(t *testing.T, sources []string, fresh bool, run func(string) (scaleIssueUpdateOutcome, time.Time)) []scaleIssueUpdateOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21IssueUpdateOutcome
+	var outcomes []scaleIssueUpdateOutcome
 	for _, source := range sources {
 		got, started := run(source)
 		outcomes = append(outcomes, got)
 		compared := got
 		if fresh {
-			// Every source's image equals the SQL reload up to NUL (sw460Run).
+			// Every source's image equals the SQL reload up to NUL (triageLeftoversRun).
 			// A bounded writer that lost the race to the other server
 			// installs that reload (installedGenerationBehind), whose rows
 			// had NUL stripped when stored; a legacy server keeps its copy.
 			compared.Installed = json.RawMessage(strings.ReplaceAll(string(got.Installed), `\u0000`, ""))
 		}
-		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, compared, started))
+		normalized = append(normalized, scaleIssueUpdateNormalize(t, compared, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s changed: %s", source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s changed: %s", source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
 // Another server reassigns the team of a document attached to an issue the
-// generation does not touch, after this server installed its image (the SW441
+// generation does not touch, after this server installed its image (the triage team moves
 // interleaving recorded on 2026-11-17). No writer refreshes a record it does
 // not change: a legacy server that has not received that server's peer event
 // yet (mutateIssueScope on its copy) and the bounded writer on its installed
@@ -138,22 +138,22 @@ func scaleP21SW460Compare(t *testing.T, sources []string, fresh bool, run func(s
 // legacy server byte for byte (response, rows, events, webhooks, realtime and
 // the installed documents and suggestions), and their images differ from the
 // SQL reload only by that document.
-func TestScaleP21SW460TriageUntouchedPeerWriteMatchesLegacyServer(t *testing.T) {
+func TestTriageUntouchedPeerWriteMatchesLegacyServer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, ids := scaleP21SW440Setup(t, 100)
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f, ids := triageWriterBudgetSetup(t, 100)
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{issue: f.triage.ID})
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	peer := func(t *testing.T) {
 		other, err := store.OpenDatabase(f.reader.config)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer other.Close()
-		f.sw460Reassign(t, other, "sw440-plain")
+		f.reassign(t, other, "sw440-plain")
 	}
-	outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, peer, f.sw440Generate(t, ids), false)
+	outcomes := f.triageLeftoversDifferential(t, []string{"legacy", "warm", "reloaded"}, peer, f.triageWriterBudgetGenerate(t, ids), false)
 	legacy := outcomes[0]
 	if legacy.Code != 200 || len(legacy.State.Events) != 1 {
 		t.Fatalf("legacy status %d with %d events: %s", legacy.Code, len(legacy.State.Events), legacy.Body)
@@ -169,13 +169,13 @@ func TestScaleP21SW460TriageUntouchedPeerWriteMatchesLegacyServer(t *testing.T) 
 	image = strings.Replace(image, stale, fresh, 1)
 	image = strings.Replace(image, `"updatedAt":"2026-01-03T04:05:06Z","revisions"`, `"updatedAt":"2026-01-04T05:06:07Z","revisions"`, 1)
 	if image != reload {
-		t.Fatalf("the image differs from the SQL reload beyond the other server's document write: %s", scaleP21M2Diff(reload, image))
+		t.Fatalf("the image differs from the SQL reload beyond the other server's document write: %s", policyFirstDifference(reload, image))
 	}
 }
 
-// scaleP21SW461Existing is the number of other issues' suggestions the SW461
+// existing is the number of other issues' suggestions the triage suggestion reads
 // workspace holds; a measurement run sets FLOW_SW461_EXISTING.
-func scaleP21SW461Existing(t *testing.T) int {
+func triageLeftoversExisting(t *testing.T) int {
 	if raw := os.Getenv("FLOW_SW461_EXISTING"); raw != "" {
 		count, err := strconv.Atoi(raw)
 		if err != nil || count < 0 {
@@ -186,11 +186,11 @@ func scaleP21SW461Existing(t *testing.T) int {
 	return 20000
 }
 
-// scaleP21SW461Suggestions adds existing suggestions to the SW440 baseline: a
+// suggestions adds existing suggestions to the triage writer budget baseline: a
 // dismissed suggestion of every tenth scoped issue first (generation moves it
 // behind the regenerated ones), then existing suggestions of two issues outside
 // the scope, active and dismissed, of the size real generations store.
-func scaleP21SW461Suggestions(data *domain.Bootstrap, ids []string, existing int) ([]domain.IssueSuggestion, error) {
+func triageLeftoversSuggestions(data *domain.Bootstrap, ids []string, existing int) ([]domain.IssueSuggestion, error) {
 	at := time.Date(2026, 1, 5, 6, 7, 8, 0, time.UTC)
 	scoped := map[string]bool{}
 	suggestions := make([]domain.IssueSuggestion, 0, (len(ids)+9)/10+existing+len(data.IssueSuggestions))
@@ -220,12 +220,12 @@ func scaleP21SW461Suggestions(data *domain.Bootstrap, ids []string, existing int
 			SuggestedIssueID: fmt.Sprintf("sw400-bulk-%04d", index%len(ids)), StateChangedAt: at, CreatedAt: at, UpdatedAt: at,
 			Metadata: map[string]any{"rank": index%5 + 1, "reasons": []string{"Similar title", fmt.Sprintf("Shares %d words", index%7+2)}, "score": 0.25 + float64(index%50)/100}})
 	}
-	return append(suggestions, scaleP21SW461Unique(data.IssueSuggestions)...), nil
+	return append(suggestions, uniqueTriageSuggestions(data.IssueSuggestions)...), nil
 }
 
 // Repeated IDs keep the field inline. Keep the first occurrence so the
 // seeded list is one canonical row per suggestion.
-func scaleP21SW461Unique(list []domain.IssueSuggestion) []domain.IssueSuggestion {
+func uniqueTriageSuggestions(list []domain.IssueSuggestion) []domain.IssueSuggestion {
 	seen := map[string]bool{}
 	unique := make([]domain.IssueSuggestion, 0, len(list))
 	for _, item := range list {
@@ -237,11 +237,11 @@ func scaleP21SW461Unique(list []domain.IssueSuggestion) []domain.IssueSuggestion
 	return unique
 }
 
-func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string, existing int) {
+func triageLeftoversSeed(t *testing.T, f *scaleIssueUpdateFixture, ids []string, existing int) {
 	t.Helper()
 	ctx, workspace := t.Context(), f.data.Workspace.URLKey
 	if err := f.repository.MutateWorkspace(ctx, workspace, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
-		data.IssueSuggestions = scaleP21SW461Unique(data.IssueSuggestions)
+		data.IssueSuggestions = uniqueTriageSuggestions(data.IssueSuggestions)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string
 	if !ok {
 		t.Fatal("workspace missing")
 	}
-	suggestions, err := scaleP21SW461Suggestions(&full, ids, existing)
+	suggestions, err := triageLeftoversSuggestions(&full, ids, existing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,13 +307,13 @@ func scaleP21SW461Seed(t *testing.T, f *scaleP21IssueUpdateFixture, ids []string
 	}
 }
 
-// sw461Copy prepares an independent SQLite preimage for the bounded run.
+// copy prepares an independent SQLite preimage for the bounded run.
 // Resetting a database after the legacy request would renumber 20,000 rows
 // a second time just to restore the starting order.
-func (f scaleP21IssueUpdateFixture) sw461Copy(t *testing.T) scaleP21IssueUpdateFixture {
+func (f scaleIssueUpdateFixture) triageLeftoversCopy(t *testing.T) scaleIssueUpdateFixture {
 	t.Helper()
-	writer := *f.scaleP21TriageWriterFixture
-	f.scaleP21TriageWriterFixture = &writer
+	writer := *f.scaleTriageWriterFixture
+	f.scaleTriageWriterFixture = &writer
 	config := writer.reader.config
 	config.Path = teamCascadeCopy(t, config.Path)
 	repo, err := store.OpenDatabase(config)
@@ -325,7 +325,7 @@ func (f scaleP21IssueUpdateFixture) sw461Copy(t *testing.T) scaleP21IssueUpdateF
 			t.Errorf("close SW461 fixture copy: %v", err)
 		}
 	})
-	f.reader = &scaleP04Database{config: config}
+	f.reader = &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if f.reader.reader != nil {
 			if err := f.reader.reader.Close(); err != nil {
@@ -339,7 +339,7 @@ func (f scaleP21IssueUpdateFixture) sw461Copy(t *testing.T) scaleP21IssueUpdateF
 		t.Fatal(err)
 	}
 	f.reloadOracle = nil
-	f.scaleP21TriageWriterFixture.prepare = f.resetTriageSideTables
+	f.scaleTriageWriterFixture.prepare = f.resetTriageSideTables
 	return f
 }
 
@@ -353,29 +353,29 @@ func (f scaleP21IssueUpdateFixture) sw461Copy(t *testing.T) scaleP21IssueUpdateF
 // the CI planner can shard the comparisons. With FLOW_SW461_MEASURE=1 only
 // the bounded source runs, logging its peak work under an unlimited budget. With
 // FLOW_SW461_MEASURE=budget its status under the 256 MB budget.
-func TestScaleP21SW461TriageSuggestionListReorderDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, false, "warm")
+func TestTriageSuggestionListReorderDifferential(t *testing.T) {
+	reorder(t, false, "warm")
 }
 
-func TestScaleP21SW461TriageSuggestionListReorderReloadedDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, false, "reloaded")
+func TestTriageSuggestionListReorderReloadedDifferential(t *testing.T) {
+	reorder(t, false, "reloaded")
 }
 
-func TestScaleP21SW461TriageSuggestionListReorderBulkDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, true, "warm")
+func TestTriageSuggestionListReorderBulkDifferential(t *testing.T) {
+	reorder(t, true, "warm")
 }
 
-func TestScaleP21SW461TriageSuggestionListReorderBulkReloadedDifferential(t *testing.T) {
-	scaleP21SW461Reorder(t, true, "reloaded")
+func TestTriageSuggestionListReorderBulkReloadedDifferential(t *testing.T) {
+	reorder(t, true, "reloaded")
 }
 
-func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
+func reorder(t *testing.T, bulk bool, source string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, ids := scaleP21SW440Setup(t, scaleP21SW440Size(t))
-	existing := scaleP21SW461Existing(t)
+	f, ids := triageWriterBudgetSetup(t, triageWriterBudgetSize(t))
+	existing := triageLeftoversExisting(t)
 	measure := os.Getenv("FLOW_SW461_MEASURE") != ""
 	scope := ids[:1]
 	if bulk {
@@ -383,10 +383,10 @@ func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
 	}
 	t.Run(fmt.Sprintf("scope-%d", len(scope)), func(t *testing.T) {
 		began := time.Now()
-		scaleP21SW461Seed(t, &f, ids, existing)
+		triageLeftoversSeed(t, &f, ids, existing)
 		t.Logf("suggestion seed took %s", time.Since(began))
-		f.prepareTriageReset(t, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID}))
-		generate := f.sw440Generate(t, scope)
+		f.prepareTriageReset(t, f.prepare(scaleIssueUpdateCase{issue: f.triage.ID}))
+		generate := f.triageWriterBudgetGenerate(t, scope)
 		peak := 0
 		call := func(service *server) *httptest.ResponseRecorder {
 			began := time.Now()
@@ -407,7 +407,7 @@ func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
 		}
 		noPeer := func(*testing.T) {}
 		if measure {
-			got, _ := f.sw460Run(t, source, noPeer, call, true)
+			got, _ := f.triageLeftoversRun(t, source, noPeer, call, true)
 			t.Logf("%d existing suggestions, %d scoped issues: status %d, bounded peak work %.1f MB", existing, len(scope), got.Code, float64(peak)/(1<<20))
 			return
 		}
@@ -416,15 +416,15 @@ func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
 		// contain other workspaces, so restore just the owned rows there.
 		if os.Getenv("FLOW_TEST_DATABASE_DRIVER") == "" {
 			began := time.Now()
-			bounded = f.sw461Copy(t)
+			bounded = f.triageLeftoversCopy(t)
 			t.Logf("bounded preimage copy took %s", time.Since(began))
 		}
-		outcomes := scaleP21SW460Compare(t, []string{"legacy", source}, true, func(mode string) (scaleP21IssueUpdateOutcome, time.Time) {
+		outcomes := triageLeftoversCompare(t, []string{"legacy", source}, true, func(mode string) (scaleIssueUpdateOutcome, time.Time) {
 			fixture := f
 			if mode != "legacy" {
 				fixture = bounded
 			}
-			return fixture.sw460Run(t, mode, noPeer, call, true)
+			return fixture.triageLeftoversRun(t, mode, noPeer, call, true)
 		})
 		t.Logf("%d existing suggestions, %d scoped issues: %s bounded peak work %.1f MB of 256 MB", existing, len(scope), source, float64(peak)/(1<<20))
 		legacy := outcomes[0]
@@ -463,16 +463,16 @@ func scaleP21SW461Reorder(t *testing.T, bulk bool, source string) {
 // yet keeps the added row and its order, does not write the deleted one again
 // and only moves the edited one. The bounded warm and SQL-reloaded views
 // equal that legacy server byte for byte.
-func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
+func TestTriageSuggestionReorderOverPeerRows(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, ids := scaleP21SW440Setup(t, 100)
+	f, ids := triageWriterBudgetSetup(t, 100)
 	workspace := f.data.Workspace.URLKey
 	// The peer case observes the installed legacy image before it reloads
 	// from SQL, so seed it through the writer to keep the literal values.
 	if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw461_suggestions", "", nil, func(data *domain.Bootstrap) error {
-		suggestions, err := scaleP21SW461Suggestions(data, ids, 400)
+		suggestions, err := triageLeftoversSuggestions(data, ids, 400)
 		data.IssueSuggestions = suggestions
 		return err
 	}); err != nil {
@@ -486,8 +486,8 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 	if f.baseline, err = json.Marshal(full); err != nil {
 		t.Fatal(err)
 	}
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{issue: f.triage.ID})
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	at := time.Date(2026, 1, 6, 7, 8, 9, 0, time.UTC)
 	peer := func(t *testing.T) {
 		other, err := store.OpenDatabase(f.reader.config)
@@ -514,7 +514,7 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, peer, f.sw440Generate(t, ids), false)
+	outcomes := f.triageLeftoversDifferential(t, []string{"legacy", "warm", "reloaded"}, peer, f.triageWriterBudgetGenerate(t, ids), false)
 	legacy := outcomes[0]
 	if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {
 		t.Fatalf("legacy status %d with %d events: %.300s", legacy.Code, len(legacy.State.Events), legacy.Body)
@@ -539,32 +539,32 @@ func TestScaleP21SW462TriageSuggestionReorderOverPeerRows(t *testing.T) {
 // issue as often as the scope names it (before 2026-11-18 the rerun appended
 // a second copy of every result), and the bounded warm and SQL-reloaded views equal that legacy
 // server byte for byte, the moved document included.
-func TestScaleP21SW463TriageRerunReturnsOneResultPerIssue(t *testing.T) {
+func TestTriageRerunReturnsOneResultPerIssue(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, ids := scaleP21SW440Setup(t, 100)
-	f.scaleP21TriageWriterFixture.prepare = scaleP21SW441Attach(f, f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+	f, ids := triageWriterBudgetSetup(t, 100)
+	f.scaleTriageWriterFixture.prepare = attach(f, f.prepare(scaleIssueUpdateCase{issue: f.triage.ID, setup: triageBatchActions(f, func(settings *domain.TriageIntelligenceSettings) {
 		settings.TeamAction, settings.LabelAction = "auto", "auto"
 	})}))
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	peer := func(t *testing.T) {
 		other, err := store.OpenDatabase(f.reader.config)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer other.Close()
-		f.sw460Reassign(t, other, "sw440-plain")
+		f.reassign(t, other, "sw440-plain")
 	}
-	outcomes := f.sw460Differential(t, []string{"legacy", "warm", "reloaded"}, peer, func(service *server) *httptest.ResponseRecorder {
-		w := f.sw440Generate(t, ids)(service)
+	outcomes := f.triageLeftoversDifferential(t, []string{"legacy", "warm", "reloaded"}, peer, func(service *server) *httptest.ResponseRecorder {
+		w := f.triageWriterBudgetGenerate(t, ids)(service)
 		var results []struct {
 			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
 			t.Fatalf("status %d: %.300s", w.Code, w.Body.String())
 		}
-		// The scope repeats one ID (scaleP21SW440Setup), which every
+		// The scope repeats one ID (triageWriterBudgetSetup), which every
 		// attempt lists as often as the scope names it.
 		allowed := map[string]int{}
 		for _, id := range ids {
@@ -591,7 +591,7 @@ func TestScaleP21SW463TriageRerunReturnsOneResultPerIssue(t *testing.T) {
 		}
 		// The move applied over the other server's write: the legacy server
 		// refreshed the document and ran the generation again.
-		if document.IssueID != scaleP21SW441Moved || document.IssueTeamID == "sw440-plain" || document.IssueTeamID == scaleP21SW400Team ||
+		if document.IssueID != triageWriterBudgetMoved || document.IssueTeamID == "sw440-plain" || document.IssueTeamID == triageBatchTeam ||
 			!document.UpdatedAt.Equal(time.Date(2026, 1, 4, 5, 6, 7, 0, time.UTC)) {
 			t.Fatalf("legacy did not move the reassigned document: %s", row[2])
 		}

@@ -15,17 +15,17 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW100Row struct {
+type legacyImportInputsRow struct {
 	Workspace, Kind, Resource, ID, Created, Raw, Owner, Parent, Status, Next string
 	Version                                                                  int
 }
 
-func scaleP21SW100Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
+func legacyImportInputsFixture(t *testing.T) (scaleFixture, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -35,16 +35,16 @@ func scaleP21SW100Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
 	return f, view
 }
 
-func scaleP21SW100Rows(t *testing.T, tx *sqlTx, workspace string) []scaleP21SW100Row {
+func legacyImportInputsRows(t *testing.T, tx *sqlTx, workspace string) []legacyImportInputsRow {
 	t.Helper()
 	rows, err := tx.QueryContext(t.Context(), `SELECT workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version FROM workspace_content_records WHERE workspace_key IN (?,?) ORDER BY workspace_key,kind,resource_id,id`, workspace, workspace+"-foreign")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	result := []scaleP21SW100Row{}
+	result := []legacyImportInputsRow{}
 	for rows.Next() {
-		var row scaleP21SW100Row
+		var row legacyImportInputsRow
 		var raw []byte
 		if err := rows.Scan(&row.Workspace, &row.Kind, &row.Resource, &row.ID, &row.Created, &raw, &row.Owner, &row.Parent, &row.Status, &row.Next, &row.Version); err != nil {
 			t.Fatal(err)
@@ -58,7 +58,7 @@ func scaleP21SW100Rows(t *testing.T, tx *sqlTx, workspace string) []scaleP21SW10
 	return result
 }
 
-func scaleP21SW100Data(f scaleP09Fixture) domain.Bootstrap {
+func legacyImportInputsData(f scaleFixture) domain.Bootstrap {
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
 	return domain.Bootstrap{
 		Workspace: f.data.Workspace, Viewer: f.data.Viewer, ViewerRole: "native-role",
@@ -82,7 +82,7 @@ func scaleP21SW100Data(f scaleP09Fixture) domain.Bootstrap {
 	}
 }
 
-func scaleP21SW100Seed(t *testing.T, f scaleP09Fixture, prior string) *sqlTx {
+func legacyImportInputsSeed(t *testing.T, f scaleFixture, prior string) *sqlTx {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -121,7 +121,7 @@ func scaleP21SW100Seed(t *testing.T, f scaleP09Fixture, prior string) *sqlTx {
 	return tx
 }
 
-func scaleP21SW100Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, source *metadataLogicalSource, prior string, limit int) int {
+func legacyImportInputsCompare(t *testing.T, f scaleFixture, view *SQLiteStore, source *metadataLogicalSource, prior string, limit int) int {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Fields: []string{"importJobs", "migrationJobs", "documents", "settings"}}
@@ -129,15 +129,15 @@ func scaleP21SW100Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, so
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx := scaleP21SW100Seed(t, f, prior)
-	initial := scaleP21SW100Rows(t, tx, workspace)
+	tx := legacyImportInputsSeed(t, f, prior)
+	initial := legacyImportInputsRows(t, tx, workspace)
 	wantErr := writeImportInputs(t.Context(), tx, workspace, before)
-	want := scaleP21SW100Rows(t, tx, workspace)
+	want := legacyImportInputsRows(t, tx, workspace)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	tx = scaleP21SW100Seed(t, f, prior)
-	if !reflect.DeepEqual(scaleP21SW100Rows(t, tx, workspace), initial) {
+	tx = legacyImportInputsSeed(t, f, prior)
+	if !reflect.DeepEqual(legacyImportInputsRows(t, tx, workspace), initial) {
 		t.Fatal("import-input paired SQL preimages differ")
 	}
 	budget, previousLimit := view.metadataResidency.work, view.metadataResidency.work.limit
@@ -151,7 +151,7 @@ func scaleP21SW100Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, so
 	if reflect.TypeOf(gotErr) != reflect.TypeOf(wantErr) || wantErr != nil && gotErr.Error() != wantErr.Error() {
 		t.Fatalf("literal/owned input errors differ: %T %v / %T %v", wantErr, wantErr, gotErr, gotErr)
 	}
-	if got := scaleP21SW100Rows(t, tx, workspace); !reflect.DeepEqual(got, want) {
+	if got := legacyImportInputsRows(t, tx, workspace); !reflect.DeepEqual(got, want) {
 		t.Fatal("literal/owned input rows, indexes, versions or prune results differ")
 	}
 	unchanged, err := source.Select(t.Context(), scope, 64<<20)
@@ -162,18 +162,18 @@ func scaleP21SW100Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, so
 		metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("input persistence retained work/staging or decoded full metadata")
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
 	return peak
 }
 
-func TestScaleP21SW100LegacyImportInputsLiteral(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyImportInputsLiteral(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	for _, variant := range []string{"duplicates-status-order", "nil-jobs", "empty-jobs", "compacted-prunes-orphans", "empty-raw-bundle-error", "invalid-raw-bundle-error", "legal-large-prior-body"} {
 		t.Run(variant, func(t *testing.T) {
-			data, prior := scaleP21SW100Data(f), "Original stored body"
+			data, prior := legacyImportInputsData(f), "Original stored body"
 			switch variant {
 			case "nil-jobs":
 				data.ImportJobs, data.MigrationJobs = nil, nil
@@ -193,22 +193,22 @@ func TestScaleP21SW100LegacyImportInputsLiteral(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer source.Release()
-			scaleP21SW100Compare(t, f, view, source, prior, 0)
+			legacyImportInputsCompare(t, f, view, source, prior, 0)
 		})
 	}
 }
 
-func TestScaleP21SW100LegacyImportInputsWarmReloadHeaderBound(t *testing.T) {
+func TestLegacyImportInputsWarmReloadHeaderBound(t *testing.T) {
 	peaks := map[bool]int{}
 	for _, size := range []int{2000, 20000} {
 		t.Run(fmt.Sprintf("body-%d", size), func(t *testing.T) {
 			// Each size starts from a new owned workspace. Re-seeding changed
 			// duplicate/inline jobs through the literal delta would itself
 			// rebase missing split rows and alter the comparison's job set.
-			f, view := scaleP21SW100Fixture(t)
+			f, view := legacyImportInputsFixture(t)
 			workspace := f.data.Workspace.URLKey
 			body := strings.Repeat("Unneeded job metadata. ", size)
-			data := compactImportInputs(scaleP21SW100Data(f))
+			data := compactImportInputs(legacyImportInputsData(f))
 			for index := range data.ImportJobs {
 				data.ImportJobs[index].Filename = body
 				data.ImportJobs[index].Mapping = map[string]string{"unrelated": body}
@@ -247,7 +247,7 @@ func TestScaleP21SW100LegacyImportInputsWarmReloadHeaderBound(t *testing.T) {
 					}
 					defer source.Release()
 					f.db.SetMaxOpenConns(1)
-					peak := scaleP21SW100Compare(t, f, view, source, strings.Repeat("Untouched complete stored body. ", 1<<17), 8<<20)
+					peak := legacyImportInputsCompare(t, f, view, source, strings.Repeat("Untouched complete stored body. ", 1<<17), 8<<20)
 					if peak == 0 {
 						t.Fatal("header-only input persistence admitted no work")
 					}
@@ -264,10 +264,10 @@ func TestScaleP21SW100LegacyImportInputsWarmReloadHeaderBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW100LegacyContentBeforeGuard(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyContentBeforeGuard(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	workspace := f.data.Workspace.URLKey
-	tx := scaleP21SW100Seed(t, f, strings.Repeat("Legal previous mostly-string input. ", 1<<17))
+	tx := legacyImportInputsSeed(t, f, strings.Repeat("Legal previous mostly-string input. ", 1<<17))
 	raw, version, release, err := readLegacyContentBefore(t.Context(), tx, workspace, "import_input", "duplicate", "duplicate", view)
 	if err != nil || len(raw) <= 2<<20 || version != 1 || view.MetadataWorkUsedForTesting() == 0 {
 		release()
@@ -301,16 +301,16 @@ func TestScaleP21SW100LegacyContentBeforeGuard(t *testing.T) {
 	if !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("previous-row quota failed to clean up", err)
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 }
 
-func TestScaleP21SW100LegacyImportInputsActualReadChanges(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyImportInputsActualReadChanges(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	workspace := f.data.Workspace.URLKey
 	for _, variant := range []string{"prior-body-growth", "prior-read-cancel", "prune-header-growth", "cancel-before", "quota"} {
 		t.Run(variant, func(t *testing.T) {
-			tx := scaleP21SW100Seed(t, f, "Small prior value")
-			data := scaleP21SW100Data(f)
+			tx := legacyImportInputsSeed(t, f, "Small prior value")
+			data := legacyImportInputsData(f)
 			data.ImportJobs = data.ImportJobs[:1]
 			data.MigrationJobs = nil
 			if variant == "prune-header-growth" {
@@ -390,7 +390,7 @@ func TestScaleP21SW100LegacyImportInputsActualReadChanges(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(unchanged, before) {
 				t.Fatal("failed input persistence mutated the source", err)
 			}
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}
@@ -398,7 +398,7 @@ func TestScaleP21SW100LegacyImportInputsActualReadChanges(t *testing.T) {
 	}
 }
 
-func scaleP21SW100HydrationRows(t *testing.T, f scaleP09Fixture, variant string, foreign bool) *sqlTx {
+func hydrationRows(t *testing.T, f scaleFixture, variant string, foreign bool) *sqlTx {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -461,15 +461,15 @@ func scaleP21SW100HydrationRows(t *testing.T, f scaleP09Fixture, variant string,
 	return tx
 }
 
-func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyImportImageLiteral(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	workspace := f.data.Workspace.URLKey
 	for _, variant := range []string{
 		"mixed", "compacted", "nil-jobs", "empty-jobs", "supplied-empty", "supplied-empty-bundle", "supplied-values",
 		"large-input", "bad-import-bad-migration", "bad-migration", "supplied-bad-import", "nil-jobs-bad-migration",
 	} {
 		t.Run(variant, func(t *testing.T) {
-			data := scaleP21SW100Data(f)
+			data := legacyImportInputsData(f)
 			data.ImportJobs = append(data.ImportJobs, domain.ImportJob{ID: "nil-first", Status: "pending"})
 			data.MigrationJobs = append(data.MigrationJobs, domain.MigrationJob{ID: "nil-first"})
 			switch variant {
@@ -513,8 +513,8 @@ func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx := scaleP21SW100HydrationRows(t, f, variant, true)
-			initial := scaleP21SW100Rows(t, tx, workspace)
+			tx := hydrationRows(t, f, variant, true)
+			initial := legacyImportInputsRows(t, tx, workspace)
 			// The original database wrapper binds an explicit snapshot by
 			// database, even when its namespace label differs.
 			ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace + "-caller-label", reader: tx})
@@ -537,7 +537,7 @@ func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
 					t.Fatal("successful hydration omitted its owned source")
 				}
 				t.Cleanup(result.Release)
-				scaleP21SW72Compare(t, result, scope, want)
+				legacyIssueImageCompare(t, result, scope, want)
 				if result.Stamp() != source.Stamp() {
 					t.Fatal("import hydration changed source generation")
 				}
@@ -552,13 +552,13 @@ func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(unchanged, before) {
 				t.Fatal("import hydration mutated its source", err)
 			}
-			if !reflect.DeepEqual(scaleP21SW100Rows(t, tx, workspace), initial) {
+			if !reflect.DeepEqual(legacyImportInputsRows(t, tx, workspace), initial) {
 				t.Fatal("import hydration changed canonical input rows")
 			}
 			if queries == 0 {
 				t.Fatal("input kinds were not read even for supplied/nil job collections")
 			}
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}
@@ -569,7 +569,7 @@ func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
 				if _, err := result.Select(cancelled, scope, 64<<20); !errors.Is(err, context.Canceled) {
 					t.Fatal("canceled result read did not cancel", err)
 				}
-				scaleP21SW72Compare(t, result, scope, want)
+				legacyIssueImageCompare(t, result, scope, want)
 				result.Release()
 				result.Release()
 			}
@@ -581,15 +581,15 @@ func TestScaleP21SW100LegacyImportImageLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW100LegacyImportImageIndependentKinds(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyImportImageIndependentKinds(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	workspace := f.data.Workspace.URLKey
 	f.db.SetMaxOpenConns(4)
-	tx := scaleP21SW100HydrationRows(t, f, "normal", false)
+	tx := hydrationRows(t, f, "normal", false)
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	data := compactImportInputs(scaleP21SW100Data(f))
+	data := compactImportInputs(legacyImportInputsData(f))
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID, revision: -1})
 	if err != nil {
 		t.Fatal(err)
@@ -638,22 +638,22 @@ func TestScaleP21SW100LegacyImportImageIndependentKinds(t *testing.T) {
 	if !changed || preflights != 2 {
 		t.Fatal("per-kind snapshot transition was not exercised", preflights)
 	}
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("independent-kind hydration retained work")
 	}
 }
 
-func TestScaleP21SW100LegacyImportImageFailures(t *testing.T) {
-	f, view := scaleP21SW100Fixture(t)
+func TestLegacyImportImageFailures(t *testing.T) {
+	f, view := legacyImportInputsFixture(t)
 	workspace := f.data.Workspace.URLKey
-	data := compactImportInputs(scaleP21SW100Data(f))
+	data := compactImportInputs(legacyImportInputsData(f))
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer source.Release()
-	tx := scaleP21SW100HydrationRows(t, f, "normal", true)
+	tx := hydrationRows(t, f, "normal", true)
 	ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	cancelled, cancel := context.WithCancel(ctx)
@@ -678,5 +678,5 @@ func TestScaleP21SW100LegacyImportImageFailures(t *testing.T) {
 	if view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("failed import hydration retained work or staging")
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 }

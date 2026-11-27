@@ -32,13 +32,13 @@ func TestProjectAndInitiativeTimestampSort(t *testing.T) {
 	for _, ordering := range []string{"Created", "Updated"} {
 		for _, desc := range []bool{false, true} {
 			projects := slices.Clone(data.Projects)
-			q := scaleP19Query{Display: scaleP19Display{Ordering: ordering}}
+			q := scaleQuery{Display: scaleDisplay{Ordering: ordering}}
 			expected := slices.Clone(want)
 			if desc {
 				q.Display.OrderingDirection = "desc"
 				slices.Reverse(expected)
 			}
-			scaleP19SortProjects(projects, q, data, nil, latest)
+			scaleSortProjects(projects, q, data, nil, latest)
 			var got []string
 			for _, project := range projects {
 				got = append(got, project.ID)
@@ -49,7 +49,7 @@ func TestProjectAndInitiativeTimestampSort(t *testing.T) {
 		}
 	}
 	for _, sort := range []string{"created", "updated"} {
-		page, err := scaleP19Initiatives(data, scaleP19Query{Sort: sort}, scaleP19WindowPage{}, 0, 10)
+		page, err := scaleInitiatives(data, scaleQuery{Sort: sort}, scaleWindowPage{}, 0, 10)
 		if err != nil {
 			t.Fatal(err)
 		}

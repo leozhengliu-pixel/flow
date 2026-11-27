@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW27MetadataCommitStampPublication(t *testing.T) {
+func TestMetadataCommitStampPublication(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	base, err := readMetadataStamp(t.Context(), f.db, workspace)
 	if err != nil {
@@ -91,11 +91,11 @@ func TestScaleP21SW27MetadataCommitStampPublication(t *testing.T) {
 	t.Log("one final stamp SELECT; duplicate queued metadata increment coalesced; nonmetadata increment excluded")
 }
 
-func TestScaleP21SW27MetadataCommitStampGuard(t *testing.T) {
+func TestMetadataCommitStampGuard(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	base, err := readMetadataStamp(t.Context(), f.db, workspace)
 	if err != nil {
@@ -151,11 +151,11 @@ func TestScaleP21SW27MetadataCommitStampGuard(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27MetadataCommitStampFailures(t *testing.T) {
+func TestMetadataCommitStampFailures(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	original, err := readMetadataStamp(t.Context(), f.db, workspace)
 	if err != nil {

@@ -10,12 +10,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP09RealtimeUsesJournalCursor(t *testing.T) {
+func TestScaleRealtimeUsesJournalCursor(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 			issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]string{"title": "Before", "teamId": f.data.Teams[0].ID}, workspace, http.StatusCreated)
 			before, err := repo.RecordJournalHead(t.Context(), workspaceID)
@@ -54,7 +54,7 @@ func TestScaleP09RealtimeUsesJournalCursor(t *testing.T) {
 			}
 			state := &syncV2Stream{workspaceID: workspaceID, cursor: cursor}
 			w := httptest.NewRecorder()
-			r := scaleP12Request(workspace, f.data.Viewer)
+			r := scaleRequest(workspace, f.data.Viewer)
 			if !f.service.writeSyncV2Batch(w, r, state, []domain.RealtimeEvent{{ID: "wake", Seq: legacy, Type: "issue.updated", AggregateID: issue.ID}}) {
 				t.Fatalf("journal wake was skipped: %s", w.Body)
 			}

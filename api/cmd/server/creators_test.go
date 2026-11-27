@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW6GeneratedJSON(t *testing.T, value any, generated map[string]string) any {
+func generatedJSON(t *testing.T, value any, generated map[string]string) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -49,7 +49,7 @@ func scaleP21SW6GeneratedJSON(t *testing.T, value any, generated map[string]stri
 	return replace(decoded)
 }
 
-func scaleP21SW6CreationState(t *testing.T, repo *store.SQLiteStore, workspace, kind string, baseline []string) ([]string, [32]byte) {
+func creationState(t *testing.T, repo *store.SQLiteStore, workspace, kind string, baseline []string) ([]string, [32]byte) {
 	t.Helper()
 	existing := make(map[string]bool, len(baseline))
 	for _, id := range baseline {
@@ -72,12 +72,12 @@ func scaleP21SW6CreationState(t *testing.T, repo *store.SQLiteStore, workspace, 
 	return ids, [32]byte(hash.Sum(nil))
 }
 
-func TestScaleP21SW6CreatorDifferential(t *testing.T) {
+func TestCreatorDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		conversationID, releaseID := idgen.New("ai_conversation_"), idgen.New("release_")
 		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -134,9 +134,9 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 		reset(f.data.Viewer.ID)
 		hashes := map[string][32]byte{}
 		for kind, ids := range baseline {
-			_, hashes[kind] = scaleP21SW6CreationState(t, repo, workspace, kind, ids)
+			_, hashes[kind] = creationState(t, repo, workspace, kind, ids)
 		}
-		unrelatedProject := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+		unrelatedProject := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW6 foreign creators", idgen.New("sw6-creators-workspace-"), "us")
 		if err != nil {
 			t.Fatal(err)
@@ -150,8 +150,8 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		foreignConversation := scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "aiConversations", foreignConversationID)
-		foreignRelease := scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "releases", foreignReleaseID)
+		foreignConversation := recordHash(t, repo, foreign.Workspace.URLKey, "aiConversations", foreignConversationID)
+		foreignRelease := recordHash(t, repo, foreign.Workspace.URLKey, "releases", foreignReleaseID)
 		foreignRefs := map[string]string{"prompt-progress": foreignConversationID, "release-note": foreignReleaseID}
 
 		operations := []struct {
@@ -236,7 +236,7 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 						rows, order := []any{}, map[string][]string{}
 						for _, kind := range kinds {
 							ids := baseline[kind]
-							current, hash := scaleP21SW6CreationState(t, repo, workspace, kind, ids)
+							current, hash := creationState(t, repo, workspace, kind, ids)
 							if hash != hashes[kind] || len(current) < len(ids) || !slices.Equal(current[:len(ids)], ids) {
 								t.Fatal("creator changed existing collection bytes or order", kind)
 							}
@@ -266,13 +266,13 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 						for _, event := range realtime {
 							effects = append(effects, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
 						}
-						if scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != unrelatedProject {
+						if recordHash(t, repo, workspace, "projects", "m2-unrelated") != unrelatedProject {
 							t.Fatal("creator rewrote unrelated private project bytes")
 						}
-						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, []any{responses, rows, order, effects}, generated))
+						outcomes = append(outcomes, generatedJSON(t, []any{responses, rows, order, effects}, generated))
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("creator differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("creator differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -305,9 +305,9 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 						if w.Code != http.StatusNotFound || events != 0 {
 							t.Fatalf("missing input status=%d publications=%d body=%s", w.Code, events, w.Body.String())
 						}
-						outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+						outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 						for kind, ids := range baseline {
-							current, hash := scaleP21SW6CreationState(t, repo, workspace, kind, ids)
+							current, hash := creationState(t, repo, workspace, kind, ids)
 							if hash != hashes[kind] || !slices.Equal(current, ids) {
 								t.Fatal("failed creation changed existing rows", kind)
 							}
@@ -347,7 +347,7 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 				t.Fatalf("oversized creation was not atomic: status=%d publications=%d body=%s", w.Code, publications, w.Body.String())
 			}
 			for kind, ids := range baseline {
-				current, hash := scaleP21SW6CreationState(t, repo, workspace, kind, ids)
+				current, hash := creationState(t, repo, workspace, kind, ids)
 				if hash != hashes[kind] || !slices.Equal(current, ids) {
 					t.Fatal("oversized creation changed canonical state", kind)
 				}
@@ -373,8 +373,8 @@ func TestScaleP21SW6CreatorDifferential(t *testing.T) {
 		if f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("creator decoded complete workspace metadata")
 		}
-		if scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "aiConversations", foreignConversationID) != foreignConversation ||
-			scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "releases", foreignReleaseID) != foreignRelease {
+		if recordHash(t, repo, foreign.Workspace.URLKey, "aiConversations", foreignConversationID) != foreignConversation ||
+			recordHash(t, repo, foreign.Workspace.URLKey, "releases", foreignReleaseID) != foreignRelease {
 			t.Fatal("creator changed foreign workspace records")
 		}
 	}

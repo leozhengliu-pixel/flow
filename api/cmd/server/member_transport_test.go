@@ -15,10 +15,10 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP20ThousandMemberTransport(t *testing.T) {
+func TestScaleThousandMemberTransport(t *testing.T) {
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	rows := db.query(t, "SELECT id FROM auth_users WHERE id=?", db.users[0].ID)
 	rows.Close()
 	prefix := idgen.New("p20-directory-")

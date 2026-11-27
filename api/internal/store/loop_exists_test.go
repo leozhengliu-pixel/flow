@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW23LoopRecordExists(t *testing.T) {
+func TestLoopRecordExists(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	loops := []domain.Loop{{ID: "sw23-target", SlugID: "sw23-old-slug", Description: strings.Repeat("legal large loop ", 22000)}}
 	for i := range 80 {

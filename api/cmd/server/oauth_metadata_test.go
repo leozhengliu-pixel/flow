@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW294: the OAuth/application metadata transaction (application install,
+// The OAuth/application metadata transaction (application install,
 // deactivation and uninstall, credential issue and revocation, refresh-family
 // revocation, grants, application policies and the built-in agent) on the
 // legacy store, a warm bounded view and a bounded view loaded from SQL. The
@@ -28,24 +28,24 @@ import (
 // reload must agree byte for byte except generated IDs and clocks; bounded,
 // the installed image must also equal the reload exactly.
 
-var scaleP21SW294Fields = []string{"users", "apiKeys", "oauthAuthorizations", "settings", "webhooks", "oauthApplications"}
+var oauthMetadataFields = []string{"users", "apiKeys", "oauthAuthorizations", "settings", "webhooks", "oauthApplications"}
 
-// scaleP21SW294ExactFields are compared between a bounded installed image and
+// exactFields are compared between a bounded installed image and
 // a reload; the legacy snapshot does not derive a new user's settings.
-var scaleP21SW294ExactFields = append(slices.Clone(scaleP21SW294Fields), "userSettings", "notificationPreferences", "members", "teamMembers")
+var exactFields = append(slices.Clone(oauthMetadataFields), "userSettings", "notificationPreferences", "members", "teamMembers")
 
-type scaleP21SW294Outcome struct {
+type oauthMetadataOutcome struct {
 	Result              string
-	State               scaleP21TeamCreateState
+	State               scaleTeamCreateState
 	Extra               map[string][][]any
 	Webhooks, Realtime  []json.RawMessage
 	Installed, Reloaded json.RawMessage
 }
 
-// scaleP21SW294Image reads the fields from repo's installed image (the legacy
+// oauthMetadataImage reads the fields from repo's installed image (the legacy
 // snapshot or the bounded installed logical source), each decoded and
 // re-encoded so an empty collection's spelling is not state.
-func scaleP21SW294Image(t *testing.T, repo *store.SQLiteStore, workspace string, names ...string) map[string]json.RawMessage {
+func oauthMetadataImage(t *testing.T, repo *store.SQLiteStore, workspace string, names ...string) map[string]json.RawMessage {
 	t.Helper()
 	result := map[string]json.RawMessage{}
 	if !repo.BoundedMetadataEnabled() {
@@ -98,9 +98,9 @@ func scaleP21SW294Image(t *testing.T, repo *store.SQLiteStore, workspace string,
 	return result
 }
 
-// scaleP21SW294Delta lists, per field, the installed entries a call added or
+// oauthMetadataDelta lists, per field, the installed entries a call added or
 // changed, sorted (the legacy snapshot appends where a load orders).
-func scaleP21SW294Delta(t *testing.T, before, after map[string]json.RawMessage) json.RawMessage {
+func oauthMetadataDelta(t *testing.T, before, after map[string]json.RawMessage) json.RawMessage {
 	t.Helper()
 	entries := func(name string, raw json.RawMessage) map[string]string {
 		var value any
@@ -143,7 +143,7 @@ func scaleP21SW294Delta(t *testing.T, before, after map[string]json.RawMessage) 
 		return result
 	}
 	result := map[string][]string{}
-	for _, name := range scaleP21SW294Fields {
+	for _, name := range oauthMetadataFields {
 		old := entries(name, before[name])
 		for entry := range entries(name, after[name]) {
 			if _, found := old[entry]; !found {
@@ -159,7 +159,7 @@ func scaleP21SW294Delta(t *testing.T, before, after map[string]json.RawMessage) 
 	return raw
 }
 
-func (f scaleP21TeamCreateFixture) sw294Extra(t *testing.T) map[string][][]any {
+func (f scaleTeamCreateFixture) oAuthMetadataExtra(t *testing.T) map[string][][]any {
 	t.Helper()
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	return map[string][][]any{
@@ -170,10 +170,10 @@ func (f scaleP21TeamCreateFixture) sw294Extra(t *testing.T) map[string][][]any {
 	}
 }
 
-// sw294Prepare restores the fixture (team-create prepare: team-move seed,
+// oauthMetadataPrepare restores the fixture (team-create prepare: team-move seed,
 // installations and their memberships, audit rows), clears the auxiliary rows
 // earlier runs wrote and applies the case's setup through the legacy store.
-func (f scaleP21TeamCreateFixture) sw294Prepare(setup func(*testing.T)) func(*testing.T) {
+func (f scaleTeamCreateFixture) oauthMetadataPrepare(setup func(*testing.T)) func(*testing.T) {
 	return f.prepare(func(t *testing.T) {
 		workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 		f.exec(t, `DELETE FROM api_key_lookup WHERE workspace_key=? AND key_id LIKE ?`, workspace, "sw294-%")
@@ -185,17 +185,17 @@ func (f scaleP21TeamCreateFixture) sw294Prepare(setup func(*testing.T)) func(*te
 	})
 }
 
-func (f scaleP21TeamCreateFixture) sw294Run(t *testing.T, source string, call func(*server) string) (scaleP21SW294Outcome, time.Time) {
+func (f scaleTeamCreateFixture) oauthMetadataRun(t *testing.T, source string, call func(*server) string) (oauthMetadataOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.service(t, source)
 	workspace := f.data.Workspace.URLKey
-	got := scaleP21SW294Outcome{}
+	got := oauthMetadataOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -203,7 +203,7 @@ func (f scaleP21TeamCreateFixture) sw294Run(t *testing.T, source string, call fu
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -212,7 +212,7 @@ func (f scaleP21TeamCreateFixture) sw294Run(t *testing.T, source string, call fu
 	for _, event := range f.state(t).Events {
 		prior[event[0]] = true
 	}
-	before := scaleP21SW294Image(t, service.store, workspace, scaleP21SW294Fields...)
+	before := oauthMetadataImage(t, service.store, workspace, oauthMetadataFields...)
 	decodes := service.store.WorkspaceMetadataDecodes()
 	got.Result = call(service)
 	service.store.SetWebhookSink(nil)
@@ -229,33 +229,33 @@ func (f scaleP21TeamCreateFixture) sw294Run(t *testing.T, source string, call fu
 	slices.SortFunc(got.Webhooks, func(a, b json.RawMessage) int { return strings.Compare(string(a), string(b)) })
 	slices.SortFunc(got.Realtime, func(a, b json.RawMessage) int { return strings.Compare(string(a), string(b)) })
 	got.State.Events = events
-	got.Extra = f.sw294Extra(t)
+	got.Extra = f.oAuthMetadataExtra(t)
 	if service.store.BoundedMetadataEnabled() && (service.store.WorkspaceMetadataDecodes() != decodes || service.store.MetadataWorkUsedForTesting() != 0) {
 		t.Fatalf("%s: bounded OAuth metadata write decoded full metadata (%d) or retained work (%d)", source,
 			service.store.WorkspaceMetadataDecodes(), service.store.MetadataWorkUsedForTesting())
 	}
-	installed := scaleP21SW294Image(t, service.store, workspace, scaleP21SW294ExactFields...)
+	installed := oauthMetadataImage(t, service.store, workspace, exactFields...)
 	reloaded, err := store.OpenDatabase(f.reader.config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fresh := scaleP21SW294Image(t, reloaded, workspace, scaleP21SW294ExactFields...)
+	fresh := oauthMetadataImage(t, reloaded, workspace, exactFields...)
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if service.store.BoundedMetadataEnabled() {
 		// The installed image is exactly what a reload reads, in its order
 		// (a load derives settings it never stored with its own clock).
-		for _, name := range scaleP21SW294ExactFields {
-			want, have := scaleP21TriageNormalize(t, fresh[name], started), scaleP21TriageNormalize(t, installed[name], started)
+		for _, name := range exactFields {
+			want, have := scaleTriageNormalize(t, fresh[name], started), scaleTriageNormalize(t, installed[name], started)
 			if want != have {
-				t.Fatalf("%s: installed %s is not the reloaded one: %s", source, name, scaleP21M2Diff(want, have))
+				t.Fatalf("%s: installed %s is not the reloaded one: %s", source, name, policyFirstDifference(want, have))
 			}
 		}
 	}
-	got.Installed = scaleP21SW294Delta(t, before, installed)
-	for _, name := range scaleP21SW294ExactFields {
-		if !slices.Contains(scaleP21SW294Fields, name) {
+	got.Installed = oauthMetadataDelta(t, before, installed)
+	for _, name := range exactFields {
+		if !slices.Contains(oauthMetadataFields, name) {
 			delete(fresh, name)
 		}
 	}
@@ -263,24 +263,24 @@ func (f scaleP21TeamCreateFixture) sw294Run(t *testing.T, source string, call fu
 	return got, started
 }
 
-func (f scaleP21TeamCreateFixture) sw294Differential(t *testing.T, name string, setup func(*testing.T), call func(*server) string) []scaleP21SW294Outcome {
+func (f scaleTeamCreateFixture) oauthMetadataDifferential(t *testing.T, name string, setup func(*testing.T), call func(*server) string) []oauthMetadataOutcome {
 	t.Helper()
-	f.scaleP21TriageWriterFixture.prepare = f.sw294Prepare(setup)
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.oauthMetadataPrepare(setup)
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
-	var outcomes []scaleP21SW294Outcome
+	var outcomes []oauthMetadataOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started := f.sw294Run(t, source, call)
+		got, started := f.oauthMetadataRun(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func scaleP21SW294Result(values ...any) string {
+func oauthMetadataResult(values ...any) string {
 	parts := make([]string, 0, len(values))
 	for _, value := range values {
 		if err, ok := value.(error); ok || value == nil {
@@ -302,33 +302,33 @@ func scaleP21SW294Result(values ...any) string {
 	return strings.Join(parts, " | ")
 }
 
-// scaleP21SW294Hash is the installation/app-user hash of writeApplicationInstallationTx.
-func scaleP21SW294Hash(workspace, client string) string {
+// oauthMetadataHash is the installation/app-user hash of writeApplicationInstallationTx.
+func oauthMetadataHash(workspace, client string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(workspace+":"+client)))[:32]
 }
 
-type scaleP21SW294Case struct {
+type oauthMetadataCase struct {
 	name  string
 	setup func(*testing.T)
 	call  func(*server) string
-	check func(*testing.T, scaleP21SW294Outcome)
+	check func(*testing.T, oauthMetadataOutcome)
 	// interleaved: concurrent calls decide which intermediate writes,
 	// events and deliveries happen; only the converged state is compared.
 	interleaved bool
 }
 
-func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
+func TestOAuthMetadataDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	workspace := f.data.Workspace.URLKey
 	owner, admin, member := f.data.Viewer, f.principals[1].user, f.principals[2].user
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	later := at.Add(48 * time.Hour)
 	const client, secret = "sw294-client-a", "sw294-client-secret"
-	appUser, installation := "app_"+scaleP21SW294Hash(workspace, client), "installation_"+scaleP21SW294Hash(workspace, client)
-	builtin := "installation_" + scaleP21SW294Hash(workspace, store.BuiltinApplicationClientID)
+	appUser, installation := "app_"+oauthMetadataHash(workspace, client), "installation_"+oauthMetadataHash(workspace, client)
+	builtin := "installation_" + oauthMetadataHash(workspace, store.BuiltinApplicationClientID)
 	install := func(name string, active bool, scopes ...string) domain.ApplicationInstallation {
 		if len(scopes) == 0 {
 			scopes = []string{"read", "write"}
@@ -397,26 +397,26 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 		p.Settings["applicationPolicies"] = map[string]any{"requests": []any{map[string]any{"clientId": client, "status": "pending"}}}
 		return nil
 	}
-	cases := []scaleP21SW294Case{
+	cases := []oauthMetadataCase{
 		{name: "install-new", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, install("SW294 App", true), "sw294-webhook-secret"))
+			return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, install("SW294 App", true), "sw294-webhook-secret"))
 		}},
 		{name: "install-again-renamed", setup: installed, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, install("Renamed app", true, "read", "write", "app:assignable"), ""))
+			return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, install("Renamed app", true, "read", "write", "app:assignable"), ""))
 		}},
 		{name: "install-unknown-team", setup: seedApp, call: func(s *server) string {
 			bad := install("SW294 App", true)
 			bad.TeamIDs = []string{"sw294-missing-team"}
-			return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, bad, ""))
+			return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, bad, ""))
 		}},
 		{name: "install-not-admin", setup: seedApp, call: func(s *server) string {
 			bad := install("SW294 App", true)
 			bad.InstalledBy = member.ID
-			return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, bad, ""))
+			return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, bad, ""))
 		}},
 		{name: "deactivate-revokes-credentials", setup: func(t *testing.T) { installed(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, install("SW294 App", false), ""))
-		}, check: func(t *testing.T, outcome scaleP21SW294Outcome) {
+			return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, install("SW294 App", false), ""))
+		}, check: func(t *testing.T, outcome oauthMetadataOutcome) {
 			for _, key := range []string{"sw294-key-subject", "sw294-key-creator", "sw294-grant-app"} {
 				if !strings.Contains(string(outcome.Installed), key) {
 					t.Fatalf("deactivation did not revoke %s: %s", key, outcome.Installed)
@@ -429,8 +429,8 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 			}
 		}},
 		{name: "uninstall", setup: func(t *testing.T) { installed(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.UninstallApplication(t.Context(), workspace, installation))
-		}, check: func(t *testing.T, outcome scaleP21SW294Outcome) {
+			return oauthMetadataResult(s.store.UninstallApplication(t.Context(), workspace, installation))
+		}, check: func(t *testing.T, outcome oauthMetadataOutcome) {
 			for _, key := range []string{"sw294-key-subject", "sw294-grant-app", "sw294-grant-member", appUser} {
 				if !strings.Contains(string(outcome.Installed), key) {
 					t.Fatalf("uninstall did not change %s: %s", key, outcome.Installed)
@@ -438,30 +438,30 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 			}
 		}},
 		{name: "uninstall-missing", setup: installed, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.UninstallApplication(t.Context(), workspace, "installation_sw294_missing"))
+			return oauthMetadataResult(s.store.UninstallApplication(t.Context(), workspace, "installation_sw294_missing"))
 		}},
 		{name: "uninstall-builtin", setup: ensure(true), call: func(s *server) string {
-			return scaleP21SW294Result(s.store.UninstallApplication(t.Context(), workspace, builtin))
+			return oauthMetadataResult(s.store.UninstallApplication(t.Context(), workspace, builtin))
 		}},
 		{name: "issue-client-credentials", setup: func(t *testing.T) { installed(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.IssueApplicationCredential(t.Context(), workspace, client, secret, "", "app", []string{"read", "write"}, issueKey("sw294-issued-a"), nil))
+			return oauthMetadataResult(s.store.IssueApplicationCredential(t.Context(), workspace, client, secret, "", "app", []string{"read", "write"}, issueKey("sw294-issued-a"), nil))
 		}},
 		{name: "issue-client-credentials-new-installation", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.IssueApplicationCredential(t.Context(), workspace, client, secret, "", "app", []string{"read"}, issueKey("sw294-issued-b"), nil))
+			return oauthMetadataResult(s.store.IssueApplicationCredential(t.Context(), workspace, client, secret, "", "app", []string{"read"}, issueKey("sw294-issued-b"), nil))
 		}},
 		{name: "issue-wrong-secret", setup: installed, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.IssueApplicationCredential(t.Context(), workspace, client, "wrong", "", "app", nil, issueKey("sw294-issued-c"), nil))
+			return oauthMetadataResult(s.store.IssueApplicationCredential(t.Context(), workspace, client, "wrong", "", "app", nil, issueKey("sw294-issued-c"), nil))
 		}},
 		{name: "issue-user-token", setup: func(t *testing.T) { seedApp(t); credentials(t) }, call: func(s *server) string {
 			key := issueKey("sw294-issued-user")
 			key.GrantType = "authorization_code"
-			return scaleP21SW294Result(s.store.IssueApplicationCredential(t.Context(), workspace, client, "", owner.ID, "user", []string{"read"}, key, nil))
+			return oauthMetadataResult(s.store.IssueApplicationCredential(t.Context(), workspace, client, "", owner.ID, "user", []string{"read"}, key, nil))
 		}},
 		{name: "revoke-access-token", setup: func(t *testing.T) { installed(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-subject"))
+			return oauthMetadataResult(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-subject"))
 		}},
 		{name: "revoke-access-token-unknown", setup: func(t *testing.T) { installed(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-unknown"))
+			return oauthMetadataResult(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-unknown"))
 		}},
 		{name: "revoke-refresh-family", setup: func(t *testing.T) {
 			seedApp(t)
@@ -471,14 +471,14 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthRefreshToken(t.Context(), refreshToken))
-		}, check: func(t *testing.T, outcome scaleP21SW294Outcome) {
+			return oauthMetadataResult(s.store.RevokeOAuthRefreshToken(t.Context(), refreshToken))
+		}, check: func(t *testing.T, outcome oauthMetadataOutcome) {
 			if !strings.Contains(string(outcome.Installed), "sw294-key-family-a") || !strings.Contains(string(outcome.Installed), "sw294-key-family-b") || strings.Contains(string(outcome.Installed), "sw294-key-family-other") {
 				t.Fatalf("family revocation changed %s", outcome.Installed)
 			}
 		}},
 		{name: "grant-user-created", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-new", CreatedAt: at.Add(3 * time.Hour)}, nil))
+			return oauthMetadataResult(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-new", CreatedAt: at.Add(3 * time.Hour)}, nil))
 		}},
 		{name: "grant-user-reused", setup: func(t *testing.T) {
 			seedApp(t)
@@ -486,19 +486,19 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-second", CreatedAt: at.Add(4 * time.Hour)}, nil))
+			return oauthMetadataResult(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-second", CreatedAt: at.Add(4 * time.Hour)}, nil))
 		}},
 		{name: "grant-app-installs", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("app", "", "read", "write"), domain.OAuthAuthorization{ID: "sw294-grant-app-new", CreatedAt: at.Add(5 * time.Hour)}, nil))
+			return oauthMetadataResult(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("app", "", "read", "write"), domain.OAuthAuthorization{ID: "sw294-grant-app-new", CreatedAt: at.Add(5 * time.Hour)}, nil))
 		}},
 		{name: "grant-app-update-access", setup: installed, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("app", "", "read", "app:assignable"), domain.OAuthAuthorization{ID: "sw294-grant-app-update", CreatedAt: at.Add(5 * time.Hour)}, nil))
+			return oauthMetadataResult(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("app", "", "read", "app:assignable"), domain.OAuthAuthorization{ID: "sw294-grant-app-update", CreatedAt: at.Add(5 * time.Hour)}, nil))
 		}},
 		{name: "grant-refused-by-policy", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-refused", CreatedAt: at}, func(*domain.Bootstrap, string, []string) bool { return false }))
+			return oauthMetadataResult(s.store.CreateOAuthAuthorizationGrant(t.Context(), idgen.New("sw294-code-"), grant("user", member.ID, "read"), domain.OAuthAuthorization{ID: "sw294-grant-refused", CreatedAt: at}, func(*domain.Bootstrap, string, []string) bool { return false }))
 		}},
 		{name: "request-approval", setup: seedApp, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, client, policy))
+			return oauthMetadataResult(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, client, policy))
 		}},
 		{name: "request-approval-replaces", setup: func(t *testing.T) {
 			seedApp(t)
@@ -509,44 +509,44 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, client, policy))
+			return oauthMetadataResult(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, client, policy))
 		}},
 		{name: "revoke-authorization-own", setup: func(t *testing.T) { seedApp(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", member.ID))
+			return oauthMetadataResult(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", member.ID))
 		}},
 		{name: "revoke-authorization-admin", setup: func(t *testing.T) { seedApp(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", owner.ID))
+			return oauthMetadataResult(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", owner.ID))
 		}},
 		{name: "revoke-authorization-forbidden", setup: func(t *testing.T) { seedApp(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", f.principals[3].user.ID))
+			return oauthMetadataResult(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-member", f.principals[3].user.ID))
 		}},
 		{name: "revoke-authorization-missing", setup: func(t *testing.T) { seedApp(t); credentials(t) }, call: func(s *server) string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-missing", owner.ID))
+			return oauthMetadataResult(s.store.RevokeOAuthAuthorizationRecords(t.Context(), workspace, "sw294-grant-missing", owner.ID))
 		}},
 		{name: "ensure-builtin-new", call: func(s *server) string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
 		}},
 		{name: "ensure-builtin-noop", setup: ensure(true), call: func(s *server) string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
 		}},
 		{name: "ensure-builtin-suspend", setup: ensure(true), call: func(s *server) string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, false))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, false))
 		}},
 		{name: "ensure-builtin-resume", setup: ensure(true, false), call: func(s *server) string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
 		}},
 		{name: "ensure-builtin-disabled-absent", call: func(s *server) string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, false))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, false))
 		}},
 		{name: "cancelled", setup: seedApp, call: func(s *server) string {
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
-			return scaleP21SW294Result(s.store.InstallApplication(ctx, workspace, install("SW294 App", true), ""))
+			return oauthMetadataResult(s.store.InstallApplication(ctx, workspace, install("SW294 App", true), ""))
 		}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			outcomes := f.sw294Differential(t, test.name, test.setup, test.call)
+			outcomes := f.oauthMetadataDifferential(t, test.name, test.setup, test.call)
 			t.Logf("legacy result %s", outcomes[0].Result)
 			if test.check != nil {
 				test.check(t, outcomes[0])
@@ -559,11 +559,11 @@ func TestScaleP21SW294OAuthMetadataDifferential(t *testing.T) {
 // several applications, the built-in agent, a client-credentials token, a
 // token revocation and an approval request. Each commits whole; the final
 // rows, events and installed records agree whatever order they ran in.
-func TestScaleP21SW294OAuthMetadataConcurrent(t *testing.T) {
+func TestOAuthMetadataConcurrent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	workspace := f.data.Workspace.URLKey
 	owner := f.data.Viewer
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
@@ -576,7 +576,7 @@ func TestScaleP21SW294OAuthMetadataConcurrent(t *testing.T) {
 			data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "sw294-key-concurrent", Name: "Concurrent", SubjectUserID: owner.ID, CreatorID: owner.ID, Scopes: []string{"read"}, SecretHash: "sw294-hash-concurrent", CreatedAt: at})
 		})
 	}
-	f.sw294Differential(t, "concurrent", setup, func(s *server) string {
+	f.oauthMetadataDifferential(t, "concurrent", setup, func(s *server) string {
 		var group sync.WaitGroup
 		results := make([]string, 8)
 		run := func(index int, call func() string) {
@@ -588,21 +588,21 @@ func TestScaleP21SW294OAuthMetadataConcurrent(t *testing.T) {
 		}
 		for index, client := range []string{"sw294-client-w", "sw294-client-x", "sw294-client-y", "sw294-client-z"} {
 			run(index, func() string {
-				return scaleP21SW294Result(s.store.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{ClientID: client, Name: "Concurrent " + client, InstalledBy: owner.ID, Scopes: []string{"read"}, TeamIDs: []string{f.public}, Active: true}, ""))
+				return oauthMetadataResult(s.store.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{ClientID: client, Name: "Concurrent " + client, InstalledBy: owner.ID, Scopes: []string{"read"}, TeamIDs: []string{f.public}, Active: true}, ""))
 			})
 		}
 		run(4, func() string {
-			return scaleP21SW294Result(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
+			return oauthMetadataResult(s.store.EnsureBuiltinApplication(t.Context(), workspace, true))
 		})
 		run(5, func() string {
 			key := domain.APIKey{ID: "sw294-issued-concurrent", Name: "Issued", Prefix: "lin_oauth", SecretHash: "sw294-issued-concurrent-hash", GrantType: "client_credentials", CreatedAt: at.Add(time.Hour)}
-			return scaleP21SW294Result(s.store.IssueApplicationCredential(t.Context(), workspace, "sw294-client-c", "sw294-secret-c", "", "app", []string{"read"}, key, nil))
+			return oauthMetadataResult(s.store.IssueApplicationCredential(t.Context(), workspace, "sw294-client-c", "sw294-secret-c", "", "app", []string{"read"}, key, nil))
 		})
 		run(6, func() string {
-			return scaleP21SW294Result(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-concurrent"))
+			return oauthMetadataResult(s.store.RevokeOAuthAccessToken(t.Context(), "sw294-hash-concurrent"))
 		})
 		run(7, func() string {
-			return scaleP21SW294Result(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, "sw294-client-c", func(p *domain.Bootstrap) error {
+			return oauthMetadataResult(s.store.RequestOAuthApplicationApproval(t.Context(), workspace, "sw294-client-c", func(p *domain.Bootstrap) error {
 				p.Settings["applicationPolicies"] = map[string]any{"concurrent": true}
 				return nil
 			}))
@@ -616,20 +616,20 @@ func TestScaleP21SW294OAuthMetadataConcurrent(t *testing.T) {
 // budget refuses before writing (ErrMetadataWorkBudget): no row, event or
 // installed record changes and no work is retained. Legacy holds the whole
 // workspace and revokes; the refusal is the bounded store's budget contract.
-func TestScaleP21SW294OAuthMetadataBudget(t *testing.T) {
+func TestOAuthMetadataBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	workspace := f.data.Workspace.URLKey
 	owner := f.data.Viewer
 	const client = "sw294-client-budget"
-	appUser := "app_" + scaleP21SW294Hash(workspace, client)
+	appUser := "app_" + oauthMetadataHash(workspace, client)
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	install := func(active bool) domain.ApplicationInstallation {
 		return domain.ApplicationInstallation{ClientID: client, Name: "Budget app", InstalledBy: owner.ID, Scopes: []string{"read"}, TeamIDs: []string{f.public}, Active: active}
 	}
-	f.scaleP21TriageWriterFixture.prepare = f.sw294Prepare(func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = f.oauthMetadataPrepare(func(t *testing.T) {
 		if _, err := f.repository.InstallApplication(t.Context(), workspace, install(true), ""); err != nil {
 			t.Fatal(err)
 		}
@@ -646,11 +646,11 @@ func TestScaleP21SW294OAuthMetadataBudget(t *testing.T) {
 			data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "sw294-key-small", Name: "Small", SubjectUserID: appUser, CreatorID: owner.ID, Scopes: []string{"read"}, SecretHash: "sw294-hash-small", CreatedAt: at})
 		})
 	})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		service := f.service(t, source)
 		before := f.state(t)
-		image := scaleP21SW294Image(t, service.store, workspace, scaleP21SW294Fields...)
+		image := oauthMetadataImage(t, service.store, workspace, oauthMetadataFields...)
 		published := 0
 		service.store.SetWebhookSink(func(string, domain.DomainEvent) { published++ })
 		_, err := service.store.InstallApplication(t.Context(), workspace, install(false), "")
@@ -668,7 +668,7 @@ func TestScaleP21SW294OAuthMetadataBudget(t *testing.T) {
 		if fmt.Sprint(before) != fmt.Sprint(after) || published != 0 {
 			t.Fatalf("%s: refused transaction changed rows or published %d events", source, published)
 		}
-		if fmt.Sprint(image) != fmt.Sprint(scaleP21SW294Image(t, service.store, workspace, scaleP21SW294Fields...)) {
+		if fmt.Sprint(image) != fmt.Sprint(oauthMetadataImage(t, service.store, workspace, oauthMetadataFields...)) {
 			t.Fatalf("%s: refused transaction changed the installed image", source)
 		}
 		if service.store.MetadataWorkUsedForTesting() != 0 || service.store.WorkspaceMetadataDecodes() != 0 {

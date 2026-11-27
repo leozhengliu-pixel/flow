@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP15ReusedBootstrapPermissionDifferential(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleReusedBootstrapPermissionDifferential(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			member, _ := scaleP03Join(t, f, "Snapshot member", idgen.New("p15-reuse-")+"@example.test", "member")
+			member, _ := resourceAccessScaleJoin(t, f, "Snapshot member", idgen.New("p15-reuse-")+"@example.test", "member")
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p15.reuse_seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p15-reuse-public", Key: "P15R"}, domain.Team{ID: "p15-reuse-private", Key: "P15S", Private: true})
 				data.TeamSettings["p15-reuse-public"] = domain.TeamSettings{TeamID: "p15-reuse-public", Access: "public"}
@@ -44,9 +44,9 @@ func TestScaleP15ReusedBootstrapPermissionDifferential(t *testing.T) {
 				for _, client := range []*http.Client{f.admin, member} {
 					for _, path := range []string{"/api/bootstrap", "/api/issue-records/bootstrap"} {
 						t.Setenv("FLOW_RECORD_HYDRATION", "off")
-						old := scaleP03Read(t, f, client, "", http.MethodGet, path, workspace)
+						old := resourceAccessScaleRead(t, f, client, "", http.MethodGet, path, workspace)
 						t.Setenv("FLOW_RECORD_HYDRATION", "on")
-						got := scaleP03Read(t, f, client, "", http.MethodGet, path, workspace)
+						got := resourceAccessScaleRead(t, f, client, "", http.MethodGet, path, workspace)
 						var left, right any
 						if err := json.Unmarshal(old.Body.Bytes(), &left); err != nil {
 							t.Fatal(err)

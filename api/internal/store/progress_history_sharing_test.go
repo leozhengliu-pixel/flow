@@ -11,7 +11,7 @@ import (
 
 // Issue #244: snapshot clones share project progress histories, which no
 // writer changes in place, instead of copying them.
-func TestScaleP21SW244ProgressHistoriesAreShared(t *testing.T) {
+func TestProgressHistoriesAreShared(t *testing.T) {
 	history := []domain.ProjectProgressHistoryPoint{{Date: time.Unix(0, 0).UTC(), Value: 1}, {Date: time.Unix(86400, 0).UTC(), Value: 2}}
 	source := domain.Bootstrap{Projects: []domain.Project{{ID: "project", Name: "Project", TeamIDs: []string{"team"}, ProgressHistory: history, ScopeHistory: history[:1]}}}
 	clone := cloneBootstrap(source)

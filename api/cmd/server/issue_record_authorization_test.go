@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
+func TestIssueRecordAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		other := scaleP03Fixture(t, repo)
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		other := resourceAccessScaleFixture(t, repo)
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw187-")
 		publicID, childID := prefix+"issue", prefix+"child"
 		projectID, cycleID := prefix+"project", prefix+"cycle"
@@ -69,9 +69,9 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
-			request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodDelete, "/api/issue-records/"+publicID, publicID, "", nil)
+			request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodDelete, "/api/issue-records/"+publicID, publicID, "", nil)
 			request.Header.Set("X-Workspace-Key", other.data.Workspace.URLKey)
-			outcome, release := scaleP21SW47Call(t, source, request, other.data.Workspace.URLKey, f.data.Viewer, "")
+			outcome, release := issueChildAuthorizationCall(t, source, request, other.data.Workspace.URLKey, f.data.Viewer, "")
 			if outcome.Allowed {
 				t.Fatal("authorization crossed a workspace membership boundary")
 			}
@@ -119,14 +119,14 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 					for _, test := range tests {
 						path := "/api/issue-records/" + test.ref + test.tail
-						oldRequest := scaleP21SW47Request(f, user, key, test.method, path, test.ref, "", test.body)
-						newRequest := scaleP21SW47Request(f, user, key, test.method, path, test.ref, "", test.body)
+						oldRequest := issueChildAuthorizationRequest(f, user, key, test.method, path, test.ref, "", test.body)
+						newRequest := issueChildAuthorizationRequest(f, user, key, test.method, path, test.ref, "", test.body)
 						if !reload && user.ID == f.data.Viewer.ID && key == nil && test.name == "update-project" {
 							oldRequest.Header.Set("X-SW47-Measure", "sw187-project")
 							newRequest.Header.Set("X-SW47-Measure", "sw187-project")
 						}
-						old, closeOld := scaleP21SW47Call(t, repo, oldRequest, workspace, user, "")
-						bounded, closeNew := scaleP21SW47Call(t, f.probe, newRequest, workspace, user, "")
+						old, closeOld := issueChildAuthorizationCall(t, repo, oldRequest, workspace, user, "")
+						bounded, closeNew := issueChildAuthorizationCall(t, f.probe, newRequest, workspace, user, "")
 						if !reflect.DeepEqual(old, bounded) {
 							t.Fatalf("%s authorization differs: old=%+v bounded=%+v", test.name, old, bounded)
 						}
@@ -141,7 +141,7 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 		}
 		// A generation read must be retained until the request closes, even
 		// when middleware's one-shot handoff is never consumed.
-		request := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"assigneeId": f.principals[2].user.ID})
+		request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"assigneeId": f.principals[2].user.ID})
 		request, closeOutput := beginRequestResourceReads(request)
 		service := &server{store: f.probe}
 		if !service.resourceAllowedLegacy(request, workspace, f.data.Viewer.ID) || f.probe.MetadataWorkUsedForTesting() == 0 {
@@ -155,7 +155,7 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 		}
 		canceled, cancel := context.WithCancel(t.Context())
 		cancel()
-		request = scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"projectId": projectID})
+		request = issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"projectId": projectID})
 		request = request.WithContext(context.WithValue(canceled, authUserContextKey{}, f.data.Viewer))
 		request, closeOutput = beginRequestResourceReads(request)
 		if service.resourceAllowedLegacy(request, workspace, f.data.Viewer.ID) {
@@ -165,7 +165,7 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 		if f.probe.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("canceled general authorization leaked its owner")
 		}
-		unowned := scaleP21SW47Request(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"projectId": projectID})
+		unowned := issueChildAuthorizationRequest(f, f.data.Viewer, nil, http.MethodPatch, "/api/issue-records/"+publicID, publicID, "", map[string]any{"projectId": projectID})
 		if _, err := service.buildIssueRecordAuthorizationData(unowned); err == nil || f.probe.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("general authorization accepted or leaked an unowned output", err)
 		}
@@ -174,9 +174,9 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 				continue
 			}
 			path := "/api/issue-records/" + test.ref + test.tail
-			var expected []scaleP21SW47IssueHeader
+			var expected []issueHeader
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
-				request := scaleP21SW47Request(f, f.data.Viewer, nil, test.method, path, test.ref, "", test.body)
+				request := issueChildAuthorizationRequest(f, f.data.Viewer, nil, test.method, path, test.ref, "", test.body)
 				request, release := beginRequestResourceReads(request)
 				development := &server{store: source, authDisabled: true}
 				actual, err := development.buildIssueRecordAuthorizationData(request)
@@ -185,8 +185,8 @@ func TestScaleP21SW187IssueRecordAuthorizationDifferential(t *testing.T) {
 					t.Fatal("development authorization", test.name, err)
 				}
 				if source == repo {
-					expected = scaleP21SW47Headers(development, actual)
-				} else if !reflect.DeepEqual(expected, scaleP21SW47Headers(development, actual)) {
+					expected = issueChildAuthorizationHeaders(development, actual)
+				} else if !reflect.DeepEqual(expected, issueChildAuthorizationHeaders(development, actual)) {
 					release()
 					t.Fatal("development authorization headers differ", test.name)
 				}

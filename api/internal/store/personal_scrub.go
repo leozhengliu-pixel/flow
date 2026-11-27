@@ -14,30 +14,30 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW21ScrubFixedWork = 2 << 20
-const scaleP21SW21ScrubHeaderKeys = 8 << 10
-const scaleP21SW21ScrubRecordWork = metadataWorkBytesDefault - scaleP21SW21ScrubFixedWork
+const scrubFixedWork = 2 << 20
+const scrubHeaderKeys = 8 << 10
+const scrubRecordWork = metadataWorkBytesDefault - scrubFixedWork
 
-type scaleP21SW21ScrubHeader struct {
+type scrubHeader struct {
 	keys      []string
 	size      int64
 	aggregate string
 }
 
-type scaleP21SW21ScrubReader struct {
+type scrubReader struct {
 	ctx    context.Context
 	tx     *sqlTx
 	target int
 	column string
 	scope  any
-	header scaleP21SW21ScrubHeader
+	header scrubHeader
 }
 
-type scaleP21SW21ScrubReadError struct{ error }
+type scrubReadError struct{ error }
 
-func (e *scaleP21SW21ScrubReadError) Unwrap() error { return e.error }
+func (e *scrubReadError) Unwrap() error { return e.error }
 
-func (r *scaleP21SW21ScrubReader) ReadAt(p []byte, offset int64) (int, error) {
+func (r *scrubReader) ReadAt(p []byte, offset int64) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -75,10 +75,10 @@ func (r *scaleP21SW21ScrubReader) ReadAt(p []byte, offset int64) (int, error) {
 		}
 		var chunk []byte
 		if err := r.tx.QueryRowContext(r.ctx, "SELECT SUBSTR("+column+",?,?) FROM "+target.table+" WHERE "+where, args...).Scan(&chunk); err != nil {
-			return n, &scaleP21SW21ScrubReadError{err}
+			return n, &scrubReadError{err}
 		}
 		if int64(len(chunk)) != size {
-			return n, &scaleP21SW21ScrubReadError{io.ErrUnexpectedEOF}
+			return n, &scrubReadError{io.ErrUnexpectedEOF}
 		}
 		n += copy(p[n:], chunk)
 	}
@@ -88,7 +88,7 @@ func (r *scaleP21SW21ScrubReader) ReadAt(p []byte, offset int64) (int, error) {
 	return n, nil
 }
 
-func scaleP21SW21ScrubByteLength(dialect, column string) string {
+func scrubByteLength(dialect, column string) string {
 	if dialect == "sqlite" {
 		return "LENGTH(CAST(" + column + " AS BLOB))"
 	}
@@ -103,7 +103,7 @@ func scaleP21SW21ScrubByteLength(dialect, column string) string {
 // coherent and publishes every rewrite atomically; no rewritten body outlives
 // its one-record admission or accumulates in an outer update slice.
 func (s *SQLiteStore) scrubPersonCopiesBounded(ctx context.Context, workspaceKey, workspaceID string, anonymous domain.User) (int, error) {
-	ctx, release, err := s.admitMetadataWork(ctx, scaleP21SW21ScrubFixedWork)
+	ctx, release, err := s.admitMetadataWork(ctx, scrubFixedWork)
 	if err != nil {
 		return 0, err
 	}
@@ -124,13 +124,13 @@ func (s *SQLiteStore) scrubPersonCopiesBounded(ctx context.Context, workspaceKey
 		for _, column := range target.columns {
 			last, started := []string(nil), false
 			for {
-				page, err := s.scaleP21SW21ScrubHeaders(ctx, tx, index, column, scope, anonymous.ID, last, started)
+				page, err := s.scrubHeaders(ctx, tx, index, column, scope, anonymous.ID, last, started)
 				if err != nil {
 					return 0, err
 				}
 				for _, header := range page {
-					reader := &scaleP21SW21ScrubReader{ctx: ctx, tx: tx, target: index, column: column, scope: scope, header: header}
-					part, cost, valid, err := scaleP21SW21ScrubPreflight(ctx, reader, header.size)
+					reader := &scrubReader{ctx: ctx, tx: tx, target: index, column: column, scope: scope, header: header}
+					part, cost, valid, err := scrubPreflight(ctx, reader, header.size)
 					if err != nil {
 						return 0, err
 					}
@@ -188,19 +188,19 @@ func (s *SQLiteStore) scrubPersonCopiesBounded(ctx context.Context, workspaceKey
 	return changed, nil
 }
 
-func (s *SQLiteStore) scaleP21SW21ScrubHeaders(ctx context.Context, tx *sqlTx, index int, column string, scope any, person string, last []string, started bool) ([]scaleP21SW21ScrubHeader, error) {
+func (s *SQLiteStore) scrubHeaders(ctx context.Context, tx *sqlTx, index int, column string, scope any, person string, last []string, started bool) ([]scrubHeader, error) {
 	target := personScrubTargets[index]
 	selected := make([]string, 0, len(target.keys)*2+3)
 	for _, key := range target.keys {
-		length := scaleP21SW21ScrubByteLength(s.dialect, key)
-		selected = append(selected, length, fmt.Sprintf("CASE WHEN %s<=%d THEN %s ELSE NULL END", length, scaleP21SW21ScrubHeaderKeys, key))
+		length := scrubByteLength(s.dialect, key)
+		selected = append(selected, length, fmt.Sprintf("CASE WHEN %s<=%d THEN %s ELSE NULL END", length, scrubHeaderKeys, key))
 	}
-	selected = append(selected, scaleP21SW21ScrubByteLength(s.dialect, column))
+	selected = append(selected, scrubByteLength(s.dialect, column))
 	where := target.scope + "=? AND " + s.textCast(column) + " LIKE ? ESCAPE '!'"
 	args := []any{scope, labelReferencePattern(person)}
 	if target.table == "domain_events" {
-		length := scaleP21SW21ScrubByteLength(s.dialect, "aggregate_id")
-		selected = append(selected, length, fmt.Sprintf("CASE WHEN %s<=%d THEN aggregate_id ELSE NULL END", length, scaleP21SW21ScrubHeaderKeys))
+		length := scrubByteLength(s.dialect, "aggregate_id")
+		selected = append(selected, length, fmt.Sprintf("CASE WHEN %s<=%d THEN aggregate_id ELSE NULL END", length, scrubHeaderKeys))
 		where = target.scope + "=? AND " + column + " IS NOT NULL AND (aggregate_id=? OR " + s.textCast(column) + " LIKE ? ESCAPE '!')"
 		args = []any{scope, person, labelReferencePattern(person)}
 	}
@@ -226,12 +226,12 @@ func (s *SQLiteStore) scaleP21SW21ScrubHeaders(ctx context.Context, tx *sqlTx, i
 		return nil, fmt.Errorf("scan %s.%s: %w", target.table, column, err)
 	}
 	defer rows.Close()
-	page := make([]scaleP21SW21ScrubHeader, 0, 50)
+	page := make([]scrubHeader, 0, 50)
 	for rows.Next() {
 		lengths, keys := make([]int64, len(target.keys)), make([]sql.NullString, len(target.keys))
 		var aggregateSize int64
 		var aggregate sql.NullString
-		item := scaleP21SW21ScrubHeader{keys: make([]string, len(target.keys))}
+		item := scrubHeader{keys: make([]string, len(target.keys))}
 		dest := make([]any, 0, len(target.keys)*2+3)
 		for i := range keys {
 			dest = append(dest, &lengths[i], &keys[i])
@@ -244,13 +244,13 @@ func (s *SQLiteStore) scaleP21SW21ScrubHeaders(ctx context.Context, tx *sqlTx, i
 			return nil, err
 		}
 		for i, key := range keys {
-			if lengths[i] < 0 || lengths[i] > scaleP21SW21ScrubHeaderKeys || !key.Valid {
+			if lengths[i] < 0 || lengths[i] > scrubHeaderKeys || !key.Valid {
 				return nil, fmt.Errorf("%w: personal scrub key exceeds header allowance", ErrMetadataWorkBudget)
 			}
 			item.keys[i] = key.String
 		}
 		if target.table == "domain_events" {
-			if aggregateSize < 0 || aggregateSize > scaleP21SW21ScrubHeaderKeys || !aggregate.Valid {
+			if aggregateSize < 0 || aggregateSize > scrubHeaderKeys || !aggregate.Valid {
 				return nil, fmt.Errorf("%w: personal scrub aggregate exceeds header allowance", ErrMetadataWorkBudget)
 			}
 			item.aggregate = aggregate.String
@@ -267,14 +267,14 @@ func (s *SQLiteStore) scaleP21SW21ScrubHeaders(ctx context.Context, tx *sqlTx, i
 // encoder growth, returned output, NUL stripping and text/SQL copies. It
 // preserves Decoder's first-value behavior: trailing bytes are not validated,
 // and an invalid first value remains unchanged rather than aborting the job.
-func scaleP21SW21ScrubPreflight(ctx context.Context, input io.ReaderAt, size int64) (metadataCollectionRange, int, bool, error) {
+func scrubPreflight(ctx context.Context, input io.ReaderAt, size int64) (metadataCollectionRange, int, bool, error) {
 	scanner := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(io.NewSectionReader(input, 0, size), metadataRecordChunkBytes)}
 	part, err := scanner.value(0)
 	if err != nil {
 		if ctx.Err() != nil {
 			return part, 0, false, ctx.Err()
 		}
-		var readError *scaleP21SW21ScrubReadError
+		var readError *scrubReadError
 		if errors.As(err, &readError) {
 			return part, 0, false, err
 		}
@@ -292,13 +292,13 @@ func scaleP21SW21ScrubPreflight(ctx context.Context, input io.ReaderAt, size int
 	}
 	cost, encoded := int64(256<<10), part.size
 	add := func(value int64) error {
-		if value < 0 || value > int64(scaleP21SW21ScrubRecordWork)-cost {
+		if value < 0 || value > int64(scrubRecordWork)-cost {
 			return ErrMetadataWorkBudget
 		}
 		cost += value
 		return nil
 	}
-	if part.size > int64(scaleP21SW21ScrubRecordWork)/4 {
+	if part.size > int64(scrubRecordWork)/4 {
 		return part, 0, false, ErrMetadataWorkBudget
 	}
 	if err := add(part.size * 4); err != nil {
@@ -350,11 +350,11 @@ func scaleP21SW21ScrubPreflight(ctx context.Context, input io.ReaderAt, size int
 				encoded += 2
 			}
 		}
-		if encoded > int64(scaleP21SW21ScrubRecordWork)/6 {
+		if encoded > int64(scrubRecordWork)/6 {
 			return part, 0, false, ErrMetadataWorkBudget
 		}
 	}
-	if encoded > int64(scaleP21SW21ScrubRecordWork)/6 {
+	if encoded > int64(scrubRecordWork)/6 {
 		return part, 0, false, ErrMetadataWorkBudget
 	}
 	if err := add(encoded * 6); err != nil {

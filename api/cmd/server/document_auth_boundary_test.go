@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-// The SW282 guard closes the store wrappers SelectedDocumentMetadata and
+// The document auth boundary guard closes the store wrappers SelectedDocumentMetadata and
 // TrashRecordHeader by reachability over every non-test file of the module,
 // not by names or comments. Each identifier spelling a wrapper name must be
 // its own declaration or a direct call; a method value, method expression,
@@ -33,13 +33,13 @@ import (
 // route, ticker, record-read mode (on/shadow/off) or development
 // (auth-disabled) branch can therefore run a wrapper with the flag on.
 
-type scaleP21SW282Use struct {
+type documentAuthBoundaryUse struct {
 	file, function, kind string
 	line                 int
 	offOnly              bool
 }
 
-func scaleP21SW282Source(node ast.Node) string {
+func documentAuthBoundarySource(node ast.Node) string {
 	var text bytes.Buffer
 	if err := format.Node(&text, token.NewFileSet(), node); err != nil {
 		return fmt.Sprintf("<%T>", node)
@@ -47,50 +47,50 @@ func scaleP21SW282Source(node ast.Node) string {
 	return text.String()
 }
 
-func scaleP21SW282Flag(expression ast.Expr) bool {
-	text := scaleP21SW282Source(expression)
+func documentAuthBoundaryFlag(expression ast.Expr) bool {
+	text := documentAuthBoundarySource(expression)
 	return text == "s.store.BoundedMetadataEnabled()" || text == "s.BoundedMetadataEnabled()"
 }
 
-// scaleP21SW282OnImplied reports whether expression is true whenever the flag is on.
-func scaleP21SW282OnImplied(expression ast.Expr) bool {
+// onImplied reports whether expression is true whenever the flag is on.
+func documentAuthBoundaryOnImplied(expression ast.Expr) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
-		return scaleP21SW282OnImplied(value.X)
+		return documentAuthBoundaryOnImplied(value.X)
 	case *ast.UnaryExpr:
-		return value.Op == token.NOT && scaleP21SW282OffImplied(value.X)
+		return value.Op == token.NOT && documentAuthBoundaryOffImplied(value.X)
 	case *ast.BinaryExpr:
 		switch value.Op {
 		case token.LOR:
-			return scaleP21SW282OnImplied(value.X) || scaleP21SW282OnImplied(value.Y)
+			return documentAuthBoundaryOnImplied(value.X) || documentAuthBoundaryOnImplied(value.Y)
 		case token.LAND:
-			return scaleP21SW282OnImplied(value.X) && scaleP21SW282OnImplied(value.Y)
+			return documentAuthBoundaryOnImplied(value.X) && documentAuthBoundaryOnImplied(value.Y)
 		}
 	case *ast.CallExpr:
-		return scaleP21SW282Flag(value)
+		return documentAuthBoundaryFlag(value)
 	}
 	return false
 }
 
-// scaleP21SW282OffImplied reports whether expression is false whenever the flag is on.
-func scaleP21SW282OffImplied(expression ast.Expr) bool {
+// offImplied reports whether expression is false whenever the flag is on.
+func documentAuthBoundaryOffImplied(expression ast.Expr) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
-		return scaleP21SW282OffImplied(value.X)
+		return documentAuthBoundaryOffImplied(value.X)
 	case *ast.UnaryExpr:
-		return value.Op == token.NOT && scaleP21SW282OnImplied(value.X)
+		return value.Op == token.NOT && documentAuthBoundaryOnImplied(value.X)
 	case *ast.BinaryExpr:
 		switch value.Op {
 		case token.LAND:
-			return scaleP21SW282OffImplied(value.X) || scaleP21SW282OffImplied(value.Y)
+			return documentAuthBoundaryOffImplied(value.X) || documentAuthBoundaryOffImplied(value.Y)
 		case token.LOR:
-			return scaleP21SW282OffImplied(value.X) && scaleP21SW282OffImplied(value.Y)
+			return documentAuthBoundaryOffImplied(value.X) && documentAuthBoundaryOffImplied(value.Y)
 		}
 	}
 	return false
 }
 
-func scaleP21SW282Terminates(body *ast.BlockStmt) bool {
+func documentAuthBoundaryTerminates(body *ast.BlockStmt) bool {
 	if len(body.List) == 0 {
 		return false
 	}
@@ -108,42 +108,42 @@ func scaleP21SW282Terminates(body *ast.BlockStmt) bool {
 	return false
 }
 
-func scaleP21SW282DominatedByOnReturn(list []ast.Stmt, child ast.Node) bool {
+func documentAuthBoundaryDominatedByOnReturn(list []ast.Stmt, child ast.Node) bool {
 	for _, statement := range list {
 		if ast.Node(statement) == child {
 			return false
 		}
 		branch, ok := statement.(*ast.IfStmt)
-		if ok && branch.Init == nil && branch.Else == nil && scaleP21SW282OnImplied(branch.Cond) && scaleP21SW282Terminates(branch.Body) {
+		if ok && branch.Init == nil && branch.Else == nil && documentAuthBoundaryOnImplied(branch.Cond) && documentAuthBoundaryTerminates(branch.Body) {
 			return true
 		}
 	}
 	return false
 }
 
-// scaleP21SW282OffOnly decides whether the last node of ancestors can execute
+// offOnly decides whether the last node of ancestors can execute
 // with the flag on. ancestors[0] is the function body.
-func scaleP21SW282OffOnly(ancestors []ast.Node) bool {
+func documentAuthBoundaryOffOnly(ancestors []ast.Node) bool {
 	for index := len(ancestors) - 2; index >= 0; index-- {
 		child := ancestors[index+1]
 		switch parent := ancestors[index].(type) {
 		case *ast.IfStmt:
-			if child == parent.Body && scaleP21SW282OffImplied(parent.Cond) {
+			if child == parent.Body && documentAuthBoundaryOffImplied(parent.Cond) {
 				return true
 			}
-			if parent.Else != nil && child == parent.Else && scaleP21SW282OnImplied(parent.Cond) {
+			if parent.Else != nil && child == parent.Else && documentAuthBoundaryOnImplied(parent.Cond) {
 				return true
 			}
 		case *ast.BlockStmt:
-			if scaleP21SW282DominatedByOnReturn(parent.List, child) {
+			if documentAuthBoundaryDominatedByOnReturn(parent.List, child) {
 				return true
 			}
 		case *ast.CaseClause:
-			if scaleP21SW282DominatedByOnReturn(parent.Body, child) {
+			if documentAuthBoundaryDominatedByOnReturn(parent.Body, child) {
 				return true
 			}
 		case *ast.CommClause:
-			if scaleP21SW282DominatedByOnReturn(parent.Body, child) {
+			if documentAuthBoundaryDominatedByOnReturn(parent.Body, child) {
 				return true
 			}
 		}
@@ -151,7 +151,7 @@ func scaleP21SW282OffOnly(ancestors []ast.Node) bool {
 	return false
 }
 
-func scaleP21SW282FunctionName(fn *ast.FuncDecl) string {
+func documentAuthBoundaryFunctionName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return fn.Name.Name
 	}
@@ -165,16 +165,16 @@ func scaleP21SW282FunctionName(fn *ast.FuncDecl) string {
 	return "unknown." + fn.Name.Name
 }
 
-// scaleP21SW282Uses returns every identifier spelling one of names in the
+// uses returns every identifier spelling one of names in the
 // file, keyed by name, with its role and flag-on reachability.
-func scaleP21SW282Uses(t *testing.T, path string, src []byte, names map[string]bool) (map[string][]scaleP21SW282Use, map[string]*ast.FuncDecl) {
+func documentAuthBoundaryUses(t *testing.T, path string, src []byte, names map[string]bool) (map[string][]documentAuthBoundaryUse, map[string]*ast.FuncDecl) {
 	t.Helper()
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, src, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uses := map[string][]scaleP21SW282Use{}
+	uses := map[string][]documentAuthBoundaryUse{}
 	decls := map[string]*ast.FuncDecl{}
 	for _, decl := range file.Decls {
 		fn, isFunc := decl.(*ast.FuncDecl)
@@ -184,12 +184,12 @@ func scaleP21SW282Uses(t *testing.T, path string, src []byte, names map[string]b
 		owner := "package-level"
 		var root ast.Node = decl
 		if isFunc {
-			owner = scaleP21SW282FunctionName(fn)
+			owner = documentAuthBoundaryFunctionName(fn)
 			if fn.Body == nil {
 				continue
 			}
 			if names[fn.Name.Name] && fn.Recv == nil {
-				uses[fn.Name.Name] = append(uses[fn.Name.Name], scaleP21SW282Use{path, owner, "function", fset.Position(fn.Pos()).Line, false})
+				uses[fn.Name.Name] = append(uses[fn.Name.Name], documentAuthBoundaryUse{path, owner, "function", fset.Position(fn.Pos()).Line, false})
 			}
 			root = fn.Body
 		}
@@ -204,7 +204,7 @@ func scaleP21SW282Uses(t *testing.T, path string, src []byte, names map[string]b
 			if !ok || !names[ident.Name] {
 				return true
 			}
-			use := scaleP21SW282Use{file: path, function: owner, kind: "value", line: fset.Position(ident.Pos()).Line}
+			use := documentAuthBoundaryUse{file: path, function: owner, kind: "value", line: fset.Position(ident.Pos()).Line}
 			if !isFunc {
 				use.kind = "package-level"
 			} else if len(ancestors) >= 3 {
@@ -212,7 +212,7 @@ func scaleP21SW282Uses(t *testing.T, path string, src []byte, names map[string]b
 				call, isCall := ancestors[len(ancestors)-3].(*ast.CallExpr)
 				if isSelector && selector.Sel == ident && isCall && call.Fun == selector {
 					use.kind = "call"
-					use.offOnly = scaleP21SW282OffOnly(ancestors[:len(ancestors)-1])
+					use.offOnly = documentAuthBoundaryOffOnly(ancestors[:len(ancestors)-1])
 				}
 			}
 			uses[ident.Name] = append(uses[ident.Name], use)
@@ -222,9 +222,9 @@ func scaleP21SW282Uses(t *testing.T, path string, src []byte, names map[string]b
 	return uses, decls
 }
 
-func scaleP21SW282ModuleUses(t *testing.T, root string, names map[string]bool) (map[string][]scaleP21SW282Use, map[string]*ast.FuncDecl) {
+func moduleUses(t *testing.T, root string, names map[string]bool) (map[string][]documentAuthBoundaryUse, map[string]*ast.FuncDecl) {
 	t.Helper()
-	uses := map[string][]scaleP21SW282Use{}
+	uses := map[string][]documentAuthBoundaryUse{}
 	decls := map[string]*ast.FuncDecl{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -254,7 +254,7 @@ func scaleP21SW282ModuleUses(t *testing.T, root string, names map[string]bool) (
 			return nil
 		}
 		relative, _ := filepath.Rel(root, path)
-		fileUses, fileDecls := scaleP21SW282Uses(t, filepath.ToSlash(relative), src, names)
+		fileUses, fileDecls := documentAuthBoundaryUses(t, filepath.ToSlash(relative), src, names)
 		for name, list := range fileUses {
 			uses[name] = append(uses[name], list...)
 		}
@@ -272,9 +272,9 @@ func scaleP21SW282ModuleUses(t *testing.T, root string, names map[string]bool) (
 	return uses, decls
 }
 
-func TestScaleP21SW282DocumentAuthorizationWrapperBoundaries(t *testing.T) {
+func TestDocumentAuthorizationWrapperBoundaries(t *testing.T) {
 	names := map[string]bool{"SelectedDocumentMetadata": true, "TrashRecordHeader": true}
-	uses, decls := scaleP21SW282ModuleUses(t, "../..", names)
+	uses, decls := moduleUses(t, "../..", names)
 	// Every reference in the module: declaration excluded, each a direct,
 	// flag-off-only call. A new caller, function value or interface method
 	// fails until it is reviewed.
@@ -282,7 +282,7 @@ func TestScaleP21SW282DocumentAuthorizationWrapperBoundaries(t *testing.T) {
 		"SelectedDocumentMetadata": {
 			"cmd/server/document_record_scopes.go server.documentAuthorizationMetadata call off",
 			"cmd/server/record_authorization.go server.projectRecordAuthorizationMetadata call off",
-			"cmd/server/resource_reads.go server.scaleP20DocumentMetadata call off",
+			"cmd/server/resource_reads.go server.scaleDocumentMetadata call off",
 			"internal/store/document_read.go SQLiteStore.BeginDocumentRead call off",
 		},
 		"TrashRecordHeader": {
@@ -311,20 +311,20 @@ func TestScaleP21SW282DocumentAuthorizationWrapperBoundaries(t *testing.T) {
 	// The arbitrary selector also refuses by itself: its first statement
 	// answers a bounded store before any resident or hydrated read.
 	selected := decls["SelectedDocumentMetadata"]
-	if selected == nil || scaleP21SW282Source(selected.Recv.List[0].Type) != "*SQLiteStore" {
+	if selected == nil || documentAuthBoundarySource(selected.Recv.List[0].Type) != "*SQLiteStore" {
 		t.Fatal("SelectedDocumentMetadata declaration missing")
 	}
 	first, ok := selected.Body.List[0].(*ast.IfStmt)
-	if !ok || first.Init != nil || first.Else != nil || scaleP21SW282Source(first.Cond) != "s.BoundedMetadataEnabled()" || len(first.Body.List) != 1 ||
-		scaleP21SW282Source(first.Body.List[0]) != "return domain.Bootstrap{}, ErrBoundedMetadataCoverage" {
+	if !ok || first.Init != nil || first.Else != nil || documentAuthBoundarySource(first.Cond) != "s.BoundedMetadataEnabled()" || len(first.Body.List) != 1 ||
+		documentAuthBoundarySource(first.Body.List[0]) != "return domain.Bootstrap{}, ErrBoundedMetadataCoverage" {
 		t.Error("SelectedDocumentMetadata lost its first bounded refusal")
 	}
-	if header := decls["TrashRecordHeader"]; header == nil || scaleP21SW282Source(header.Recv.List[0].Type) != "*SQLiteStore" {
+	if header := decls["TrashRecordHeader"]; header == nil || documentAuthBoundarySource(header.Recv.List[0].Type) != "*SQLiteStore" {
 		t.Fatal("TrashRecordHeader declaration missing")
 	}
 }
 
-func TestScaleP21SW283GuardRejectsFlagOnReach(t *testing.T) {
+func TestGuardRejectsFlagOnReachDocumentAuthBoundary(t *testing.T) {
 	const source = `package main
 
 type server struct{ store interface{ BoundedMetadataEnabled() bool; SelectedDocumentMetadata() } }
@@ -386,7 +386,7 @@ func (s *server) captured() func() {
 	return s.store.SelectedDocumentMetadata
 }
 `
-	uses, _ := scaleP21SW282Uses(t, "probe.go", []byte(source), map[string]bool{"SelectedDocumentMetadata": true})
+	uses, _ := documentAuthBoundaryUses(t, "probe.go", []byte(source), map[string]bool{"SelectedDocumentMetadata": true})
 	got := map[string]string{}
 	for _, use := range uses["SelectedDocumentMetadata"] {
 		reach := use.kind

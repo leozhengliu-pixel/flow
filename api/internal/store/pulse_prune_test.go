@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW23PulsePruneRegistryDifferential(t *testing.T) {
+func TestPulsePruneRegistryDifferential(t *testing.T) {
 	ignored := strings.Repeat("unrelated private metadata ", 400000)
 	keys := []string{"active", "Case", "trail ", "a\x00b", ""}
 	want := map[string]*pulseIndex{}
@@ -51,7 +51,7 @@ func TestScaleP21SW23PulsePruneRegistryDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23PulsePruneConstantAllocation(t *testing.T) {
+func TestPulsePruneConstantAllocation(t *testing.T) {
 	for _, bodyBytes := range []int{64 << 10, 8 << 20} {
 		t.Run(fmt.Sprint(bodyBytes), func(t *testing.T) {
 			repository := &SQLiteStore{

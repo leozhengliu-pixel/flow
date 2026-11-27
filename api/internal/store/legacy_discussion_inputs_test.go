@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW91Data(workspace domain.Workspace, repetitions int) domain.Bootstrap {
+func legacyDiscussionInputsData(workspace domain.Workspace, repetitions int) domain.Bootstrap {
 	at := time.Date(2026, 11, 15, 1, 2, 3, 456, time.UTC)
 	body := strings.Repeat("Unrelated legal discussion input body. ", repetitions)
 	actor := domain.User{ID: "sw91-actor", Name: "Directory actor before substitution", Email: "actor@example.test", DisplayName: "Directory actor"}
@@ -93,16 +93,16 @@ func scaleP21SW91Data(workspace domain.Workspace, repetitions int) domain.Bootst
 	}
 }
 
-func scaleP21SW91Prepare(t *testing.T, view *SQLiteStore, data domain.Bootstrap) *metadataLogicalSource {
+func legacyDiscussionInputsPrepare(t *testing.T, view *SQLiteStore, data domain.Bootstrap) *metadataLogicalSource {
 	t.Helper()
-	source := scaleP21SW78Capture(t, data)
+	source := legacyCountWriteCapture(t, data)
 	refreshed, err := view.refreshLegacyDisplayImage(t.Context(), source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(refreshed.Release)
 	source.Release()
-	actor := scaleP21SW69OwnedActor(data.Viewer)
+	actor := ownedActor(data.Viewer)
 	actor.Name = "Actor substituted after reference refresh"
 	actor.Via = &domain.ActorBot{ID: "sw91-app", Type: domain.ActorBotTypeOAuthApplication, Name: "Native callback attribution", OnBehalfOfID: "person"}
 	image, err := view.prepareLegacyActorImage(t.Context(), refreshed, &actor)
@@ -120,7 +120,7 @@ func scaleP21SW91Prepare(t *testing.T, view *SQLiteStore, data domain.Bootstrap)
 	return result
 }
 
-func scaleP21SW91Want(full domain.Bootstrap, issueID string) (domain.Bootstrap, []int, []int, []int, []int) {
+func legacyDiscussionInputsWant(full domain.Bootstrap, issueID string) (domain.Bootstrap, []int, []int, []int, []int) {
 	want := domain.Bootstrap{Workspace: full.Workspace, Viewer: full.Viewer, ViewerRole: full.ViewerRole}
 	source, target := reflect.ValueOf(full), reflect.ValueOf(&want).Elem()
 	for _, name := range append([]string{"issues", "comments", "activities", "notifications", "notificationDeliveries"}, issueDiscussionInputFields...) {
@@ -231,7 +231,7 @@ func scaleP21SW91Want(full domain.Bootstrap, issueID string) (domain.Bootstrap, 
 	}
 	for key, item := range full.NotificationPreferences {
 		if recipients[key] {
-			want.NotificationPreferences[key] = scaleP21SW61Preference(item)
+			want.NotificationPreferences[key] = discussionInputsPreference(item)
 		}
 	}
 	for _, item := range full.PushSubscriptions {
@@ -247,14 +247,14 @@ func scaleP21SW91Want(full domain.Bootstrap, issueID string) (domain.Bootstrap, 
 	return want, issueOrdinals, notificationOrdinals, deliveryOrdinals, threadOrdinals
 }
 
-func scaleP21SW91Check(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, issueID string) (*legacyDiscussionInputs, int) {
+func legacyDiscussionInputsCheck(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, issueID string) (*legacyDiscussionInputs, int) {
 	t.Helper()
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	full, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, issues, notifications, deliveries, threads := scaleP21SW91Want(full, issueID)
+	want, issues, notifications, deliveries, threads := legacyDiscussionInputsWant(full, issueID)
 	queries := 0
 	ctx := WithSQLStatementObserver(ContextWithActor(t.Context(), domain.User{ID: "wrong-context-actor", Name: "Must not substitute another actor"}), func(string) { queries++ })
 	read, err := view.loadLegacyDiscussionInputs(ctx, source, issueID)
@@ -290,15 +290,15 @@ func scaleP21SW91Check(t *testing.T, view *SQLiteStore, source *metadataLogicalS
 	if queries != 0 || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("logical callback input selection queried SQL or decoded workspace metadata", queries)
 	}
-	scaleP21SW72Compare(t, source, scope, full)
+	legacyIssueImageCompare(t, source, scope, full)
 	return read, view.MetadataWorkUsedForTesting()
 }
 
-func TestScaleP21SW91LegacyDiscussionInputsLiteral(t *testing.T) {
+func TestLegacyDiscussionInputsLiteral(t *testing.T) {
 	for _, variant := range []string{"prepared-native", "missing-issue", "wrong-case-key", "nil-comment-value", "empty-comment-value", "large-selected-comment", "native-missing-role", "narrow-flag-on", "narrow-flag-off"} {
 		t.Run(variant, func(t *testing.T) {
 			view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-			data := scaleP21SW91Data(domain.Workspace{ID: "sw91-native", URLKey: "sw91-native"}, 1000)
+			data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-native", URLKey: "sw91-native"}, 1000)
 			issueID := "sw91-issue"
 			switch variant {
 			case "missing-issue":
@@ -319,8 +319,8 @@ func TestScaleP21SW91LegacyDiscussionInputsLiteral(t *testing.T) {
 				t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
 			}
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			source := scaleP21SW91Prepare(t, view, data)
-			read, held := scaleP21SW91Check(t, view, source, issueID)
+			source := legacyDiscussionInputsPrepare(t, view, data)
+			read, held := legacyDiscussionInputsCheck(t, view, source, issueID)
 			if held == 0 {
 				t.Fatal("callback inputs have no owned work allowance")
 			}
@@ -350,7 +350,7 @@ func TestScaleP21SW91LegacyDiscussionInputsLiteral(t *testing.T) {
 	}
 }
 
-type scaleP21SW91CallbackReads struct {
+type callbackReads struct {
 	Issue, NotificationIssue                                             *domain.Issue
 	Comment                                                              *domain.Comment
 	Viewer                                                               domain.User
@@ -366,9 +366,9 @@ type scaleP21SW91CallbackReads struct {
 // These are the native lookups the six real comment callbacks and their
 // notification helpers consume. HTTP side effects are proved by the writer's
 // integration harness; this table proves its selected input read closure.
-func scaleP21SW91ReadCallback(t *testing.T, data *domain.Bootstrap, event string) scaleP21SW91CallbackReads {
+func readCallback(t *testing.T, data *domain.Bootstrap, event string) callbackReads {
 	t.Helper()
-	result := scaleP21SW91CallbackReads{Viewer: data.Viewer, FirstDelivery: -1,
+	result := callbackReads{Viewer: data.Viewer, FirstDelivery: -1,
 		FutureDeliveryFirst: slices.IndexFunc(data.NotificationDeliveries, func(delivery domain.NotificationDelivery) bool {
 			return delivery.ID == "delivery_notification_future_email"
 		})}
@@ -452,21 +452,21 @@ func scaleP21SW91ReadCallback(t *testing.T, data *domain.Bootstrap, event string
 	return result
 }
 
-func TestScaleP21SW91LegacyDiscussionSupportedCallbackReads(t *testing.T) {
+func TestLegacyDiscussionSupportedCallbackReads(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	data := scaleP21SW91Data(domain.Workspace{ID: "sw91-callback", URLKey: "sw91-callback"}, 1000)
+	data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-callback", URLKey: "sw91-callback"}, 1000)
 	// The last native same-group row is too old, so the winner names another
 	// issue/recipient despite its logical GroupKey. Both are legal SQL values.
 	data.Notifications[4].UpdatedAt = data.Notifications[4].UpdatedAt.Add(-10 * time.Hour)
-	source := scaleP21SW91Prepare(t, view, data)
-	full, err := source.Select(t.Context(), scaleP21SW72FullScope(t, source), 64<<20)
+	source := legacyDiscussionInputsPrepare(t, view, data)
+	full, err := source.Select(t.Context(), fullScope(t, source), 64<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, _ := scaleP21SW91Check(t, view, source, "sw91-issue")
+	read, _ := legacyDiscussionInputsCheck(t, view, source, "sw91-issue")
 	for _, event := range []string{"comment.created", "comment.updated", "comment.resolved", "comment.unresolved", "comment.deleted", "comment.reaction_toggled"} {
 		t.Run(event, func(t *testing.T) {
-			want, got := scaleP21SW91ReadCallback(t, &full, event), scaleP21SW91ReadCallback(t, read.Data, event)
+			want, got := readCallback(t, &full, event), readCallback(t, read.Data, event)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatal("literal callback native reads differ", event)
 			}
@@ -482,11 +482,11 @@ func TestScaleP21SW91LegacyDiscussionSupportedCallbackReads(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW91LegacyDiscussionInputsOwnershipAndFailures(t *testing.T) {
+func TestLegacyDiscussionInputsOwnershipAndFailures(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	data := scaleP21SW91Data(domain.Workspace{ID: "sw91-own", URLKey: "sw91-own"}, 1000)
-	source := scaleP21SW91Prepare(t, view, data)
-	scope := scaleP21SW72FullScope(t, source)
+	data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-own", URLKey: "sw91-own"}, 1000)
+	source := legacyDiscussionInputsPrepare(t, view, data)
+	scope := fullScope(t, source)
 	full, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +503,7 @@ func TestScaleP21SW91LegacyDiscussionInputsOwnershipAndFailures(t *testing.T) {
 	preferences.Email.Categories = map[string]bool{"comments": false}
 	read.Data.NotificationPreferences["sw91-recipient"] = preferences
 	read.Data.NotificationDeliveries[0].Status = "owned status edit"
-	scaleP21SW72Compare(t, source, scope, full)
+	legacyIssueImageCompare(t, source, scope, full)
 	source.Release()
 	cancel()
 	if read.Data.Comments["sw91-issue"][0].Body != "Owned comment edit" || read.Data.Users[0].Name != "Owned directory edit" {
@@ -512,7 +512,7 @@ func TestScaleP21SW91LegacyDiscussionInputsOwnershipAndFailures(t *testing.T) {
 	read.Close()
 	for _, failure := range []string{"cancelled", "quota"} {
 		t.Run(failure, func(t *testing.T) {
-			input := scaleP21SW91Prepare(t, view, data)
+			input := legacyDiscussionInputsPrepare(t, view, data)
 			work, limit := view.metadataResidency.work, view.metadataResidency.work.limit
 			readCtx, stop := context.WithCancel(t.Context())
 			defer stop()
@@ -537,14 +537,14 @@ func TestScaleP21SW91LegacyDiscussionInputsOwnershipAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW91LegacyDiscussionInputsWarmReloadBodyBound(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyDiscussionInputsWarmReloadBodyBound(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	held := map[bool]int{}
 	mergeHeld := map[bool]int{}
 	for _, size := range []int{1000, 10000} {
 		f.db.SetMaxOpenConns(4)
-		seed := scaleP21SW91Data(f.data.Workspace, size)
+		seed := legacyDiscussionInputsData(f.data.Workspace, size)
 		restore := ForceFullMutationsForTesting(true)
 		err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw91_seed", "", nil, func(data *domain.Bootstrap) error {
 			*data = cloneBootstrap(collectionMetadata(seed))
@@ -598,29 +598,29 @@ func TestScaleP21SW91LegacyDiscussionInputsWarmReloadBodyBound(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				literal, err := external.Select(t.Context(), scaleP21SW72FullScope(t, external), 64<<20)
+				literal, err := external.Select(t.Context(), fullScope(t, external), 64<<20)
 				external.Release()
 				if err != nil {
 					t.Fatal(err)
 				}
-				prepared := scaleP21SW91Prepare(t, f.view, literal)
+				prepared := legacyDiscussionInputsPrepare(t, f.view, literal)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
-				read, cost := scaleP21SW91Check(t, f.view, prepared, "sw91-issue")
+				read, cost := legacyDiscussionInputsCheck(t, f.view, prepared, "sw91-issue")
 				if held[reload] == 0 {
 					held[reload] = cost
 				} else if held[reload] != cost {
 					t.Fatal("10x unrelated bodies increased held legacy callback inputs", held[reload], cost)
 				}
 				t.Logf("body_size=%d reload=%t callback_held=%d", size, reload, cost)
-				scope := scaleP21SW72FullScope(t, prepared)
+				scope := fullScope(t, prepared)
 				want, err := prepared.Select(t.Context(), scope, 64<<20)
 				if err != nil {
 					t.Fatal(err)
 				}
-				scaleP21SW91MergeCallback(t, &want, "comment.reaction_toggled")
-				scaleP21SW91MergeCallback(t, read.Data, "comment.reaction_toggled")
+				legacyDiscussionInputsMergeCallback(t, &want, "comment.reaction_toggled")
+				legacyDiscussionInputsMergeCallback(t, read.Data, "comment.reaction_toggled")
 				merged, err := read.MergeCallback(t.Context())
 				if err != nil {
 					t.Fatal(err)
@@ -632,10 +632,10 @@ func TestScaleP21SW91LegacyDiscussionInputsWarmReloadBodyBound(t *testing.T) {
 				} else if mergeHeld[reload] != mergedCost {
 					t.Fatal("10x unrelated bodies increased retained merged callback work", mergeHeld[reload], mergedCost)
 				}
-				scaleP21SW72Compare(t, merged, scope, want)
+				legacyIssueImageCompare(t, merged, scope, want)
 				prepared.Release()
 				read.Close()
-				scaleP21SW72Compare(t, merged, scope, want)
+				legacyIssueImageCompare(t, merged, scope, want)
 				merged.Release()
 				if f.view.MetadataWorkUsedForTesting() != 0 {
 					t.Fatal("warm/reloaded callback retained work after Close")
@@ -645,7 +645,7 @@ func TestScaleP21SW91LegacyDiscussionInputsWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func scaleP21SW91MergeCallback(t *testing.T, data *domain.Bootstrap, event string) {
+func legacyDiscussionInputsMergeCallback(t *testing.T, data *domain.Bootstrap, event string) {
 	t.Helper()
 	issueID, commentID := "sw91-issue", "sw91-root"
 	now := time.Date(2026, 11, 15, 4, 2, 3, 456, time.UTC)
@@ -800,7 +800,7 @@ func scaleP21SW91MergeCallback(t *testing.T, data *domain.Bootstrap, event strin
 	}
 }
 
-func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
+func TestLegacyDiscussionMergeCallback(t *testing.T) {
 	for _, event := range []string{"comment.created", "comment.updated", "comment.resolved", "comment.unresolved", "comment.deleted", "comment.reaction_toggled", "drop-comment-group"} {
 		for _, shape := range []string{"existing-candidates", "append-notification", "misgrouped-winner", "nil-group"} {
 			if shape == "nil-group" && event != "comment.created" {
@@ -808,7 +808,7 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 			}
 			t.Run(event+"/"+shape, func(t *testing.T) {
 				view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-				data := scaleP21SW91Data(domain.Workspace{ID: "sw91-merge", URLKey: "sw91-merge"}, 1000)
+				data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-merge", URLKey: "sw91-merge"}, 1000)
 				preferences := data.NotificationPreferences["sw91-recipient"]
 				preferences.Desktop.Enabled, preferences.ImmediateUrgent = true, false
 				data.NotificationPreferences["sw91-recipient"] = preferences
@@ -831,8 +831,8 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 					data.Comments["sw91-issue"], data.Activities["sw91-issue"] = nil, nil
 				}
 				disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-				source := scaleP21SW91Prepare(t, view, data)
-				scope := scaleP21SW72FullScope(t, source)
+				source := legacyDiscussionInputsPrepare(t, view, data)
+				scope := fullScope(t, source)
 				before, err := source.Select(t.Context(), scope, 64<<20)
 				if err != nil {
 					t.Fatal(err)
@@ -841,9 +841,9 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				read, _ := scaleP21SW91Check(t, view, source, "sw91-issue")
-				scaleP21SW91MergeCallback(t, &want, event)
-				scaleP21SW91MergeCallback(t, read.Data, event)
+				read, _ := legacyDiscussionInputsCheck(t, view, source, "sw91-issue")
+				legacyDiscussionInputsMergeCallback(t, &want, event)
+				legacyDiscussionInputsMergeCallback(t, read.Data, event)
 				queries := 0
 				ctx, cancel := context.WithCancel(WithSQLStatementObserver(t.Context(), func(string) { queries++ }))
 				result, err := read.MergeCallback(ctx)
@@ -851,8 +851,8 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 					t.Fatal("legacy callback merge failed", err)
 				}
 				t.Cleanup(result.Release)
-				scaleP21SW72Compare(t, result, scope, want)
-				scaleP21SW72Compare(t, source, scope, before)
+				legacyIssueImageCompare(t, result, scope, want)
+				legacyIssueImageCompare(t, source, scope, before)
 				if result.Stamp() != source.Stamp() || queries != 0 || view.WorkspaceMetadataDecodes() != 0 {
 					t.Fatal("callback merge changed generation or read SQL", queries)
 				}
@@ -869,7 +869,7 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 				source.Release()
 				cancel()
 				read.Close()
-				scaleP21SW72Compare(t, result, scope, want)
+				legacyIssueImageCompare(t, result, scope, want)
 				result.Release()
 				result.Release()
 				if _, err := result.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) ||
@@ -881,18 +881,18 @@ func TestScaleP21SW91LegacyDiscussionMergeCallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW91LegacyDiscussionMergeRejectsUnsupportedEdits(t *testing.T) {
+func TestLegacyDiscussionMergeRejectsUnsupportedEdits(t *testing.T) {
 	for _, edit := range []string{"issue", "other-comment-key", "comment-author", "notification-recipient", "delivery-parent", "activity-prefix", "thread-edit", "viewer"} {
 		t.Run(edit, func(t *testing.T) {
 			view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-			data := scaleP21SW91Data(domain.Workspace{ID: "sw91-reject", URLKey: "sw91-reject"}, 1000)
-			source := scaleP21SW91Prepare(t, view, data)
-			scope := scaleP21SW72FullScope(t, source)
+			data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-reject", URLKey: "sw91-reject"}, 1000)
+			source := legacyDiscussionInputsPrepare(t, view, data)
+			scope := fullScope(t, source)
 			before, err := source.Select(t.Context(), scope, 64<<20)
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, _ := scaleP21SW91Check(t, view, source, "sw91-issue")
+			read, _ := legacyDiscussionInputsCheck(t, view, source, "sw91-issue")
 			switch edit {
 			case "issue":
 				read.Data.Issues[0].Title = "Undeclared issue edit"
@@ -919,7 +919,7 @@ func TestScaleP21SW91LegacyDiscussionMergeRejectsUnsupportedEdits(t *testing.T) 
 			if !errors.Is(err, ErrBoundedMetadataCoverage) {
 				t.Fatal("unsupported callback edit was not rejected", err)
 			}
-			scaleP21SW72Compare(t, source, scope, before)
+			legacyIssueImageCompare(t, source, scope, before)
 			read.Close()
 			source.Release()
 			if view.MetadataWorkUsedForTesting() != 0 {
@@ -929,12 +929,12 @@ func TestScaleP21SW91LegacyDiscussionMergeRejectsUnsupportedEdits(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW91LegacyDiscussionMergeCancellation(t *testing.T) {
+func TestLegacyDiscussionMergeCancellation(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	data := scaleP21SW91Data(domain.Workspace{ID: "sw91-cancel-merge", URLKey: "sw91-cancel-merge"}, 1000)
-	source := scaleP21SW91Prepare(t, view, data)
-	read, _ := scaleP21SW91Check(t, view, source, "sw91-issue")
-	scaleP21SW91MergeCallback(t, read.Data, "comment.created")
+	data := legacyDiscussionInputsData(domain.Workspace{ID: "sw91-cancel-merge", URLKey: "sw91-cancel-merge"}, 1000)
+	source := legacyDiscussionInputsPrepare(t, view, data)
+	read, _ := legacyDiscussionInputsCheck(t, view, source, "sw91-issue")
+	legacyDiscussionInputsMergeCallback(t, read.Data, "comment.created")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	held := view.MetadataWorkUsedForTesting()

@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
+func TestPointResourceAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -27,7 +27,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 			for _, kind := range []string{"projects", "initiatives"} {
 				for _, tail := range []string{"", "/relations", "/updates", "/updates/diff-preview", "/history"} {
 					request := httptest.NewRequest(method, "/api/"+kind+"/old-slug"+tail, nil)
-					gotKind, ref, handled := scaleP21SW255ResourceAuthorizationRequest(request)
+					gotKind, ref, handled := resourceAuthorizationRequestShape(request)
 					if !handled || gotKind != kind || ref != "old-slug" {
 						t.Fatal("source detail/subview not selected", method, kind, tail)
 					}
@@ -36,7 +36,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 		}
 		for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete, http.MethodOptions} {
 			for _, path := range []string{"/api/projects/x", "/api/initiatives/x/relations", "/api/projects/x/updates"} {
-				if _, _, handled := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(method, path, nil)); handled {
+				if _, _, handled := resourceAuthorizationRequestShape(httptest.NewRequest(method, path, nil)); handled {
 					t.Fatal("point authorization captured another method", method, path)
 				}
 			}
@@ -47,7 +47,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 			"/api/initiatives/x/updates/not-diff-preview",
 			"/api/documents/x", "/api/projects//updates", "/api//projects/x",
 		} {
-			if _, _, handled := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)); handled {
+			if _, _, handled := resourceAuthorizationRequestShape(httptest.NewRequest(http.MethodGet, path, nil)); handled {
 				t.Fatal("point authorization bypassed a different route predicate", path)
 			}
 		}
@@ -90,7 +90,7 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 		Status  int
 		Body    string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			type sqlCounts struct {
 				pairs, legacy, bounded, legacyMax, boundedMax       int
@@ -128,8 +128,8 @@ func TestScaleP21SW255PointResourceAuthorization(t *testing.T) {
 					t.Logf("authorization SQL %s pairs=%d legacy/bounded=%d/%d max=%d/%d regressed-pairs=%d worst-pair=%d/%d increase=%d", route, counts.pairs, counts.legacy, counts.bounded, counts.legacyMax, counts.boundedMax, counts.regressions, counts.worstLegacy, counts.worstBounded, counts.maxIncrease)
 				}
 			}()
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw255-")
 			metadata, found := repo.WorkspaceMetadata(workspace)
 			if !found {

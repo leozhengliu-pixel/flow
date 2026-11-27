@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW324DeliveryRawFrameComparison(t *testing.T) {
+func TestDeliveryRawFrameComparison(t *testing.T) {
 	values := []json.RawMessage{nil, {}, {'x'}, {'x', 0, 'y'}, {'x', 0, 'z'}, {'x', 0, 'y', 0}}
 	large := bytes.Repeat([]byte{'x'}, 3*4096)
 	changed := append([]byte(nil), large...)
@@ -39,13 +39,13 @@ func TestScaleP21SW324DeliveryRawFrameComparison(t *testing.T) {
 	}
 }
 
-type scaleP21SW324CancelContext struct {
+type deliveryFrameComparisonCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	checks int
 }
 
-func (c *scaleP21SW324CancelContext) Err() error {
+func (c *deliveryFrameComparisonCancelContext) Err() error {
 	c.checks++
 	if c.checks == 10 {
 		c.cancel()
@@ -53,7 +53,7 @@ func (c *scaleP21SW324CancelContext) Err() error {
 	return c.Context.Err()
 }
 
-func TestScaleP21SW324DeliveryRawFrameReadCancellation(t *testing.T) {
+func TestDeliveryRawFrameReadCancellation(t *testing.T) {
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestScaleP21SW324DeliveryRawFrameReadCancellation(t *testing.T) {
 	}
 	base, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	ctx := &scaleP21SW324CancelContext{Context: base, cancel: cancel}
+	ctx := &deliveryFrameComparisonCancelContext{Context: base, cancel: cancel}
 	if equal, err := integrationDeliveryRawFrameEqual(ctx, node, value); equal ||
 		!errors.Is(err, context.Canceled) || ctx.checks < 10 {
 		t.Fatal("streaming comparison ignored mid-read cancellation", equal, err, ctx.checks)

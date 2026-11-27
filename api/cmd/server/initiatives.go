@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19WindowPage, offset, limit int) (scaleP19WindowPage, error) {
+func scaleInitiatives(data domain.Bootstrap, q scaleQuery, page scaleWindowPage, offset, limit int) (scaleWindowPage, error) {
 	byID := map[string]domain.Initiative{}
 	children := map[string][]string{}
 	for _, item := range data.Initiatives {
@@ -106,9 +106,9 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 	page.Counts = map[string]map[string]int{}
 	// Filter-menu counts retain the legacy whole-catalogue denominator.
 	for _, item := range data.Initiatives {
-		for field, values := range scaleP19InitiativeValues(item, q) {
+		for field, values := range scaleInitiativeValues(item, q) {
 			for _, value := range values {
-				scaleP19Increment(page.Counts, field, value)
+				scaleIncrement(page.Counts, field, value)
 			}
 		}
 	}
@@ -121,7 +121,7 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 		if q.LeadTeamID == "" && !q.ShowTeamInitiatives && item.LeadTeamID != "" {
 			continue
 		}
-		values := scaleP19InitiativeValues(item, q)
+		values := scaleInitiativeValues(item, q)
 		matches := len(q.InitiativeFilters) == 0 || q.FilterMode != "any"
 		for field, raw := range q.InitiativeFilters {
 			var v any
@@ -147,7 +147,7 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 			visibleIDs[item.ID] = true
 		}
 	}
-	c := scaleP19Collator(q)
+	c := scaleCollator(q)
 	slices.SortStableFunc(visible, func(a, b domain.Initiative) int {
 		switch q.Sort {
 		case "", "manual":
@@ -164,7 +164,7 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 			order := []string{"proposed", "planned", "active", "completed", "canceled"}
 			return slices.Index(order, a.Status) - slices.Index(order, b.Status)
 		case "target":
-			return c.CompareString(scaleP19String(a.TargetDate), scaleP19String(b.TargetDate))
+			return c.CompareString(scaleString(a.TargetDate), scaleString(b.TargetDate))
 		case "health":
 			return c.CompareString(a.Health, b.Health)
 		case "created":
@@ -174,12 +174,12 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 		}
 		return c.CompareString(a.Name, b.Name)
 	})
-	page.Aggregates = map[string]scaleP19Aggregate{}
+	page.Aggregates = map[string]scaleAggregate{}
 	// Sidebar counts use the filtered visible set, before contextual parents.
 	for _, item := range visible {
-		for field, values := range scaleP19InitiativeValues(item, q) {
+		for field, values := range scaleInitiativeValues(item, q) {
 			for _, value := range values {
-				scaleP19Increment(page.Counts, "visible:"+field, value)
+				scaleIncrement(page.Counts, "visible:"+field, value)
 			}
 		}
 	}
@@ -264,13 +264,13 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 			add(strconv.Itoa(item.Priority), item.PriorityLabel, item)
 		}
 	}
-	entries := []scaleP19Entry{}
+	entries := []scaleEntry{}
 	for _, g := range groups {
 		if q.Grouping != "" && q.Grouping != "none" {
-			entries = append(entries, scaleP19Entry{Key: "group:" + g.id, Kind: "group", Label: g.label, Count: len(g.items), EntityName: slices.Contains([]string{"owner", "leadTeam", "contributingTeam", "label"}, q.Grouping)})
+			entries = append(entries, scaleEntry{Key: "group:" + g.id, Kind: "group", Label: g.label, Count: len(g.items), EntityName: slices.Contains([]string{"owner", "leadTeam", "contributingTeam", "label"}, q.Grouping)})
 		}
 		appendRow := func(item domain.Initiative, depth, childCount int) {
-			entries = append(entries, scaleP19Entry{Key: "initiative:" + g.id + ":" + item.ID, Kind: "initiative", ID: item.ID, Depth: depth, ChildCount: childCount, ContextOnly: !visibleIDs[item.ID]})
+			entries = append(entries, scaleEntry{Key: "initiative:" + g.id + ":" + item.ID, Kind: "initiative", ID: item.ID, Depth: depth, ChildCount: childCount, ContextOnly: !visibleIDs[item.ID]})
 		}
 		if !q.ShowNested {
 			for _, item := range g.items {
@@ -323,11 +323,11 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 			}
 		}
 	}
-	total := len(entries) - scaleP19GroupEntryCount(entries)
+	total := len(entries) - scaleGroupEntryCount(entries)
 	page.Total = total
-	page.Entries = []scaleP19Entry{}
+	page.Entries = []scaleEntry{}
 	position := 0
-	var heading *scaleP19Entry
+	var heading *scaleEntry
 	for _, entry := range entries {
 		if entry.Kind == "group" {
 			copy := entry
@@ -343,7 +343,7 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 		}
 		position++
 	}
-	page.HasMore = offset+scaleP19PageCount(scaleP19WindowPage{Items: []domain.Initiative{}, Entries: page.Entries}) < total
+	page.HasMore = offset+scalePageCount(scaleWindowPage{Items: []domain.Initiative{}, Entries: page.Entries}) < total
 	result := []domain.Initiative{}
 	emitted := map[string]bool{}
 	for _, entry := range page.Entries {
@@ -353,7 +353,7 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 		emitted[entry.ID] = true
 		item := byID[entry.ID]
 		ids := projectIDs(item.ID)
-		aggregate := scaleP19Aggregate{HasUpdates: len(data.InitiativeUpdates[item.ID]) > 0 || item.Health != "noUpdate"}
+		aggregate := scaleAggregate{HasUpdates: len(data.InitiativeUpdates[item.ID]) > 0 || item.Health != "noUpdate"}
 		for _, project := range data.Projects {
 			if !ids[project.ID] {
 				continue
@@ -388,13 +388,13 @@ func scaleP19Initiatives(data domain.Bootstrap, q scaleP19Query, page scaleP19Wi
 	return page, nil
 }
 
-func scaleP19InitiativeValues(item domain.Initiative, q scaleP19Query) map[string][]string {
+func scaleInitiativeValues(item domain.Initiative, q scaleQuery) map[string][]string {
 	owner := ""
 	if item.Owner != nil {
 		owner = item.Owner.ID
 	}
 	dates := []string{}
-	now := scaleP19Now(q)
+	now := scaleNow(q)
 	if !item.CreatedAt.Before(now.Add(-7 * 24 * time.Hour)) {
 		dates = append(dates, "created7")
 	}
@@ -408,7 +408,7 @@ func scaleP19InitiativeValues(item domain.Initiative, q scaleP19Query) map[strin
 	if _, err := time.Parse("2006-01", month); err != nil {
 		month = now.Format("2006-01")
 	}
-	if target, err := time.Parse("2006-01-02", scaleP19String(item.TargetDate)); err == nil && target.Format("2006-01") == month {
+	if target, err := time.Parse("2006-01-02", scaleString(item.TargetDate)); err == nil && target.Format("2006-01") == month {
 		dates = append(dates, "targetMonth")
 	}
 	return map[string][]string{"ownerId": {owner}, "creatorId": {item.Creator.ID}, "leadTeamId": {item.LeadTeamID}, "teamId": item.ContributingTeamIDs, "status": {item.Status}, "priority": {strconv.Itoa(item.Priority)}, "health": {item.Health}, "labelId": item.LabelIDs, "date": dates}

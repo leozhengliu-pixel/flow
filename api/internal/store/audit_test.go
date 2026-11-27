@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW31AuditNativeAggregateID(t *testing.T) {
+func TestAuditNativeAggregateID(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id, templateID := f.data.Workspace.URLKey, idgen.New("emoji_sw31_audit_"), idgen.New("template_sw31_audit_")
 	type outcome struct {
 		row      string
@@ -68,12 +68,12 @@ func TestScaleP21SW31AuditNativeAggregateID(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31AuditSynchronousSinkMutation(t *testing.T) {
+func TestAuditSynchronousSinkMutation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, bounded := range []bool{false, true} {
-		f := scaleP09Database(t)
+		f := journalScaleDatabase(t)
 		workspace := f.data.Workspace.URLKey
 		repo := f.SQLiteStore
 		if bounded {

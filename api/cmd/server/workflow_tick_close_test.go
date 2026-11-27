@@ -15,10 +15,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-// scaleP21SW501LegacyTick is startWorkflowScheduler's literal flag-off body
-// for one owned workspace. TestScaleP21SW503WorkflowSchedulerDispatchGuard
+// legacyTick is startWorkflowScheduler's literal flag-off body
+// for one owned workspace. TestWorkflowSchedulerDispatchGuard
 // pins this copy to the production source.
-func scaleP21SW501LegacyTick(ctx context.Context, service *server, key string, now time.Time) {
+func legacyTick(ctx context.Context, service *server, key string, now time.Time) {
 	data, ok := service.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
 	if !ok {
 		return
@@ -39,8 +39,8 @@ func scaleP21SW501LegacyTick(ctx context.Context, service *server, key string, n
 // due boundaries, cron weekday rules, disabled/manual/duplicate definitions,
 // missing and disabled retry targets, stale and superseded retries, and a
 // failing scheduled run, through the literal loop and the bounded tick.
-func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
-	env := scaleP21SW500Setup(t)
+func TestWorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
+	env := workflowCloseSetup(t)
 	sunday := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	monday := time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC)
 	if sunday.Weekday() != time.Sunday || monday.Weekday() != time.Monday || !monday.Before(time.Now()) {
@@ -70,7 +70,7 @@ func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
 				at := func(value time.Time) *time.Time { return &value }
 				definition := func(id, trigger, schedule string, enabled bool, next *time.Time, actions ...domain.WorkflowAction) domain.WorkflowDefinition {
 					if len(actions) == 0 {
-						actions = []domain.WorkflowAction{scaleP21SW500Action("notify")}
+						actions = []domain.WorkflowAction{workflowCloseAction("notify")}
 					}
 					return domain.WorkflowDefinition{
 						ID: id, Name: id, Trigger: trigger, Schedule: schedule, Enabled: enabled, NextRunAt: next,
@@ -87,10 +87,10 @@ func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
 					definition(duplicate, "schedule", "@daily", true, at(now.Add(24*time.Hour))),
 					definition(duplicate, "schedule", "@daily", true, at(now.Add(-time.Hour))),
 					definition(retryTarget, "manual", "", true, nil,
-						scaleP21SW500Action("setIssuePriority", "priority", "1"), scaleP21SW500Action("notify")),
+						workflowCloseAction("setIssuePriority", "priority", "1"), workflowCloseAction("notify")),
 					definition(retryDisabled, "manual", "", false, nil),
 					definition(failing, "schedule", "@weekly", true, at(sunday.Add(-time.Hour)),
-						scaleP21SW500Action("notify"), scaleP21SW500Action("assignIssue", "userId", "missing-user")),
+						workflowCloseAction("notify"), workflowCloseAction("assignIssue", "userId", "missing-user")),
 				}
 				data.WorkflowRuns = []domain.WorkflowRun{
 					env.priorRun("retry-older", retryTarget, "failed", 1, at(now.Add(-time.Hour))),
@@ -103,13 +103,13 @@ func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
 				}
 			}
 			expected := map[string]any{}
-			for _, mode := range scaleP21SW500Modes {
+			for _, mode := range workflowCloseModes {
 				t.Run(mode, func(t *testing.T) {
-					env.reset(t, scaleP21SW500Case{}, seed)
+					env.reset(t, workflowCloseCase{}, seed)
 					bounded := strings.HasPrefix(mode, "bounded")
 					source := env.source(t, mode)
 					service := &server{store: source}
-					result := env.outcome(t, source, scaleP21SW500Call{aggregates: aggregates, schedules: schedules, unowned: true,
+					result := env.outcome(t, source, workflowCloseCall{aggregates: aggregates, schedules: schedules, unowned: true,
 						wrap: func(ctx context.Context) context.Context {
 							if !tick.cancel {
 								return ctx
@@ -122,7 +122,7 @@ func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
 							if bounded {
 								service.boundedWorkflowScheduleTick(ctx, now)
 							} else {
-								scaleP21SW501LegacyTick(ctx, service, env.workspace, now)
+								legacyTick(ctx, service, env.workspace, now)
 							}
 							return domain.WorkflowRun{}, nil
 						}})
@@ -164,22 +164,22 @@ func TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday(t *testing.T) {
 // Cancellation at every sampled SQL statement of a complete multi-action run
 // leaves either the untouched preimage or exactly the literal postimage, and
 // never leaks bounded work.
-func TestScaleP21SW502WorkflowRunCancellationAtomicity(t *testing.T) {
-	env := scaleP21SW500Setup(t)
-	test := scaleP21SW500Case{name: "cancel", trigger: "retry", issue: true, actions: scaleP21SW500AllActions,
-		seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+func TestWorkflowRunCancellationAtomicity(t *testing.T) {
+	env := workflowCloseSetup(t)
+	test := workflowCloseCase{name: "cancel", trigger: "retry", issue: true, actions: allActions,
+		seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("prior", env.workflowID, "failed", 2, &env.past)}
 		}}
 	success := map[string]any{}
-	for _, mode := range scaleP21SW500Modes {
+	for _, mode := range workflowCloseModes {
 		t.Run(mode, func(t *testing.T) {
-			execute := func(t *testing.T, cancelAt int) scaleP21SW500Result {
+			execute := func(t *testing.T, cancelAt int) workflowCloseResult {
 				t.Helper()
 				env.reset(t, test, nil)
 				source := env.source(t, mode)
 				service := &server{store: source}
 				cancel, seen := context.CancelFunc(func() {}), 0
-				return env.outcome(t, source, scaleP21SW500Call{aggregates: []string{env.workflowID},
+				return env.outcome(t, source, workflowCloseCall{aggregates: []string{env.workflowID},
 					wrap: func(ctx context.Context) context.Context {
 						ctx, cancel = context.WithCancel(ctx)
 						t.Cleanup(cancel)
@@ -234,7 +234,7 @@ func TestScaleP21SW502WorkflowRunCancellationAtomicity(t *testing.T) {
 // The scheduler's bounded dispatch precedes its literal snapshot read, the
 // test copy of the literal loop stays byte-identical, and runWorkflow keeps
 // one callback for both writers.
-func TestScaleP21SW503WorkflowSchedulerDispatchGuard(t *testing.T) {
+func TestWorkflowSchedulerDispatchGuard(t *testing.T) {
 	set := token.NewFileSet()
 	file, err := parser.ParseFile(set, "automation_intake.go", nil, 0)
 	if err != nil {
@@ -285,7 +285,7 @@ func TestScaleP21SW503WorkflowSchedulerDispatchGuard(t *testing.T) {
 	}
 	var copied string
 	for _, declaration := range copyFile.Decls {
-		if function, ok := declaration.(*ast.FuncDecl); ok && function.Name.Name == "scaleP21SW501LegacyTick" {
+		if function, ok := declaration.(*ast.FuncDecl); ok && function.Name.Name == "legacyTick" {
 			copied = print(function.Body)
 		}
 	}

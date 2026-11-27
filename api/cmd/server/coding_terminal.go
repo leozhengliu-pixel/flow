@@ -131,7 +131,7 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 	}
 	expiresAt := time.Now().Add(ttl).UTC()
 	// The terminal keeps no request values and writes its audit and
-	// prepare-script records: COLD work with bounded metadata on (SW557).
+	// prepare-script records: COLD work with bounded metadata on.
 	ctx, cancel := context.WithDeadline(store.WithColdWork(background.serving, "coding-terminal"), expiresAt)
 	defer cancel()
 	// Socket I/O must outlive the TTL context: coder/websocket closes the

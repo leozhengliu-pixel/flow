@@ -148,7 +148,7 @@ func (r *ResourceWindowRead) installed(ctx context.Context, kind string) error {
 				excluded = directoryOutputFields(node.typ.Elem(), "Payload", "Links")
 			}
 			err = r.owner.nativeArray(ctx, node, func(_ int, child metadataLogicalNode) error {
-				part, err := p19SnapshotHeaderWork(ctx, child, excluded)
+				part, err := snapshotHeaderWork(ctx, child, excluded)
 				if err != nil {
 					return err
 				}

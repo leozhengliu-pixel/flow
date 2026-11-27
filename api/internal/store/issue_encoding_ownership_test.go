@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW224IssueEncodingOwnershipTransition(t *testing.T) {
+func TestIssueEncodingOwnershipTransition(t *testing.T) {
 	issue := domain.Issue{ID: "sw224-issue", Description: strings.Repeat("x", 4<<20)}
 	previous, err := json.Marshal(issue)
 	if err != nil {

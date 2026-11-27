@@ -9,11 +9,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW494: reviews, releases, release pipelines, customers, customer requests
+// Reviews, releases, release pipelines, customers, customer requests
 // and asks by ID, with their create/reorder roots and body references.
-func scaleP21SW494Table(t *testing.T, part, parts int) {
+func recordKindAuthorizationTable(t *testing.T, part, parts int) {
 	t.Helper()
-	fx := scaleP21SW491Setup(t, nil)
+	fx := harnessSetup(t, nil)
 	p, workspace := fx.prefix, fx.workspace
 	host, err := url.Parse(fx.f.host.URL)
 	if err != nil {
@@ -75,10 +75,10 @@ func scaleP21SW494Table(t *testing.T, part, parts int) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	row := func(name, method, pattern, path, body string) scaleP21SW491Row {
-		return scaleP21SW491Row{name, method, pattern, path, body}
+	row := func(name, method, pattern, path, body string) harnessRow {
+		return harnessRow{name, method, pattern, path, body}
 	}
-	rows := []scaleP21SW491Row{}
+	rows := []harnessRow{}
 	for _, ref := range []string{"rev-public", "rev-private", "rev-mixed", "rev-gone", "rev-dup", "rev-public-slug", "rev-missing"} {
 		rows = append(rows,
 			row("review-get-"+ref, http.MethodGet, "GET /api/reviews/{id}", "/api/reviews/"+p+ref, ""),
@@ -168,7 +168,7 @@ func scaleP21SW494Table(t *testing.T, part, parts int) {
 		row("ask-create-private", http.MethodPost, "POST /api/asks", "/api/asks", `{"teamId":"`+fx.privateTeam+`"}`),
 		row("ask-create-invalid", http.MethodPost, "POST /api/asks", "/api/asks", `{"teamId":3}`),
 	)
-	fx.runPart(t, "SW494", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW494", rows, []harnessControl{
 		{"review-get-rev-public/member-private-outsider/session", true},
 		{"review-get-rev-private/member-private-outsider/session", false},
 		{"review-get-rev-private/admin/session", true},
@@ -196,14 +196,14 @@ func scaleP21SW494Table(t *testing.T, part, parts int) {
 	}, part, parts)
 }
 
-// The SW494 table runs in 3 top-level tests (every third row each) so the
+// The record kind authorization table runs in 3 top-level tests (every third row each) so the
 // CI shards spread it: on PostgreSQL and MySQL the whole table took 15-21 minutes.
-func TestScaleP21SW494RecordKindAuthorizationDifferential(t *testing.T) { scaleP21SW494Table(t, 0, 3) }
+func TestRecordKindAuthorizationDifferential(t *testing.T) { recordKindAuthorizationTable(t, 0, 3) }
 
-func TestScaleP21SW494RecordKindAuthorizationDifferentialPart2(t *testing.T) {
-	scaleP21SW494Table(t, 1, 3)
+func TestRecordKindAuthorizationDifferentialPart2(t *testing.T) {
+	recordKindAuthorizationTable(t, 1, 3)
 }
 
-func TestScaleP21SW494RecordKindAuthorizationDifferentialPart3(t *testing.T) {
-	scaleP21SW494Table(t, 2, 3)
+func TestRecordKindAuthorizationDifferentialPart3(t *testing.T) {
+	recordKindAuthorizationTable(t, 2, 3)
 }

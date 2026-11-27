@@ -19,12 +19,12 @@ import (
 // Reuse authenticated fixture contexts; permission primitives have their own M
 // tables. The alias must retain its ordinary issue-record marker, never the
 // discussion marker used by comment routes.
-func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
+func TestIssueReactionRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 				var outcomes []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(t, test.reactions)
-					before := scaleP21SW59SQL(t, f)
+					before := discussionWriteSql(t, f)
 					prior, err := repo.Events(t.Context(), issue.ID)
 					if err != nil {
 						t.Fatal(err)
@@ -136,7 +136,7 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 					for _, event := range prior {
 						priorIDs[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					checkPublicationOwner := func() {
 						t.Helper()
 						if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
@@ -145,14 +145,14 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 					}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						checkPublicationOwner()
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 							"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 							"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot, "createdAt": event.CreatedAt,
 						}))
 					})
 					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 						checkPublicationOwner()
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 							"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 							"seq": event.Seq, "clientId": event.ClientID, "payload": event.Payload, "createdAt": event.CreatedAt,
 						}))
@@ -188,7 +188,7 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 						}
 						mux := http.NewServeMux()
 						mux.Handle("POST /api/"+family+"/{id}/reactions", call)
-						response := &scaleP21SW59ResponseWriter{
+						response := &responseWriter{
 							ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.code == http.StatusOK,
 						}
 						mux.ServeHTTP(response, request)
@@ -205,7 +205,7 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 					finished := time.Now().UTC()
 					source.SetWebhookSink(nil)
 					source.SetRealtimeSink(nil)
-					got.Rows = scaleP21SW59SQL(t, f)
+					got.Rows = discussionWriteSql(t, f)
 					after, err := repo.Events(t.Context(), issue.ID)
 					if err != nil {
 						t.Fatal(err)
@@ -255,7 +255,7 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 							}
 						}
 						if !reflect.DeepEqual(updated.Reactions, expected) {
-							t.Fatal("issue reaction changed nil/empty/duplicate removal semantics", scaleP21M2Diff(updated.Reactions, expected))
+							t.Fatal("issue reaction changed nil/empty/duplicate removal semantics", policyFirstDifference(updated.Reactions, expected))
 						}
 						var payload domain.ReactionInput
 						if err := json.Unmarshal(got.Events[0].Payload, &payload); err != nil {
@@ -275,10 +275,10 @@ func TestScaleP21SW117IssueReactionRoutesDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("issue reaction route retained work or decoded full workspace metadata")
 					}
-					outcomes = append(outcomes, scaleP21SW59Normalized(t, got, before, started, finished))
+					outcomes = append(outcomes, discussionWriteNormalized(t, got, before, started, finished))
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatal("issue reaction response/SQL/events/webhooks/realtime differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatal("issue reaction response/SQL/events/webhooks/realtime differential", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}

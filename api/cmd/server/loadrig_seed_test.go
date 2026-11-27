@@ -121,7 +121,7 @@ func TestLoadRigSeed(t *testing.T) {
 		return true
 	}
 	fixture.WorkspaceID = repo.Bootstrap().Workspace.ID
-	adminID := scaleP01IdentityFromClient(t, host.URL, admin, "admin", nil)
+	adminID := scaleIdentityFromClient(t, host.URL, admin, "admin", nil)
 	fixture.Admin = loadRigIdentity{ID: adminID.ID, Token: adminID.Token, Role: "admin"}
 	suffix := fmt.Sprintf("%04d", time.Now().Unix()%10000)
 
@@ -155,7 +155,7 @@ func TestLoadRigSeed(t *testing.T) {
 	fixture.Admin.TeamIDs = teamIDs
 
 	timed("members", func() {
-		people, err := repo.SeedScaleP01Principals(ctx, ws, teamIDs, users, false)
+		people, err := repo.SeedScalePrincipals(ctx, ws, teamIDs, users, false)
 		if err != nil {
 			t.Fatal(err)
 		}

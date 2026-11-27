@@ -16,14 +16,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW231FilterSuggestionAuthorizationDifferential(t *testing.T) {
+func TestFilterSuggestionAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			tokens := map[string]string{}
 			for _, principal := range f.principals {
@@ -131,7 +131,7 @@ func TestScaleP21SW231FilterSuggestionAuthorizationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW231FilterSuggestionAuthorizationBoundary(t *testing.T) {
+func TestFilterSuggestionAuthorizationBoundary(t *testing.T) {
 	raw, err := os.ReadFile("auth.go")
 	if err != nil {
 		t.Fatal(err)

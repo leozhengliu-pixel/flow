@@ -13,13 +13,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-// TestScaleP21SW278PersistIssueMetadataCallset proves the legacy issue
+// TestPersistIssueMetadataCallset proves the legacy issue
 // metadata writer is reached on a bounded store only after the non-project
 // hot inputs were selected: its only reference is UpdateIssueRecord's else
 // branch of `projectInputs != nil`, and projectInputs is assigned only in the
 // bounded issueProjectInputsSupported branch, whose sibling branches are the
 // hot inputs and a coverage refusal.
-func TestScaleP21SW278PersistIssueMetadataCallset(t *testing.T) {
+func TestPersistIssueMetadataCallset(t *testing.T) {
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestScaleP21SW278PersistIssueMetadataCallset(t *testing.T) {
 						continue
 					}
 					condition, ok := branch.Cond.(*ast.BinaryExpr)
-					if ok && condition.Op == token.NEQ && scaleP21SW278Ident(condition.X, "projectInputs") && scaleP21SW278Ident(condition.Y, "nil") {
+					if ok && condition.Op == token.NEQ && issueMetadataCallsetIdent(condition.X, "projectInputs") && issueMetadataCallsetIdent(condition.Y, "nil") {
 						guarded = true
 					}
 					break
@@ -94,7 +94,7 @@ func TestScaleP21SW278PersistIssueMetadataCallset(t *testing.T) {
 			if !ok || function.Name.Name != "UpdateIssueRecord" {
 				continue
 			}
-			scaleP21SW278CheckProjectInputs(t, function)
+			checkProjectInputs(t, function)
 		}
 	}
 	if references != 1 {
@@ -102,18 +102,18 @@ func TestScaleP21SW278PersistIssueMetadataCallset(t *testing.T) {
 	}
 }
 
-func scaleP21SW278Ident(expression ast.Expr, name string) bool {
+func issueMetadataCallsetIdent(expression ast.Expr, name string) bool {
 	ident, ok := expression.(*ast.Ident)
 	return ok && ident.Name == name
 }
 
-// scaleP21SW278CheckProjectInputs pins every assignment of projectInputs to
+// checkProjectInputs pins every assignment of projectInputs to
 // the bounded selector chain
 //
 //	if s.BoundedMetadataEnabled() { ... if issueHotInputsSupported(...) {...}
 //	else if issueProjectInputsSupported(...) { projectInputs, err = ... }
 //	else { return ErrBoundedMetadataCoverage } ... }
-func scaleP21SW278CheckProjectInputs(t *testing.T, function *ast.FuncDecl) {
+func checkProjectInputs(t *testing.T, function *ast.FuncDecl) {
 	t.Helper()
 	assignments, chains := 0, 0
 	var stack []ast.Node
@@ -123,10 +123,10 @@ func scaleP21SW278CheckProjectInputs(t *testing.T, function *ast.FuncDecl) {
 			return true
 		}
 		stack = append(stack, node)
-		if branch, ok := node.(*ast.IfStmt); ok && scaleP21SW278CallNamed(branch.Cond, "issueHotInputsSupported") {
+		if branch, ok := node.(*ast.IfStmt); ok && callNamed(branch.Cond, "issueHotInputsSupported") {
 			chains++
 			project, ok := branch.Else.(*ast.IfStmt)
-			if !ok || !scaleP21SW278CallNamed(project.Cond, "issueProjectInputsSupported") {
+			if !ok || !callNamed(project.Cond, "issueProjectInputsSupported") {
 				t.Error("hot inputs are not followed by the project-input branch")
 				return true
 			}
@@ -136,12 +136,12 @@ func scaleP21SW278CheckProjectInputs(t *testing.T, function *ast.FuncDecl) {
 				return true
 			}
 			result, ok := refusal.List[0].(*ast.ReturnStmt)
-			if !ok || len(result.Results) != 1 || !scaleP21SW278Ident(result.Results[0], "ErrBoundedMetadataCoverage") {
+			if !ok || len(result.Results) != 1 || !issueMetadataCallsetIdent(result.Results[0], "ErrBoundedMetadataCoverage") {
 				t.Error("unsupported issue inputs are not refused")
 			}
 			bounded := false
 			for index := len(stack) - 2; index >= 0; index-- {
-				if outer, ok := stack[index].(*ast.IfStmt); ok && scaleP21SW278CallNamed(outer.Cond, "BoundedMetadataEnabled") && outer.Else == nil {
+				if outer, ok := stack[index].(*ast.IfStmt); ok && callNamed(outer.Cond, "BoundedMetadataEnabled") && outer.Else == nil {
 					bounded = true
 					break
 				}
@@ -155,14 +155,14 @@ func scaleP21SW278CheckProjectInputs(t *testing.T, function *ast.FuncDecl) {
 			return true
 		}
 		for _, left := range assignment.Lhs {
-			if !scaleP21SW278Ident(left, "projectInputs") {
+			if !issueMetadataCallsetIdent(left, "projectInputs") {
 				continue
 			}
 			assignments++
 			inProjectBranch := false
 			for index := len(stack) - 2; index >= 1; index-- {
 				branch, ok := stack[index].(*ast.IfStmt)
-				if ok && scaleP21SW278CallNamed(branch.Cond, "issueProjectInputsSupported") {
+				if ok && callNamed(branch.Cond, "issueProjectInputsSupported") {
 					inProjectBranch = true
 					break
 				}
@@ -178,7 +178,7 @@ func scaleP21SW278CheckProjectInputs(t *testing.T, function *ast.FuncDecl) {
 	}
 }
 
-func scaleP21SW278CallNamed(expression ast.Expr, name string) bool {
+func callNamed(expression ast.Expr, name string) bool {
 	found := false
 	ast.Inspect(expression, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
@@ -196,15 +196,15 @@ func scaleP21SW278CallNamed(expression ast.Expr, name string) bool {
 	return found
 }
 
-// TestScaleP21SW278BoundedIssueMetadataRefusal shows the bounded writer
+// TestBoundedIssueMetadataRefusal shows the bounded writer
 // neither reads past the policy copy nor skips a change the legacy writer
 // would make: project-less issues produce no metadata (as legacy), project
 // progress and team moves are refused.
-func TestScaleP21SW278BoundedIssueMetadataRefusal(t *testing.T) {
+func TestBoundedIssueMetadataRefusal(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	project := domain.Project{ID: "sw278-project", Name: "SW278", TeamIDs: []string{f.data.Teams[0].ID}, CreatedAt: at, UpdatedAt: at}

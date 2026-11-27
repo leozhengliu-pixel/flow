@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW45DeliveryAuditDifferential(t *testing.T) {
+func TestDeliveryAuditDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		target := idgen.New("sw45-hook-")
 		fixed := time.Unix(1700000000, 0).UTC()
@@ -92,7 +92,7 @@ func TestScaleP21SW45DeliveryAuditDifferential(t *testing.T) {
 						webhook.ID, webhook.CreatedAt = "", time.Time{}
 						realtime.ID, realtime.Seq, realtime.CreatedAt = "", 0, time.Time{}
 						outcomes = append(outcomes, []any{
-							scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "webhooks", ID: target}),
+							policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "webhooks", ID: target}),
 							webhook, realtime, audits,
 						})
 						source.SetWebhookSink(nil)
@@ -102,7 +102,7 @@ func TestScaleP21SW45DeliveryAuditDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("delivery helper changed: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("delivery helper changed: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}

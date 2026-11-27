@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW16AgentSessionDraftLoop(t *testing.T) {
+func TestAgentSessionDraftLoop(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	sessions := []domain.AgentSession{

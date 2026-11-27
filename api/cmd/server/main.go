@@ -333,7 +333,7 @@ func main() {
 	// Replicas starting together would otherwise race to install the same
 	// built-in application rows; the database startup lock makes them take
 	// turns, and later ones find the rows current.
-	// The startup syncs run as COLD work with bounded metadata on (SW557).
+	// The startup syncs run as COLD work with bounded metadata on.
 	if err := s.store.WithStartupLock(store.WithColdWork(shutdownSignal, "startup"), "built-in applications", func(ctx context.Context) error {
 		s.ensureBuiltinApplications(ctx)
 		if err := s.store.SyncAllApplicationIdentities(ctx); err != nil {
@@ -361,7 +361,7 @@ func main() {
 	// Other replicas look here for this release's assets once it serves pages.
 	s.startSharedAssetPublish(applicationConfig.Assets, 30*time.Second)
 	// Background work that reaches COLD consumers runs COLD per operation
-	// with bounded metadata on (SW550 background roots, SW557). The coding
+	// with bounded metadata on (route temperature guard background roots, bounded startup). The coding
 	// service calls back into the server (its notifier and hooks) with the
 	// context runCoding hands its reconcilers.
 	s.goWorker(func(ctx context.Context) { s.runCoding(store.WithColdWork(ctx, "coding")) })
@@ -906,7 +906,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/documents/{id}/drafts/{draftId}", s.deleteDocumentDraft)
 	mux.HandleFunc("POST /api/documents/{id}/drafts/{draftId}/publish", s.publishDocumentDraft)
 	mux.HandleFunc("GET /api/documents/{id}/history", s.documentContentHistory)
-	s.registerScaleP20Routes(mux)
+	s.registerScaleRoutes(mux)
 	mux.HandleFunc("POST /api/workspace/documents/{id}/revisions/import", s.importDocumentRevision)
 	mux.HandleFunc("GET /api/customer-taxonomy", s.listCustomerTaxonomy)
 	mux.HandleFunc("POST /api/customer-statuses", s.createCustomerTaxonomy)
@@ -5102,7 +5102,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	if workspace == "" {
 		// Only with authentication disabled: an authenticated request names
 		// its workspace. Bounded, the key is resident; the legacy accessor
-		// would decode the whole workspace for it (SW558).
+		// would decode the whole workspace for it.
 		if s.store.BoundedMetadataEnabled() {
 			metadata, _ := s.store.WorkspaceSettingsMetadata("")
 			workspace = metadata.Workspace.URLKey

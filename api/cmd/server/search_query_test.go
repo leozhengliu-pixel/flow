@@ -31,9 +31,9 @@ func TestMetadataSearchHTTPDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21M2Setup(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 			if err := repo.MutateWorkspace(t.Context(), workspace, "search.http_fixture", "", nil, func(data *domain.Bootstrap) error {

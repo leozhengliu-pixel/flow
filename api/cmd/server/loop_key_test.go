@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW23LoopTeamKeyDispatchDifferential(t *testing.T) {
+func TestLoopTeamKeyDispatchDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repository := range scaleP03ServerTestStores(t) {
-		fixture := scaleP21M2Setup(t, repository)
+	for _, repository := range scaleServerTestStores(t) {
+		fixture := setupPolicyDifferential(t, repository)
 		workspace := fixture.data.Workspace.URLKey
 		first, later, unicode := idgen.New("sw23-first-"), idgen.New("sw23-later-"), idgen.New("sw23-unicode-")
 		largeName := strings.Repeat("legal installed team name ", 5000)
@@ -32,7 +32,7 @@ func TestScaleP21SW23LoopTeamKeyDispatchDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repository, workspace, "teams")
+		before := pointRecordFingerprint(t, repository, workspace, "teams")
 		for index, allowed := range []map[string]bool{
 			nil, {}, {first: true}, {later: true}, {unicode: true},
 			{first: true, later: true, unicode: true},
@@ -53,7 +53,7 @@ func TestScaleP21SW23LoopTeamKeyDispatchDifferential(t *testing.T) {
 				t.Fatal("team key lookup crossed a missing workspace binding")
 			}
 		}
-		if after := scaleP21M3Fingerprint(t, repository, workspace, "teams"); after != before {
+		if after := pointRecordFingerprint(t, repository, workspace, "teams"); after != before {
 			t.Fatal("boolean loop scope lookup changed canonical team bytes")
 		}
 		if probe.WorkspaceMetadataDecodes() != 0 {

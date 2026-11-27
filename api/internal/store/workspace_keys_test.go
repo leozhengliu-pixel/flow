@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func sw26TestStage(t *testing.T) *sw26MigrationStage {
+func newMigrationStageTest(t *testing.T) *migrationStage {
 	t.Helper()
-	stage, err := sw26NewMigrationStage(t.Context())
+	stage, err := newMigrationStage(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,9 @@ func sw26TestStage(t *testing.T) *sw26MigrationStage {
 	return stage
 }
 
-func TestScaleP21SW26RenameEventProjectionDifferential(t *testing.T) {
+func TestRenameEventProjectionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	fixtures := []string{
 		`{"urlKey":"before"}`,
 		`{"URLKEY":"case","urlKey":null}`,
@@ -75,7 +75,7 @@ func TestScaleP21SW26RenameEventProjectionDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		actual, err := sw26EventURLKey(t.Context(), &sw26EventReaderAt{ctx: t.Context(), tx: tx, id: id, size: int64(len(payload))})
+		actual, err := eventURLKey(t.Context(), &eventReaderAt{ctx: t.Context(), tx: tx, id: id, size: int64(len(payload))})
 		tx.Rollback()
 		if err != nil || len(actual) <= 191 && actual != oracle.URLKey || (len(actual) > 191) != (len(oracle.URLKey) > 191) {
 			t.Fatalf("fixture %d differs from ignored-error typed decoder: actual=%q expected=%q error=%v", index, actual, oracle.URLKey, err)
@@ -86,10 +86,10 @@ func TestScaleP21SW26RenameEventProjectionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW26RenameStageAggregationAndResume(t *testing.T) {
+func TestRenameStageAggregationAndResume(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
-	stage := sw26TestStage(t)
+	f := journalScaleDatabase(t)
+	stage := newMigrationStageTest(t)
 	id := f.data.Workspace.ID
 	if _, err := stage.exec(t.Context(), int64(len(id)+len(f.data.Workspace.URLKey)), `INSERT INTO live(id,key) VALUES(?,?)`, id, f.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
@@ -123,15 +123,15 @@ func TestScaleP21SW26RenameStageAggregationAndResume(t *testing.T) {
 			}
 		}
 	})
-	count, err := f.sw26ApplyRenamePairs(ctx, stage)
+	count, err := f.applyRenamePairs(ctx, stage)
 	if count != 1 || !errors.Is(err, context.Canceled) {
 		t.Fatalf("partial autocommit/resume contract: count=%d error=%v", count, err)
 	}
-	count, err = f.sw26ApplyRenamePairs(t.Context(), stage)
+	count, err = f.applyRenamePairs(t.Context(), stage)
 	if err != nil || count != 132 {
 		t.Fatalf("resume count=%d error=%v", count, err)
 	}
-	count, err = f.sw26ApplyRenamePairs(t.Context(), stage)
+	count, err = f.applyRenamePairs(t.Context(), stage)
 	if err != nil || count != 0 {
 		t.Fatalf("idempotent rerun count=%d error=%v", count, err)
 	}
@@ -144,20 +144,20 @@ func TestScaleP21SW26RenameStageAggregationAndResume(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW26MigrationStageQuotaAndCleanup(t *testing.T) {
+func TestMigrationStageQuotaAndCleanup(t *testing.T) {
 	temp := t.TempDir()
 	t.Setenv("TMPDIR", temp)
 	before := recordSpoolBytes.Load()
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", fmt.Sprint(before))
-	if _, err := sw26NewMigrationStage(t.Context()); !errors.Is(err, ErrRecordSpoolBudget) {
+	if _, err := newMigrationStage(t.Context()); !errors.Is(err, ErrRecordSpoolBudget) {
 		t.Fatalf("quota denial allocated stage: %v", err)
 	}
 	files, err := os.ReadDir(temp)
 	if err != nil || len(files) != 0 {
 		t.Fatalf("quota failure left files: %v %v", files, err)
 	}
-	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", fmt.Sprint(before+sw26MigrationStageChunk))
-	stage := sw26TestStage(t)
+	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", fmt.Sprint(before+migrationStageChunk))
+	stage := newMigrationStageTest(t)
 	path := stage.path
 	denied := false
 	for index := range 20000 {
@@ -198,15 +198,15 @@ func TestScaleP21SW26MigrationStageQuotaAndCleanup(t *testing.T) {
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := sw26NewMigrationStage(cancelled); !errors.Is(err, context.Canceled) {
+	if _, err := newMigrationStage(cancelled); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }
 
-func TestScaleP21SW26RenameEventPagesBounded(t *testing.T) {
+func TestRenameEventPagesBounded(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
-	stage := sw26TestStage(t)
+	f := journalScaleDatabase(t)
+	stage := newMigrationStageTest(t)
 	prefix := idgen.New("sw26-event-key-")
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -236,7 +236,7 @@ func TestScaleP21SW26RenameEventPagesBounded(t *testing.T) {
 	f.db.SetMaxOpenConns(1)
 	last, pages := "", 0
 	for {
-		count, next, err := f.sw26StageRenameEventPage(t.Context(), stage, last)
+		count, next, err := f.stageRenameEventPage(t.Context(), stage, last)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -259,7 +259,7 @@ func TestScaleP21SW26RenameEventPagesBounded(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW26RenameBoundedCancellationAndQuota(t *testing.T) {
+func TestRenameBoundedCancellationAndQuota(t *testing.T) {
 	s := &SQLiteStore{metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()

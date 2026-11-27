@@ -79,7 +79,7 @@ func TestTemplateTeamReach(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, bounded := range []bool{false, true} {
-		for _, repo := range scaleP03ServerTestStores(t) {
+		for _, repo := range scaleServerTestStores(t) {
 			f, tokens := templateReachSetup(t, repo)
 			workspace := f.data.Workspace.URLKey
 			handler := f.host.Config.Handler

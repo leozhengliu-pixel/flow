@@ -76,7 +76,7 @@ func TestRealtimeIssueTemplateEventsFollowTemplateTeams(t *testing.T) {
 func TestTeamDefaultTemplatesFollowTemplateVisibility(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
+	for _, repo := range scaleServerTestStores(t) {
 		f := teamScopedSeed(t, repo)
 		at := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "team_defaults.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -163,8 +163,8 @@ func TestTeamTemplatePermissionDefault(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, bounded := range []bool{false, true} {
-		for _, repo := range scaleP03ServerTestStores(t) {
-			f := scaleP21M2Setup(t, repo)
+		for _, repo := range scaleServerTestStores(t) {
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			if settings, found := repo.TeamSettingsFor(workspace, f.public); found && settings.TemplatePermission != "" {
 				t.Fatalf("fixture's public team has a stored template permission %q", settings.TemplatePermission)

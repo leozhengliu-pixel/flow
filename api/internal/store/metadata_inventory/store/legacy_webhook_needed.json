@@ -5,7 +5,7 @@
     "boundedLegacyWebhookNeeded": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Retains the current installed logical generation before writeMu/retries and evaluates the complete legacy webhook/loop/connection predicate without decoding unrelated bodies. The absent-workspace authoritative chat fallback and off-mode original call remain exact. SW97 compares native/reloaded source shapes, warm replacement, namespace/pin handling, legal large records, cancellation, refusal and release; ordinary, persistent SQLite twice and race pass. Installed evaluation uses zero SQL; uncached chat fallback retains its single query.",
+      "reason": "Retains the current installed logical generation before writeMu/retries and evaluates the complete legacy webhook/loop/connection predicate without decoding unrelated bodies. The absent-workspace authoritative chat fallback and off-mode original call remain exact. legacy webhook needed compares native/reloaded source shapes, warm replacement, namespace/pin handling, legal large records, cancellation, refusal and release; ordinary, persistent SQLite twice and race pass. Installed evaluation uses zero SQL; uncached chat fallback retains its single query.",
       "accessors": ["resident-state"],
       "temperature": "hot",
       "temperatureReason": "Pre-mutation previous-values decision for the ordinary comment writer.",

@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21IssueProjectInputsNativeSelection(t *testing.T) {
+func TestScaleIssueProjectInputsNativeSelection(t *testing.T) {
 	at := time.Now()
 	project := domain.Project{ID: "selected", Name: "First", CreatedAt: at, Milestones: []domain.ProjectMilestone{{ID: "milestone", Name: "Selected"}}}
 	duplicate := project
@@ -32,7 +32,7 @@ func TestScaleP21IssueProjectInputsNativeSelection(t *testing.T) {
 			stored.Projects = append(stored.Projects, domain.Project{ID: fmt.Sprint("unrelated-", index), Description: strings.Repeat("unrelated project body ", count*100)})
 			stored.Documents = append(stored.Documents, domain.Document{ID: fmt.Sprint("unrelated-", index), IssueID: "other", Content: strings.Repeat("unrelated document body ", count*100)})
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
 		data := domain.Bootstrap{Issues: []domain.Issue{target}}
 		read, err := view.loadIssueProjectInputs(t.Context(), "physical", &data, target, input)
 		if err != nil {
@@ -69,7 +69,7 @@ func TestScaleP21IssueProjectInputsNativeSelection(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueProjectInputsManyAndBudget(t *testing.T) {
+func TestScaleIssueProjectInputsManyAndBudget(t *testing.T) {
 	var stored domain.Bootstrap
 	var issues []domain.Issue
 	for index := range 60 {
@@ -78,7 +78,7 @@ func TestScaleP21IssueProjectInputsManyAndBudget(t *testing.T) {
 		issues = append(issues, domain.Issue{ID: fmt.Sprint("issue-", index), Project: &domain.ProjectSummary{ID: id}})
 	}
 	stored.Projects[0].Description = strings.Repeat("large selected body ", 50000)
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": stored})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": stored})
 	data := domain.Bootstrap{Issues: issues}
 	read, err := view.loadIssueProjectInputs(t.Context(), "workspace", &data, issues[0], domain.IssueUpdateInput{})
 	if err != nil || !reflect.DeepEqual(read.data.Projects, stored.Projects) {
@@ -106,7 +106,7 @@ func TestScaleP21IssueProjectInputsManyAndBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueProjectProgressNativeStatePrecedence(t *testing.T) {
+func TestScaleIssueProjectProgressNativeStatePrecedence(t *testing.T) {
 	at := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
 	states := []domain.WorkflowState{
 		{ID: "duplicate", TeamID: "selected", Type: "started", Description: "callback"},
@@ -114,7 +114,7 @@ func TestScaleP21IssueProjectProgressNativeStatePrecedence(t *testing.T) {
 		{ID: "duplicate", TeamID: "unrelated", Type: "completed", Description: strings.Repeat("unneeded state body ", 50000)},
 		{ID: "historical", TeamID: "unrelated", Type: "canceled"},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {States: states}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {States: states}})
 	inputs := &issueHotInputs{store: view}
 	var err error
 	inputs.source, err = view.retainMetadataLogicalSource(t.Context(), "workspace")
@@ -139,10 +139,10 @@ func TestScaleP21IssueProjectProgressNativeStatePrecedence(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueProjectInputsWarmReload(t *testing.T) {
+func TestScaleIssueProjectInputsWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	project := domain.Project{ID: "p21-selected-reload-project", Name: "Selected", CreatedAt: time.Now().UTC(), Description: strings.Repeat("legal selected project ", 10000)}
 	target := domain.Issue{ID: "p21-selected-reload-issue", Project: &domain.ProjectSummary{ID: project.ID}}

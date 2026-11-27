@@ -14,21 +14,21 @@ import (
 	"unicode/utf8"
 )
 
-type scaleP21SW15JSONStringReader struct {
+type jsonStringReader struct {
 	input io.Reader
 	max   int
 }
 
-func (r *scaleP21SW15JSONStringReader) Read(output []byte) (int, error) {
+func (r *jsonStringReader) Read(output []byte) (int, error) {
 	return r.input.Read(output[:min(len(output), r.max)])
 }
 
-func scaleP21SW15JSONStringDifferential(t *testing.T, raw []byte, readBytes int) {
+func jsonStringDifferential(t *testing.T, raw []byte, readBytes int) {
 	t.Helper()
 	var expected string
 	legacyErr := json.Unmarshal(raw, &expected)
 	var actual bytes.Buffer
-	input := &scaleP21SW15JSONStringReader{input: bytes.NewReader(raw), max: readBytes}
+	input := &jsonStringReader{input: bytes.NewReader(raw), max: readBytes}
 	null, err := VisitMetadataJSONStringChunks(t.Context(), input, func(chunk []byte) error {
 		if len(chunk) == 0 || len(chunk) > MetadataJSONStringChunkBytes || !utf8.Valid(chunk) {
 			t.Fatalf("invalid decoded chunk length=%d utf8=%v", len(chunk), utf8.Valid(chunk))
@@ -49,7 +49,7 @@ func scaleP21SW15JSONStringDifferential(t *testing.T, raw []byte, readBytes int)
 	}
 }
 
-func TestScaleP21SW0JSONStringDifferential(t *testing.T) {
+func TestJSONStringDifferential(t *testing.T) {
 	fixtures := [][]byte{
 		[]byte(`""`),
 		[]byte(`"plain text"`),
@@ -105,20 +105,20 @@ func TestScaleP21SW0JSONStringDifferential(t *testing.T) {
 	for index, raw := range fixtures {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			for _, readBytes := range []int{1, 2, 3, 4, 5, 6, 7, 31, 4096} {
-				scaleP21SW15JSONStringDifferential(t, raw, readBytes)
+				jsonStringDifferential(t, raw, readBytes)
 			}
 		})
 	}
 }
 
-func TestScaleP21SW0JSONStringChunkBoundaries(t *testing.T) {
+func TestJSONStringChunkBoundaries(t *testing.T) {
 	for _, prefix := range []int{4091, 4092, 4093, 4094, 4095, 4096, 4097} {
 		raw := []byte(`"` + strings.Repeat("a", prefix) + `\uD834\uDD1E` +
 			strings.Repeat("b", prefix) + string(rune(0x1f600)) +
 			strings.Repeat("c", prefix) + `\ud800` +
 			strings.Repeat("d", prefix) + `"`)
 		for _, readBytes := range []int{1, 2, 3, 5, 4093, 4096, 4097} {
-			scaleP21SW15JSONStringDifferential(t, raw, readBytes)
+			jsonStringDifferential(t, raw, readBytes)
 		}
 	}
 	// Malformed source after emitted chunks must still be rejected even when
@@ -136,7 +136,7 @@ func TestScaleP21SW0JSONStringChunkBoundaries(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0JSONStringRandomDifferential(t *testing.T) {
+func TestJSONStringRandomDifferential(t *testing.T) {
 	random := rand.New(rand.NewSource(2131501))
 	for index := range 2000 {
 		payload := make([]byte, random.Intn(257))
@@ -158,16 +158,16 @@ func TestScaleP21SW0JSONStringRandomDifferential(t *testing.T) {
 		case 3:
 			raw = []byte(fmt.Sprintf(`"\u%04x\u%04x"`, random.Intn(65536), random.Intn(65536)))
 		}
-		scaleP21SW15JSONStringDifferential(t, raw, random.Intn(31)+1)
+		jsonStringDifferential(t, raw, random.Intn(31)+1)
 	}
 }
 
-type scaleP21SW15JSONStringReadFailure struct {
+type jsonStringReadFailure struct {
 	input io.Reader
 	err   error
 }
 
-func (r scaleP21SW15JSONStringReadFailure) Read(output []byte) (int, error) {
+func (r jsonStringReadFailure) Read(output []byte) (int, error) {
 	n, err := r.input.Read(output)
 	if errors.Is(err, io.EOF) {
 		err = r.err
@@ -175,7 +175,7 @@ func (r scaleP21SW15JSONStringReadFailure) Read(output []byte) (int, error) {
 	return n, err
 }
 
-func TestScaleP21SW0JSONStringCancellationAndFailures(t *testing.T) {
+func TestJSONStringCancellationAndFailures(t *testing.T) {
 	raw := []byte(`"` + strings.Repeat("x", MetadataJSONStringChunkBytes*3) + `"`)
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -204,7 +204,7 @@ func TestScaleP21SW0JSONStringCancellationAndFailures(t *testing.T) {
 		t.Fatalf("callback failure=%v callbacks=%d", err, calls)
 	}
 	readerErr := errors.New("owned reader failed")
-	if _, err := VisitMetadataJSONStringChunks(t.Context(), scaleP21SW15JSONStringReadFailure{
+	if _, err := VisitMetadataJSONStringChunks(t.Context(), jsonStringReadFailure{
 		input: strings.NewReader(`"complete"`), err: readerErr,
 	}, func([]byte) error { return nil }); !errors.Is(err, readerErr) {
 		t.Fatalf("reader failure=%v", err)
@@ -214,7 +214,7 @@ func TestScaleP21SW0JSONStringCancellationAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0JSONStringAllocationBound(t *testing.T) {
+func TestJSONStringAllocationBound(t *testing.T) {
 	small := []byte(`"short"`)
 	literal := []byte(`"` + strings.Repeat("a", 2<<20) + `"`)
 	escaped := []byte(`"` + strings.Repeat(`\uD834\uDD1E`, 1<<17) + `"`)
@@ -239,7 +239,7 @@ func TestScaleP21SW0JSONStringAllocationBound(t *testing.T) {
 	}
 }
 
-func FuzzScaleP21SW0JSONStringChunks(f *testing.F) {
+func FuzzJSONStringChunks(f *testing.F) {
 	for _, raw := range [][]byte{
 		[]byte(`""`), []byte(`null`), []byte(`"\uD834\uDD1E"`), []byte(`"\ud800"`),
 		[]byte{'"', 0xe2, 0x82, '"'}, []byte(`"bad\x"`), []byte(`"first" "second"`),
@@ -250,6 +250,6 @@ func FuzzScaleP21SW0JSONStringChunks(f *testing.F) {
 		if len(raw) > 64<<10 {
 			t.Skip()
 		}
-		scaleP21SW15JSONStringDifferential(t, raw, int(readBytes)%31+1)
+		jsonStringDifferential(t, raw, int(readBytes)%31+1)
 	})
 }

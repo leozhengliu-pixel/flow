@@ -9,14 +9,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW189EditorWorkLifetime(t *testing.T) {
+func TestEditorWorkLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	read, tx := scaleP21IssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
+	read, tx := scaleIssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
 	var data domain.Bootstrap
 	read.install(&data)
 	if data.FormerMembers == nil || data.CollaborationUpdates == nil || data.CollaborationWork == nil {
@@ -64,12 +64,12 @@ func TestScaleP21SW189EditorWorkLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW189EditorWorkBudget(t *testing.T) {
+func TestEditorWorkBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
-	view := scaleP21IssuePersistenceView(t, f, true, false)
-	read, tx := scaleP21IssueEditorRead(t, t.Context(), view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
+	view := scaleIssuePersistenceView(t, f, true, false)
+	read, tx := scaleIssueEditorRead(t, t.Context(), view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
 	work := read.collaborationWork()
 	baseline := view.MetadataWorkUsedForTesting()
 	limit := view.metadataResidency.work.limit

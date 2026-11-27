@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21ResidentPointWriterMatchesLegacyRowsAndHooks(t *testing.T) {
+func TestScaleResidentPointWriterMatchesLegacyRowsAndHooks(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p21-edit", Name: "Before", Description: "kept", TeamIDs: []string{data.Teams[0].ID}}, domain.Project{ID: "p21-unrelated", Description: strings.Repeat("unrelated", 100000)})
@@ -56,7 +56,7 @@ func TestScaleP21ResidentPointWriterMatchesLegacyRowsAndHooks(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='projects' AND record_key='p21-edit'`, original, workspace); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	probe.viewer = f.viewer
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
@@ -109,12 +109,12 @@ func TestScaleP21ResidentPointWriterMatchesLegacyRowsAndHooks(t *testing.T) {
 	}
 }
 
-func TestScaleP21ConversationReadsAndBackgroundWritesShareAdmission(t *testing.T) {
+func TestScaleConversationReadsAndBackgroundWritesShareAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.AIConversations = append(data.AIConversations,
@@ -125,7 +125,7 @@ func TestScaleP21ConversationReadsAndBackgroundWritesShareAdmission(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	probe.viewer = f.viewer
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)

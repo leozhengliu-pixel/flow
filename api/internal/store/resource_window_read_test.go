@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW121TypedWindowDecodeAdmission(t *testing.T) {
+func TestTypedWindowDecodeAdmission(t *testing.T) {
 	for _, raw := range []string{
 		`{"users":[{},null,{},null]}`,
 		`{"users":[{"via":null},null]}`,
@@ -63,7 +63,7 @@ func TestScaleP21SW121TypedWindowDecodeAdmission(t *testing.T) {
 	}
 }
 
-func scaleP21SW121FixTimes(value reflect.Value, at time.Time) {
+func fixTimes(value reflect.Value, at time.Time) {
 	if value.Type() == reflect.TypeFor[time.Time]() {
 		if !value.Interface().(time.Time).IsZero() {
 			value.Set(reflect.ValueOf(at))
@@ -73,37 +73,37 @@ func scaleP21SW121FixTimes(value reflect.Value, at time.Time) {
 	switch value.Kind() {
 	case reflect.Pointer:
 		if !value.IsNil() {
-			scaleP21SW121FixTimes(value.Elem(), at)
+			fixTimes(value.Elem(), at)
 		}
 	case reflect.Interface:
 		if !value.IsNil() {
 			copy := reflect.New(value.Elem().Type()).Elem()
 			copy.Set(value.Elem())
-			scaleP21SW121FixTimes(copy, at)
+			fixTimes(copy, at)
 			value.Set(copy)
 		}
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
 			if value.Type().Field(i).PkgPath == "" {
-				scaleP21SW121FixTimes(value.Field(i), at)
+				fixTimes(value.Field(i), at)
 			}
 		}
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < value.Len(); i++ {
-			scaleP21SW121FixTimes(value.Index(i), at)
+			fixTimes(value.Index(i), at)
 		}
 	case reflect.Map:
 		iter := value.MapRange()
 		for iter.Next() {
 			copy := reflect.New(value.Type().Elem()).Elem()
 			copy.Set(iter.Value())
-			scaleP21SW121FixTimes(copy, at)
+			fixTimes(copy, at)
 			value.SetMapIndex(iter.Key(), copy)
 		}
 	}
 }
 
-func scaleP21SW121Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
+func resourceWindowReadSeed(t *testing.T, f scaleFixture, prefix, body string) {
 	t.Helper()
 	if err := f.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func scaleP21SW121Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
 		selected := reflect.ValueOf(data).Elem()
 		for _, name := range append([]string{"workspace", "viewer"}, resourceWindowCoreFields...) {
 			index, _, _ := metadataLogicalField(name)
-			scaleP21SW121FixTimes(selected.Field(index), at)
+			fixTimes(selected.Field(index), at)
 		}
 		return nil
 	}); err != nil {
@@ -147,7 +147,7 @@ func scaleP21SW121Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
 	}
 }
 
-func scaleP21SW121Comparable(t *testing.T, data domain.Bootstrap, started time.Time) domain.Bootstrap {
+func resourceWindowReadComparable(t *testing.T, data domain.Bootstrap, started time.Time) domain.Bootstrap {
 	t.Helper()
 	// Canonical normalization creates these omitted collections afresh. Their
 	// generated clocks are checked, while every other value stays exact.
@@ -170,13 +170,13 @@ func scaleP21SW121Comparable(t *testing.T, data domain.Bootstrap, started time.T
 	return data
 }
 
-func scaleP21SW121Compare(t *testing.T, want domain.Bootstrap, revision string, read *ResourceWindowRead, started time.Time) {
+func resourceWindowReadCompare(t *testing.T, want domain.Bootstrap, revision string, read *ResourceWindowRead, started time.Time) {
 	t.Helper()
 	if read == nil {
 		t.Fatal("missing owned window")
 	}
-	expected := scaleP21SW121Comparable(t, want, started)
-	actual := scaleP21SW121Comparable(t, read.Data, started)
+	expected := resourceWindowReadComparable(t, want, started)
+	actual := resourceWindowReadComparable(t, read.Data, started)
 	if read.Revision != revision || !reflect.DeepEqual(expected, actual) {
 		left, right := reflect.ValueOf(expected), reflect.ValueOf(actual)
 		for i := 0; i < left.NumField(); i++ {
@@ -188,13 +188,13 @@ func scaleP21SW121Compare(t *testing.T, want domain.Bootstrap, revision string, 
 	}
 }
 
-func TestScaleP21SW121WindowNativeSourceAndPayload(t *testing.T) {
+func TestWindowNativeSourceAndPayload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw121-native-")
-	scaleP21SW121Seed(t, f, prefix, strings.Repeat("Excluded payload and body. ", 1000))
+	resourceWindowReadSeed(t, f, prefix, strings.Repeat("Excluded payload and body. ", 1000))
 	known, exact := f.copyRevisionOf(workspace)
 	stamp, err := readMetadataStamp(t.Context(), f.db, workspace)
 	if err != nil || !exact || known.workspaceID != stamp.workspaceID || known.revision != stamp.revision {
@@ -216,7 +216,7 @@ func TestScaleP21SW121WindowNativeSourceAndPayload(t *testing.T) {
 			t.Fatal(kind, err)
 		}
 		defer read.Close()
-		scaleP21SW121Compare(t, want, revision, read, started)
+		resourceWindowReadCompare(t, want, revision, read, started)
 		if read.Data.NextIssueNumber != 73 || read.Data.Viewer.Via == nil || read.Data.Viewer.Via.ID != prefix+"actor" {
 			t.Fatal("raw warm window lost supported native scalar/actor attribution", kind, read.Data.NextIssueNumber, read.Data.Viewer.Via)
 		}
@@ -266,7 +266,7 @@ func TestScaleP21SW121WindowNativeSourceAndPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	scaleP21SW121Compare(t, want, revision, read, started)
+	resourceWindowReadCompare(t, want, revision, read, started)
 	if len(read.Data.Documents) != 3 || read.Data.Documents[1].Title != "Later duplicate" || read.Data.Users != nil {
 		t.Fatal("warm duplicate order/nil native directory changed")
 	}
@@ -299,7 +299,7 @@ func TestScaleP21SW121WindowNativeSourceAndPayload(t *testing.T) {
 			if boundedErr != nil {
 				t.Fatal(payload, boundedErr)
 			}
-			scaleP21SW121Compare(t, want, revision, read, started)
+			resourceWindowReadCompare(t, want, revision, read, started)
 			read.Close()
 		}
 		if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
@@ -308,7 +308,7 @@ func TestScaleP21SW121WindowNativeSourceAndPayload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW121WindowBodyBoundAndCanonical(t *testing.T) {
+func TestWindowBodyBoundAndCanonical(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -316,9 +316,9 @@ func TestScaleP21SW121WindowBodyBoundAndCanonical(t *testing.T) {
 	auxiliary := map[string]uint64{}
 	for _, size := range []int{1000, 10000} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw121-size-")
-			scaleP21SW121Seed(t, f, prefix, strings.Repeat("Excluded body. ", size))
+			resourceWindowReadSeed(t, f, prefix, strings.Repeat("Excluded body. ", size))
 			view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 			if err != nil {
 				t.Fatal(err)
@@ -350,7 +350,7 @@ func TestScaleP21SW121WindowBodyBoundAndCanonical(t *testing.T) {
 						t.Fatal(state, kind, err)
 					}
 					defer read.Close()
-					scaleP21SW121Compare(t, want, revision, read, started)
+					resourceWindowReadCompare(t, want, revision, read, started)
 					key := state + "/" + kind
 					if state != "canonical" {
 						for _, field := range append([]string{"workspace", "viewer", "viewerRole"}, resourceWindowCoreFields...) {
@@ -381,13 +381,13 @@ func TestScaleP21SW121WindowBodyBoundAndCanonical(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW121WindowPermissionDifferential(t *testing.T) {
+func TestWindowPermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID, prefix := f.data.Workspace.URLKey, f.data.Workspace.ID, idgen.New("sw121-policy-")
-	scaleP21SW121Seed(t, f, prefix, "Excluded")
+	resourceWindowReadSeed(t, f, prefix, "Excluded")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw121_teams", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: public, Key: public}, domain.Team{ID: private, Key: private, Private: true}, domain.Team{ID: child, Key: child})
@@ -513,7 +513,7 @@ func TestScaleP21SW121WindowPermissionDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer read.Close()
-					scaleP21SW121Compare(t, want, revision, read, started)
+					resourceWindowReadCompare(t, want, revision, read, started)
 					read.Close()
 					if view.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("M window leaked work")
@@ -568,13 +568,13 @@ func TestScaleP21SW121WindowPermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW121WindowCancellationBudgetAndRevision(t *testing.T) {
+func TestWindowCancellationBudgetAndRevision(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw121-budget-")
-	scaleP21SW121Seed(t, f, prefix, "Excluded")
+	resourceWindowReadSeed(t, f, prefix, "Excluded")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -648,16 +648,16 @@ func TestScaleP21SW121WindowCancellationBudgetAndRevision(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW121WindowCanonicalKeyTransferGuard(t *testing.T) {
+func TestWindowCanonicalKeyTransferGuard(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("PostgreSQL/MySQL enforce the 191-character/byte key schema before this oversized-key witness")
 	}
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw121-key-")
-	scaleP21SW121Seed(t, f, prefix, "Excluded")
+	resourceWindowReadSeed(t, f, prefix, "Excluded")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)

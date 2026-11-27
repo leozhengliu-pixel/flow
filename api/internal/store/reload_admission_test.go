@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW216Budget(t *testing.T, view *SQLiteStore, limit, occupied int) (context.Context, func()) {
+func reloadAdmissionBudget(t *testing.T, view *SQLiteStore, limit, occupied int) (context.Context, func()) {
 	t.Helper()
 	budget := view.metadataResidency.work
 	budget.mu.Lock()
@@ -46,7 +46,7 @@ func scaleP21SW216Budget(t *testing.T, view *SQLiteStore, limit, occupied int) (
 	return ctx, finish
 }
 
-func scaleP21SW216PeerConnection(t *testing.T, fixture scaleP09Fixture, before domain.Bootstrap, provider string) {
+func peerConnection(t *testing.T, fixture scaleFixture, before domain.Bootstrap, provider string) {
 	t.Helper()
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -68,8 +68,8 @@ func scaleP21SW216PeerConnection(t *testing.T, fixture scaleP09Fixture, before d
 	}
 }
 
-func TestScaleP21SW216ReloadActualPolicyWarmStaleCancellation(t *testing.T) {
-	fixture, view, _ := scaleP21SW27KnownWarmReloadFixture(t)
+func TestReloadActualPolicyWarmStaleCancellation(t *testing.T) {
+	fixture, view, _ := knownWarmReloadFixture(t)
 	workspace := fixture.data.Workspace.URLKey
 	scope := MetadataRecordScope{Fields: []string{"integrationConnections", "cycles"}}
 	warm, found := fixture.WorkspaceMetadata(workspace)
@@ -81,7 +81,7 @@ func TestScaleP21SW216ReloadActualPolicyWarmStaleCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Release()
-	ctx, finish := scaleP21SW216Budget(t, view, 32<<20, 8<<20)
+	ctx, finish := reloadAdmissionBudget(t, view, 32<<20, 8<<20)
 	defer finish()
 	// The occupied output allowance cannot also serve as reload scratch.
 	// Its 8MiB inherited lease is deliberately smaller than the former
@@ -106,7 +106,7 @@ func TestScaleP21SW216ReloadActualPolicyWarmStaleCancellation(t *testing.T) {
 	if used := view.MetadataWorkUsedForTesting(); used != 8<<20 {
 		t.Fatal("public reload borrowed or retained output ownership", used)
 	}
-	scaleP21SW216PeerConnection(t, fixture, warm, "sw216-same-version-peer")
+	peerConnection(t, fixture, warm, "sw216-same-version-peer")
 	if err := fixture.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestScaleP21SW216ReloadActualPolicyWarmStaleCancellation(t *testing.T) {
 	if used := view.MetadataWorkUsedForTesting(); used != 8<<20 {
 		t.Fatal("cold reload changed independently occupied work", used)
 	}
-	scaleP21SW216PeerConnection(t, fixture, literal, "sw216-cancelled-peer")
+	peerConnection(t, fixture, literal, "sw216-cancelled-peer")
 	disk, descriptors, spool := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
@@ -169,11 +169,11 @@ func TestScaleP21SW216ReloadActualPolicyWarmStaleCancellation(t *testing.T) {
 	finish()
 }
 
-func TestScaleP21SW216ReloadLargePolicyRefusesBeforeDecode(t *testing.T) {
+func TestReloadLargePolicyRefusesBeforeDecode(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := fixture.data.Workspace.URLKey
 	view, err := fixture.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -201,7 +201,7 @@ func TestScaleP21SW216ReloadLargePolicyRefusesBeforeDecode(t *testing.T) {
 		}); err != nil {
 		t.Fatal(err)
 	}
-	ctx, finish := scaleP21SW216Budget(t, view, 32<<20, 24<<20)
+	ctx, finish := reloadAdmissionBudget(t, view, 32<<20, 24<<20)
 	defer finish()
 	owner := &ResourceRead{store: view}
 	defer owner.Close()
@@ -257,8 +257,8 @@ func TestScaleP21SW216ReloadLargePolicyRefusesBeforeDecode(t *testing.T) {
 	finish()
 }
 
-func TestScaleP21SW216ReloadLargeNormalizationBase(t *testing.T) {
-	fixture, view, _ := scaleP21SW27KnownWarmReloadFixture(t)
+func TestReloadLargeNormalizationBase(t *testing.T) {
+	fixture, view, _ := knownWarmReloadFixture(t)
 	workspace := fixture.data.Workspace.URLKey
 	welcome := strings.Repeat("supported welcome text ", 36<<10) + "end"
 	if err := fixture.MutateWorkspace(WithMetadataFields(t.Context(), "workspaceSettings"), workspace, "scale_p21.sw216_base", "", nil,
@@ -275,7 +275,7 @@ func TestScaleP21SW216ReloadLargeNormalizationBase(t *testing.T) {
 	if !found || want.WorkspaceSettings.WelcomeMessage != welcome {
 		t.Fatal("literal writer did not retain the supported large setting")
 	}
-	ctx, finish := scaleP21SW216Budget(t, view, 32<<20, 8<<20)
+	ctx, finish := reloadAdmissionBudget(t, view, 32<<20, 8<<20)
 	defer finish()
 	if err := view.ReloadWorkspace(ctx, workspace); err != nil {
 		t.Fatal("large normalization base borrowed the parser/output lease", err)
@@ -289,9 +289,9 @@ func TestScaleP21SW216ReloadLargeNormalizationBase(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW216ReloadPolicyOnlyProbeKeepsLiteralAdmission(t *testing.T) {
+func TestReloadPolicyOnlyProbeKeepsLiteralAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	probe := &SQLiteStore{db: fixture.db, dialect: fixture.dialect, maxStateBytes: fixture.maxStateBytes,
 		workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency()}
 	probe.metadataResidency.requireCoverage = false

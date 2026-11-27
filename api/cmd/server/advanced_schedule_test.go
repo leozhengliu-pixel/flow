@@ -16,27 +16,27 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW209Stream struct {
+type advancedScheduleStream struct {
 	bytes.Buffer
 	ctx  context.Context
 	work *store.MetadataJSONRead
 }
 
-func (b *scaleP21SW209Stream) Write(part []byte) (int, error) {
+func (b *advancedScheduleStream) Write(part []byte) (int, error) {
 	if err := b.work.ReserveEncoded(b.ctx, b.Len()+len(part)); err != nil {
 		return 0, err
 	}
 	return b.Buffer.Write(part)
 }
 
-func (b *scaleP21SW209Stream) WriteString(part string) (int, error) {
+func (b *advancedScheduleStream) WriteString(part string) (int, error) {
 	if err := b.work.ReserveEncoded(b.ctx, b.Len()+len(part)); err != nil {
 		return 0, err
 	}
 	return b.Buffer.WriteString(part)
 }
 
-func scaleP21SW209Native(t *testing.T, source *store.SQLiteStore, workspace string) domain.Bootstrap {
+func advancedScheduleNative(t *testing.T, source *store.SQLiteStore, workspace string) domain.Bootstrap {
 	t.Helper()
 	if !source.BoundedMetadataEnabled() {
 		data, found := source.WorkspaceMetadataFields(workspace, "projects", "projectUpdates", "trash", "issueSlas", "slaEvents")
@@ -61,7 +61,7 @@ func scaleP21SW209Native(t *testing.T, source *store.SQLiteStore, workspace stri
 		if err != nil {
 			t.Fatal(err)
 		}
-		buffer := &scaleP21SW209Stream{ctx: t.Context(), work: work}
+		buffer := &advancedScheduleStream{ctx: t.Context(), work: work}
 		if err := read.StreamFieldJSON(t.Context(), name, buffer); err != nil {
 			work.Close()
 			t.Fatal(err)
@@ -86,7 +86,7 @@ func scaleP21SW209Native(t *testing.T, source *store.SQLiteStore, workspace stri
 	return data
 }
 
-func scaleP21SW209Headers(data domain.Bootstrap) domain.Bootstrap {
+func advancedScheduleHeaders(data domain.Bootstrap) domain.Bootstrap {
 	result := data
 	if data.Projects != nil {
 		result.Projects = make([]domain.Project, len(data.Projects))
@@ -113,7 +113,7 @@ func scaleP21SW209Headers(data domain.Bootstrap) domain.Bootstrap {
 	return result
 }
 
-func scaleP21SW209ProjectSpools(t *testing.T, source *store.SQLiteStore, workspace string) map[string]*store.RecordSpool {
+func advancedScheduleProjectSpools(t *testing.T, source *store.SQLiteStore, workspace string) map[string]*store.RecordSpool {
 	t.Helper()
 	result := map[string]*store.RecordSpool{}
 	var literal domain.Bootstrap
@@ -161,7 +161,7 @@ func scaleP21SW209ProjectSpools(t *testing.T, source *store.SQLiteStore, workspa
 	return result
 }
 
-func scaleP21SW209ExactSpools(t *testing.T, field string, left, right *store.RecordSpool) {
+func exactSpools(t *testing.T, field string, left, right *store.RecordSpool) {
 	t.Helper()
 	a, err := left.Stat()
 	if err != nil {
@@ -187,7 +187,7 @@ func scaleP21SW209ExactSpools(t *testing.T, field string, left, right *store.Rec
 	}
 }
 
-func scaleP21SW209MetadataRows(t *testing.T, f scaleP21SW10Fixture, workspace string) []any {
+func metadataRows(t *testing.T, f notificationsFixture, workspace string) []any {
 	t.Helper()
 	rows := f.reader.query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 	defer rows.Close()
@@ -207,7 +207,7 @@ func scaleP21SW209MetadataRows(t *testing.T, f scaleP21SW10Fixture, workspace st
 	return result
 }
 
-func scaleP21SW209MetadataRoot(t *testing.T, f scaleP21SW10Fixture, workspace string) json.RawMessage {
+func metadataRoot(t *testing.T, f notificationsFixture, workspace string) json.RawMessage {
 	t.Helper()
 	rows := f.reader.query(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace)
 	defer rows.Close()
@@ -224,7 +224,7 @@ func scaleP21SW209MetadataRoot(t *testing.T, f scaleP21SW10Fixture, workspace st
 	return raw
 }
 
-func scaleP21SW209ReloadSource(t *testing.T, f scaleP21SW10Fixture, source *store.SQLiteStore) {
+func advancedScheduleReloadSource(t *testing.T, f notificationsFixture, source *store.SQLiteStore) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, workspace).Close()
@@ -251,44 +251,44 @@ func scaleP21SW209ReloadSource(t *testing.T, f scaleP21SW10Fixture, source *stor
 // shards can spread it: every case is a complete literal/bounded pair, and
 // the single test of all 17 scenarios needed most of an hour under the race
 // detector. The 5 MiB duplicate-update cases run one test per source mode.
-func TestScaleP21SW209AdvancedScheduleTickerDifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{false, true}, "missing", "cancelled", "missing-workspace")
+func TestAdvancedScheduleTickerDifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{false, true}, "missing", "cancelled", "missing-workspace")
 }
 
-func TestScaleP21SW209AdvancedScheduleTickerDueDifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{false, true}, "due-soon", "current-archive", "inbox-off-noop", "expired-document", "member-reminder-fanout")
+func TestAdvancedScheduleTickerDueDifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{false, true}, "due-soon", "current-archive", "inbox-off-noop", "expired-document", "member-reminder-fanout")
 }
 
-func TestScaleP21SW209AdvancedScheduleTickerSLADifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{false, true}, "sla-breach", "sla-paused", "sla-removed", "sla-subscriber-fanout",
+func TestAdvancedScheduleTickerSLADifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{false, true}, "sla-breach", "sla-paused", "sla-removed", "sla-subscriber-fanout",
 		"sla-many-unique-rules", "sla-duplicate-winning-rules", "duplicate-updates")
 }
 
-func TestScaleP21SW209AdvancedScheduleTickerLargeMapDifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{false, true}, "duplicate-large-map")
+func TestAdvancedScheduleTickerLargeMapDifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{false, true}, "duplicate-large-map")
 }
 
-func TestScaleP21SW209AdvancedScheduleTickerLargeInlineWarmDifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{false}, "duplicate-large-inline")
+func TestAdvancedScheduleTickerLargeInlineWarmDifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{false}, "duplicate-large-inline")
 }
 
-func TestScaleP21SW209AdvancedScheduleTickerLargeInlineReloadedDifferential(t *testing.T) {
-	scaleP21SW209Ticker(t, []bool{true}, "duplicate-large-inline")
+func TestAdvancedScheduleTickerLargeInlineReloadedDifferential(t *testing.T) {
+	advancedScheduleTicker(t, []bool{true}, "duplicate-large-inline")
 }
 
-func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
+func advancedScheduleTicker(t *testing.T, reloads []bool, scenarios ...string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	workspace := f.data.Workspace.URLKey
 	// The initial invitation fixture has not installed every loader default.
 	// Capture its normalized state once, before either differential leg.
-	scaleP21SW209ReloadSource(t, f, f.repository)
+	advancedScheduleReloadSource(t, f, f.repository)
 	baseline, found := f.repository.BootstrapFor(workspace)
 	if !found || len(baseline.Issues) == 0 {
 		t.Fatal("ticker fixture requires a stored issue")
@@ -492,20 +492,20 @@ func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
 								}
 							}
 							if reload {
-								scaleP21SW209ReloadSource(t, f, f.repository)
+								advancedScheduleReloadSource(t, f, f.repository)
 							}
 							if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), f.repository, workspace); err != nil {
 								t.Fatal(err)
 							}
 							if reload && source.BoundedMetadataEnabled() {
-								scaleP21SW209ReloadSource(t, f, source)
+								advancedScheduleReloadSource(t, f, source)
 							}
-							before := scaleP21SW59SQL(t, f)
-							metadataPreimages = append(metadataPreimages, scaleP21SW209MetadataRows(t, f, workspace))
+							before := discussionWriteSql(t, f)
+							metadataPreimages = append(metadataPreimages, metadataRows(t, f, workspace))
 							if len(metadataPreimages) == 2 && !reflect.DeepEqual(metadataPreimages[0], metadataPreimages[1]) {
-								t.Fatal("literal and bounded ticker legs began with different canonical metadata", scaleP21M2Diff(metadataPreimages[0], metadataPreimages[1]))
+								t.Fatal("literal and bounded ticker legs began with different canonical metadata", policyFirstDifference(metadataPreimages[0], metadataPreimages[1]))
 							}
-							got := scaleP21SW59Outcome{}
+							got := discussionWriteOutcome{}
 							source.SetWebhookSink(func(_ string, event domain.DomainEvent) { got.Events = append(got.Events, event) })
 							captureRealtime := func(_ string, event domain.RealtimeEvent) {
 								raw, err := json.Marshal(event)
@@ -547,9 +547,9 @@ func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
 							if source.MetadataWorkUsedForTesting() != 0 {
 								t.Fatal("ticker leaked operation ownership", source.MetadataWorkUsedForTesting())
 							}
-							got.Rows = scaleP21SW59SQL(t, f)
-							native := scaleP21SW209Native(t, source, workspace)
-							projectSpools = append(projectSpools, scaleP21SW209ProjectSpools(t, source, workspace))
+							got.Rows = discussionWriteSql(t, f)
+							native := advancedScheduleNative(t, source, workspace)
+							projectSpools = append(projectSpools, advancedScheduleProjectSpools(t, source, workspace))
 							if combinedGate {
 								projectID := prefix + "project"
 								if test.name == "duplicate-large-inline" {
@@ -572,14 +572,14 @@ func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
 									t.Fatal("combined duplicate gate has wrong literal body lengths")
 								}
 							}
-							metadata := scaleP21SW209MetadataRows(t, f, workspace)
-							headers := scaleP21SW209Headers(native)
-							got.Response, err = json.Marshal(map[string]any{"metadata": metadata, "metadataRoot": scaleP21SW209MetadataRoot(t, f, workspace), "projects": headers.Projects,
+							metadata := metadataRows(t, f, workspace)
+							headers := advancedScheduleHeaders(native)
+							got.Response, err = json.Marshal(map[string]any{"metadata": metadata, "metadataRoot": metadataRoot(t, f, workspace), "projects": headers.Projects,
 								"projectUpdates": headers.ProjectUpdates, "trash": native.Trash, "issueSlas": native.IssueSLAs, "slaEvents": native.SLAEvents})
 							if err != nil {
 								t.Fatal(err)
 							}
-							value := scaleP21SW59Normalized(t, got, before, started, finished)
+							value := discussionWriteNormalized(t, got, before, started, finished)
 							ids := map[string]string{}
 							for index, event := range native.SLAEvents {
 								ids[event.ID] = fmt.Sprintf("<sla-event:%d>", index)
@@ -626,13 +626,13 @@ func scaleP21SW209Ticker(t *testing.T, reloads []bool, scenarios ...string) {
 								source.BoundedMetadataEnabled(), statements, writes, peak, bodyBytes)
 						}
 						for _, field := range []string{"projects", "projectUpdates"} {
-							scaleP21SW209ExactSpools(t, field, projectSpools[0][field], projectSpools[1][field])
+							exactSpools(t, field, projectSpools[0][field], projectSpools[1][field])
 						}
 						if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 							if !reflect.DeepEqual(metadataPreimages[0], metadataPreimages[1]) {
-								t.Log("metadata fixture preimages differ", scaleP21M2Diff(metadataPreimages[0], metadataPreimages[1]))
+								t.Log("metadata fixture preimages differ", policyFirstDifference(metadataPreimages[0], metadataPreimages[1]))
 							}
-							t.Fatal("advanced ticker changed exact SQL/native/publication output", test.name, reload, principal.name, bodyBytes, scaleP21M2Diff(outcomes[0], outcomes[1]))
+							t.Fatal("advanced ticker changed exact SQL/native/publication output", test.name, reload, principal.name, bodyBytes, policyFirstDifference(outcomes[0], outcomes[1]))
 						}
 					})
 				}

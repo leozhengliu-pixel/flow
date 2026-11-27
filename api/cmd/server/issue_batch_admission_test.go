@@ -13,27 +13,27 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW184ThousandIssueBatchDifferential(t *testing.T) {
+func TestThousandIssueBatchDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21IssueBatchBulk(t, f, 1000)
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f := scaleIssueUpdateSetup(t)
+	ids := scaleIssueBatchBulk(t, f, 1000)
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "1000-description-growth", user: f.data.Viewer, ids: ids, update: map[string]any{"description": strings.Repeat("description <>& ", 128)}, code: http.StatusOK},
-		{name: "1000-one-archived-rolls-back", setup: scaleP21IssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
+		{name: "1000-one-archived-rolls-back", setup: scaleIssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
 		{name: "1000-cancelled", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, stop: true, code: http.StatusRequestTimeout},
 	})
 }
 
-func TestScaleP21SW184IssueBatchCancelledSQL(t *testing.T) {
+func TestIssueBatchCancelledSQL(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	ids := []string{f.triage.ID, f.visible.ID}
 	f.editBaseline = pinIssueFixtureAges(false, ids...)
-	var before scaleP21IssueUpdateState
+	var before scaleIssueUpdateState
 	outcomes := f.differential(t, "cancelled SQL argument batch", func(service *server) *httptest.ResponseRecorder {
 		if !service.store.BoundedMetadataEnabled() {
 			before = f.state(t)

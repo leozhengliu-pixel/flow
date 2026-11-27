@@ -9,11 +9,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW602: every way a bounded store creates a workspace leaves it served: its
+// Every way a bounded store creates a workspace leaves it served: its
 // installed logical source and resident policy image are in place before the
 // creation returns, a peer store sharing the database installs it on its
 // reload, and a flag-on restart's coverage check accepts it.
-func TestScaleP21SW602CreatedWorkspaceIsInstalled(t *testing.T) {
+func TestCreatedWorkspaceIsInstalled(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -48,7 +48,7 @@ func TestScaleP21SW602CreatedWorkspaceIsInstalled(t *testing.T) {
 	if _, err := repo.CreateWorkspace(actor, "SW602 legacy", "sw602-legacy", "us"); err != nil {
 		t.Fatal(err)
 	}
-	if err := scaleP21SW557CompleteCatalog(ctx, repo); err != nil {
+	if err := completeCatalog(ctx, repo); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Close(); err != nil {

@@ -14,15 +14,15 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21WebhookJSONRoutingDifferential(t *testing.T) {
+func TestScaleWebhookJSONRoutingDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("webhook-json-route-")
 	allowed, hidden := prefix+"allowed", prefix+"hidden"
 	hooks := []domain.Webhook{

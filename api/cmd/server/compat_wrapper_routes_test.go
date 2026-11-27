@@ -17,11 +17,11 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW274InWrapper reports whether the calling goroutine is inside one
+// compatWrapperRoutesInWrapper reports whether the calling goroutine is inside one
 // of the compatibility wrappers or the literal permission lookup. The SQL
 // observer runs on the goroutine that issues the statement, so any statement a
 // wrapper causes is attributed to it.
-func scaleP21SW274InWrapper() bool {
+func compatWrapperRoutesInWrapper() bool {
 	pcs := make([]uintptr, 256)
 	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
 	for {
@@ -37,13 +37,13 @@ func scaleP21SW274InWrapper() bool {
 	}
 }
 
-type scaleP21SW274Outcome struct {
+type compatWrapperRoutesOutcome struct {
 	Code   int
 	Header http.Header
 	Body   []byte
 }
 
-func scaleP21SW274Serve(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, method, path string, development bool, prepare func(*http.Request) *http.Request) scaleP21SW274Outcome {
+func compatWrapperRoutesServe(t *testing.T, f policyDifferentialFixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, method, path string, development bool, prepare func(*http.Request) *http.Request) compatWrapperRoutesOutcome {
 	t.Helper()
 	var request *http.Request
 	if key == nil && !development {
@@ -57,7 +57,7 @@ func scaleP21SW274Serve(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteS
 	inWrapper, statements := 0, 0
 	request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(string) {
 		statements++
-		if scaleP21SW274InWrapper() {
+		if compatWrapperRoutesInWrapper() {
 			inWrapper++
 		}
 	}))
@@ -95,21 +95,21 @@ func scaleP21SW274Serve(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteS
 			t.Fatalf("%s %s leaked retained work or decoded the complete workspace", method, path)
 		}
 	}
-	return scaleP21SW274Outcome{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}
+	return compatWrapperRoutesOutcome{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}
 }
 
-// TestScaleP21SW274IssuePermissionListHeadAndGetDifferential drives the HOT
+// TestIssuePermissionListHeadAndGetDifferential drives the HOT
 // permission list routes, GET and the HEAD their GET patterns also serve,
 // through the real middleware for every principal and credential. The literal
 // flag-off answer, the bounded answer and the bounded HEAD answer must agree
 // byte for byte, and with the flag on no statement may run inside
 // workspaceData or findIssueForPermissions (before this change a bounded HEAD
 // hydrated the workspace through them).
-func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
+func TestIssuePermissionListHeadAndGetDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		metadata, ok := repo.WorkspaceMetadata(workspace)
 		if !ok {
@@ -178,10 +178,10 @@ func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
 				for _, ref := range refs {
 					t.Run(prefix+ref.name, func(t *testing.T) {
 						path := prefix + ref.ref + "/permissions"
-						get := scaleP21SW274Serve(t, f, repo, user, key, sessions[user.ID], http.MethodGet, path, false, nil)
+						get := compatWrapperRoutesServe(t, f, repo, user, key, sessions[user.ID], http.MethodGet, path, false, nil)
 						for _, method := range []string{http.MethodGet, http.MethodHead} {
-							old := scaleP21SW274Serve(t, f, repo, user, key, sessions[user.ID], method, path, false, nil)
-							bounded := scaleP21SW274Serve(t, f, f.probe, user, key, sessions[user.ID], method, path, false, nil)
+							old := compatWrapperRoutesServe(t, f, repo, user, key, sessions[user.ID], method, path, false, nil)
+							bounded := compatWrapperRoutesServe(t, f, f.probe, user, key, sessions[user.ID], method, path, false, nil)
 							if !reflect.DeepEqual(old, bounded) {
 								t.Fatalf("%s differs: literal=%d %v %s bounded=%d %v %s", method, old.Code, old.Header, old.Body, bounded.Code, bounded.Header, bounded.Body)
 							}
@@ -209,10 +209,10 @@ func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
 		for _, ref := range refs {
 			t.Run("development/"+ref.name, func(t *testing.T) {
 				path := "/api/issues/" + ref.ref + "/permissions"
-				get := scaleP21SW274Serve(t, f, repo, f.data.Viewer, nil, "", http.MethodGet, path, true, nil)
+				get := compatWrapperRoutesServe(t, f, repo, f.data.Viewer, nil, "", http.MethodGet, path, true, nil)
 				for _, method := range []string{http.MethodGet, http.MethodHead} {
-					old := scaleP21SW274Serve(t, f, repo, f.data.Viewer, nil, "", method, path, true, nil)
-					bounded := scaleP21SW274Serve(t, f, f.probe, f.data.Viewer, nil, "", method, path, true, nil)
+					old := compatWrapperRoutesServe(t, f, repo, f.data.Viewer, nil, "", method, path, true, nil)
+					bounded := compatWrapperRoutesServe(t, f, f.probe, f.data.Viewer, nil, "", method, path, true, nil)
 					if !reflect.DeepEqual(old, bounded) || !reflect.DeepEqual(old, get) {
 						t.Fatalf("development %s differs: literal=%d %s bounded=%d %s get=%d %s", method, old.Code, old.Body, bounded.Code, bounded.Body, get.Code, get.Body)
 					}
@@ -229,7 +229,7 @@ func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
 		// A refused budget stays the same bounded refusal for HEAD as for GET.
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			t.Run("budget/"+method, func(t *testing.T) {
-				outcome := scaleP21SW274Serve(t, f, f.probe, f.data.Viewer, nil, "", method, "/api/issues/"+public.ID+"/permissions", true, func(r *http.Request) *http.Request {
+				outcome := compatWrapperRoutesServe(t, f, f.probe, f.data.Viewer, nil, "", method, "/api/issues/"+public.ID+"/permissions", true, func(r *http.Request) *http.Request {
 					return r.WithContext(context.WithValue(r.Context(), issueRequestAccessKey{}, issueRequestAccess{
 						workspace: workspace, userID: f.data.Viewer.ID, err: store.ErrMetadataWorkBudget,
 					}))
@@ -242,16 +242,16 @@ func TestScaleP21SW274IssuePermissionListHeadAndGetDifferential(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW274SnapshotReservationDifferential compares the bounded
+// TestSnapshotReservationDifferential compares the bounded
 // estimator branch with the store estimator it replaces: a bounded store's
 // estimate is the fixed maximum for every key, a literal store's estimate is
 // still the store's own measurement, and the storeless fallbacks are
 // unchanged for general bootstrap. The paged route uses its own gate.
-func TestScaleP21SW274SnapshotReservationDifferential(t *testing.T) {
+func TestSnapshotReservationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
 			for _, key := range []string{f.data.Workspace.URLKey, "", "sw274-missing"} {
 				request := httptest.NewRequest(http.MethodGet, "/api/bootstrap", nil)

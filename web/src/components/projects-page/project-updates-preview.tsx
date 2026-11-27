@@ -15,8 +15,8 @@ import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
-import { useScaleP19ProjectUpdates } from './scale-p19-project-updates'
-import { ScaleP19ProjectPager } from './scale-p19-project-pager'
+import { useProjectUpdateWindow } from './use-project-update-window'
+import { ProjectWindowPager } from './project-window-pager'
 
 const HEALTHS: { id: Project['health']; label: string }[] = [{ id: 'onTrack', label: 'On track' }, { id: 'atRisk', label: 'At risk' }, { id: 'offTrack', label: 'Off track' }]
 
@@ -36,7 +36,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
   viewer?: User
 }) {
   const { t } = useI18n()
-  const window = useScaleP19ProjectUpdates(project.id, legacyUpdates)
+  const window = useProjectUpdateWindow(project.id, legacyUpdates)
   const updates = window.items
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -121,7 +121,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
         {mode === 'list' && !window.loading && !window.error && updates.length === 0 && <ProjectUpdatesEmptyState onCreate={beginCreate}/>}
         {mode === 'list' && updates.map((update, index) => <ProjectUpdateArticle active={activeIndex === index} dataIndex={index} key={update.id} menuRef={menuRef} onComment={onComment ? async (...args) => { const result = await onComment(...args); await window.reload(); return result } : undefined} onDelete={() => setDeleteTarget(update)} onEdit={() => beginEdit(update)} onReact={onReact ? async (...args) => { const result = await onReact(...args); await window.reload(); return result } : undefined} project={project} reactionRef={reactionRef} update={update} viewer={viewer}/>)}
       </div>
-      {window.enabled && <ScaleP19ProjectPager label="Project updates" page={window.page} loading={window.loading} onPage={index => { setActiveIndex(0); void window.onPage(index) }}/ >}
+      {window.enabled && <ProjectWindowPager label="Project updates" page={window.page} loading={window.loading} onPage={index => { setActiveIndex(0); void window.onPage(index) }}/ >}
       <footer className="lp-project-updates-preview__hint"><kbd>Shift</kbd><kbd>↑</kbd><span>or</span><kbd>↓</kbd><span>to navigate</span></footer>
     </div>
     <Dialog.Root open={Boolean(deleteTarget)} onOpenChange={open => { if (!open && !deleting) setDeleteTarget(undefined) }}>

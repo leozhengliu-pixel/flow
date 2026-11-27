@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-type scaleP21SW349RootFixture struct {
+type rootFixture struct {
 	store, foreign            *SQLiteStore
 	tx                        *sqlTx
 	root                      *metadataInlineRoot
@@ -24,9 +24,9 @@ type scaleP21SW349RootFixture struct {
 	work                      int
 }
 
-func scaleP21SW349Root(t *testing.T, event string) *scaleP21SW349RootFixture {
+func integrationRootReuseRoot(t *testing.T, event string) *rootFixture {
 	t.Helper()
-	body := strings.TrimSuffix(strings.TrimPrefix(scaleP21SW339Root(t), "{"), "}")
+	body := strings.TrimSuffix(strings.TrimPrefix(inlineRootPagesRoot(t), "{"), "}")
 	body = strings.Replace(body, `"settings":{"opaque":`,
 		`"settings" : { "duplicate" : 1, "duplicate":2, "raw" : { "html" : "<>&", "nul" : "\u0000" }, "opaque" : `, 1)
 	body = strings.Replace(body, `"viewerRole":"final"`, `"\u0076iewerRole" : "final"`, 1)
@@ -35,15 +35,15 @@ func scaleP21SW349Root(t *testing.T, event string) *scaleP21SW349RootFixture {
 	if !json.Valid([]byte(raw)) || len(raw) <= 2*MetadataRecordPageMaxBytes {
 		t.Fatal("root reuse fixture lost its large, whitespace/duplicate JSON shape")
 	}
-	base, view := scaleP21SW229Fixture(t, raw)
+	base, view := inlineRootSpoolFixture(t, raw)
 	t.Cleanup(view.releaseMetadataLogicalSources)
-	f := &scaleP21SW349RootFixture{
+	f := &rootFixture{
 		store: view, foreign: base.SQLiteStore, raw: raw, workspace: base.data.Workspace.URLKey,
 		disk: metadataLogicalDiskUsed.Load(), descriptors: metadataLogicalDescriptorsUsed.Load(),
 		spools: recordSpoolBytes.Load(), work: view.MetadataWorkUsedForTesting(),
 	}
 	f.ctx = WithSQLStatementObserver(withIntegrationDeliveryStream(t.Context(), event), func(query string) {
-		if scaleP21SW229RootQuery(query) {
+		if inlineRootSpoolRootQuery(query) {
 			f.queries++
 		}
 	})
@@ -70,7 +70,7 @@ func scaleP21SW349Root(t *testing.T, event string) *scaleP21SW349RootFixture {
 	return f
 }
 
-func (f *scaleP21SW349RootFixture) assertReleased(t *testing.T) {
+func (f *rootFixture) assertReleased(t *testing.T) {
 	t.Helper()
 	path := f.root.spool.file.Name()
 	f.root.Close()
@@ -82,22 +82,22 @@ func (f *scaleP21SW349RootFixture) assertReleased(t *testing.T) {
 	}
 }
 
-type scaleP21SW349ReaderAt struct {
+type integrationRootReuseReaderAt struct {
 	input io.ReaderAt
 	reads int
 }
 
-func (r *scaleP21SW349ReaderAt) ReadAt(output []byte, offset int64) (int, error) {
+func (r *integrationRootReuseReaderAt) ReadAt(output []byte, offset int64) (int, error) {
 	r.reads++
 	return r.input.ReadAt(output, offset)
 }
 
-func TestScaleP21SW349IntegrationRootFieldMapMatchesOriginal(t *testing.T) {
+func TestIntegrationRootFieldMapMatchesOriginal(t *testing.T) {
 	for _, event := range []string{"integration_delivery.claimed", "integration_delivery.retry"} {
 		t.Run(event, func(t *testing.T) {
-			f := scaleP21SW349Root(t, event)
+			f := integrationRootReuseRoot(t, event)
 			captured, held := f.queries, f.store.MetadataWorkUsedForTesting()
-			reader := &scaleP21SW349ReaderAt{input: f.root.source.source}
+			reader := &integrationRootReuseReaderAt{input: f.root.source.source}
 			f.root.source.source = reader
 			owner := &ResourceRead{store: f.store}
 			defer owner.Close()
@@ -154,14 +154,14 @@ func TestScaleP21SW349IntegrationRootFieldMapMatchesOriginal(t *testing.T) {
 			if f.store.MetadataWorkUsedForTesting() != held {
 				t.Fatal("closing map owners retained work or consumed the captured root")
 			}
-			scaleP21SW229AssertRootBytes(t, f.root, f.raw)
+			assertRootBytes(t, f.root, f.raw)
 			f.assertReleased(t)
 		})
 	}
 }
 
-func TestScaleP21SW349IntegrationRootFieldMapGuards(t *testing.T) {
-	f := scaleP21SW349Root(t, "integration_delivery.claimed")
+func TestIntegrationRootFieldMapGuards(t *testing.T) {
+	f := integrationRootReuseRoot(t, "integration_delivery.claimed")
 	captured := f.queries
 	for _, mode := range []string{"nil-owner", "nil-store-owner", "foreign-owner", "closed-owner", "canceled", "work-denied"} {
 		t.Run(mode, func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestScaleP21SW349IntegrationRootFieldMapGuards(t *testing.T) {
 				f.store.MetadataWorkUsedForTesting() != before {
 				t.Fatal("invalid field-map owner/context was admitted or reached SQL", mode, err, want)
 			}
-			scaleP21SW229AssertRootBytes(t, f.root, f.raw)
+			assertRootBytes(t, f.root, f.raw)
 		})
 	}
 	owner := &ResourceRead{store: f.store}
@@ -211,8 +211,8 @@ func TestScaleP21SW349IntegrationRootFieldMapGuards(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW349IntegrationRootBorrowAndRootShapesReuse(t *testing.T) {
-	f := scaleP21SW349Root(t, "integration_delivery.claimed")
+func TestIntegrationRootBorrowAndRootShapesReuse(t *testing.T) {
+	f := integrationRootReuseRoot(t, "integration_delivery.claimed")
 	captured, held := f.queries, f.store.MetadataWorkUsedForTesting()
 	ctx := withMetadataInlineRootCapture(f.ctx, f.root)
 	borrowed, err := f.store.scanMetadataInlineRoot(ctx, f.tx, f.workspace, int64(len(f.raw)))
@@ -223,13 +223,13 @@ func TestScaleP21SW349IntegrationRootBorrowAndRootShapesReuse(t *testing.T) {
 	if borrowed == f.root || borrowed.spool != nil || !reflect.DeepEqual(borrowed.fields, f.root.fields) {
 		t.Fatal("borrowed root did not preserve parent ranges with its own reader")
 	}
-	scaleP21SW229AssertRootBytes(t, borrowed, f.raw)
+	assertRootBytes(t, borrowed, f.raw)
 	borrowed.Close()
 	borrowed.Close()
 	if f.queries != captured || f.store.MetadataWorkUsedForTesting() != held {
 		t.Fatal("borrow reread SQL, retained its allowance or released parent work")
 	}
-	scaleP21SW229AssertRootBytes(t, f.root, f.raw)
+	assertRootBytes(t, f.root, f.raw)
 
 	plan := &legacyMetadataWritePlan{
 		store: f.store, tx: f.tx, workspace: f.workspace, work: &ResourceRead{store: f.store},
@@ -254,12 +254,12 @@ func TestScaleP21SW349IntegrationRootBorrowAndRootShapesReuse(t *testing.T) {
 	if f.store.MetadataWorkUsedForTesting() != held {
 		t.Fatal("rootShapes retained a borrowed reader or plan allowance")
 	}
-	scaleP21SW229AssertRootBytes(t, f.root, f.raw)
+	assertRootBytes(t, f.root, f.raw)
 	f.assertReleased(t)
 }
 
-func TestScaleP21SW349IntegrationRootCaptureRefusals(t *testing.T) {
-	f := scaleP21SW349Root(t, "integration_delivery.retry")
+func TestIntegrationRootCaptureRefusals(t *testing.T) {
+	f := integrationRootReuseRoot(t, "integration_delivery.retry")
 	captured, held := f.queries, f.store.MetadataWorkUsedForTesting()
 	ctx := withMetadataInlineRootCapture(f.ctx, f.root)
 	rejectShapes := func(t *testing.T, ctx context.Context, work int) {
@@ -334,7 +334,7 @@ func TestScaleP21SW349IntegrationRootCaptureRefusals(t *testing.T) {
 		}
 		t.Fatal("canceled capture reuse was admitted or reached SQL", err)
 	}
-	scaleP21SW229AssertRootBytes(t, f.root, f.raw)
+	assertRootBytes(t, f.root, f.raw)
 	f.assertReleased(t)
 	rejectShapes(t, ctx, f.work)
 	if root, err := f.store.scanMetadataInlineRoot(ctx, f.tx, f.workspace, int64(len(f.raw))); root != nil ||

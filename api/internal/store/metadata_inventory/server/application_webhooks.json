@@ -5,7 +5,7 @@
     "applicationWebhookDataScoped": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode retains workspaceData exactly. Bounded mode resolves live access, selects oauthApplications/pathID or identity only for credentials without admin, validates access after the read and retains original API-key projection and auth-disabled bypass. TestScaleP21SW22ApplicationWebhookDifferential compares the full principal/key matrix, malformed/name/missing references, hidden oversized provider concealment, cross-workspace/revocation, owned output, cancellation/recovery and unchanged canonical application/hook bytes with zero full decodes.",
+      "reason": "Off mode retains workspaceData exactly. Bounded mode resolves live access, selects oauthApplications/pathID or identity only for credentials without admin, validates access after the read and retains original API-key projection and auth-disabled bypass. TestApplicationWebhookDifferential compares the full principal/key matrix, malformed/name/missing references, hidden oversized provider concealment, cross-workspace/revocation, owned output, cancellation/recovery and unchanged canonical application/hook bytes with zero full decodes.",
       "accessors": [
         "workspaceData",
         "WorkspaceMetadataScoped"
@@ -14,7 +14,7 @@
     "applicationWebhookSettings": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode retains the original per-workspace webhook accessor. Bounded mode counts distinct matching catalog workspaces with scalar managedBy/clientID predicates in fixed50-key SQL groups and an8MiB work reservation; duplicate, disabled and empty-client behavior is retained without body reads. TestScaleP21SW22ApplicationWebhookCount and ApplicationWebhookDifferential compare exact case and catalog semantics, >50 and oversized hooks, null/empty resource types, cancellation/recovery, unchanged canonical state and zero full decodes.",
+      "reason": "Off mode retains the original per-workspace webhook accessor. Bounded mode counts distinct matching catalog workspaces with scalar managedBy/clientID predicates in fixed50-key SQL groups and an8MiB work reservation; duplicate, disabled and empty-client behavior is retained without body reads. TestApplicationWebhookCount and ApplicationWebhookDifferential compare exact case and catalog semantics, >50 and oversized hooks, null/empty resource types, cancellation/recovery, unchanged canonical state and zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -22,7 +22,7 @@
     "dispatchAppAssignmentNotifications": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original issue/previous-assignee/delegate gates and off WorkspaceMetadataFields accessor remain unchanged. Bounded hook headers use BeginApplicationWebhookSweepRead with exact application-managed/Enabled/app_user_notifications eligibility, retaining AuditLog and empty URL, plus a proven applicationOutputContext owner around the unchanged ListApplications boundary. First active user installation/client match, field/change/hook order, independent issue/comment lookups and queue helper remain exact. TestScaleP21ApplicationWebhookSweepQueueDifferential invokes the actual function twice per warm/reloaded off/on mode, comparing five complete queued rows/payloads including assignment/delegate actions, audit/empty URL hooks and team rejection with zero full decodes/retained work. The shared Tier A reader passes persistent SQLite twice and race.",
+      "reason": "Original issue/previous-assignee/delegate gates and off WorkspaceMetadataFields accessor remain unchanged. Bounded hook headers use BeginApplicationWebhookSweepRead with exact application-managed/Enabled/app_user_notifications eligibility, retaining AuditLog and empty URL, plus a proven applicationOutputContext owner around the unchanged ListApplications boundary. First active user installation/client match, field/change/hook order, independent issue/comment lookups and queue helper remain exact. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual function twice per warm/reloaded off/on mode, comparing five complete queued rows/payloads including assignment/delegate actions, audit/empty URL hooks and team rejection with zero full decodes/retained work. The shared Tier A reader passes persistent SQLite twice and race.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -35,7 +35,7 @@
     "getApplicationWebhook": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Selects only the live credential-projected oauthApplications/pathID through applicationWebhookDataScoped, followed by scalar applicationWebhookSettings installation counts. Independent admin-route authorization remains unchanged. TestScaleP21SW22ApplicationWebhookDifferential compares full principal/key matrix, missing/name/malformed IDs, auth-disabled behavior, non-admin-key concealment of oversized targets, cross-workspace/queued/replay revocation, ownership, cancellation, canonical rows and no publication.",
+      "reason": "Selects only the live credential-projected oauthApplications/pathID through applicationWebhookDataScoped, followed by scalar applicationWebhookSettings installation counts. Independent admin-route authorization remains unchanged. TestApplicationWebhookDifferential compares full principal/key matrix, missing/name/malformed IDs, auth-disabled behavior, non-admin-key concealment of oversized targets, cross-workspace/queued/replay revocation, ownership, cancellation, canonical rows and no publication.",
       "accessors": [
         "workspaceData"
       ]
@@ -53,7 +53,7 @@
         "processDueDeliveries -> reconcileAllApplicationWebhooks -> applicationWebhookClients",
         "dispatchWebhookEvent -> reconcileApplicationWebhooks -> applicationWebhookClients"
       ],
-      "reason": "Off mode retains the literal per-workspace WorkspaceMetadataFields(oauthApplications) index. Bounded, applicationWebhookClients takes BeginApplicationWebhookClientsRead: WorkspaceKeys order, each installed oauthApplications collection in order through the reviewed WebhookDeliveryRead owner, projecting only ID/ClientID/Name/WebhookEnabled/WebhookURL/WebhookResourceTypes (the fields the reconcile reads), so a client ID in several workspaces (or twice in one) maps to the last exactly as before; the owned index is held until the reconcile batch ends and a refused admission skips the reconcile instead of hydrating. TestScaleP21SW295ApplicationWebhookClients compares legacy, warm and SQL-reloaded indexes (missing, duplicate, multi-workspace and secret/description-bearing apps) with zero retained work; TestScaleP21SW295ApplicationWebhookReconcileDifferential runs it under every reconcile."
+      "reason": "Off mode retains the literal per-workspace WorkspaceMetadataFields(oauthApplications) index. Bounded, applicationWebhookClients takes BeginApplicationWebhookClientsRead: WorkspaceKeys order, each installed oauthApplications collection in order through the reviewed WebhookDeliveryRead owner, projecting only ID/ClientID/Name/WebhookEnabled/WebhookURL/WebhookResourceTypes (the fields the reconcile reads), so a client ID in several workspaces (or twice in one) maps to the last exactly as before; the owned index is held until the reconcile batch ends and a refused admission skips the reconcile instead of hydrating. TestApplicationWebhookClients compares legacy, warm and SQL-reloaded indexes (missing, duplicate, multi-workspace and secret/description-bearing apps) with zero retained work; TestApplicationWebhookReconcileDifferential runs it under every reconcile."
     },
     "reconcileApplicationWebhooksWith": {
       "owner": "P21",
@@ -71,12 +71,12 @@
         "server/application_uninstall.go -> reconcileApplicationWebhooks",
         "server/settings_features.go -> reconcileApplicationWebhooks"
       ],
-      "reason": "Off mode retains WorkspaceMetadataFields and the literal MutateWorkspace(webhooks) callback (now a named variable, unchanged). Bounded, BeginApplicationWebhookReconcileRead (reviewed WebhookDeliveryRead owner) hands exactly what the reconcile reads: workspace ID, every ManagedBy=application hook whole in order, live grants (RevokedAt nil, non-empty client) as ordered client/user headers (first installer per client unchanged) and the IDs of non-private, non-archived, non-retired teams in order; ListApplications runs under the reviewed applicationOutputContext owner; the unchanged callback writes through MutateWorkspaceScoped with the complete webhooks field and the same WithMetadataFields context, event, aggregate and payload. Revocation/permission deliveries and cancellation are unchanged. A refused read logs and skips. TestScaleP21SW295ApplicationWebhookReconcileDifferential compares legacy, warm and SQL-reloaded results for one workspace, 24 applications, reconcile-all, unchanged, nothing installed, seven lifecycle events through dispatchWebhookEvent and concurrent reconciles with an install: every metadata row (new hooks' map-order positions normalized), queued deliveries, departures, events, webhooks/realtime publications, installed delta and reload, the bounded image equal to a reload, zero full decodes and released work; Tier A persistent SQLite x2 and race."
+      "reason": "Off mode retains WorkspaceMetadataFields and the literal MutateWorkspace(webhooks) callback (now a named variable, unchanged). Bounded, BeginApplicationWebhookReconcileRead (reviewed WebhookDeliveryRead owner) hands exactly what the reconcile reads: workspace ID, every ManagedBy=application hook whole in order, live grants (RevokedAt nil, non-empty client) as ordered client/user headers (first installer per client unchanged) and the IDs of non-private, non-archived, non-retired teams in order; ListApplications runs under the reviewed applicationOutputContext owner; the unchanged callback writes through MutateWorkspaceScoped with the complete webhooks field and the same WithMetadataFields context, event, aggregate and payload. Revocation/permission deliveries and cancellation are unchanged. A refused read logs and skips. TestApplicationWebhookReconcileDifferential compares legacy, warm and SQL-reloaded results for one workspace, 24 applications, reconcile-all, unchanged, nothing installed, seven lifecycle events through dispatchWebhookEvent and concurrent reconciles with an install: every metadata row (new hooks' map-order positions normalized), queued deliveries, departures, events, webhooks/realtime publications, installed delta and reload, the bounded image equal to a reload, zero full decodes and released work; Tier A persistent SQLite x2 and race."
     },
     "rotateApplicationWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Retains original accessors pending aggregate compatibility: its storeApplicationWebhookSecret writer can resolve an earlier Document.ContentData value with the application ID; a scoped application-only writer publishes a different realtime/webhook entity. SW22 reproduced the mismatch in sw22-collision.log and reverted the attempted migration.",
+      "reason": "Retains original accessors pending aggregate compatibility: its storeApplicationWebhookSecret writer can resolve an earlier Document.ContentData value with the application ID; a scoped application-only writer publishes a different realtime/webhook entity. visibility-key reproduced the mismatch in sw22-collision.log and reverted the attempted migration.",
       "accessors": [
         "workspaceData"
       ],
@@ -89,7 +89,7 @@
     "storeApplicationWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Retains original writer pending bounded aggregate compatibility: Document.ContentData with id=app.ID can precede OAuthApplications in legacy aggregate lookup. SW22 verified that a target-only scoped writer changes Snapshot/realtime entity despite identical canonical application state; failed fixture and log are retained under the task scratch directory.",
+      "reason": "Retains original writer pending bounded aggregate compatibility: Document.ContentData with id=app.ID can precede OAuthApplications in legacy aggregate lookup. visibility-key verified that a target-only scoped writer changes Snapshot/realtime entity despite identical canonical application state; failed fixture and log are retained under the task scratch directory.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -105,7 +105,7 @@
     "sweepAppUserNotifications": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded hook headers preserve exact application-managed/Enabled/app_user_notifications eligibility, including AuditLog and empty URL. The unchanged ListApplications boundary is retained through a proven application output owner; active client selection, notifications page/age/category/action behavior, independent issue/comment lookups and queue helper remain exact. The original WorkspaceMetadataFields accessor remains off mode. TestScaleP21ApplicationWebhookSweepQueueDifferential invokes the actual sweep twice per warm/reloaded off/on mode and compares thirteen complete queue rows/envelopes for recent/boundary/future/stale categories, missing issue/comment behavior, audit/empty URL hooks and team filters, with zero full decodes/retained work. Shared reader Tier A persistent SQLite twice and race pass.",
+      "reason": "Bounded hook headers preserve exact application-managed/Enabled/app_user_notifications eligibility, including AuditLog and empty URL. The unchanged ListApplications boundary is retained through a proven application output owner; active client selection, notifications page/age/category/action behavior, independent issue/comment lookups and queue helper remain exact. The original WorkspaceMetadataFields accessor remains off mode. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual sweep twice per warm/reloaded off/on mode and compares thirteen complete queue rows/envelopes for recent/boundary/future/stale categories, missing issue/comment behavior, audit/empty URL hooks and team filters, with zero full decodes/retained work. Shared reader Tier A persistent SQLite twice and race pass.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -119,7 +119,7 @@
     "sweepIssueSLAWebhooks": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Uses separate owned hook and SLA-event reads at the two original lookup boundaries; off mode retains both literal WorkspaceMetadataFields accessors. Hook !AuditLog/Enabled/issue_sla and selected-team rules, last-wins SLA index, original event then highRisk order, age/time/window-cap comparisons, missing SLA zero values and independent IssueRecord calls remain exact. TestScaleP21ApplicationWebhookSweepQueueDifferential compares nine complete actual queued rows/payloads in warm/reloaded off/on modes with repeated idempotent calls and zero full decodes/retained work. Tier A native/header tests pass persistent SQLite twice and race, including duplicate/empty SLA IDs, custom-zone times, old pinned parent versus fresh second generation, cancellation/quota/concurrency and stable body10x admission.",
+      "reason": "Uses separate owned hook and SLA-event reads at the two original lookup boundaries; off mode retains both literal WorkspaceMetadataFields accessors. Hook !AuditLog/Enabled/issue_sla and selected-team rules, last-wins SLA index, original event then highRisk order, age/time/window-cap comparisons, missing SLA zero values and independent IssueRecord calls remain exact. TestScaleApplicationWebhookSweepQueueDifferential compares nine complete actual queued rows/payloads in warm/reloaded off/on modes with repeated idempotent calls and zero full decodes/retained work. Tier A native/header tests pass persistent SQLite twice and race, including duplicate/empty SLA IDs, custom-zone times, old pinned parent versus fresh second generation, cancellation/quota/concurrency and stable body10x admission.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

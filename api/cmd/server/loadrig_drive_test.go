@@ -759,7 +759,7 @@ func TestLoadRigDrive(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			// Spread the start over the first second.
-			if !scaleP01Pause(runCtx, time.Duration(vu.random.IntN(1000))*time.Millisecond) {
+			if !scalePause(runCtx, time.Duration(vu.random.IntN(1000))*time.Millisecond) {
 				return
 			}
 			for runCtx.Err() == nil {
@@ -779,7 +779,7 @@ func TestLoadRigDrive(t *testing.T) {
 					op = ops[1] // guests read an issue instead
 				}
 				op.run(ctx, d, vu)
-				if !scaleP01Pause(runCtx, time.Duration(float64(think)*(0.5+vu.random.Float64()))) {
+				if !scalePause(runCtx, time.Duration(float64(think)*(0.5+vu.random.Float64()))) {
 					return
 				}
 			}
@@ -838,7 +838,7 @@ func TestLoadRigDrive(t *testing.T) {
 			}
 		}
 	}()
-	if !scaleP01Pause(runCtx, warmup) {
+	if !scalePause(runCtx, warmup) {
 		t.Fatal("run canceled during warmup")
 	}
 	sample(true)
@@ -927,7 +927,7 @@ func (d *loadRigDriver) stream(ctx context.Context, client *http.Client, base st
 				d.streamFail.Add(1)
 			}
 		}
-		if !scaleP01Pause(ctx, time.Second) {
+		if !scalePause(ctx, time.Second) {
 			return
 		}
 	}
@@ -945,7 +945,7 @@ func (d *loadRigDriver) loopRun(ctx, window context.Context, vu *loadRigVU) {
 		return
 	}
 	for window.Err() == nil {
-		if !scaleP01Pause(window, time.Second) {
+		if !scalePause(window, time.Second) {
 			break
 		}
 		var current domain.LoopRun
@@ -1058,7 +1058,7 @@ func (d *loadRigDriver) report(label string, measured time.Duration, vus, stream
 		meta := loadRigRequests[name]
 		summary := loadRigSummarize([]*loadRigOpStats{stats}, seconds)
 		summary.Class, summary.Pattern = meta[0], meta[1]
-		summary.Temperature = scaleP21RouteTemperature[meta[1]]
+		summary.Temperature = scaleRouteTemperature[meta[1]]
 		if summary.Temperature == "" && strings.Contains(meta[1], " /") {
 			summary.Temperature = "cold (not in the route table)"
 		}

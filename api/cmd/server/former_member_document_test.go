@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW520Outcome struct {
+type formerMemberDocumentOutcome struct {
 	// The literal socketWorkspaceMetadata + collaborationDocument read, or
 	// its bounded form.
 	// ContentData is compared as its JSON (an empty map is "null": the
@@ -32,7 +32,7 @@ type scaleP21SW520Outcome struct {
 	Stored                  bool
 }
 
-// TestScaleP21SW520FormerMemberDocumentDifferential compares the standalone
+// TestFormerMemberDocumentDifferential compares the standalone
 // document branch of refuseFormerMemberCollaborationUpdate (legacy
 // socketWorkspaceMetadata versus the bounded single-document content read)
 // through the actual collaboration frame: the content it reads, the refusal,
@@ -41,15 +41,15 @@ type scaleP21SW520Outcome struct {
 // duplicate and conflicting collaboration IDs, hidden and missing documents,
 // mentions kept in content data, state or pending updates, and malformed
 // updates.
-func TestScaleP21SW520FormerMemberDocumentDifferential(t *testing.T) {
+func TestFormerMemberDocumentDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21M2Setup(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw520-")
-			_, former := scaleP03Join(t, f.scaleP03PlatformFixture, "sw520-former", prefix+"former@example.test", "member", f.public)
+			_, former := resourceAccessScaleJoin(t, f.scalePlatformFixture, "sw520-former", prefix+"former@example.test", "member", f.public)
 			plain, stateKept, clean := prefix+"plain", prefix+"state-kept", prefix+"clean"
 			generation, current := prefix+"generation", prefix+"current"
 			duplicate, collision := prefix+"duplicate-current", prefix+"collision"
@@ -150,19 +150,19 @@ func TestScaleP21SW520FormerMemberDocumentDifferential(t *testing.T) {
 				{"missing-document", prefix + "missing", owner, nil, false, mention},
 				{"large-content", large, member, nil, false, mention},
 			}
-			run := func(t *testing.T, selected *store.SQLiteStore, test row) scaleP21SW520Outcome {
+			run := func(t *testing.T, selected *store.SQLiteStore, test row) formerMemberDocumentOutcome {
 				t.Helper()
 				service := &server{store: selected, realtime: newRealtimeHub(), authDisabled: test.development}
 				request := f.literalRequest(test.user, test.key, nil)
 				request.Method, request.URL.Path = http.MethodGet, "/api/realtime/socket"
-				var result scaleP21SW520Outcome
+				var result formerMemberDocumentOutcome
 				if selected.BoundedMetadataEnabled() {
 					read, err := service.beginFormerMemberDocumentContent(request, workspace, test.ref)
 					if err != nil {
 						result.ReadError = err.Error()
 					} else {
 						result.ContentState = read.Document.ContentState
-						result.ContentData, result.ContentMentions = scaleP21SW520Content(t, read.Document.ContentData)
+						result.ContentData, result.ContentMentions = formerMemberDocumentContent(t, read.Document.ContentData)
 						read.Close()
 					}
 				} else {
@@ -172,7 +172,7 @@ func TestScaleP21SW520FormerMemberDocumentDifferential(t *testing.T) {
 						document, _, err = collaborationDocument(data, test.ref)
 						if err == nil {
 							result.ContentState = document.ContentState
-							result.ContentData, result.ContentMentions = scaleP21SW520Content(t, document.ContentData)
+							result.ContentData, result.ContentMentions = formerMemberDocumentContent(t, document.ContentData)
 						}
 					}
 					if err != nil {
@@ -230,7 +230,7 @@ func TestScaleP21SW520FormerMemberDocumentDifferential(t *testing.T) {
 						}
 						got := run(t, f.probe, test)
 						if !reflect.DeepEqual(want, got) {
-							t.Fatalf("%s former-member document changed:\n%s", mode, scaleP21M2Diff(want, got))
+							t.Fatalf("%s former-member document changed:\n%s", mode, policyFirstDifference(want, got))
 						}
 					}
 					if want.FrameError == errFormerMemberMention.Error() {
@@ -271,7 +271,7 @@ func TestScaleP21SW520FormerMemberDocumentDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW520Content(t *testing.T, content map[string]any) (string, []string) {
+func formerMemberDocumentContent(t *testing.T, content map[string]any) (string, []string) {
 	t.Helper()
 	mentions := []string{}
 	collectMentionIDs(content, &mentions)

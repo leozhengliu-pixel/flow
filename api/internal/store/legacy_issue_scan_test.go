@@ -15,27 +15,27 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW70Fixture struct {
-	scaleP09Fixture
+type legacyIssueScanFixture struct {
+	scaleFixture
 	view *SQLiteStore
 }
 
-func scaleP21SW70Setup(t *testing.T) scaleP21SW70Fixture {
+func legacyIssueScanSetup(t *testing.T) legacyIssueScanFixture {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(view.releaseMetadataLogicalSources)
 	f.db.SetMaxOpenConns(1)
-	return scaleP21SW70Fixture{scaleP09Fixture: f, view: view}
+	return legacyIssueScanFixture{scaleFixture: f, view: view}
 }
 
-func (f scaleP21SW70Fixture) begin(t *testing.T) *sqlTx {
+func (f legacyIssueScanFixture) begin(t *testing.T) *sqlTx {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -48,7 +48,7 @@ func (f scaleP21SW70Fixture) begin(t *testing.T) *sqlTx {
 	return tx
 }
 
-func (f scaleP21SW70Fixture) put(t *testing.T, tx *sqlTx, workspace string, physical any, order int64, raw []byte) {
+func (f legacyIssueScanFixture) put(t *testing.T, tx *sqlTx, workspace string, physical any, order int64, raw []byte) {
 	t.Helper()
 	identity := idgen.New("sw70-index-")
 	values, err := issueRecordValues(workspace, domain.Issue{ID: identity, Identifier: identity, Title: "SQL index title"})
@@ -64,7 +64,7 @@ func (f scaleP21SW70Fixture) put(t *testing.T, tx *sqlTx, workspace string, phys
 	}
 }
 
-func scaleP21SW70Usable(t *testing.T, tx *sqlTx) {
+func legacyIssueScanUsable(t *testing.T, tx *sqlTx) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
@@ -74,7 +74,7 @@ func scaleP21SW70Usable(t *testing.T, tx *sqlTx) {
 	}
 }
 
-func scaleP21SW70Cleared(t *testing.T, row *legacyIssueRow, raw []byte) {
+func legacyIssueScanCleared(t *testing.T, row *legacyIssueRow, raw []byte) {
 	t.Helper()
 	if row == nil {
 		return
@@ -89,7 +89,7 @@ func scaleP21SW70Cleared(t *testing.T, row *legacyIssueRow, raw []byte) {
 	}
 }
 
-func (f scaleP21SW70Fixture) compare(t *testing.T, tx *sqlTx, workspace string, count int) {
+func (f legacyIssueScanFixture) compare(t *testing.T, tx *sqlTx, workspace string, count int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
@@ -128,7 +128,7 @@ func (f scaleP21SW70Fixture) compare(t *testing.T, tx *sqlTx, workspace string, 
 		}
 	})
 	gotErr := f.view.scanLegacyIssueRows(scanCtx, tx, workspace, func(row *legacyIssueRow) error {
-		scaleP21SW70Cleared(t, previous, previousRaw)
+		legacyIssueScanCleared(t, previous, previousRaw)
 		if visited >= len(physical) {
 			t.Fatal("scanner invented an extra issue row")
 		}
@@ -142,7 +142,7 @@ func (f scaleP21SW70Fixture) compare(t *testing.T, tx *sqlTx, workspace string, 
 		if f.view.MetadataWorkUsedForTesting() == 0 {
 			t.Fatal("live callback issue has no admission")
 		}
-		scaleP21SW70Usable(t, tx)
+		legacyIssueScanUsable(t, tx)
 		previous, previousRaw = row, row.Record.raw
 		visited++
 		return nil
@@ -153,15 +153,15 @@ func (f scaleP21SW70Fixture) compare(t *testing.T, tx *sqlTx, workspace string, 
 	if (wantErr != nil) != (count < 0) || wantErr == nil && (visited != count || visited != len(want)) {
 		t.Fatal("fixture count or expected literal error differs", visited, count, len(want), wantErr)
 	}
-	scaleP21SW70Cleared(t, previous, previousRaw)
+	legacyIssueScanCleared(t, previous, previousRaw)
 	if writes != 0 || f.view.MetadataWorkUsedForTesting() != 0 || f.view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("legacy issue scan wrote SQL, retained row work or decoded workspace metadata", writes)
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 }
 
-func TestScaleP21SW70LegacyIssueScanLiteral(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueScanLiteral(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 14, 1, 2, 3, 400, time.FixedZone("stored", 5400))
 	complete := domain.Issue{ID: "semantic-complete", Title: "Complete <title>\x00\u51c6", Description: "Complete body", Version: 0,
@@ -229,8 +229,8 @@ func TestScaleP21SW70LegacyIssueScanLiteral(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW70LegacyIssueScanConstantWork(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueScanConstantWork(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	raw := []byte(`{"id":"semantic-constant","title":"Same width complete record","description":"Full description","reactions":{"like":["one","one"]}}`)
 	peaks := []int{}
@@ -254,7 +254,7 @@ func TestScaleP21SW70LegacyIssueScanConstantWork(t *testing.T) {
 			var previous *legacyIssueRow
 			var previousRaw []byte
 			err = f.view.scanLegacyIssueRows(ctx, tx, workspace, func(row *legacyIssueRow) error {
-				scaleP21SW70Cleared(t, previous, previousRaw)
+				legacyIssueScanCleared(t, previous, previousRaw)
 				used := f.view.MetadataWorkUsedForTesting()
 				if used <= baseline || row.Record.issue.ID != "semantic-constant" || !bytes.Equal(row.Record.raw, raw) {
 					t.Fatal("row borrowed caller allowance or changed complete payload", used, baseline)
@@ -270,13 +270,13 @@ func TestScaleP21SW70LegacyIssueScanConstantWork(t *testing.T) {
 			if queries == 0 || queries >= count/4 {
 				t.Fatal("small-row scan regressed to individual row queries", queries, count)
 			}
-			scaleP21SW70Cleared(t, previous, previousRaw)
+			legacyIssueScanCleared(t, previous, previousRaw)
 			peaks = append(peaks, peak)
 			release()
 			if f.view.MetadataWorkUsedForTesting() != 0 || f.view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("row-count growth leaked work or hydrated metadata")
 			}
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 			t.Logf("rows=%d peak_row_work=%d issue_queries=%d", count, peak, queries)
 		})
 	}
@@ -285,8 +285,8 @@ func TestScaleP21SW70LegacyIssueScanConstantWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueScanOutputLifetime(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	raw := []byte(`{"id":"semantic-owned","title":"Owned complete output","reactions":{"like":["actor"]}}`)
 	for _, callbackFailure := range []bool{false, true} {
@@ -346,7 +346,7 @@ func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
 			for index, release := range releases {
 				release()
 				release()
-				scaleP21SW70Cleared(t, owned[index], rawAliases[index])
+				legacyIssueScanCleared(t, owned[index], rawAliases[index])
 				if index+1 < len(owned) && (owned[index+1].Record.issue.ID != "semantic-owned" || f.view.MetadataWorkUsedForTesting() == 0) {
 					t.Fatal("closing one transferred row freed another")
 				}
@@ -354,7 +354,7 @@ func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
 			if f.view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("output completion retained row work")
 			}
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 	for _, registration := range []string{"absent", "nil", "rejected"} {
@@ -376,8 +376,8 @@ func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
 			if !errors.Is(err, ErrBoundedMetadataCoverage) || captured == nil || f.view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("missing/rejected output ownership escaped or leaked", registration, err)
 			}
-			scaleP21SW70Cleared(t, captured, rawAlias)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanCleared(t, captured, rawAlias)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 	heldOutputs := []int{}
@@ -413,14 +413,14 @@ func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
 				t.Fatal("small retained row changed during unmatched large-body scan", err)
 			}
 			defer release()
-			scaleP21SW70Cleared(t, discarded, discardedRaw)
+			legacyIssueScanCleared(t, discarded, discardedRaw)
 			heldOutputs = append(heldOutputs, f.view.MetadataWorkUsedForTesting())
 			release()
-			scaleP21SW70Cleared(t, output, outputRaw)
+			legacyIssueScanCleared(t, output, outputRaw)
 			if f.view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("retained small output leaked its allowance")
 			}
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 	if len(heldOutputs) != 2 || heldOutputs[0] == 0 || heldOutputs[0] != heldOutputs[1] {
@@ -428,8 +428,8 @@ func TestScaleP21SW70LegacyIssueScanOutputLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW70LegacyIssueScanFailureRelease(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueScanFailureRelease(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	raw := []byte(`{"id":"semantic-failure","description":"Complete selected body"}`)
 	for _, failure := range []string{"cancel-before", "cancel-in-callback", "callback-error", "quota"} {
@@ -472,8 +472,8 @@ func TestScaleP21SW70LegacyIssueScanFailureRelease(t *testing.T) {
 			if !errors.Is(err, want) || visited != expected || f.view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("failed scan changed its error, continued callbacks or retained work", failure, visited, err)
 			}
-			scaleP21SW70Cleared(t, previous, previousRaw)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueScanCleared(t, previous, previousRaw)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 	t.Run("closed-borrowed-transaction", func(t *testing.T) {

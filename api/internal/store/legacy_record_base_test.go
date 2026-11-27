@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW93Rows(t *testing.T, tx *sqlTx, workspace string) map[string][][]any {
+func legacyRecordBaseRows(t *testing.T, tx *sqlTx, workspace string) map[string][][]any {
 	t.Helper()
 	result := map[string][][]any{}
 	for _, table := range []string{"issue_records", "workspace_content_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents", "issue_identifier_aliases", "issue_permission_records", "issue_collection_counts", "issue_number_sequences"} {
@@ -60,7 +60,7 @@ func scaleP21SW93Rows(t *testing.T, tx *sqlTx, workspace string) map[string][][]
 	return result
 }
 
-func scaleP21SW93Counts(tx *sqlTx) map[string]map[issueStatsKey]int64 {
+func legacyRecordBaseCounts(tx *sqlTx) map[string]map[issueStatsKey]int64 {
 	result := map[string]map[issueStatsKey]int64{}
 	if tx.issueCounts == nil {
 		return result
@@ -74,7 +74,7 @@ func scaleP21SW93Counts(tx *sqlTx) map[string]map[issueStatsKey]int64 {
 	return result
 }
 
-func scaleP21SW93Remember(t *testing.T, base *legacyRecordBase, tx *sqlTx, workspace string) {
+func legacyRecordBaseRemember(t *testing.T, base *legacyRecordBase, tx *sqlTx, workspace string) {
 	t.Helper()
 	rows, err := tx.QueryContext(t.Context(), `SELECT id,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, workspace)
 	if err != nil {
@@ -122,7 +122,7 @@ func scaleP21SW93Remember(t *testing.T, base *legacyRecordBase, tx *sqlTx, works
 	}
 }
 
-func scaleP21SW93Data(f scaleP09Fixture, prefix string, repetitions int) domain.Bootstrap {
+func legacyRecordBaseData(f scaleFixture, prefix string, repetitions int) domain.Bootstrap {
 	at := time.Date(2026, 11, 15, 1, 2, 3, 456, time.UTC)
 	data := cloneBootstrap(collectionMetadata(f.data))
 	issue := domain.Issue{ID: prefix + "issue", Identifier: prefix + "ISSUE", Number: 1, Title: "Target issue", Team: data.Teams[0], Creator: data.Viewer, CreatedAt: at, UpdatedAt: at, SubscriberIDs: []string{data.Viewer.ID}, State: data.States[0]}
@@ -137,7 +137,7 @@ func scaleP21SW93Data(f scaleP09Fixture, prefix string, repetitions int) domain.
 	return data
 }
 
-func scaleP21SW93Begin(t *testing.T, f scaleP09Fixture, data domain.Bootstrap) (*sqlTx, context.Context) {
+func legacyRecordBaseBegin(t *testing.T, f scaleFixture, data domain.Bootstrap) (*sqlTx, context.Context) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), f.recordTxOptions())
 	if err != nil {
@@ -164,7 +164,7 @@ func scaleP21SW93Begin(t *testing.T, f scaleP09Fixture, data domain.Bootstrap) (
 	return tx, ctx
 }
 
-func scaleP21SW93Literal(ctx context.Context, f scaleP09Fixture, tx *sqlTx, workspace string, target domain.Bootstrap, base *recordBase) error {
+func legacyRecordBaseLiteral(ctx context.Context, f scaleFixture, tx *sqlTx, workspace string, target domain.Bootstrap, base *recordBase) error {
 	if err := f.lockReplacedRecords(ctx, tx, workspace, base, true, []string{"activity", "comment", "delivery", "notification"}); err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func scaleP21SW93Literal(ctx context.Context, f scaleP09Fixture, tx *sqlTx, work
 	return f.replaceIssueRecords(ctx, tx, workspace, target.Issues, target, base.issueRecords())
 }
 
-func scaleP21SW93Peer(t *testing.T, tx *sqlTx, workspace, mode string, data domain.Bootstrap) {
+func legacyRecordBasePeer(t *testing.T, tx *sqlTx, workspace, mode string, data domain.Bootstrap) {
 	t.Helper()
 	putComment := func(value domain.Comment) {
 		if err := writeContentRecord(t.Context(), tx, workspace, "comment", data.Issues[0].ID, value); err != nil {
@@ -222,18 +222,18 @@ func scaleP21SW93Peer(t *testing.T, tx *sqlTx, workspace, mode string, data doma
 	}
 }
 
-func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyRecordBaseDifferential(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	prefix := idgen.New("sw93_")
 	for _, variant := range []string{"comment-edit", "comment-delete", "new-activity-notification-delivery", "unchanged", "peer-unchanged", "peer-delete", "peer-insert", "peer-conflict", "peer-issue", "state-type-index-refresh", "supplied-content", "physical-issue-id", "physical-comment-id", "physical-notification-resource", "duplicate-content-id", "duplicate-issues-one-batch", "duplicate-issues-next-batch", "duplicate-issues-next-batch-loaded"} {
 		t.Run(variant, func(t *testing.T) {
-			data := scaleP21SW93Data(f, prefix, 2000)
+			data := legacyRecordBaseData(f, prefix, 2000)
 			var wantRows map[string][][]any
 			var wantErr error
 			var wantCounts map[string]map[issueStatsKey]int64
 			var wantSignals []notificationSignal
 			for _, bounded := range []bool{false, true} {
-				tx, ctx := scaleP21SW93Begin(t, f, data)
+				tx, ctx := legacyRecordBaseBegin(t, f, data)
 				workspace := data.Workspace.URLKey
 				switch variant {
 				case "physical-issue-id":
@@ -291,7 +291,7 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 					base.Close()
 					t.Fatal("capture binding lost its owner")
 				}
-				scaleP21SW93Remember(t, base, tx, workspace)
+				legacyRecordBaseRemember(t, base, tx, workspace)
 				refreshDisplayReferences(&loaded)
 				refreshIssueReferences(&loaded)
 				if err := oldBase.fingerprintLoaded(loaded); err != nil {
@@ -361,7 +361,7 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 						target.Issues = append(target.Issues, first, second)
 					}
 				}
-				scaleP21SW93Peer(t, tx, workspace, variant, loaded)
+				legacyRecordBasePeer(t, tx, workspace, variant, loaded)
 				candidate, err := captureMetadataLogicalSource(ctx, target, stamp)
 				if err != nil {
 					prepared.Release()
@@ -379,7 +379,7 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 				if bounded {
 					err = base.Persist(ctx, tx, workspace, candidate)
 				} else {
-					err = scaleP21SW93Literal(ctx, f, tx, workspace, target, oldBase)
+					err = legacyRecordBaseLiteral(ctx, f, tx, workspace, target, oldBase)
 				}
 				// PostgreSQL rejects repeated UPSERT keys in one statement.
 				// Restore SQL after that expected error so the oracle can inspect
@@ -389,8 +389,8 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 						t.Fatal(rollbackErr)
 					}
 				}
-				rows := scaleP21SW93Rows(t, tx, workspace)
-				counts := scaleP21SW93Counts(tx)
+				rows := legacyRecordBaseRows(t, tx, workspace)
+				counts := legacyRecordBaseCounts(tx)
 				if !bounded {
 					wantErr, wantRows, wantCounts = err, rows, counts
 					wantSignals = append([]notificationSignal(nil), tx.signals...)
@@ -407,14 +407,14 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 					if !reflect.DeepEqual(tx.signals, wantSignals) {
 						t.Fatal("queued notification signals differ", tx.signals, wantSignals)
 					}
-					unchanged, readErr := prepared.Select(ctx, scaleP21SW72FullScope(t, prepared), 64<<20)
+					unchanged, readErr := prepared.Select(ctx, fullScope(t, prepared), 64<<20)
 					if readErr != nil || !reflect.DeepEqual(unchanged, loaded) {
 						t.Fatal("record persistence changed its prepared source", readErr)
 					}
 				}
 				candidate.Release()
 				prepared.Release()
-				scaleP21SW70Usable(t, tx)
+				legacyIssueScanUsable(t, tx)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
@@ -428,7 +428,7 @@ func TestScaleP21SW93LegacyRecordBaseDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW93LegacyRecordPreviousContainerWork(t *testing.T) {
+func TestLegacyRecordPreviousContainerWork(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	source, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{}, copyStamp{})
 	if err != nil {
@@ -478,10 +478,10 @@ func TestScaleP21SW93LegacyRecordPreviousContainerWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW93LegacyRecordNotificationSignalWork(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW93Data(f, idgen.New("sw93_signal_"), 1)
-	tx, ctx := scaleP21SW93Begin(t, f, data)
+func TestLegacyRecordNotificationSignalWork(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyRecordBaseData(f, idgen.New("sw93_signal_"), 1)
+	tx, ctx := legacyRecordBaseBegin(t, f, data)
 	base := &legacyRecordBase{store: view, owner: &ResourceRead{store: view}}
 	defer base.Close()
 	start := len(tx.signals)
@@ -521,14 +521,14 @@ func TestScaleP21SW93LegacyRecordNotificationSignalWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyRecordTenfoldPopulationWork(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	prefix := idgen.New("sw93_population_")
 	peaks := map[bool]int{}
 	for _, supplied := range []bool{false, true} {
 		for _, count := range []int{64, 640} {
 			t.Run(fmt.Sprintf("supplied-%t/records-%d", supplied, count), func(t *testing.T) {
-				data := scaleP21SW93Data(f, prefix, 1)
+				data := legacyRecordBaseData(f, prefix, 1)
 				for len(data.Issues) < count {
 					issue := data.Issues[1]
 					issue.ID = fmt.Sprintf("%sunchanged-%04d", prefix, len(data.Issues))
@@ -540,7 +540,7 @@ func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
 				var wantCounts map[string]map[issueStatsKey]int64
 				var observed atomic.Int64
 				for _, bounded := range []bool{false, true} {
-					tx, ctx := scaleP21SW93Begin(t, f, data)
+					tx, ctx := legacyRecordBaseBegin(t, f, data)
 					oldBase := newRecordBase()
 					loaded := cloneBootstrap(collectionMetadata(data))
 					installed := collectionMetadata(data)
@@ -567,7 +567,7 @@ func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
 						t.Fatal(err)
 					}
 					if bounded {
-						ctx = scaleP21HotWebhookContext{Context: ctx, check: func() {
+						ctx = scaleHotWebhookContext{Context: ctx, check: func() {
 							budget := view.metadataResidency.work
 							// Err also runs in database/sql background goroutines
 							// and while admission already holds this mutex.
@@ -588,7 +588,7 @@ func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					scaleP21SW93Remember(t, base, tx, data.Workspace.URLKey)
+					legacyRecordBaseRemember(t, base, tx, data.Workspace.URLKey)
 					prepared, err := captureMetadataLogicalSource(ctx, loaded, stamp)
 					if err != nil {
 						base.Close()
@@ -602,20 +602,20 @@ func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
 					if bounded {
 						err = base.Persist(ctx, tx, data.Workspace.URLKey, prepared)
 					} else {
-						err = scaleP21SW93Literal(ctx, f, tx, data.Workspace.URLKey, loaded, oldBase)
+						err = legacyRecordBaseLiteral(ctx, f, tx, data.Workspace.URLKey, loaded, oldBase)
 					}
 					if err != nil {
 						prepared.Release()
 						base.Close()
 						t.Fatal(err)
 					}
-					rows := scaleP21SW93Rows(t, tx, data.Workspace.URLKey)
+					rows := legacyRecordBaseRows(t, tx, data.Workspace.URLKey)
 					if bounded {
-						if !reflect.DeepEqual(rows, want) || !reflect.DeepEqual(scaleP21SW93Counts(tx), wantCounts) {
+						if !reflect.DeepEqual(rows, want) || !reflect.DeepEqual(legacyRecordBaseCounts(tx), wantCounts) {
 							t.Fatal("tenfold population changed literal canonical rows/counts")
 						}
 					} else {
-						want, wantCounts = rows, scaleP21SW93Counts(tx)
+						want, wantCounts = rows, legacyRecordBaseCounts(tx)
 					}
 					prepared.Release()
 					if err := tx.Rollback(); err != nil {
@@ -642,10 +642,10 @@ func TestScaleP21SW93LegacyRecordTenfoldPopulationWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW93LegacyRecordPreparedLockOrder(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW93Data(f, idgen.New("sw93_lock_order_"), 1)
-	tx, ctx := scaleP21SW93Begin(t, f, data)
+func TestLegacyRecordPreparedLockOrder(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyRecordBaseData(f, idgen.New("sw93_lock_order_"), 1)
+	tx, ctx := legacyRecordBaseBegin(t, f, data)
 	source, err := captureMetadataLogicalSource(ctx, collectionMetadata(data), copyStamp{workspaceID: data.Workspace.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -656,7 +656,7 @@ func TestScaleP21SW93LegacyRecordPreparedLockOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer base.Close()
-	scaleP21SW93Remember(t, base, tx, data.Workspace.URLKey)
+	legacyRecordBaseRemember(t, base, tx, data.Workspace.URLKey)
 	target, err := captureMetadataLogicalSource(ctx, data, copyStamp{workspaceID: data.Workspace.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -719,7 +719,7 @@ func TestScaleP21SW93LegacyRecordPreparedLockOrder(t *testing.T) {
 }
 
 func TestLegacyRecordBaseReadsBorrowedIssueFrames(t *testing.T) {
-	_, view := scaleP21SW78Fixture(t)
+	_, view := legacyCountWriteFixture(t)
 	ctx := t.Context()
 	issue := domain.Issue{ID: "borrowed-issue", Number: 1, Description: strings.Repeat("x", metadataLogicalBorrowMinimum)}
 	source, err := captureMetadataLogicalSource(ctx, domain.Bootstrap{Issues: []domain.Issue{issue}}, copyStamp{})
@@ -763,9 +763,9 @@ func TestLegacyRecordBaseReadsBorrowedIssueFrames(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW93LegacyRecordBaseCancellation(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW93Data(f, idgen.New("sw93_cancel_"), 2000)
+func TestLegacyRecordBaseCancellation(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyRecordBaseData(f, idgen.New("sw93_cancel_"), 2000)
 	installed, err := captureMetadataLogicalSource(t.Context(), collectionMetadata(data), copyStamp{workspaceID: data.Workspace.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -790,13 +790,13 @@ func TestScaleP21SW93LegacyRecordBaseCancellation(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer base.Close()
-			tx, readCtx := scaleP21SW93Begin(t, f, data)
+			tx, readCtx := legacyRecordBaseBegin(t, f, data)
 			source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer source.Release()
-			before := scaleP21SW93Rows(t, tx, data.Workspace.URLKey)
+			before := legacyRecordBaseRows(t, tx, data.Workspace.URLKey)
 			want := error(context.Canceled)
 			limit := view.metadataResidency.work.limit
 			switch variant {
@@ -818,7 +818,7 @@ func TestScaleP21SW93LegacyRecordBaseCancellation(t *testing.T) {
 			if !errors.Is(err, want) {
 				t.Fatal("record base failure changed", variant, err, want)
 			}
-			if got := scaleP21SW93Rows(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, before) {
+			if got := legacyRecordBaseRows(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, before) {
 				t.Fatal("record preflight failure wrote SQL")
 			}
 			base.Close()

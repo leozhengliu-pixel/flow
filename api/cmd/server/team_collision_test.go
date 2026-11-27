@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW20ImportedTeamAggregateCollision(t *testing.T) {
+func TestImportedTeamAggregateCollision(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		targetID := idgen.New("sw20-imported-")
 		stamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		for _, providerJob := range []bool{false, true} {
@@ -51,16 +51,16 @@ func TestScaleP21SW20ImportedTeamAggregateCollision(t *testing.T) {
 				var realtime domain.RealtimeEvent
 				current.SetWebhookSink(func(_ string, value domain.DomainEvent) { event = value })
 				current.SetRealtimeSink(func(_ string, value domain.RealtimeEvent) { realtime = value })
-				beforeUser := scaleP21SW6RecordHash(t, repo, f.data.Workspace.URLKey, "users", targetID)
-				beforeSettings := scaleP21SW20Rows(t, repo, f.data.Workspace.URLKey, store.RecordKey{Kind: "userSettings", ID: targetID})
+				beforeUser := recordHash(t, repo, f.data.Workspace.URLKey, "users", targetID)
+				beforeSettings := helpersRows(t, repo, f.data.Workspace.URLKey, store.RecordKey{Kind: "userSettings", ID: targetID})
 				r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 				r.SetPathValue("teamId", targetID)
 				(&server{store: current}).restoreDeletedTeam(w, r)
 				if w.Code != http.StatusOK {
 					t.Fatal(w.Code, w.Body.String())
 				}
-				if scaleP21SW6RecordHash(t, repo, f.data.Workspace.URLKey, "users", targetID) != beforeUser ||
-					!reflect.DeepEqual(beforeSettings, scaleP21SW20Rows(t, repo, f.data.Workspace.URLKey, store.RecordKey{Kind: "userSettings", ID: targetID})) {
+				if recordHash(t, repo, f.data.Workspace.URLKey, "users", targetID) != beforeUser ||
+					!reflect.DeepEqual(beforeSettings, helpersRows(t, repo, f.data.Workspace.URLKey, store.RecordKey{Kind: "userSettings", ID: targetID})) {
 					t.Fatal("aggregate read changed user or virtual settings defaults")
 				}
 				var payload, previous any
@@ -80,18 +80,18 @@ func TestScaleP21SW20ImportedTeamAggregateCollision(t *testing.T) {
 				outcomes = append(outcomes, []any{payload, previous})
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("imported team aggregate differs providerJob=%t: %s", providerJob, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("imported team aggregate differs providerJob=%t: %s", providerJob, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		}
 	}
 }
 
-func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
+func TestRestoreTeamTypedPrefixes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		baseline, ok := repo.WorkspaceMetadata(workspace)
 		if !ok {
@@ -156,7 +156,7 @@ func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
 						}
 						collisionBefore := [32]byte{}
 						if spec.kind != "" {
-							collisionBefore = scaleP21SW6RecordHash(t, repo, workspace, spec.kind, id)
+							collisionBefore = recordHash(t, repo, workspace, spec.kind, id)
 						}
 						var events []domain.DomainEvent
 						var realtime []domain.RealtimeEvent
@@ -173,11 +173,11 @@ func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
 						for _, entry := range previousAudits {
 							previousAuditIDs[entry.ID] = true
 						}
-						scaleP21M3Call(&server{store: source}, w, r, (*server).restoreDeletedTeam)
+						callPointSettingsHandler(&server{store: source}, w, r, (*server).restoreDeletedTeam)
 						if w.Code != http.StatusOK || len(events) != 1 || len(realtime) != 1 {
 							t.Fatal("typed team restore", w.Code, len(events), len(realtime), w.Body.String())
 						}
-						if spec.kind != "" && collisionBefore != scaleP21SW6RecordHash(t, repo, workspace, spec.kind, id) {
+						if spec.kind != "" && collisionBefore != recordHash(t, repo, workspace, spec.kind, id) {
 							t.Fatal("typed aggregate enrichment persisted read-only row", spec.kind)
 						}
 						var response map[string]any
@@ -194,14 +194,14 @@ func TestScaleP21SW20RestoreTeamTypedPrefixes(t *testing.T) {
 						}
 						generated[audits[0].ID], generated[audits[0].CreatedAt.Format(time.RFC3339Nano)] = "<audit>", "<clock>"
 						audits[0].Hash, audits[0].Seq = "", 0
-						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, []any{
+						outcomes = append(outcomes, generatedJSON(t, []any{
 							response,
-							scaleP21SW20Rows(t, repo, workspace, store.RecordKey{Kind: "teams", ID: id}, store.RecordKey{Kind: "users", ID: actor.ID}),
-							audits, scaleP21SW20Effects(events, realtime),
+							helpersRows(t, repo, workspace, store.RecordKey{Kind: "teams", ID: id}, store.RecordKey{Kind: "users", ID: actor.ID}),
+							audits, helpersEffects(events, realtime),
 						}, generated))
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("typed restore differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("typed restore differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			})

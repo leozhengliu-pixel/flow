@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW69OwnedActor(actor domain.User) domain.User {
+func ownedActor(actor domain.User) domain.User {
 	result := cloneSnapshotValue(reflect.ValueOf(actor)).Interface().(domain.User)
 	if actor.Via != nil {
 		result.Via = cloneSnapshotValue(reflect.ValueOf(actor.Via)).Interface().(*domain.ActorBot)
@@ -20,13 +20,13 @@ func scaleP21SW69OwnedActor(actor domain.User) domain.User {
 	return result
 }
 
-func scaleP21SW69LiteralActorStep(before domain.Bootstrap, actor *domain.User) domain.Bootstrap {
+func literalActorStep(before domain.Bootstrap, actor *domain.User) domain.Bootstrap {
 	next := before
 	next.Users = slices.Clone(before.Users)
 	if actor == nil {
 		return next
 	}
-	owned := scaleP21SW69OwnedActor(*actor)
+	owned := ownedActor(*actor)
 	next.Viewer = owned
 	for index := range next.Users {
 		if next.Users[index].ID == owned.ID {
@@ -38,7 +38,7 @@ func scaleP21SW69LiteralActorStep(before domain.Bootstrap, actor *domain.User) d
 	return next
 }
 
-func TestScaleP21SW69LegacyActorImageNative(t *testing.T) {
+func TestLegacyActorImageNative(t *testing.T) {
 	instant := time.Now()
 	actor := domain.User{ID: "duplicate", Name: "Complete actor", DisplayName: "Actor <display>\x00\u51c6", Username: "actor-handle",
 		JobTitle: "Full actor body", Email: "actor@example.test", AvatarURL: "actor-avatar", Active: true, EmailVerified: true,
@@ -91,7 +91,7 @@ func TestScaleP21SW69LegacyActorImageNative(t *testing.T) {
 			}
 			var input *domain.User
 			if !test.noActor {
-				value := scaleP21SW69OwnedActor(actor)
+				value := ownedActor(actor)
 				value.ID = test.actorID
 				if test.shape == "utc" {
 					utc := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
@@ -99,7 +99,7 @@ func TestScaleP21SW69LegacyActorImageNative(t *testing.T) {
 				}
 				input = &value
 			}
-			want := scaleP21SW69LiteralActorStep(before, input)
+			want := literalActorStep(before, input)
 			queries := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
 			image, err := view.prepareLegacyActorImage(ctx, source, input)
@@ -145,9 +145,9 @@ func TestScaleP21SW69LegacyActorImageNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW69LegacyActorImageOwnership(t *testing.T) {
+func TestLegacyActorImageOwnership(t *testing.T) {
 	data := domain.Bootstrap{ViewerRole: "stored-role", Viewer: domain.User{ID: "before"}, Users: []domain.User{{ID: "before", Name: "Before"}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"registry": {Viewer: domain.User{ID: "wrong-source"}}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"registry": {Viewer: domain.User{ID: "wrong-source"}}})
 	parent, found, err := view.BeginInstalledMetadataRead(t.Context(), "registry")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -171,7 +171,7 @@ func TestScaleP21SW69LegacyActorImageOwnership(t *testing.T) {
 		if !noActor {
 			actor = &domain.User{ID: "after", Name: "After", Via: &domain.ActorBot{ID: "caller-app"}}
 		}
-		want := scaleP21SW69LiteralActorStep(before, actor)
+		want := literalActorStep(before, actor)
 		callCtx, cancel := context.WithCancel(pinned)
 		image, err := view.prepareLegacyActorImage(callCtx, source, actor)
 		if err != nil {
@@ -217,11 +217,11 @@ func TestScaleP21SW69LegacyActorImageOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW69LegacyActorImageWarmReloadBodyBound(t *testing.T) {
+func TestLegacyActorImageWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -264,7 +264,7 @@ func TestScaleP21SW69LegacyActorImageWarmReloadBodyBound(t *testing.T) {
 			when := time.Now()
 			actor := &domain.User{ID: f.data.Viewer.ID, Name: "Replacement full actor", JobTitle: "Complete replacement body",
 				AppScopes: []string{"read"}, AppTeamIDs: []string{}, OutOfOfficeUntil: &when, Via: &domain.ActorBot{ID: "application", Name: "Live attribution"}}
-			want := scaleP21SW69LiteralActorStep(before, actor)
+			want := literalActorStep(before, actor)
 			queries := 0
 			image, err := view.prepareLegacyActorImage(WithSQLStatementObserver(t.Context(), func(string) { queries++ }), source, actor)
 			if err != nil {

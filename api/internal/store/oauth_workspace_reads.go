@@ -78,7 +78,7 @@ func (s *SQLiteStore) OAuthWorkspaceAccess(ctx context.Context, workspace, userI
 
 func (s *SQLiteStore) DocumentByID(workspace, id string) (domain.Document, bool) {
 	if view, release, handled := s.coldAccessorView(context.Background(), "DocumentByID", workspace, []string{"documents"}); handled {
-		// Bounded: the image holds no documents (SW559).
+		// Bounded: the image holds no documents.
 		defer release()
 		if view == nil {
 			return domain.Document{}, false
@@ -144,7 +144,7 @@ func (s *SQLiteStore) ResolveTeamID(workspace, idOrKey string) string {
 func (s *SQLiteStore) TrashSnapshot(workspace string) []domain.TrashEntry {
 	if view, release, handled := s.coldAccessorView(context.Background(), "TrashSnapshot", workspace, []string{"trash"}); handled {
 		// Bounded: the image holds no trash, so an agent's restore found
-		// nothing to restore (SW559).
+		// nothing to restore.
 		defer release()
 		if view == nil {
 			return nil

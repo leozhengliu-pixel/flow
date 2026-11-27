@@ -1686,7 +1686,7 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 }
 
 // DELETE /api/oauth-applications/{id} is COLD (registered in
-// scaleP21ColdRoutes).
+// scaleColdRoutes).
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {
 	s.withColdMetadataRequest(w, r, "server/settings_features.go:deleteOAuthApplication", "oauth_application.deleted", func(repo *store.SQLiteStore, request *http.Request) {
 		s.deleteOAuthApplicationWithStore(w, request, repo)

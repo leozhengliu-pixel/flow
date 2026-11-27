@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW297: a conflicted large canonical row is refreshed into the installed
+// A conflicted large canonical row is refreshed into the installed
 // logical image (no 256 KiB page refusal) exactly as the literal typed
 // refresh decodes it, and a large-row conflict is retried to success.
 
-func scaleP21SW297Node(t *testing.T, f scaleP09Fixture, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, large bool) (reflect.Value, []byte, error) {
+func largeRowRefreshNode(t *testing.T, f scaleFixture, field string, kind reflect.Type, raw []byte, old metadataAggregateNode, large bool) (reflect.Value, []byte, error) {
 	t.Helper()
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
@@ -60,10 +60,10 @@ func scaleP21SW297Node(t *testing.T, f scaleP09Fixture, field string, kind refle
 // The large decoder frames every top-level string from its token. Repeated,
 // case-folded, null, escaped, invalid-UTF-8, mistyped and unknown members
 // decode exactly as the typed decoder the literal refresh uses.
-func TestScaleP21SW297LargeRetryRecordDecode(t *testing.T) {
-	_, view := scaleP21SW78Fixture(t)
-	f := scaleP09Fixture{SQLiteStore: view}
-	big := scaleP21SW296Body("framed", 600<<10)
+func TestLargeRetryRecordDecode(t *testing.T) {
+	_, view := legacyCountWriteFixture(t)
+	f := scaleFixture{SQLiteStore: view}
+	big := largeRowWriteBody("framed", 600<<10)
 	quoted, _ := json.Marshal(big)
 	loop := string(quoted)
 	invalid := `"invalid é \ud800 ` + "\xff\xfe" + ` \u0000 tail"`
@@ -89,8 +89,8 @@ func TestScaleP21SW297LargeRetryRecordDecode(t *testing.T) {
 			if test.old != nil {
 				old = metadataAggregateNativeNode{value: reflect.ValueOf(test.old)}
 			}
-			wantValue, wantJSON, wantErr := scaleP21SW297Node(t, f, test.field, test.kind, []byte(test.raw), old, false)
-			gotValue, gotJSON, gotErr := scaleP21SW297Node(t, f, test.field, test.kind, []byte(test.raw), old, true)
+			wantValue, wantJSON, wantErr := largeRowRefreshNode(t, f, test.field, test.kind, []byte(test.raw), old, false)
+			gotValue, gotJSON, gotErr := largeRowRefreshNode(t, f, test.field, test.kind, []byte(test.raw), old, true)
 			if (wantErr == nil) != (gotErr == nil) || wantErr != nil && wantErr.Error() != gotErr.Error() {
 				t.Fatalf("large retry decode error differs: want %v, got %v", wantErr, gotErr)
 			}
@@ -122,16 +122,16 @@ func TestScaleP21SW297LargeRetryRecordDecode(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW297LargeRowConflictRefreshAndRetry(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLargeRowConflictRefreshAndRetry(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	f.db.SetMaxOpenConns(4)
 	workspace := f.data.Workspace.URLKey
-	base := scaleP21SW296Base(f)
-	loop := scaleP21SW296Loop(&base)
-	loop.Instructions = scaleP21SW296Body("legal large instructions", 6<<20)
-	release := scaleP21SW296Release(&base)
-	release.IssueIDs = scaleP21SW296IDs("issue", 60_000)
-	scaleP21SW296Seed(t, f, base)
+	base := largeRowWriteBase(f)
+	loop := largeRowWriteLoop(&base)
+	loop.Instructions = largeRowWriteBody("legal large instructions", 6<<20)
+	release := largeRowWriteRelease(&base)
+	release.IssueIDs = largeRowWriteIDs("issue", 60_000)
+	largeRowWriteSeed(t, f, base)
 	if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -151,13 +151,13 @@ func TestScaleP21SW297LargeRowConflictRefreshAndRetry(t *testing.T) {
 		}
 	}
 	peerLoop := *loop
-	peerAt := scaleP21SW296At.Add(3 * time.Hour)
+	peerAt := largeRowWriteAt.Add(3 * time.Hour)
 	peerLoop.Name, peerLoop.LastRunAt = "Peer renamed loop", &peerAt
 	peerRelease := *release
 	peerRelease.IssueIDs = append(append([]string{}, release.IssueIDs...), "peer-issue")
 	peer(func(tx *sqlTx) {
-		scaleP21SW296Put(t, tx, workspace, "loops", peerLoop.ID, peerLoop, scaleP21SW296Order(t, tx, workspace, "loops", peerLoop.ID))
-		scaleP21SW296Put(t, tx, workspace, "releases", peerRelease.ID, peerRelease, scaleP21SW296Order(t, tx, workspace, "releases", peerRelease.ID))
+		largeRowWritePut(t, tx, workspace, "loops", peerLoop.ID, peerLoop, largeRowWriteOrder(t, tx, workspace, "loops", peerLoop.ID))
+		largeRowWritePut(t, tx, workspace, "releases", peerRelease.ID, peerRelease, largeRowWriteOrder(t, tx, workspace, "releases", peerRelease.ID))
 		if err := deleteMetadataRecordRow(t.Context(), tx, workspace, metadataRecordKey{"loops", "sw296-small-loop"}); err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +205,7 @@ func TestScaleP21SW297LargeRowConflictRefreshAndRetry(t *testing.T) {
 	// Retry: the writer's base is stale (the peer changed LastRunAt), so the
 	// first attempt conflicts; the refreshed second attempt succeeds and
 	// keeps the peer's name.
-	scaleP21SW296Seed(t, f, base)
+	largeRowWriteSeed(t, f, base)
 	if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -213,9 +213,9 @@ func TestScaleP21SW297LargeRowConflictRefreshAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	peer(func(tx *sqlTx) {
-		scaleP21SW296Put(t, tx, workspace, "loops", peerLoop.ID, peerLoop, scaleP21SW296Order(t, tx, workspace, "loops", peerLoop.ID))
+		largeRowWritePut(t, tx, workspace, "loops", peerLoop.ID, peerLoop, largeRowWriteOrder(t, tx, workspace, "loops", peerLoop.ID))
 	})
-	ours := scaleP21SW296At.Add(4 * time.Hour)
+	ours := largeRowWriteAt.Add(4 * time.Hour)
 	attempts := 0
 	var seen []*time.Time
 	err = mutationAttempts(t.Context(), fullMutationAttempts, func(ctx context.Context) error {
@@ -225,12 +225,12 @@ func TestScaleP21SW297LargeRowConflictRefreshAndRetry(t *testing.T) {
 			return err
 		}
 		defer stored.Release()
-		data, err := stored.Select(ctx, scaleP21SW72FullScope(t, stored), 1<<30)
+		data, err := stored.Select(ctx, fullScope(t, stored), 1<<30)
 		if err != nil {
 			return err
 		}
 		next := cloneBootstrap(data)
-		target := scaleP21SW296Loop(&next)
+		target := largeRowWriteLoop(&next)
 		seen = append(seen, target.LastRunAt)
 		target.LastRunAt = &ours
 		after, err := captureMetadataLogicalSource(ctx, next, stored.Stamp())

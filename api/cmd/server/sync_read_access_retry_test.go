@@ -18,16 +18,16 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW575: a sync records window read whose summary snapshot finds the
+// A sync records window read whose summary snapshot finds the
 // workspace metadata changed under it (a write committed between the read's
 // SQL revision and its copy check) reads again, a bounded number of times,
 // and answers the post-change data; only metadata that keeps changing past
 // the bound still answers the 503 it always did.
-func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
-	scaleP19Options(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestSyncReadRetriesChangedAccessMetadata(t *testing.T) {
+	scaleOptions(t)
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			prefix := idgen.New("sw575-")
 			open := prefix + "open"
@@ -64,7 +64,7 @@ func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
 				return at
 			}
 			read := func(ctx context.Context, client *http.Client, token string) *httptest.ResponseRecorder {
-				r := httptest.NewRequestWithContext(ctx, http.MethodGet, scaleP19Path("projects", scaleP19ProjectQuery(), "", 100), nil)
+				r := httptest.NewRequestWithContext(ctx, http.MethodGet, scalePath("projects", scaleProjectQuery(), "", 100), nil)
 				r.Header.Set("X-Workspace-Key", workspace)
 				r.Header.Set("X-Request-ID", "scale-p21-sw575")
 				if token != "" {
@@ -84,11 +84,11 @@ func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
 			// writes its last-used time in the background. Settle that write
 			// (later uses within the minute write nothing) so the forced
 			// changes below are the only ones.
-			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
+			selected := scaleKey(t, f, []string{"read"}, []string{public})
 			if w := read(t.Context(), nil, selected); w.Code != http.StatusOK {
 				t.Fatalf("warm read %d %.300s", w.Code, w.Body.String())
 			}
-			scaleP21SW575SettleKeyUse(t, repo, workspace, selected)
+			settleKeyUse(t, repo, workspace, selected)
 
 			bound := 0
 			for _, principal := range []struct {
@@ -157,7 +157,7 @@ func TestScaleP21SW575SyncReadRetriesChangedAccessMetadata(t *testing.T) {
 	}
 }
 
-func scaleP21SW575SettleKeyUse(t *testing.T, repo *store.SQLiteStore, workspace, secret string) {
+func settleKeyUse(t *testing.T, repo *store.SQLiteStore, workspace, secret string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

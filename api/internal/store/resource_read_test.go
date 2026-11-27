@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21ResourceReadDifferential(t *testing.T) {
+func TestScaleResourceReadDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("hot-resource-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
@@ -140,11 +140,11 @@ func TestScaleP21ResourceReadDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceReadLargeOwnershipAndErrors(t *testing.T) {
+func TestScaleResourceReadLargeOwnershipAndErrors(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	target := idgen.New("hot-resource-large-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.resource_large", "", nil, func(data *domain.Bootstrap) error {
@@ -216,17 +216,17 @@ func TestScaleP21ResourceReadLargeOwnershipAndErrors(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceReadInheritedSnapshotPoolOne(t *testing.T) {
+func TestScaleResourceReadInheritedSnapshotPoolOne(t *testing.T) {
 	for _, journal := range []string{"off", "on"} {
-		t.Run(journal, func(t *testing.T) { scaleP21ResourceReadInheritedSnapshot(t, journal) })
+		t.Run(journal, func(t *testing.T) { scaleResourceReadInheritedSnapshot(t, journal) })
 	}
 }
 
-func scaleP21ResourceReadInheritedSnapshot(t *testing.T, journal string) {
+func scaleResourceReadInheritedSnapshot(t *testing.T, journal string) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", journal)
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("hot-resource-snapshot-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.resource_snapshot", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: target, Name: "Caller snapshot", TeamIDs: []string{data.Teams[0].ID}})
@@ -278,10 +278,10 @@ func scaleP21ResourceReadInheritedSnapshot(t *testing.T, journal string) {
 	}
 }
 
-func TestScaleP21ResourceReadNativeWireTarget(t *testing.T) {
+func TestScaleResourceReadNativeWireTarget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("hot-resource-native-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.resource_native", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: target, CreatedAt: time.Date(2026, 11, 14, 0, 0, 0, 0, time.FixedZone("unsupported", 7*3600+123))})
@@ -321,11 +321,11 @@ func TestScaleP21ResourceReadNativeWireTarget(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceReadRevokedAuthority(t *testing.T) {
+func TestScaleResourceReadRevokedAuthority(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	target := idgen.New("hot-resource-revoke-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.resource_revoke", "", nil, func(data *domain.Bootstrap) error {
@@ -364,11 +364,11 @@ func TestScaleP21ResourceReadRevokedAuthority(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceReadUnrelatedCountBound(t *testing.T) {
+func TestScaleResourceReadUnrelatedCountBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, "target--00000001"
 	alias := "old-small-target"
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.resource_count", "", nil, func(data *domain.Bootstrap) error {
@@ -468,11 +468,11 @@ func TestScaleP21ResourceReadUnrelatedCountBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceReadNativeDuplicateReferences(t *testing.T) {
+func TestScaleResourceReadNativeDuplicateReferences(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, team := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

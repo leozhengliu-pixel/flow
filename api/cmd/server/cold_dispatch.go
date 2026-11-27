@@ -7,13 +7,13 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21ColdRoute struct {
+type scaleColdRoute struct {
 	method, path, consumer, writer string
 }
 
 // These bindings admit the installed authorization bridge and selected handler
 // bridges. Writer names alone certify neither publication nor activation.
-var scaleP21ColdRoutes = []scaleP21ColdRoute{
+var scaleColdRoutes = []scaleColdRoute{
 	{http.MethodPost, "/api/project-statuses", "server/settings_features.go:createProjectStatus", "project_status.created"},
 	{http.MethodPatch, "/api/project-statuses/{id}", "server/settings_features.go:updateProjectStatus", "project_status.updated"},
 	{http.MethodDelete, "/api/project-statuses/{id}", "server/settings_features.go:deleteProjectStatus", "project_status.deleted"},

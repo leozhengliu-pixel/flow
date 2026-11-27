@@ -14,11 +14,11 @@ import (
 	"testing"
 )
 
-type scaleP21SW223RawReader func([]byte) (int, error)
+type rawReader func([]byte) (int, error)
 
-func (read scaleP21SW223RawReader) Read(dst []byte) (int, error) { return read(dst) }
+func (read rawReader) Read(dst []byte) (int, error) { return read(dst) }
 
-func scaleP21SW223Builder(t *testing.T, ctx context.Context) *metadataLogicalBuilder {
+func rawMessageFrameBuilder(t *testing.T, ctx context.Context) *metadataLogicalBuilder {
 	t.Helper()
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	builder, err := newMetadataLogicalBuilder(ctx)
@@ -38,7 +38,7 @@ func scaleP21SW223Builder(t *testing.T, ctx context.Context) *metadataLogicalBui
 	return builder
 }
 
-func TestScaleP21SW223RawMessageFrameRoundTrip(t *testing.T) {
+func TestRawMessageFrameRoundTrip(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		raw  json.RawMessage
@@ -51,7 +51,7 @@ func TestScaleP21SW223RawMessageFrameRoundTrip(t *testing.T) {
 		{"large-native", json.RawMessage(strings.Repeat("raw\x00\xff ", 200000))},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			builder := scaleP21SW223Builder(t, t.Context())
+			builder := rawMessageFrameBuilder(t, t.Context())
 			var reader io.Reader
 			if test.raw != nil {
 				reader = bytes.NewReader(test.raw)
@@ -95,12 +95,12 @@ func TestScaleP21SW223RawMessageFrameRoundTrip(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW223RawMessageFrameRangeAndBuffer(t *testing.T) {
-	builder := scaleP21SW223Builder(t, t.Context())
+func TestRawMessageFrameRangeAndBuffer(t *testing.T) {
+	builder := rawMessageFrameBuilder(t, t.Context())
 	body := strings.Repeat("x", 3*(32<<10)+19)
 	input := strings.NewReader(body + "TAIL")
 	maxRequest := 0
-	reader := scaleP21SW223RawReader(func(dst []byte) (int, error) {
+	reader := rawReader(func(dst []byte) (int, error) {
 		maxRequest = max(maxRequest, len(dst))
 		return input.Read(dst)
 	})
@@ -115,13 +115,13 @@ func TestScaleP21SW223RawMessageFrameRangeAndBuffer(t *testing.T) {
 	if _, err := builder.writeRawMessageFrame(t.Context(), zero, 0); err != nil || zero.Len() != len("untouched") {
 		t.Fatal("present empty frame read beyond its zero-byte range", err)
 	}
-	finalEOF := scaleP21SW223RawReader(func(dst []byte) (int, error) { return copy(dst, "null"), io.EOF })
+	finalEOF := rawReader(func(dst []byte) (int, error) { return copy(dst, "null"), io.EOF })
 	if _, err := builder.writeRawMessageFrame(t.Context(), finalEOF, 4); err != nil {
 		t.Fatal("complete final range rejected simultaneous EOF", err)
 	}
 }
 
-func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
+func TestRawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 	sentinel := errors.New("sw223 reader failed")
 	for _, test := range []struct {
 		name   string
@@ -135,13 +135,13 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 		{"frame-overflow", strings.NewReader(""), metadataLogicalFrameBytes - 24, ErrMetadataWorkBudget},
 		{"short", strings.NewReader("abc"), 4, io.ErrUnexpectedEOF},
 		{"empty-short", strings.NewReader(""), 1, io.ErrUnexpectedEOF},
-		{"reader-error", scaleP21SW223RawReader(func([]byte) (int, error) { return 0, sentinel }), 1, sentinel},
-		{"partial-reader-error", io.MultiReader(strings.NewReader("abc"), scaleP21SW223RawReader(func([]byte) (int, error) { return 0, sentinel })), 4, sentinel},
-		{"complete-reader-error", scaleP21SW223RawReader(func(dst []byte) (int, error) { return copy(dst, "x"), sentinel }), 1, sentinel},
-		{"no-progress", scaleP21SW223RawReader(func([]byte) (int, error) { return 0, nil }), 1, io.ErrNoProgress},
+		{"reader-error", rawReader(func([]byte) (int, error) { return 0, sentinel }), 1, sentinel},
+		{"partial-reader-error", io.MultiReader(strings.NewReader("abc"), rawReader(func([]byte) (int, error) { return 0, sentinel })), 4, sentinel},
+		{"complete-reader-error", rawReader(func(dst []byte) (int, error) { return copy(dst, "x"), sentinel }), 1, sentinel},
+		{"no-progress", rawReader(func([]byte) (int, error) { return 0, nil }), 1, io.ErrNoProgress},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			builder := scaleP21SW223Builder(t, t.Context())
+			builder := rawMessageFrameBuilder(t, t.Context())
 			prior, err := builder.writeValue(reflect.ValueOf("prior"), 0, false)
 			if err != nil {
 				t.Fatal(err)
@@ -161,7 +161,7 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 		})
 	}
 	t.Run("offset-overflow-before-write", func(t *testing.T) {
-		builder := scaleP21SW223Builder(t, t.Context())
+		builder := rawMessageFrameBuilder(t, t.Context())
 		before := builder.offset
 		builder.offset = builder.fileLimit - 16
 		node, err := builder.writeRawMessageFrame(t.Context(), nil, 0)
@@ -171,7 +171,7 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 		}
 	})
 	t.Run("closed", func(t *testing.T) {
-		builder := scaleP21SW223Builder(t, t.Context())
+		builder := rawMessageFrameBuilder(t, t.Context())
 		builder.Close()
 		node, err := builder.writeRawMessageFrame(t.Context(), nil, 0)
 		if !errors.Is(err, errMetadataLogicalClosed) || node != (metadataLogicalNode{}) {
@@ -180,7 +180,7 @@ func TestScaleP21SW223RawMessageFrameFailuresPreservePriorNodes(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW223RawMessageFrameCancellation(t *testing.T) {
+func TestRawMessageFrameCancellation(t *testing.T) {
 	for _, owner := range []string{"request", "builder"} {
 		for _, moment := range []string{"before", "during-read"} {
 			t.Run(owner+"/"+moment, func(t *testing.T) {
@@ -192,13 +192,13 @@ func TestScaleP21SW223RawMessageFrameCancellation(t *testing.T) {
 				} else {
 					builderCtx = cancelled
 				}
-				builder := scaleP21SW223Builder(t, builderCtx)
+				builder := rawMessageFrameBuilder(t, builderCtx)
 				prior, err := builder.writeValue(reflect.ValueOf("prior"), 0, false)
 				if err != nil {
 					t.Fatal(err)
 				}
 				calls := 0
-				reader := scaleP21SW223RawReader(func(dst []byte) (int, error) {
+				reader := rawReader(func(dst []byte) (int, error) {
 					calls++
 					cancel()
 					return copy(dst, "abc"), nil
@@ -222,7 +222,7 @@ func TestScaleP21SW223RawMessageFrameCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW223RawMessageFrameJSONOutput(t *testing.T) {
+func TestRawMessageFrameJSONOutput(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		raw  json.RawMessage
@@ -235,7 +235,7 @@ func TestScaleP21SW223RawMessageFrameJSONOutput(t *testing.T) {
 		{"invalid-native", json.RawMessage{0, 255, '{'}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			builder := scaleP21SW223Builder(t, t.Context())
+			builder := rawMessageFrameBuilder(t, t.Context())
 			var reader io.Reader
 			if test.raw != nil {
 				reader = bytes.NewReader(test.raw)

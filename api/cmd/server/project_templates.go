@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (s *server) scaleP21SW16ListProjectTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *server) listBoundedProjectTemplates(w http.ResponseWriter, r *http.Request) {
 	// The original BootstrapFor is context-insensitive. Snapshot that same
 	// installed source without cancelling it on an already-ended request.
 	read, found, err := s.store.BeginProjectTemplatesRead(context.WithoutCancel(r.Context()), workspaceKey(r))

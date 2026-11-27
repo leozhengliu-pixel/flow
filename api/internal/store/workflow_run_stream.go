@@ -61,7 +61,7 @@ func workflowRetryPatchOnly(ctx context.Context, before, next metadataLogicalNod
 // Output keys live in the existing bounded disk stage. Only one admitted key
 // crosses SQL at a time; its decoded string values remain typed disk frames.
 type workflowOutputFrames struct {
-	stage  *sw26MigrationStage
+	stage  *migrationStage
 	frames *metadataLogicalBuilder
 	shape  metadataLogicalNode
 	owner  *ResourceRead
@@ -103,11 +103,11 @@ func (n workflowOutputFrames) nodeChildren(ctx context.Context, visit func(refle
 	})
 }
 
-func workflowFrameOutput(ctx context.Context, owner *ResourceRead, frames *metadataLogicalBuilder, stage *sw26MigrationStage, part legacySessionJSONPart, previousNil bool) (metadataLogicalNode, bool, error) {
+func workflowFrameOutput(ctx context.Context, owner *ResourceRead, frames *metadataLogicalBuilder, stage *migrationStage, part legacySessionJSONPart, previousNil bool) (metadataLogicalNode, bool, error) {
 	return workflowFrameStringMap(ctx, owner, frames, stage, part, previousNil, "WorkflowRun", "output")
 }
 
-func workflowFrameStringMap(ctx context.Context, owner *ResourceRead, frames *metadataLogicalBuilder, stage *sw26MigrationStage, part legacySessionJSONPart, previousNil bool, structName, fieldName string) (metadataLogicalNode, bool, error) {
+func workflowFrameStringMap(ctx context.Context, owner *ResourceRead, frames *metadataLogicalBuilder, stage *migrationStage, part legacySessionJSONPart, previousNil bool, structName, fieldName string) (metadataLogicalNode, bool, error) {
 	scanner := legacySessionJSONScanner(ctx, part)
 	if err := scanner.spaces(); err != nil {
 		return metadataLogicalNode{}, false, err
@@ -236,7 +236,7 @@ func workflowRunCanonicalRecord(ctx context.Context, store *SQLiteStore, frames 
 	if err := owner.reserve(ctx, logicalJSONStreamWork); err != nil {
 		return metadataLogicalNode{}, err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}

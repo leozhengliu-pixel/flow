@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21M3Request(workspace string, user domain.User, key *domain.APIKey, body string) *http.Request {
+func pointSettingsRequest(workspace string, user domain.User, key *domain.APIKey, body string) *http.Request {
 	r := httptest.NewRequest(http.MethodPatch, "/api/workspace/agent-guidance", strings.NewReader(body))
 	r.Header.Set("X-Workspace-Key", workspace)
 	if key != nil && key.TeamRestriction == "all" {
@@ -34,7 +34,7 @@ func scaleP21M3Request(workspace string, user domain.User, key *domain.APIKey, b
 // The legacy writer relies on route middleware for membership. Apply that
 // same live boundary before either handler; a store view does not certify the
 // unported production middleware's metadata-loading implementation.
-func scaleP21M3Call(s *server, w http.ResponseWriter, r *http.Request, handler func(*server, http.ResponseWriter, *http.Request)) {
+func callPointSettingsHandler(s *server, w http.ResponseWriter, r *http.Request, handler func(*server, http.ResponseWriter, *http.Request)) {
 	workspaceID, err := s.store.WorkspaceIDForKey(r.Context(), workspaceKey(r))
 	if err != nil {
 		writeError(w, http.StatusForbidden, "Workspace access required")
@@ -45,17 +45,17 @@ func scaleP21M3Call(s *server, w http.ResponseWriter, r *http.Request, handler f
 		writeError(w, http.StatusForbidden, "Workspace access required")
 		return
 	}
-	scaleP21CallWithOutputOwner(s, w, r, handler)
+	scaleCallWithOutputOwner(s, w, r, handler)
 }
 
 // Keep the same fixture and operation before and after migrating the handler.
 // This reports allocation cost, not a production capacity or latency claim.
-func TestScaleP21M3GuidanceMeasurement(t *testing.T) {
+func TestScaleGuidanceMeasurement(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Projects = append(data.Projects, domain.Project{ID: "m3-unrelated", Description: strings.Repeat("unrelated ", 40000)})
@@ -75,7 +75,7 @@ func TestScaleP21M3GuidanceMeasurement(t *testing.T) {
 			service := &server{store: mode.repo}
 			run := func() {
 				w := httptest.NewRecorder()
-				service.updateWorkspaceAgentGuidance(w, scaleP21M3Request(workspace, f.data.Viewer, nil, `{"instructions":"unchanged"}`))
+				service.updateWorkspaceAgentGuidance(w, pointSettingsRequest(workspace, f.data.Viewer, nil, `{"instructions":"unchanged"}`))
 				if w.Code != http.StatusOK {
 					t.Fatalf("%s: status=%d body=%s", mode.name, w.Code, w.Body.String())
 				}
@@ -93,7 +93,7 @@ func TestScaleP21M3GuidanceMeasurement(t *testing.T) {
 	}
 }
 
-func scaleP21M3JSON(t *testing.T, raw []byte) any {
+func normalizeSettingsPointJSON(t *testing.T, raw []byte) any {
 	t.Helper()
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
@@ -105,12 +105,12 @@ func scaleP21M3JSON(t *testing.T, raw []byte) any {
 	return result
 }
 
-type scaleP21M3Principal struct {
+type pointSettingsPrincipal struct {
 	name string
 	user domain.User
 }
 
-func scaleP21M3Principals(t *testing.T, f scaleP03PlatformFixture) []scaleP21M3Principal {
+func pointSettingsPrincipals(t *testing.T, f scalePlatformFixture) []pointSettingsPrincipal {
 	t.Helper()
 	public, private, child := idgen.New("m3-public-"), idgen.New("m3-private-"), idgen.New("m3-child-")
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -122,7 +122,7 @@ func scaleP21M3Principals(t *testing.T, f scaleP03PlatformFixture) []scaleP21M3P
 	}); err != nil {
 		t.Fatal(err)
 	}
-	principals := []scaleP21M3Principal{{"admin-private-outsider", f.data.Viewer}}
+	principals := []pointSettingsPrincipal{{"admin-private-outsider", f.data.Viewer}}
 	for _, spec := range []struct {
 		name, role string
 		teams      []string
@@ -132,8 +132,8 @@ func scaleP21M3Principals(t *testing.T, f scaleP03PlatformFixture) []scaleP21M3P
 		{"guest-explicit", "guest", []string{public}},
 		{"sub-team-inheritance", "member", []string{private}},
 	} {
-		_, user := scaleP03Join(t, f, spec.name, idgen.New("m3-principal-")+"@example.test", spec.role, spec.teams...)
-		principals = append(principals, scaleP21M3Principal{spec.name, user})
+		_, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("m3-principal-")+"@example.test", spec.role, spec.teams...)
+		principals = append(principals, pointSettingsPrincipal{spec.name, user})
 		if spec.role == "guest" {
 			if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.grant", "", nil, func(data *domain.Bootstrap) error {
 				for index := range data.Projects {
@@ -150,7 +150,7 @@ func scaleP21M3Principals(t *testing.T, f scaleP03PlatformFixture) []scaleP21M3P
 	return principals
 }
 
-func scaleP21M3Credentials() []struct {
+func pointSettingsCredentialCases() []struct {
 	name string
 	key  *domain.APIKey
 } {
@@ -167,19 +167,19 @@ func scaleP21M3Credentials() []struct {
 
 // These are handler-boundary differentials. Production route authorization is
 // independently registered and must be migrated before enabling the flag.
-func TestScaleP21M3GuidanceDifferential(t *testing.T) {
+func TestScaleGuidanceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
-		principals := scaleP21M3Principals(t, f)
+		principals := pointSettingsPrincipals(t, f)
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
-		unrelated := scaleP21M3Fingerprint(t, probe, workspace, "projects")
+		unrelated := pointRecordFingerprint(t, probe, workspace, "projects")
 		reset := func() {
 			t.Helper()
 			if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -198,7 +198,7 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 			}
 		}
 		for _, principal := range principals {
-			for _, credential := range scaleP21M3Credentials() {
+			for _, credential := range pointSettingsCredentialCases() {
 				t.Run(principal.name+"/"+credential.name, func(t *testing.T) {
 					for _, body := range []string{`{"instructions":" after "}`, `{"instructions":"before"}`, `{"instructions":"` + strings.Repeat("x", 8001) + `"}`} {
 						var responses []any
@@ -212,8 +212,8 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 							current.SetWebhookSink(func(_ string, next domain.DomainEvent) { event = next })
 							current.SetRealtimeSink(func(_ string, next domain.RealtimeEvent) { realtime = next })
 							w := httptest.NewRecorder()
-							scaleP21M3Call(service, w, scaleP21M3Request(workspace, principal.user, credential.key, body), (*server).updateWorkspaceAgentGuidance)
-							responses = append(responses, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+							callPointSettingsHandler(service, w, pointSettingsRequest(workspace, principal.user, credential.key, body), (*server).updateWorkspaceAgentGuidance)
+							responses = append(responses, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 							hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
 							data := hydrated.Data
 							if err != nil {
@@ -279,7 +279,7 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 			}
 			for _, current := range []*store.SQLiteStore{repo, probe} {
 				w := httptest.NewRecorder()
-				scaleP21M3Call(&server{store: current}, w, scaleP21M3Request(key, member, nil, `{"instructions":"denied"}`), (*server).updateWorkspaceAgentGuidance)
+				callPointSettingsHandler(&server{store: current}, w, pointSettingsRequest(key, member, nil, `{"instructions":"denied"}`), (*server).updateWorkspaceAgentGuidance)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s status=%d body=%s", phase, w.Code, w.Body.String())
 				}
@@ -288,7 +288,7 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 		if probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("bounded handler decoded full metadata")
 		}
-		if scaleP21M3Fingerprint(t, probe, workspace, "projects") != unrelated {
+		if pointRecordFingerprint(t, probe, workspace, "projects") != unrelated {
 			t.Fatal("guidance handler changed unrelated canonical bodies")
 		}
 	}

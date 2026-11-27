@@ -18,14 +18,14 @@ import (
 // content collection per team: the workspace ("ws"), the public team ("pub"),
 // the private team ("priv") and the private team's sub-team ("child").
 type teamScopedFixture struct {
-	scaleP21M2Fixture
+	policyDifferentialFixture
 	teams map[string]string // label -> team id
 }
 
 func teamScopedSeed(t *testing.T, repo *store.SQLiteStore) teamScopedFixture {
 	t.Helper()
-	f := scaleP21M2Setup(t, repo)
-	result := teamScopedFixture{scaleP21M2Fixture: f, teams: map[string]string{"ws": "", "pub": f.public}}
+	f := setupPolicyDifferential(t, repo)
+	result := teamScopedFixture{policyDifferentialFixture: f, teams: map[string]string{"ws": "", "pub": f.public}}
 	at := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
 	restore := store.ForceFullMutationsForTesting(true)
 	err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "team_scoped.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -233,7 +233,7 @@ func teamScopedBootstrap(t *testing.T, f teamScopedFixture, source *store.SQLite
 func TestTeamScopedCollectionsBootstrap(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
+	for _, repo := range scaleServerTestStores(t) {
 		f := teamScopedSeed(t, repo)
 		credentials := []struct {
 			name  string
@@ -292,7 +292,7 @@ func TestKeyTeamScopeWorkspaceDocuments(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
+	for _, repo := range scaleServerTestStores(t) {
 		f := teamScopedSeed(t, repo)
 		documents := []string{"tsc-doc-ws", "tsc-doc-inherited-pub", "tsc-doc-inherited-priv"}
 		for _, principal := range f.principals {
@@ -318,10 +318,10 @@ func TestKeyTeamScopeWorkspaceDocuments(t *testing.T) {
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					label := principal.name + "/" + key.ID + map[bool]string{false: "", true: "/bounded"}[source.BoundedMetadataEnabled()]
 					bootstrap := teamScopedBootstrap(t, f, source, principal.user, key, "/api/bootstrap", false).ids()["documents"]
-					list := keyTeamScopeServe(f.scaleP21M2Fixture, source, "", principal.user, key, http.MethodGet, "/api/documents", nil)
+					list := keyTeamScopeServe(f.policyDifferentialFixture, source, "", principal.user, key, http.MethodGet, "/api/documents", nil)
 					for _, id := range documents {
 						visible := slices.Contains(credential.visible, id)
-						detail := keyTeamScopeServe(f.scaleP21M2Fixture, source, "", principal.user, key, http.MethodGet, "/api/documents/"+id, nil)
+						detail := keyTeamScopeServe(f.policyDifferentialFixture, source, "", principal.user, key, http.MethodGet, "/api/documents/"+id, nil)
 						if got := detail.code == http.StatusOK; got != visible {
 							t.Errorf("%s: detail of %s = %d, want visible=%t", label, id, detail.code, visible)
 						}

@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-func TestScaleP21BoundedCRDTMapLayoutAndSkew(t *testing.T) {
+func TestScaleBoundedCRDTMapLayoutAndSkew(t *testing.T) {
 	if !runtimeSupported() {
 		t.Fatal(ErrRuntimeLayout, runtime.Version())
 	}
@@ -53,7 +53,7 @@ func TestScaleP21BoundedCRDTMapLayoutAndSkew(t *testing.T) {
 	t.Logf("entries=%d directory=%d admitted_peak=%d", len(values), header.directoryLen, peak)
 }
 
-func TestScaleP21BoundedCRDTMapGrowthFailure(t *testing.T) {
+func TestScaleBoundedCRDTMapGrowthFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	m, err := NewMeter(ctx, func(uint64) (func(), error) { return func() {}, nil })
 	if err != nil {

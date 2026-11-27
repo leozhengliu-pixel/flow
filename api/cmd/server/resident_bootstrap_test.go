@@ -13,20 +13,20 @@ import (
 	"flow/api/internal/store"
 )
 
-// TestScaleP21ResidentBootstrapImage serves the paged bootstrap with the flag
+// TestScaleResidentBootstrapImage serves the paged bootstrap with the flag
 // on from the resident decoded image of the installed generation and checks:
 // the bytes equal flag-off's for every principal shape and projection; the
 // image is built once and then shared; serving never writes into it (it
 // stays equal to a fresh decode of its generation); a read that pinned a
 // generation keeps it after a write installs the next one; and a write's
 // generation is served at once (the image follows it).
-func TestScaleP21ResidentBootstrapImage(t *testing.T) {
+func TestScaleResidentBootstrapImage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21BootstrapHistorySeed(t, repo)
+			f := scaleBootstrapHistorySeed(t, repo)
 			workspace := f.data.Workspace.URLKey
 			// The projects and documents contain upload links. Add an
 			// independent, cacheable field to exercise hits on the route.
@@ -40,7 +40,7 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cases := []scaleP21SW145Case{
+			cases := []issueBootstrapRoutesCase{
 				{name: "admin", user: f.principals[0].user},
 				{name: "member", user: f.principals[2].user},
 				{name: "guest", user: f.principals[3].user},
@@ -48,23 +48,23 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 				{name: "development", user: f.data.Viewer, development: true},
 			}
 			encodings := newBootstrapEncodingRenderer(store.BoundedBootstrapEncodingBytes())
-			serve := func(t *testing.T, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
-				return scaleP21BootstrapHistoryServeWith(t, f, &server{store: view, authDisabled: test.development, bootstrapEncodings: encodings}, test)
+			serve := func(t *testing.T, test issueBootstrapRoutesCase) scaleBootstrapHistoryResponse {
+				return scaleBootstrapHistoryServeWith(t, f, &server{store: view, authDisabled: test.development, bootstrapEncodings: encodings}, test)
 			}
 			// reference answers a case as the comparison expects it: flag-off
 			// first; after bounded writes (which flag-off sees only through a
 			// reload that normalizes more than the write), the same flag-on
 			// read through the spool, which the route differentials pin to
 			// flag-off.
-			legacy := func(test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
-				return scaleP21BootstrapHistoryServe(t, f, repo, test)
+			legacy := func(test issueBootstrapRoutesCase) scaleBootstrapHistoryResponse {
+				return scaleBootstrapHistoryServe(t, f, repo, test)
 			}
-			spool := func(test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
+			spool := func(test issueBootstrapRoutesCase) scaleBootstrapHistoryResponse {
 				t.Setenv("FLOW_COLD_DECODE_CACHE_BYTES", "0")
 				defer t.Setenv("FLOW_COLD_DECODE_CACHE_BYTES", "")
-				return scaleP21BootstrapHistoryServe(t, f, view, test)
+				return scaleBootstrapHistoryServe(t, f, view, test)
 			}
-			compare := func(t *testing.T, label string, reference func(scaleP21SW145Case) scaleP21BootstrapHistoryResponse) {
+			compare := func(t *testing.T, label string, reference func(issueBootstrapRoutesCase) scaleBootstrapHistoryResponse) {
 				t.Helper()
 				for _, test := range cases {
 					for _, projection := range []string{"", "project-list"} {
@@ -75,7 +75,7 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 							t.Fatalf("%s %s/%s: resident read %d, reference %d: %.200s", label, test.name, projection, bounded.Status, want.Status, bounded.Body)
 						}
 						if bounded.Body != want.Body {
-							t.Fatalf("%s %s/%s: resident bootstrap body differs: %d/%d bytes in %s", label, test.name, projection, len(bounded.Body), len(want.Body), scaleP21ResidentDiff(bounded.Body, want.Body))
+							t.Fatalf("%s %s/%s: resident bootstrap body differs: %d/%d bytes in %s", label, test.name, projection, len(bounded.Body), len(want.Body), scaleResidentDiff(bounded.Body, want.Body))
 						}
 						if cached := serve(t, test); cached != bounded {
 							t.Fatalf("%s %s/%s: cached bootstrap body or status differs", label, test.name, projection)
@@ -111,7 +111,7 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 			if !pinned.Resident() {
 				t.Fatal("the read did not come from the resident image")
 			}
-			renamed := scaleP21ProjectUpdateServe(f.scaleP21M2Fixture, view, "", f.principals[0].user,
+			renamed := scaleProjectUpdateServe(f.policyDifferentialFixture, view, "", f.principals[0].user,
 				&domain.APIKey{ID: "resident-writer", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"},
 				"history-project-001", map[string]any{"name": "Renamed resident project"})
 			if renamed.Code != http.StatusOK {
@@ -161,7 +161,7 @@ func TestScaleP21ResidentBootstrapImage(t *testing.T) {
 			go func() {
 				defer wait.Done()
 				for round := range 4 {
-					response := scaleP21ProjectUpdateServe(f.scaleP21M2Fixture, view, "", f.principals[0].user,
+					response := scaleProjectUpdateServe(f.policyDifferentialFixture, view, "", f.principals[0].user,
 						&domain.APIKey{ID: "resident-writer", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"},
 						"history-project-002", map[string]any{"name": fmt.Sprintf("Concurrent rename %d", round)})
 					if response.Code != http.StatusOK {
@@ -192,9 +192,9 @@ func projectNames(projects []domain.Project) []string {
 	return names
 }
 
-// scaleP21ResidentDiff names the top-level fields two bootstrap bodies
+// scaleResidentDiff names the top-level fields two bootstrap bodies
 // disagree on, with the start of each side.
-func scaleP21ResidentDiff(a, b string) string {
+func scaleResidentDiff(a, b string) string {
 	var left, right map[string]json.RawMessage
 	if json.Unmarshal([]byte(a), &left) != nil || json.Unmarshal([]byte(b), &right) != nil {
 		return "unparsable bodies"

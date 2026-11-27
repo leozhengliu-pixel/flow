@@ -17,8 +17,8 @@ import (
 // contract at once (one model read for the loop text), the editor's read waits
 // for the store, and the store retries until the slot frees instead of losing
 // the contract.
-func TestScaleP21LoopContractStoreWaitsOutBusyColdSlot(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+func TestScaleLoopContractStoreWaitsOutBusyColdSlot(t *testing.T) {
+	f, workspace := routeTemperatureGuardFixture(t)
 	view := f.probe
 	work := store.WithColdWork(context.Background(), "loop-contract-busy")
 	loop := domain.Loop{ID: "busy-contract-loop", Name: "Busy loop", Instructions: "Summarize the open bugs of the busy workspace", Status: "active", TriggerType: "manual", ConnectorIDs: []string{}}

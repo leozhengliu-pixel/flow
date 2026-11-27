@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW116Capture struct {
+type issueReactionWriteCapture struct {
 	Viewer       domain.User
 	Via          *domain.ActorBot
 	Role         string
@@ -23,23 +23,23 @@ type scaleP21SW116Capture struct {
 	BeforeLabels []domain.IssueLabel
 }
 
-type scaleP21SW116Outcome struct {
-	Business                   scaleP21SW63Business
-	Metadata                   scaleP21SW76Metadata
+type issueReactionWriteOutcome struct {
+	Business                   discussionWriterBusiness
+	Metadata                   legacyActorWriteMetadata
 	Indexes                    map[string][][]any
 	Installed                  domain.Bootstrap
 	InstalledVia               *domain.ActorBot
 	InstalledImportJobs        []domain.ImportJob
 	InstalledMigrationJobs     []domain.MigrationJob
 	Events, Webhooks, Realtime []any
-	Callback                   []scaleP21SW116Capture
+	Callback                   []issueReactionWriteCapture
 	Updated                    domain.Issue
 	Input                      domain.ReactionInput
 	ErrorType, ErrorText       string
 	Calls                      int
 }
 
-func scaleP21SW116Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time, mode string) {
+func issueReactionWriteSeed(t *testing.T, f scaleFixture, issue domain.Issue, at time.Time, mode string) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	issue.Labels = []domain.IssueLabel{{ID: "sw116-label", Name: "Reaction count alias", Scope: issue.Team.ID}}
@@ -58,7 +58,7 @@ func scaleP21SW116Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 	case "append-duplicates":
 		issue.Reactions = map[string][]string{"like": {"other", "other"}, "untouched": {}}
 	}
-	scaleP21SW63Seed(t, f, issue, at)
+	discussionWriterSeed(t, f, issue, at)
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw116_seed", "", nil, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == "sw116-label" }) {
 			data.Labels = append(data.Labels, issue.Labels[0])
@@ -158,11 +158,11 @@ func scaleP21SW116Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 	f.mu.Unlock()
 }
 
-func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
+func TestIssueReactionWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	// Disable the test-only P04 double-callback audit without selecting a
+	// Disable the test-only record verification double-callback audit without selecting a
 	// different dispatcher or replacing either literal writer.
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
 	if fullMutationsForced.Load() {
@@ -181,7 +181,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 					continue
 				}
 				t.Run(fmt.Sprintf("scoped=%t/reload=%t/%s", scoped, reload, mode), func(t *testing.T) {
-					f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Reaction progress"}}, nil)
+					f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Reaction progress"}}, nil)
 					workspace := f.data.Workspace.URLKey
 					metadata, found := f.WorkspaceMetadata(workspace)
 					if !found {
@@ -206,14 +206,14 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 							metadata.NotificationPreferences[user.ID] = preferences
 						}
 					}
-					actor := scaleP21SW69OwnedActor(f.data.Viewer)
+					actor := ownedActor(f.data.Viewer)
 					actor.Via = &domain.ActorBot{ID: "sw116-request-app", Name: "Reaction request attribution", Type: domain.ActorBotTypeOAuthApplication}
 					var outputs []any
 					var statementCounts []int64
 					for _, bounded := range []bool{false, true} {
 						writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadata))
-						scaleP21SW116Seed(t, f, issue, at, mode)
-						repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+						issueReactionWriteSeed(t, f, issue, at, mode)
+						repo := scaleIssuePersistenceView(t, f, bounded, reload)
 						if mode == "native-duplicates" {
 							f.mu.RLock()
 							duplicates := 0
@@ -227,10 +227,10 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 								t.Fatal("native duplicate fixture lost an original occurrence", duplicates)
 							}
 						}
-						before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						beforeMetadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-						beforeIndexes := scaleP21SW98Indexes(t, repo, workspace)
-						prior := scaleP21SW63EventIDs(t, repo, workspace)
+						before := businessRows(t, repo, workspace, issue.ID)
+						beforeMetadata := metadataImage(t, repo.db, workspace)
+						beforeIndexes := legacyDiscussionWriteIndexes(t, repo, workspace)
+						prior := eventIDs(t, repo, workspace)
 						ctx := ContextWithActor(t.Context(), actor)
 						if scoped {
 							ctx = WithIssueRecordMutations(ctx, issue.ID)
@@ -255,7 +255,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 						if mode == "cancel-before" {
 							cancel()
 						}
-						got := scaleP21SW116Outcome{}
+						got := issueReactionWriteOutcome{}
 						var captured []*domain.Bootstrap
 						checkOwner := func() {
 							t.Helper()
@@ -318,7 +318,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 							target.Version++
 							target.UpdatedAt = at.Add(time.Hour)
 							got.Updated = *target
-							capture := scaleP21SW116Capture{
+							capture := issueReactionWriteCapture{
 								Viewer: data.Viewer, Via: data.Viewer.Via, Role: data.ViewerRole,
 								Saved: *target, BeforeLabels: slices.Clone(target.Labels),
 							}
@@ -378,10 +378,10 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 						if mode == "cancel-persist" && !persistCancelled {
 							t.Fatal("reaction cancellation never reached event persistence")
 						}
-						got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						got.Metadata = scaleP21SW76MetadataImage(t, repo.db, workspace)
-						got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
-						got.Installed = scaleP21SW98Installed(t, repo, workspace)
+						got.Business = businessRows(t, repo, workspace, issue.ID)
+						got.Metadata = metadataImage(t, repo.db, workspace)
+						got.Indexes = legacyDiscussionWriteIndexes(t, repo, workspace)
+						got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
 						got.InstalledVia = got.Installed.Viewer.Via
 						if mode == "warm-import-inputs" {
 							var imports domain.Bootstrap
@@ -407,7 +407,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 								t.Fatal("reaction discarded import or migration job metadata")
 							}
 						}
-						got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+						got.Events = newEvents(t, repo, workspace, prior)
 						if got.Calls != wantCalls || len(got.Events) != wantEvents || len(got.Webhooks) != wantEvents || len(got.Realtime) != wantEvents {
 							t.Fatal("reaction callback/publication count changed", bounded, got.Calls, len(got.Events), len(got.Webhooks), len(got.Realtime))
 						}
@@ -488,7 +488,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 								t.Fatal(err)
 							}
 						}
-						outputs = append(outputs, scaleP21SW63JSON(t, got))
+						outputs = append(outputs, discussionWriterJSON(t, got))
 						if bounded {
 							owner.Close()
 							owner.Close()
@@ -503,7 +503,7 @@ func TestScaleP21SW116IssueReactionWriterDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(outputs[0], outputs[1]) {
-						t.Fatal("literal/bounded issue reaction differs", scaleP21SW98FirstDiff(outputs[0], outputs[1], "reaction"))
+						t.Fatal("literal/bounded issue reaction differs", firstDiff(outputs[0], outputs[1], "reaction"))
 					}
 					t.Logf("scoped=%t reload=%t operation=%s writer_SQL_old=%d writer_SQL_bounded=%d", scoped, reload, mode, statementCounts[0], statementCounts[1])
 				})

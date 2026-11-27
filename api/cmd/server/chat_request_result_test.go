@@ -16,13 +16,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ChatRequestResultDifferential(t *testing.T) {
+func TestScaleChatRequestResultDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{43}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -165,7 +165,7 @@ func TestScaleP21ChatRequestResultDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("request-result differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("request-result differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

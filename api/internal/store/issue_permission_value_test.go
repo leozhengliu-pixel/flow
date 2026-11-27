@@ -15,8 +15,8 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW114FullHeaders(issues []domain.Issue, full bool) []domain.Issue {
-	headers := scaleP21IssueAuthorizationHeaders(issues)
+func fullHeaders(issues []domain.Issue, full bool) []domain.Issue {
+	headers := scaleIssueAuthorizationHeaders(issues)
 	if full {
 		for index := range headers {
 			headers[index].Permissions = slices.Clone(issues[index].Permissions)
@@ -25,7 +25,7 @@ func scaleP21SW114FullHeaders(issues []domain.Issue, full bool) []domain.Issue {
 	return headers
 }
 
-func scaleP21SW114Permissions(issueID, subjectID string) []domain.IssuePermission {
+func issuePermissionValuePermissions(issueID, subjectID string) []domain.IssuePermission {
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456789123, time.UTC)
 	offset := time.Date(2026, 11, 13, 23, 4, 5, 987654321, time.FixedZone("permission-input", 5*3600+45*60))
 	return []domain.IssuePermission{
@@ -36,7 +36,7 @@ func scaleP21SW114Permissions(issueID, subjectID string) []domain.IssuePermissio
 	}
 }
 
-func scaleP21SW114SetPermissions(t *testing.T, f scaleP09Fixture, issue domain.Issue, permissions []domain.IssuePermission, missing bool, rawOverride []byte) {
+func setPermissions(t *testing.T, f scaleFixture, issue domain.Issue, permissions []domain.IssuePermission, missing bool, rawOverride []byte) {
 	t.Helper()
 	issue.Permissions = nil
 	raw, err := json.Marshal(issue)
@@ -67,9 +67,9 @@ func scaleP21SW114SetPermissions(t *testing.T, f scaleP09Fixture, issue domain.I
 	}
 }
 
-func scaleP21SW114Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userID string, key *domain.APIKey, request IssueWriteAuthorizationRequest) *IssueWriteAuthorizationRead {
+func issuePermissionValueRead(t *testing.T, view *SQLiteStore, f scaleFixture, userID string, key *domain.APIKey, request IssueWriteAuthorizationRequest) *IssueWriteAuthorizationRead {
 	t.Helper()
-	want, err := scaleP21IssueAuthorizationLegacy(t, f, userID, request)
+	want, err := scaleIssueAuthorizationLegacy(t, f, userID, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func scaleP21SW114Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userI
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before, after := scaleP21SW114FullHeaders(want.Issues, request.FullPermissions), scaleP21SW114FullHeaders(read.Data.Issues, true); !reflect.DeepEqual(before, after) {
+	if before, after := fullHeaders(want.Issues, request.FullPermissions), fullHeaders(read.Data.Issues, true); !reflect.DeepEqual(before, after) {
 		read.Close()
 		t.Fatalf("full=%t permission values differ: legacy issues=%d bounded issues=%d", request.FullPermissions, len(before), len(after))
 	}
@@ -94,7 +94,7 @@ func scaleP21SW114Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userI
 	return read
 }
 
-func scaleP21SW114Member(t *testing.T, f scaleP21IssueAuthorizationFixture) domain.User {
+func issuePermissionValueMember(t *testing.T, f scaleIssueAuthorizationFixture) domain.User {
 	t.Helper()
 	user, token, err := f.Register(t.Context(), "Permission value member", idgen.New("sw114-")+"@example.test", "sw114-member-password")
 	if err != nil {
@@ -117,11 +117,11 @@ func scaleP21SW114Member(t *testing.T, f scaleP21IssueAuthorizationFixture) doma
 	return user
 }
 
-func TestScaleP21SW114IssuePermissionValueMatrix(t *testing.T) {
+func TestIssuePermissionValueMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	member := scaleP21SW114Member(t, f)
+	f := scaleIssueAuthorizationSeed(t)
+	member := issuePermissionValueMember(t, f)
 	workspace := f.data.Workspace.URLKey
 	child, err := f.IssueRecord(t.Context(), workspace, f.child)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestScaleP21SW114IssuePermissionValueMatrix(t *testing.T) {
 	}
 	for _, shape := range []string{"complete", "nil", "empty", "missing", "folded-duplicate-fields"} {
 		for _, issue := range rows {
-			permissions := scaleP21SW114Permissions(issue.ID, f.guest.ID)
+			permissions := issuePermissionValuePermissions(issue.ID, f.guest.ID)
 			var raw []byte
 			switch shape {
 			case "nil", "missing":
@@ -158,10 +158,10 @@ func TestScaleP21SW114IssuePermissionValueMatrix(t *testing.T) {
 			case "folded-duplicate-fields":
 				raw = []byte(`[{"id":"first","ID":"decoded","issueId":"first-issue","ISSUEID":"decoded-issue","subjectType":"user","subjectId":"` + f.guest.ID + `","role":"viewer","createdAt":"2026-11-14T01:02:03.000000004Z","CREATEDAT":null,"updatedAt":"2026-11-14T01:02:03Z","UPDATEDAT":"2026-11-15T01:02:03.123456789+05:45"},{"id":"decoded","issueId":"","subjectType":"team","subjectId":"","role":"editor","createdAt":"0001-01-01T00:00:00Z","updatedAt":null},null]`)
 			}
-			scaleP21SW114SetPermissions(t, f.scaleP09Fixture, issue, permissions, shape == "missing", raw)
+			setPermissions(t, f.scaleFixture, issue, permissions, shape == "missing", raw)
 		}
 		for _, reload := range []bool{false, true} {
-			view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, reload)
+			view := scaleIssueAuthorizationView(t, f.scaleFixture, reload)
 			for _, principal := range []struct{ name, userID string }{
 				{"admin-private-outsider", f.data.Viewer.ID},
 				{"member", member.ID},
@@ -198,7 +198,7 @@ func TestScaleP21SW114IssuePermissionValueMatrix(t *testing.T) {
 							// normal child-header field map was not mutated.
 							for _, full := range []bool{true, false} {
 								request.FullPermissions = full
-								read := scaleP21SW114Read(t, view, f.scaleP09Fixture, principal.userID, credential.key, request)
+								read := issuePermissionValueRead(t, view, f.scaleFixture, principal.userID, credential.key, request)
 								read.Close()
 								read.Close()
 								if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
@@ -213,11 +213,11 @@ func TestScaleP21SW114IssuePermissionValueMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW114IssuePermissionBodyAndListBounds(t *testing.T) {
+func TestIssuePermissionBodyAndListBounds(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	f := scaleIssueAuthorizationSeed(t)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	workspace := f.data.Workspace.URLKey
 	base, err := f.IssueRecord(t.Context(), workspace, f.child)
 	if err != nil {
@@ -225,15 +225,15 @@ func TestScaleP21SW114IssuePermissionBodyAndListBounds(t *testing.T) {
 	}
 	base.ParentID = nil
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: workspace}, IDs: []string{f.child}, FullPermissions: true}
-	permissions := scaleP21SW114Permissions(f.child, f.guest.ID)
+	permissions := issuePermissionValuePermissions(f.child, f.guest.ID)
 	var held int
 	for _, copies := range []int{1, 10} {
 		issue := base
 		issue.Description = strings.Repeat("ignored issue body ", copies*10000)
 		issue.Title = strings.Repeat("ignored title ", copies*10000)
 		issue.Creator.AvatarURL = strings.Repeat("ignored avatar ", copies*10000)
-		scaleP21SW114SetPermissions(t, f.scaleP09Fixture, issue, permissions, false, nil)
-		read := scaleP21SW114Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+		setPermissions(t, f.scaleFixture, issue, permissions, false, nil)
+		read := issuePermissionValueRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 		work := view.MetadataWorkUsedForTesting()
 		if held == 0 {
 			held = work
@@ -255,8 +255,8 @@ func TestScaleP21SW114IssuePermissionBodyAndListBounds(t *testing.T) {
 			values[index].ID = fmt.Sprintf("permission-%05d", index)
 			values[index].IssueID = f.child
 		}
-		scaleP21SW114SetPermissions(t, f.scaleP09Fixture, base, values, false, nil)
-		read := scaleP21SW114Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+		setPermissions(t, f.scaleFixture, base, values, false, nil)
+		read := issuePermissionValueRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 		if len(read.Data.Issues) != 1 || len(read.Data.Issues[0].Permissions) != count {
 			t.Fatal("legal permission list was truncated", count)
 		}
@@ -273,27 +273,27 @@ func TestScaleP21SW114IssuePermissionBodyAndListBounds(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW114IssuePermissionOwnershipAndScope(t *testing.T) {
+func TestIssuePermissionOwnershipAndScope(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	f := scaleIssueAuthorizationSeed(t)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	workspace := f.data.Workspace.URLKey
 	issue, err := f.IssueRecord(t.Context(), workspace, f.child)
 	if err != nil {
 		t.Fatal(err)
 	}
 	issue.ParentID = nil
-	permissions := scaleP21SW114Permissions(f.child, f.guest.ID)
-	scaleP21SW114SetPermissions(t, f.scaleP09Fixture, issue, permissions, false, nil)
+	permissions := issuePermissionValuePermissions(f.child, f.guest.ID)
+	setPermissions(t, f.scaleFixture, issue, permissions, false, nil)
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: workspace}, IDs: []string{f.child}, FullPermissions: true}
-	first := scaleP21SW114Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+	first := issuePermissionValueRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 	pinned, err := first.Context(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	firstWork := view.MetadataWorkUsedForTesting()
-	second := scaleP21SW114Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+	second := issuePermissionValueRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 	first.Data.Issues[0].Permissions[0].IssueID = "caller mutation"
 	first.Data.Issues[0].Permissions[0].CreatedAt = time.Time{}
 	if second.Data.Issues[0].Permissions[0].IssueID == "caller mutation" || second.Data.Issues[0].Permissions[0].CreatedAt.IsZero() {
@@ -305,7 +305,7 @@ func TestScaleP21SW114IssuePermissionOwnershipAndScope(t *testing.T) {
 	}
 	next := slices.Clone(permissions)
 	next[0].ID, next[0].IssueID = "new canonical permission", "new canonical issue field"
-	scaleP21SW114SetPermissions(t, f.scaleP09Fixture, issue, next, false, nil)
+	setPermissions(t, f.scaleFixture, issue, next, false, nil)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "workspaceSettings"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.HIPAACompliance = !data.WorkspaceSettings.HIPAACompliance
 		return nil

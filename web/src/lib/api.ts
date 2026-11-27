@@ -121,7 +121,7 @@ import { markSuspendedMembersInactive } from "@/lib/people";
 import { decodeBase64Url, encodeBase64Url } from "@/lib/webauthn";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
 import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
-import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/scale-p13-wire';
+import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/sync-wire';
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
 import type {

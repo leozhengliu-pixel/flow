@@ -26,7 +26,7 @@ func TestBoundedPortfolioDocumentSelection(t *testing.T) {
 			{ID: "unrelated", Description: body},
 		},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"portfolio": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"portfolio": data})
 	source, err := view.retainMetadataLogicalSource(t.Context(), "portfolio")
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestBoundedPortfolioDocumentRollbackAndReplay(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestBoundedPortfolioDocumentRollbackAndReplay(t *testing.T) {
 	var webhooks, realtime int
 	view.SetWebhookSink(func(string, domain.DomainEvent) { webhooks++ })
 	view.SetRealtimeSink(func(string, domain.RealtimeEvent) { realtime++ })
-	before := scaleP09Head(t, f)
+	before := scaleHead(t, f)
 	write := func(ctx context.Context) error {
 		var releases []func()
 		ctx = WithMetadataOutputOwner(ctx, func(close func()) bool {
@@ -144,7 +144,7 @@ func TestBoundedPortfolioDocumentRollbackAndReplay(t *testing.T) {
 	}
 	check(0)
 	read(view, 0)
-	if scaleP09Head(t, f) != before {
+	if scaleHead(t, f) != before {
 		t.Fatal("rolled back document advanced the journal")
 	}
 	if err := write(t.Context()); err != nil {
@@ -156,7 +156,7 @@ func TestBoundedPortfolioDocumentRollbackAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	read(peer, 1)
-	if scaleP09Head(t, f) == before {
+	if scaleHead(t, f) == before {
 		t.Fatal("successful document write did not advance the journal")
 	}
 }

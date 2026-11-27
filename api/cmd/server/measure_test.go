@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP06Measurements(t *testing.T) {
+func TestScaleMeasurementsMeasure(t *testing.T) {
 	t.Run("heartbeat2000", func(t *testing.T) {
 		t.Setenv("FLOW_PRESENCE_MINIMAL", "on")
 		s := &server{store: pulseTestRepo(t), uploadPath: t.TempDir(), authDisabled: true}

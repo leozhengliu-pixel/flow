@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW17RequestActorDifferential(t *testing.T) {
+func TestRequestActorDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, workspace := range []string{f.data.Workspace.URLKey, idgen.New("sw17-missing-")} {
 				r := f.request(user, key, nil)
@@ -51,10 +51,10 @@ func TestScaleP21SW17RequestActorDifferential(t *testing.T) {
 		if got := requestActor(&server{store: f.probe, authDisabled: true}, r.WithContext(ctx)); got.ID != "" {
 			t.Fatal("cancelled bounded identity lookup returned an actor")
 		}
-		original := scaleP21M2UnrelatedHash(t, t.Context(), repo, f.data.Workspace.URLKey)
+		original := unrelatedPolicyRowsHash(t, t.Context(), repo, f.data.Workspace.URLKey)
 		user := requestActor(&server{store: f.probe}, f.request(f.data.Viewer, nil, nil))
 		user.DisplayName = "Caller-owned actor"
-		if scaleP21M2UnrelatedHash(t, t.Context(), repo, f.data.Workspace.URLKey) != original || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if unrelatedPolicyRowsHash(t, t.Context(), repo, f.data.Workspace.URLKey) != original || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("actor lookup changed unrelated metadata or decoded complete metadata")
 		}
 	}

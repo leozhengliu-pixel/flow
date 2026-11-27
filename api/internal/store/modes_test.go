@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestScaleP09UnreadyJournalPreservesLegacyRecords(t *testing.T) {
+func TestScaleUnreadyJournalPreservesLegacyRecords(t *testing.T) {
 	for _, schema := range []string{"absent", "disabled"} {
 		t.Run(schema, func(t *testing.T) {
 			var legacyJSON []byte
@@ -21,9 +21,9 @@ func TestScaleP09UnreadyJournalPreservesLegacyRecords(t *testing.T) {
 					var s *SQLiteStore
 					var workspace string
 					if schema == "absent" {
-						s, workspace = scaleP05Database(t)
+						s, workspace = catalogScaleDatabase(t)
 					} else {
-						f := scaleP09Database(t)
+						f := journalScaleDatabase(t)
 						s, workspace = f.SQLiteStore, f.data.Workspace.URLKey
 					}
 					t.Setenv("FLOW_RECORD_JOURNAL", mode)
@@ -81,9 +81,9 @@ func TestScaleP09UnreadyJournalPreservesLegacyRecords(t *testing.T) {
 	}
 }
 
-func TestScaleP09CatalogExplainIndexes(t *testing.T) {
+func TestScaleCatalogExplainIndexesModes(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	t.Cleanup(func() {
 		for _, table := range []string{"metadata_catalog_relations", "metadata_catalog"} {
 			if _, err := f.db.ExecContext(context.Background(), `DELETE FROM `+table+` WHERE workspace_key=?`, f.data.Workspace.URLKey); err != nil {
@@ -91,12 +91,12 @@ func TestScaleP09CatalogExplainIndexes(t *testing.T) {
 			}
 		}
 	})
-	scaleP05CatalogExplainIndexes(t, f.SQLiteStore, f.data.Workspace.URLKey, true)
+	scaleCatalogExplainIndexes(t, f.SQLiteStore, f.data.Workspace.URLKey, true)
 }
 
-func TestScaleP09CatalogCursorMatchesLegacyOrder(t *testing.T) {
+func TestScaleCatalogCursorMatchesLegacyOrder(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestScaleP09CatalogCursorMatchesLegacyOrder(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Finish(t, f.SQLiteStore, workspace, "projects")
+	scaleFinish(t, f.SQLiteStore, workspace, "projects")
 	for _, order := range []string{"collection", "createdAt", "updatedAt"} {
 		t.Run(order, func(t *testing.T) {
 			var legacy []string

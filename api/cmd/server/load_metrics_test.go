@@ -7,18 +7,18 @@ import (
 	"time"
 )
 
-type scaleP06LoadStreams struct {
+type scaleLoadStreams struct {
 	connections atomic.Int64
 	disconnects atomic.Int64
 	reconnects  atomic.Int64
 }
 
-type scaleP06LoadTransport struct {
+type scaleLoadTransport struct {
 	peakWaiters [2]int32
 	waitSamples [2]int
 }
 
-func (m *scaleP06LoadTransport) sample(peers peerServers) {
+func (m *scaleLoadTransport) sample(peers peerServers) {
 	for i, server := range peers.servers {
 		waiting := server.realtime.budget.waiters.Load()
 		m.peakWaiters[i] = max(m.peakWaiters[i], waiting)
@@ -28,7 +28,7 @@ func (m *scaleP06LoadTransport) sample(peers peerServers) {
 	}
 }
 
-func (m *scaleP06LoadTransport) report(peers peerServers) any {
+func (m *scaleLoadTransport) report(peers peerServers) any {
 	values := make([]map[string]any, len(peers.servers))
 	for i, server := range peers.servers {
 		budget := server.realtime.budget
@@ -37,7 +37,7 @@ func (m *scaleP06LoadTransport) report(peers peerServers) any {
 	return values
 }
 
-func scaleP06PropagationSummary(changes int, values []time.Duration) map[string]any {
+func scalePropagationSummary(changes int, values []time.Duration) map[string]any {
 	var overOneSecond, overFiveSeconds int
 	for _, value := range values {
 		if value > time.Second {

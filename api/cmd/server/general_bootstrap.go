@@ -70,7 +70,7 @@ func (s *server) generalBootstrapBounded(w http.ResponseWriter, r *http.Request)
 		}
 		materializeDevelopmentMembers(&data)
 	}
-	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
+	if err := scaleSanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
 		issueRecordsError(w, err)
 		return
 	}

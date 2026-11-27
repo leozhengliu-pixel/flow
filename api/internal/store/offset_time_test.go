@@ -13,7 +13,7 @@ import (
 // logical source exactly as the legacy decode reads it, whichever path built
 // the source (here a capture of a legacy-decoded image, as point reads and
 // candidates are). A named or sub-minute zone stays unavailable.
-func TestScaleP21OffsetTimestampsDecodeAsLegacy(t *testing.T) {
+func TestScaleOffsetTimestampsDecodeAsLegacy(t *testing.T) {
 	_, localOffset := time.Date(2026, 3, 4, 5, 6, 7, 0, time.Local).Zone()
 	local := time.Date(2026, 3, 4, 5, 6, 7, 8, time.FixedZone("", localOffset)).Format(time.RFC3339Nano)
 	for _, text := range []string{

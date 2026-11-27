@@ -13,18 +13,18 @@ import (
 	"testing"
 )
 
-type scaleP21SW265Ref struct {
+type bootstrapLeavesGuardRef struct {
 	File, Function string
 	Call           bool
 	Pos            token.Pos
 }
 
-type scaleP21SW265Package struct {
+type bootstrapLeavesPackage struct {
 	fset  *token.FileSet
 	files map[string]*ast.File
 }
 
-func scaleP21SW265Parse(t *testing.T) scaleP21SW265Package {
+func parseBootstrapLeavesPackage(t *testing.T) bootstrapLeavesPackage {
 	t.Helper()
 	_, path, _, ok := runtime.Caller(0)
 	if !ok {
@@ -35,7 +35,7 @@ func scaleP21SW265Parse(t *testing.T) scaleP21SW265Package {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := scaleP21SW265Package{fset: token.NewFileSet(), files: map[string]*ast.File{}}
+	result := bootstrapLeavesPackage{fset: token.NewFileSet(), files: map[string]*ast.File{}}
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -53,7 +53,7 @@ func scaleP21SW265Parse(t *testing.T) scaleP21SW265Package {
 	return result
 }
 
-func (p scaleP21SW265Package) function(t *testing.T, name string) *ast.FuncDecl {
+func (p bootstrapLeavesPackage) function(t *testing.T, name string) *ast.FuncDecl {
 	t.Helper()
 	var found *ast.FuncDecl
 	for _, file := range p.files {
@@ -75,8 +75,8 @@ func (p scaleP21SW265Package) function(t *testing.T, name string) *ast.FuncDecl 
 // references lists every identifier or selector naming name in production
 // code (calls, method values and function values alike), by enclosing
 // top-level function ("" for package-level declarations).
-func (p scaleP21SW265Package) references(name string) []scaleP21SW265Ref {
-	refs := []scaleP21SW265Ref{}
+func (p bootstrapLeavesPackage) references(name string) []bootstrapLeavesGuardRef {
+	refs := []bootstrapLeavesGuardRef{}
 	for fileName, file := range p.files {
 		for _, decl := range file.Decls {
 			enclosing := ""
@@ -96,18 +96,18 @@ func (p scaleP21SW265Package) references(name string) []scaleP21SW265Ref {
 				switch node := node.(type) {
 				case *ast.SelectorExpr:
 					if node.Sel.Name == name {
-						refs = append(refs, scaleP21SW265Ref{fileName, enclosing, calls[node], node.Pos()})
+						refs = append(refs, bootstrapLeavesGuardRef{fileName, enclosing, calls[node], node.Pos()})
 					}
 				case *ast.Ident:
-					if node.Name == name && !scaleP21SW265SelectorName(root, node) {
-						refs = append(refs, scaleP21SW265Ref{fileName, enclosing, calls[node], node.Pos()})
+					if node.Name == name && !selectorName(root, node) {
+						refs = append(refs, bootstrapLeavesGuardRef{fileName, enclosing, calls[node], node.Pos()})
 					}
 				}
 				return true
 			})
 		}
 	}
-	slices.SortFunc(refs, func(a, b scaleP21SW265Ref) int {
+	slices.SortFunc(refs, func(a, b bootstrapLeavesGuardRef) int {
 		return strings.Compare(a.File+"/"+a.Function, b.File+"/"+b.Function)
 	})
 	for index := range refs {
@@ -116,7 +116,7 @@ func (p scaleP21SW265Package) references(name string) []scaleP21SW265Ref {
 	return refs
 }
 
-func scaleP21SW265SelectorName(root ast.Node, ident *ast.Ident) bool {
+func selectorName(root ast.Node, ident *ast.Ident) bool {
 	selected := false
 	ast.Inspect(root, func(node ast.Node) bool {
 		if selector, ok := node.(*ast.SelectorExpr); ok && selector.Sel == ident {
@@ -127,10 +127,10 @@ func scaleP21SW265SelectorName(root ast.Node, ident *ast.Ident) bool {
 	return selected
 }
 
-// scaleP21SW265BoundedFirst requires fn's first statement to be
+// boundedFirst requires fn's first statement to be
 // `if s.store.BoundedMetadataEnabled() { ...; return ... }` whose body names
 // every wanted identifier.
-func scaleP21SW265BoundedFirst(t *testing.T, fn *ast.FuncDecl, wanted ...string) {
+func boundedFirst(t *testing.T, fn *ast.FuncDecl, wanted ...string) {
 	t.Helper()
 	if len(fn.Body.List) == 0 {
 		t.Fatal("empty production function", fn.Name.Name)
@@ -171,7 +171,7 @@ func scaleP21SW265BoundedFirst(t *testing.T, fn *ast.FuncDecl, wanted ...string)
 	}
 }
 
-func scaleP21SW265Names(root ast.Node) map[string]bool {
+func bootstrapLeavesGuardNames(root ast.Node) map[string]bool {
 	names := map[string]bool{}
 	ast.Inspect(root, func(node ast.Node) bool {
 		if ident, ok := node.(*ast.Ident); ok {
@@ -183,16 +183,16 @@ func scaleP21SW265Names(root ast.Node) map[string]bool {
 }
 
 // The literal accessors a bounded consumer must not reach on its own.
-var scaleP21SW265HydratingAccessors = []string{
+var hydratingAccessors = []string{
 	"Bootstrap", "BootstrapFor", "BootstrapForContext", "BootstrapForUser", "MutateWorkspace",
 	"WorkspaceMetadata", "WorkspaceMetadataForRead", "WorkspaceMetadataFields", "PagedWorkspaceMetadata",
 	"issueRecordsBootstrapData", "attachmentVisible", "workspaceData", "BeginWorkspaceRead",
 }
 
-func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
-	pkg := scaleP21SW265Parse(t)
-	scaleP21SW265BoundedFirst(t, pkg.function(t, "attachmentVisible"), "boundedAttachmentVisible")
-	want := []scaleP21SW265Ref{
+func TestAttachmentVisibilityBoundary(t *testing.T) {
+	pkg := parseBootstrapLeavesPackage(t)
+	boundedFirst(t, pkg.function(t, "attachmentVisible"), "boundedAttachmentVisible")
+	want := []bootstrapLeavesGuardRef{
 		{File: "files_api.go", Function: "fileReadableContext", Call: true},
 		{File: "main.go", Function: "serveUpload", Call: true},
 	}
@@ -205,7 +205,7 @@ func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
 	if file == nil {
 		t.Fatal("missing bounded upload visibility file")
 	}
-	names := scaleP21SW265Names(file)
+	names := bootstrapLeavesGuardNames(file)
 	// Type names (domain.Bootstrap) are not reads; every other selector or
 	// identifier, called or passed as a value, is.
 	values := map[string]bool{}
@@ -222,7 +222,7 @@ func TestScaleP21SW265AttachmentVisibilityBoundary(t *testing.T) {
 		}
 		return true
 	})
-	for _, accessor := range scaleP21SW265HydratingAccessors {
+	for _, accessor := range hydratingAccessors {
 		if values[accessor] {
 			t.Fatal("bounded upload visibility reads a hydrating accessor", accessor)
 		}

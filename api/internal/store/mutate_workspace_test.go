@@ -13,7 +13,7 @@ import (
 
 // This certifies only MutateWorkspace's fixed-aggregate callback adapter.
 // Its scoped project callback uses the already-proven point writer contract.
-func TestScaleP21SW103MutateWorkspaceForwarding(t *testing.T) {
+func TestMutateWorkspaceForwarding(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -32,7 +32,7 @@ func TestScaleP21SW103MutateWorkspaceForwarding(t *testing.T) {
 		{name: "no-mutation", callbackError: ErrNoMutation},
 	} {
 		t.Run(item.name, func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			target, unrelated := idgen.New("sw103-project-"), idgen.New("sw103-unrelated-")
 			if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw103_seed", "", nil, func(data *domain.Bootstrap) error {

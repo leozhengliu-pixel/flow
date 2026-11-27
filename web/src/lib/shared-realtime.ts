@@ -18,7 +18,7 @@
  * frontier. A promoted follower never borrows another tab's checkpoint.
  */
 
-import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
+import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/realtime-cache-limits'
 import { holdRealtimeLease, storageChannel } from './realtime-storage'
 
 export interface RealtimeMessage {

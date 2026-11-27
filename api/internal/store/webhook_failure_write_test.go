@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21WebhookFailureLiteral(ctx context.Context, repo *SQLiteStore, workspace string, failure domain.WebhookFailureEvent, status int) error {
+func scaleWebhookFailureLiteral(ctx context.Context, repo *SQLiteStore, workspace string, failure domain.WebhookFailureEvent, status int) error {
 	return repo.MutateWorkspace(ctx, workspace, "webhook.delivery_failed", failure.WebhookID, map[string]any{"executionId": failure.ExecutionID, "httpStatus": status}, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Webhooks, func(hook domain.Webhook) bool { return hook.ID == failure.WebhookID }) {
 			return nil
@@ -41,7 +41,7 @@ func scaleP21WebhookFailureLiteral(ctx context.Context, repo *SQLiteStore, works
 	})
 }
 
-func scaleP21WebhookFailureRows(t *testing.T, repo *SQLiteStore, workspace, field string) [][]any {
+func scaleWebhookFailureRows(t *testing.T, repo *SQLiteStore, workspace, field string) [][]any {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field=? ORDER BY collection_order,record_key`, workspace, field)
 	if err != nil {
@@ -64,7 +64,7 @@ func scaleP21WebhookFailureRows(t *testing.T, repo *SQLiteStore, workspace, fiel
 	return result
 }
 
-func scaleP21WebhookFailureSource(t *testing.T, repo *SQLiteStore, workspace string) []domain.WebhookFailureEvent {
+func scaleWebhookFailureSource(t *testing.T, repo *SQLiteStore, workspace string) []domain.WebhookFailureEvent {
 	t.Helper()
 	source, err := repo.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
@@ -79,10 +79,10 @@ func scaleP21WebhookFailureSource(t *testing.T, repo *SQLiteStore, workspace str
 	return value.Interface().([]domain.WebhookFailureEvent)
 }
 
-func TestScaleP21WebhookFailureWriteDifferential(t *testing.T) {
+func TestScaleWebhookFailureWriteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("webhook-failure-")
 	target, other := prefix+"target", prefix+"other"
 	at := time.Date(2026, 11, 14, 15, 16, 17, 18, time.FixedZone("failure-native", 3661))
@@ -149,7 +149,7 @@ func TestScaleP21WebhookFailureWriteDifferential(t *testing.T) {
 				if bounded {
 					err = source.RecordWebhookDeliveryFailure(observed, workspace, failure, 503)
 				} else {
-					err = scaleP21WebhookFailureLiteral(observed, source, workspace, failure, 503)
+					err = scaleWebhookFailureLiteral(observed, source, workspace, failure, 503)
 				}
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
@@ -157,11 +157,11 @@ func TestScaleP21WebhookFailureWriteDifferential(t *testing.T) {
 					t.Fatal("failure writer", reload, missing, bounded, err)
 				}
 				t.Logf("point reload=%v missing=%v bounded=%v SQL=%d", reload, missing, bounded, statements)
-				got.Failures = scaleP21WebhookFailureRows(t, source, workspace, "webhookFailureEvents")
-				got.Documents = scaleP21WebhookFailureRows(t, source, workspace, "documents")
-				got.Webhooks = scaleP21WebhookFailureRows(t, source, workspace, "webhooks")
+				got.Failures = scaleWebhookFailureRows(t, source, workspace, "webhookFailureEvents")
+				got.Documents = scaleWebhookFailureRows(t, source, workspace, "documents")
+				got.Webhooks = scaleWebhookFailureRows(t, source, workspace, "webhooks")
 				if bounded {
-					got.Native = scaleP21WebhookFailureSource(t, source, workspace)
+					got.Native = scaleWebhookFailureSource(t, source, workspace)
 				} else {
 					data, _ := source.WorkspaceMetadata(workspace)
 					got.Native = data.WebhookFailureEvents
@@ -197,10 +197,10 @@ func TestScaleP21WebhookFailureWriteDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookFailureWriteInlineDuplicates(t *testing.T) {
+func TestScaleWebhookFailureWriteInlineDuplicates(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 14, 1, 2, 3, 0, time.UTC)
 	failure := domain.WebhookFailureEvent{ID: "new", WebhookID: "hook", CreatedAt: at}
@@ -277,7 +277,7 @@ func TestScaleP21WebhookFailureWriteInlineDuplicates(t *testing.T) {
 				if bounded {
 					err = source.RecordWebhookDeliveryFailure(observed, workspace, failure, 500)
 				} else {
-					err = scaleP21WebhookFailureLiteral(observed, source, workspace, failure, 500)
+					err = scaleWebhookFailureLiteral(observed, source, workspace, failure, 500)
 				}
 				source.SetWebhookSink(nil)
 				if err != nil {
@@ -286,12 +286,12 @@ func TestScaleP21WebhookFailureWriteInlineDuplicates(t *testing.T) {
 				t.Logf("inline retained=%v reload=%v bounded=%v SQL=%d", retained, reload, bounded, statements)
 				var native []domain.WebhookFailureEvent
 				if bounded {
-					native = scaleP21WebhookFailureSource(t, source, workspace)
+					native = scaleWebhookFailureSource(t, source, workspace)
 				} else {
 					data, _ := source.WorkspaceMetadata(workspace)
 					native = data.WebhookFailureEvents
 				}
-				rows := scaleP21WebhookFailureRows(t, source, workspace, "webhookFailureEvents")
+				rows := scaleWebhookFailureRows(t, source, workspace, "webhookFailureEvents")
 				if !bounded {
 					wantNative, wantRows, wantPayload, wantSnapshot = native, rows, payload, snapshot
 					// The inline duplicates stay: there are no rows a rebase could
@@ -310,10 +310,10 @@ func TestScaleP21WebhookFailureWriteInlineDuplicates(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookFailureWriteInlineBoundaryAndCancel(t *testing.T) {
+func TestScaleWebhookFailureWriteInlineBoundaryAndCancel(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 14, 1, 2, 3, 0, time.UTC)
 	for _, wide := range []bool{false, true} {
@@ -411,10 +411,10 @@ func TestScaleP21WebhookFailureWriteInlineBoundaryAndCancel(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookFailureWriteBodyBound(t *testing.T) {
+func TestScaleWebhookFailureWriteBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("webhook-failure-body-")
 	at := time.Date(2026, 11, 14, 4, 5, 6, 7, time.UTC)
 	wantPeak := map[bool]int{}
@@ -450,7 +450,7 @@ func TestScaleP21WebhookFailureWriteBodyBound(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			documents := scaleP21WebhookFailureRows(t, view, workspace, "documents")
+			documents := scaleWebhookFailureRows(t, view, workspace, "documents")
 			peak := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) {
 				view.metadataResidency.work.mu.Lock()
@@ -465,7 +465,7 @@ func TestScaleP21WebhookFailureWriteBodyBound(t *testing.T) {
 			} else if peak != wantPeak[reload] {
 				t.Fatal("body growth increased admitted writer work", reload, peak, wantPeak[reload])
 			}
-			if !reflect.DeepEqual(documents, scaleP21WebhookFailureRows(t, view, workspace, "documents")) || view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
+			if !reflect.DeepEqual(documents, scaleWebhookFailureRows(t, view, workspace, "documents")) || view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("unrelated body changed, complete decode, or leaked work")
 			}
 			t.Logf("scale=%d reload=%v admittedPeak=%d", scale, reload, peak)
@@ -474,10 +474,10 @@ func TestScaleP21WebhookFailureWriteBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookFailureWriteRollbackAndConcurrentRetention(t *testing.T) {
+func TestScaleWebhookFailureWriteRollbackAndConcurrentRetention(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("webhook-failure-atomic-")
 	now := time.Date(2026, 11, 14, 1, 0, 0, 0, time.UTC)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "webhooks", "webhookFailureEvents"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -495,7 +495,7 @@ func TestScaleP21WebhookFailureWriteRollbackAndConcurrentRetention(t *testing.T)
 	}
 	defer view.releaseMetadataLogicalSources()
 	failure := domain.WebhookFailureEvent{ID: target + "-append", WebhookID: target, CreatedAt: now}
-	before := scaleP21WebhookFailureRows(t, view, workspace, "webhookFailureEvents")
+	before := scaleWebhookFailureRows(t, view, workspace, "webhookFailureEvents")
 	oldSource, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -524,7 +524,7 @@ func TestScaleP21WebhookFailureWriteRollbackAndConcurrentRetention(t *testing.T)
 		if phase == "budget" && !errors.Is(err, ErrMetadataWorkBudget) || phase != "budget" && !errors.Is(err, context.Canceled) {
 			t.Fatal("failure injection did not fail", phase, err)
 		}
-		if !reflect.DeepEqual(before, scaleP21WebhookFailureRows(t, view, workspace, "webhookFailureEvents")) || view.metadataResidency.work.used != 0 {
+		if !reflect.DeepEqual(before, scaleWebhookFailureRows(t, view, workspace, "webhookFailureEvents")) || view.metadataResidency.work.used != 0 {
 			t.Fatal("failed transaction changed rows or leaked work", phase)
 		}
 		current, err := view.retainMetadataLogicalSource(t.Context(), workspace)
@@ -555,8 +555,8 @@ func TestScaleP21WebhookFailureWriteRollbackAndConcurrentRetention(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	rows := scaleP21WebhookFailureRows(t, view, workspace, "webhookFailureEvents")
-	if len(rows) != 50 || len(scaleP21WebhookFailureSource(t, view, workspace)) != 50 || view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
+	rows := scaleWebhookFailureRows(t, view, workspace, "webhookFailureEvents")
+	if len(rows) != 50 || len(scaleWebhookFailureSource(t, view, workspace)) != 50 || view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("concurrent retention or work lifetime changed", len(rows))
 	}
 	node := webhookFailureWriteField(oldSource, "webhookFailureEvents")

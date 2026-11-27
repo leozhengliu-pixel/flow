@@ -1142,7 +1142,7 @@ func (s *SQLiteStore) migrateLegacyCodingEnvironments(ctx context.Context) error
 
 func (s *SQLiteStore) migrateWorkspaceCodingEnvironments(ctx context.Context, key string) (int, error) {
 	if s.BoundedMetadataEnabled() {
-		return s.scaleP21SW17MigrateCodingEnvironments(ctx, key)
+		return s.migrateCodingEnvironmentsBounded(ctx, key)
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

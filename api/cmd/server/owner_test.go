@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW11AgentRunOwnerDifferential(t *testing.T) {
+func TestAgentRunOwnerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw11-owner-")
 		deletedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		sessions := []domain.AgentSession{}
@@ -37,7 +37,7 @@ func TestScaleP21SW11AgentRunOwnerDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21SW6RecordHash(t, repo, workspace, "agentSessions", sessions[0].ID)
+		before := recordHash(t, repo, workspace, "agentSessions", sessions[0].ID)
 		off := &server{store: repo}
 		on := &server{store: f.probe}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
@@ -79,7 +79,7 @@ func TestScaleP21SW11AgentRunOwnerDifferential(t *testing.T) {
 				unregister()
 			}
 		})
-		if f.probe.WorkspaceMetadataDecodes() != 0 || before != scaleP21SW6RecordHash(t, repo, workspace, "agentSessions", sessions[0].ID) {
+		if f.probe.WorkspaceMetadataDecodes() != 0 || before != recordHash(t, repo, workspace, "agentSessions", sessions[0].ID) {
 			t.Fatal("owner reads decoded full metadata or changed the oversized session")
 		}
 		// Ownership revocation is checked when the queued stop is applied.

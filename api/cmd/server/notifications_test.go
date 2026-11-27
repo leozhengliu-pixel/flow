@@ -18,30 +18,30 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW10Fixture struct {
-	scaleP21M2Fixture
-	reader *scaleP04Database
+type notificationsFixture struct {
+	policyDifferentialFixture
+	reader *scaleDatabase
 }
 
-func scaleP21SW10Setup(t *testing.T) scaleP21SW10Fixture {
+func notificationsSetup(t *testing.T) notificationsFixture {
 	t.Helper()
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
-	reader := &scaleP04Database{config: config}
+	f := setupPolicyDifferential(t, repo)
+	reader := &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
 		}
 	})
-	return scaleP21SW10Fixture{f, reader}
+	return notificationsFixture{f, reader}
 }
 
-func scaleP21SW10JSON(t *testing.T, value any) any {
+func notificationsJSON(t *testing.T, value any) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -54,7 +54,7 @@ func scaleP21SW10JSON(t *testing.T, value any) any {
 	return result
 }
 
-func scaleP21SW10Response(t *testing.T, w *httptest.ResponseRecorder, defaultClock bool) any {
+func notificationsResponse(t *testing.T, w *httptest.ResponseRecorder, defaultClock bool) any {
 	t.Helper()
 	if w.Body.Len() == 0 {
 		return nil
@@ -71,7 +71,7 @@ func scaleP21SW10Response(t *testing.T, w *httptest.ResponseRecorder, defaultClo
 	return value
 }
 
-func scaleP21SW10Rows(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
+func notificationsRows(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
 	t.Helper()
 	result := []any{}
 	for _, projection := range []string{"detail", "summary"} {
@@ -86,10 +86,10 @@ func scaleP21SW10Rows(t *testing.T, repo *store.SQLiteStore, workspace string, k
 			result = append(result, []any{projection, item.Key, item.Missing, item.Omitted, item.Data})
 		}
 	}
-	return scaleP21SW10JSON(t, result)
+	return notificationsJSON(t, result)
 }
 
-func scaleP21SW10Events(t *testing.T, events []domain.DomainEvent, realtime []domain.RealtimeEvent) any {
+func notificationsEvents(t *testing.T, events []domain.DomainEvent, realtime []domain.RealtimeEvent) any {
 	t.Helper()
 	result := []any{}
 	for _, event := range events {
@@ -98,10 +98,10 @@ func scaleP21SW10Events(t *testing.T, events []domain.DomainEvent, realtime []do
 	for _, event := range realtime {
 		result = append(result, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
 	}
-	return scaleP21SW10JSON(t, result)
+	return notificationsJSON(t, result)
 }
 
-func (f scaleP21SW10Fixture) issueRowsHash(t *testing.T) [32]byte {
+func (f notificationsFixture) issueRowsHash(t *testing.T) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	rows := f.reader.query(t, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY id`, f.data.Workspace.URLKey)
@@ -140,11 +140,11 @@ func (f scaleP21SW10Fixture) issueRowsHash(t *testing.T) [32]byte {
 	return [32]byte(hash.Sum(nil))
 }
 
-func scaleP21SW10WriteRevocation(t *testing.T, f scaleP21SW10Fixture, handler func(*server, http.ResponseWriter, *http.Request), request func(domain.User, *domain.APIKey) *http.Request) {
+func writeRevocation(t *testing.T, f notificationsFixture, handler func(*server, http.ResponseWriter, *http.Request), request func(domain.User, *domain.APIKey) *http.Request) {
 	t.Helper()
 	member := f.principals[2].user
 	queued := []*http.Request{}
-	for _, credential := range scaleP21M3Credentials() {
+	for _, credential := range pointSettingsCredentialCases() {
 		queued = append(queued, request(member, credential.key))
 	}
 	if err := f.repository.SuspendMember(t.Context(), f.data.Workspace.ID, member.ID); err != nil {
@@ -160,11 +160,11 @@ func scaleP21SW10WriteRevocation(t *testing.T, f scaleP21SW10Fixture, handler fu
 			var responses []any
 			for _, source := range []*store.SQLiteStore{f.repository, f.probe} {
 				w := httptest.NewRecorder()
-				scaleP21M3Call(&server{store: source}, w, r, handler)
+				callPointSettingsHandler(&server{store: source}, w, r, handler)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s write crossed revoked membership: %d %s", phase, w.Code, w.Body.String())
 				}
-				responses = append(responses, scaleP21SW10Response(t, w, false))
+				responses = append(responses, notificationsResponse(t, w, false))
 			}
 			if !reflect.DeepEqual(responses[0], responses[1]) {
 				t.Fatal("revoked write boundary changed")
@@ -173,11 +173,11 @@ func scaleP21SW10WriteRevocation(t *testing.T, f scaleP21SW10Fixture, handler fu
 	}
 }
 
-func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
+func TestPreferencesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	otherID := idgen.New("sw10-preference-other-")
@@ -225,8 +225,8 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 		}
 	}
 	reset("", false)
-	otherHash := scaleP21SW6RecordHash(t, repo, workspace, "notificationPreferences", otherID)
-	projectHash := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+	otherHash := recordHash(t, repo, workspace, "notificationPreferences", otherID)
+	projectHash := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		for _, missing := range []bool{false, true} {
 			t.Run(fmt.Sprintf("missing=%t", missing), func(t *testing.T) {
@@ -237,32 +237,32 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 						absent = user.ID
 					}
 					reset(absent, false)
-					rows := scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "notificationPreferences", ID: user.ID})
+					rows := notificationsRows(t, repo, workspace, store.RecordKey{Kind: "notificationPreferences", ID: user.ID})
 					r, w := f.request(user, key, nil), httptest.NewRecorder()
 					(&server{store: source}).getNotificationPreferences(w, r)
 					if w.Code != http.StatusOK {
 						t.Fatalf("preferences status=%d body=%s", w.Code, w.Body.String())
 					}
-					response := scaleP21SW10Response(t, w, missing)
+					response := notificationsResponse(t, w, missing)
 					expected := preferences[user.ID]
 					if missing {
 						expected = defaultPreferences(user.ID)
 						expected.UpdatedAt = time.Time{}
-						encoded := scaleP21SW10JSON(t, expected).(map[string]any)
+						encoded := notificationsJSON(t, expected).(map[string]any)
 						encoded["updatedAt"] = "generated-default-time"
 						if !reflect.DeepEqual(response, encoded) {
 							t.Fatal("process notification defaults changed")
 						}
-					} else if !reflect.DeepEqual(response, scaleP21SW10JSON(t, expected)) {
+					} else if !reflect.DeepEqual(response, notificationsJSON(t, expected)) {
 						t.Fatal("stored preference values or nil/empty shapes changed")
 					}
-					if !reflect.DeepEqual(rows, scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "notificationPreferences", ID: user.ID})) {
+					if !reflect.DeepEqual(rows, notificationsRows(t, repo, workspace, store.RecordKey{Kind: "notificationPreferences", ID: user.ID})) {
 						t.Fatal("preference GET changed its canonical record")
 					}
 					results = append(results, response)
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("preference differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("preference differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			})
 		}
@@ -282,7 +282,7 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &actual); err != nil || actual.UserID != f.data.Viewer.ID {
 				t.Fatal("development-mode read did not retain stored Viewer identity", err)
 			}
-			results = append(results, []any{w.Code, scaleP21SW10Response(t, w, missing)})
+			results = append(results, []any{w.Code, notificationsResponse(t, w, missing)})
 		}
 		if !reflect.DeepEqual(results[0], results[1]) {
 			t.Fatal("development-mode preference differential")
@@ -295,7 +295,7 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	queued := []*http.Request{}
-	for _, credential := range scaleP21M3Credentials() {
+	for _, credential := range pointSettingsCredentialCases() {
 		queued = append(queued, f.request(member, credential.key, nil))
 	}
 	if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, member.ID); err != nil {
@@ -329,11 +329,11 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 			r.SetPathValue("workspaceKey", key)
 			r.SetPathValue("workspace", key)
 			w := httptest.NewRecorder()
-			scaleP21M3Call(&server{store: source}, w, r, (*server).getNotificationPreferences)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).getNotificationPreferences)
 			if w.Code != http.StatusForbidden {
 				t.Fatal("foreign or missing workspace read crossed the live boundary")
 			}
-			responses = append(responses, []any{w.Code, scaleP21SW10Response(t, w, false)})
+			responses = append(responses, []any{w.Code, notificationsResponse(t, w, false)})
 		}
 		if !reflect.DeepEqual(responses[0], responses[1]) {
 			t.Fatal("missing-workspace authorization boundary changed")
@@ -348,13 +348,13 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 		t.Fatal("cancelled preference read wrote a response body")
 	}
 	reset("", true)
-	before := scaleP21SW6RecordHash(t, repo, workspace, "notificationPreferences", f.data.Viewer.ID)
+	before := recordHash(t, repo, workspace, "notificationPreferences", f.data.Viewer.ID)
 	w = httptest.NewRecorder()
 	(&server{store: f.probe}).getNotificationPreferences(w, f.request(f.data.Viewer, nil, nil))
 	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "emailFormat") {
 		t.Fatal("oversized owned preference became a default or truncated success")
 	}
-	if before != scaleP21SW6RecordHash(t, repo, workspace, "notificationPreferences", f.data.Viewer.ID) {
+	if before != recordHash(t, repo, workspace, "notificationPreferences", f.data.Viewer.ID) {
 		t.Fatal("budget failure changed canonical preferences")
 	}
 	reset("", false)
@@ -363,18 +363,18 @@ func TestScaleP21SW10PreferencesDifferential(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatal("budget failure prevented a later preference read")
 	}
-	if scaleP21SW6RecordHash(t, repo, workspace, "notificationPreferences", otherID) != otherHash ||
-		scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
+	if recordHash(t, repo, workspace, "notificationPreferences", otherID) != otherHash ||
+		recordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
 		f.probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("preference reads changed unrelated bytes or decoded full metadata")
 	}
 }
 
-func TestScaleP21SW10TeamLabelDifferential(t *testing.T) {
+func TestTeamLabelDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	targetID, otherID := idgen.New("sw10-label-"), idgen.New("sw10-other-label-")
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -400,8 +400,8 @@ func TestScaleP21SW10TeamLabelDifferential(t *testing.T) {
 	reset()
 	issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "SW10 linked label", "teamId": f.public, "labelIds": []string{targetID}}, workspace, http.StatusCreated)
 	issueHash := f.issueRowsHash(t)
-	otherHash := scaleP21SW6RecordHash(t, repo, workspace, "labels", otherID)
-	projectHash := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+	otherHash := recordHash(t, repo, workspace, "labels", otherID)
+	projectHash := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		for _, spec := range []struct {
 			name      string
@@ -431,7 +431,7 @@ func TestScaleP21SW10TeamLabelDifferential(t *testing.T) {
 					r.SetPathValue("id", spec.team)
 					r.SetPathValue("labelId", spec.id)
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).updateTeamLabel)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).updateTeamLabel)
 					if w.Code != spec.code || len(events) != spec.events || len(realtime) != spec.events {
 						t.Fatalf("label status=%d events=%d/%d body=%s", w.Code, len(events), len(realtime), w.Body.String())
 					}
@@ -443,26 +443,26 @@ func TestScaleP21SW10TeamLabelDifferential(t *testing.T) {
 						t.Fatal("metadata-only label edit rewrote issue SQL rows or label links")
 					}
 					results = append(results, []any{
-						w.Code, scaleP21SW10Response(t, w, false),
-						scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID}, store.RecordKey{Kind: "users", ID: user.ID}),
-						scaleP21SW10Events(t, events, realtime),
+						w.Code, notificationsResponse(t, w, false),
+						notificationsRows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID}, store.RecordKey{Kind: "users", ID: user.ID}),
+						notificationsEvents(t, events, realtime),
 					})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("label differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("label differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			})
 		}
 	})
 	reset()
-	before := scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})
+	before := notificationsRows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})
 	r := f.request(f.data.Viewer, nil, map[string]any{"description": strings.Repeat("oversized target ", 20000)})
 	r.SetPathValue("id", f.public)
 	r.SetPathValue("labelId", targetID)
 	w := httptest.NewRecorder()
 	(&server{store: f.probe}).updateTeamLabel(w, r)
 	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
-		!reflect.DeepEqual(before, scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})) {
+		!reflect.DeepEqual(before, notificationsRows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})) {
 		t.Fatal("oversized label output was not an explicit atomic budget error")
 	}
 	for _, source := range []*store.SQLiteStore{repo, f.probe} {
@@ -473,28 +473,28 @@ func TestScaleP21SW10TeamLabelDifferential(t *testing.T) {
 		cancel()
 		w := httptest.NewRecorder()
 		(&server{store: source}).updateTeamLabel(w, r.WithContext(ctx))
-		if w.Code != http.StatusInternalServerError || !reflect.DeepEqual(before, scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})) {
+		if w.Code != http.StatusInternalServerError || !reflect.DeepEqual(before, notificationsRows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: targetID})) {
 			t.Fatal("cancelled label edit changed its target")
 		}
 	}
-	scaleP21SW10WriteRevocation(t, f, (*server).updateTeamLabel, func(user domain.User, key *domain.APIKey) *http.Request {
+	writeRevocation(t, f, (*server).updateTeamLabel, func(user domain.User, key *domain.APIKey) *http.Request {
 		r := f.request(user, key, map[string]any{"name": "Revoked"})
 		r.SetPathValue("id", f.public)
 		r.SetPathValue("labelId", targetID)
 		return r
 	})
-	if f.issueRowsHash(t) != issueHash || scaleP21SW6RecordHash(t, repo, workspace, "labels", otherID) != otherHash ||
-		scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
+	if f.issueRowsHash(t) != issueHash || recordHash(t, repo, workspace, "labels", otherID) != otherHash ||
+		recordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
 		f.probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("label mutation changed unrelated bytes or decoded full metadata")
 	}
 }
 
-func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
+func TestIssueTemplateDeletionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	targetID, otherID := idgen.New("sw10-template-"), idgen.New("sw10-other-template-")
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -518,8 +518,8 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 		}
 	}
 	reset(target)
-	otherHash := scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", otherID)
-	projectHash := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+	otherHash := recordHash(t, repo, workspace, "issueTemplates", otherID)
+	projectHash := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		for _, spec := range []struct {
 			name, id, scope, visibility, team string
@@ -550,7 +550,7 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 					r.SetPathValue("id", f.public)
 					r.SetPathValue("templateId", spec.id)
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).deleteIssueTemplate)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).deleteIssueTemplate)
 					// A key whose team selection leaves the team out reaches
 					// none of its templates.
 					if key != nil && apiKeyTeamRestrictionSelected(*key) && !slices.Contains(key.TeamIDs, f.public) {
@@ -564,13 +564,13 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 						t.Fatalf("template status=%d events=%d/%d body=%s", w.Code, len(events), len(realtime), w.Body.String())
 					}
 					results = append(results, []any{
-						w.Code, scaleP21SW10Response(t, w, false),
-						scaleP21SW10Rows(t, repo, workspace, store.RecordKey{Kind: "issueTemplates", ID: targetID}, store.RecordKey{Kind: "users", ID: user.ID}),
-						scaleP21SW10Events(t, events, realtime),
+						w.Code, notificationsResponse(t, w, false),
+						notificationsRows(t, repo, workspace, store.RecordKey{Kind: "issueTemplates", ID: targetID}, store.RecordKey{Kind: "users", ID: user.ID}),
+						notificationsEvents(t, events, realtime),
 					})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("template differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("template differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			})
 		}
@@ -578,18 +578,18 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 	large := target
 	large.Body = strings.Repeat("oversized owned template ", 20000)
 	reset(large)
-	before := scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID)
+	before := recordHash(t, repo, workspace, "issueTemplates", targetID)
 	r := f.request(f.data.Viewer, nil, nil)
 	r.SetPathValue("id", f.public)
 	r.SetPathValue("templateId", targetID)
 	w := httptest.NewRecorder()
 	(&server{store: f.probe}).deleteIssueTemplate(w, r)
 	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
-		scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID) != before {
+		recordHash(t, repo, workspace, "issueTemplates", targetID) != before {
 		t.Fatal("oversized template deletion did not preserve the target on an explicit budget failure")
 	}
 	reset(target)
-	before = scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID)
+	before = recordHash(t, repo, workspace, "issueTemplates", targetID)
 	// The deletion reads the viewer's template access first; a cancelled
 	// request stops at that read (the membership read refuses it) before
 	// any write, on both sources alike.
@@ -602,7 +602,7 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 		cancel()
 		w := httptest.NewRecorder()
 		(&server{store: source}).deleteIssueTemplate(w, r.WithContext(ctx))
-		if w.Code < 400 || scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", targetID) != before {
+		if w.Code < 400 || recordHash(t, repo, workspace, "issueTemplates", targetID) != before {
 			t.Fatal("cancelled deletion changed its target", w.Code, w.Body.String())
 		}
 		cancelled = append(cancelled, []any{w.Code, w.Body.String()})
@@ -610,14 +610,14 @@ func TestScaleP21SW10IssueTemplateDeletionDifferential(t *testing.T) {
 	if !reflect.DeepEqual(cancelled[0], cancelled[1]) {
 		t.Fatalf("cancelled deletion differs between the sources: %v", cancelled)
 	}
-	scaleP21SW10WriteRevocation(t, f, (*server).deleteIssueTemplate, func(user domain.User, key *domain.APIKey) *http.Request {
+	writeRevocation(t, f, (*server).deleteIssueTemplate, func(user domain.User, key *domain.APIKey) *http.Request {
 		r := f.request(user, key, nil)
 		r.SetPathValue("id", f.public)
 		r.SetPathValue("templateId", targetID)
 		return r
 	})
-	if scaleP21SW6RecordHash(t, repo, workspace, "issueTemplates", otherID) != otherHash ||
-		scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
+	if recordHash(t, repo, workspace, "issueTemplates", otherID) != otherHash ||
+		recordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
 		f.probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("template deletion changed unrelated bytes or decoded full metadata")
 	}

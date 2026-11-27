@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP05BenchmarkStore(b *testing.B, bodyScale int) *SQLiteStore {
+func scaleBenchmarkStore(b *testing.B, bodyScale int) *SQLiteStore {
 	b.Helper()
 	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(b.TempDir(), "catalog.db")))
 	if err != nil {
@@ -46,10 +46,10 @@ func scaleP05BenchmarkStore(b *testing.B, bodyScale int) *SQLiteStore {
 	return s
 }
 
-func BenchmarkScaleP05CanonicalDirectory(b *testing.B) {
+func BenchmarkScaleCanonicalDirectory(b *testing.B) {
 	for _, scale := range []int{1, 10} {
 		b.Run(fmt.Sprintf("body%d", scale), func(b *testing.B) {
-			s := scaleP05BenchmarkStore(b, scale)
+			s := scaleBenchmarkStore(b, scale)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
@@ -62,10 +62,10 @@ func BenchmarkScaleP05CanonicalDirectory(b *testing.B) {
 	}
 }
 
-func BenchmarkScaleP05CatalogDirectory(b *testing.B) {
+func BenchmarkScaleCatalogDirectoryBench(b *testing.B) {
 	for _, scale := range []int{1, 10} {
 		b.Run(fmt.Sprintf("body%d", scale), func(b *testing.B) {
-			s := scaleP05BenchmarkStore(b, scale)
+			s := scaleBenchmarkStore(b, scale)
 			ctx := context.Background()
 			if _, err := s.db.ExecContext(ctx, `CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)`); err != nil {
 				b.Fatal(err)

@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW64PresenceHeader(document domain.Document) domain.Document {
+func presenceHeader(document domain.Document) domain.Document {
 	result := domain.Document{ID: document.ID, SlugID: document.SlugID, TeamIDs: document.TeamIDs,
 		InheritedTeamIDs: document.InheritedTeamIDs, Creator: domain.User{ID: document.Creator.ID}}
 	if document.Permissions != nil {
@@ -26,7 +26,7 @@ func scaleP21SW64PresenceHeader(document domain.Document) domain.Document {
 	return result
 }
 
-func TestScaleP21SW64PresenceDocumentNative(t *testing.T) {
+func TestPresenceDocumentNative(t *testing.T) {
 	large := strings.Repeat("Unrelated content and profile body. ", 20000)
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "organization", URLKey: "logical"}, Documents: []domain.Document{
 		{ID: "first", SlugID: "collision", PreviousSlugIDs: []string{"old-slug", "old-000000000064"}, Title: large, Content: large,
@@ -49,7 +49,7 @@ func TestScaleP21SW64PresenceDocumentNative(t *testing.T) {
 	physical := "physical\x00workspace"
 	values := map[string]domain.Bootstrap{physical: data}
 	literal := &SQLiteStore{workspaces: values, lastWorkspaceKey: physical}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = physical
 	for _, workspace := range []string{physical, ""} {
 		for _, ref := range []string{"first", "collision", "later-exact-id", "later-duplicate", "", "empty-slug", "nil-shapes", "empty-shapes", "doc\x00id", "slug\x00current", "old-slug", "old-000000000064", "000000000064", "old\x00slug", " first ", "FIRST", "missing"} {
@@ -57,7 +57,7 @@ func TestScaleP21SW64PresenceDocumentNative(t *testing.T) {
 			queries := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
 			read, workspaceFound, err := view.BeginPresenceDocumentRead(ctx, workspace, ref)
-			if err != nil || !workspaceFound || read == nil || read.Found != documentFound || !reflect.DeepEqual(read.Document, scaleP21SW64PresenceHeader(document)) {
+			if err != nil || !workspaceFound || read == nil || read.Found != documentFound || !reflect.DeepEqual(read.Document, presenceHeader(document)) {
 				t.Fatal("first installed ID/current-slug header differs", workspace, ref, documentFound, workspaceFound, err)
 			}
 			if queries != 0 || view.WorkspaceMetadataDecodes() != 0 || view.MetadataWorkUsedForTesting() == 0 || read.source == nil {
@@ -124,7 +124,7 @@ func TestScaleP21SW64PresenceDocumentNative(t *testing.T) {
 					t.Error(found, err)
 					return
 				}
-				if read.Found != matched || !reflect.DeepEqual(read.Document, scaleP21SW64PresenceHeader(document)) {
+				if read.Found != matched || !reflect.DeepEqual(read.Document, presenceHeader(document)) {
 					t.Error("concurrent first-match header differs")
 				}
 				read.Close()
@@ -137,12 +137,12 @@ func TestScaleP21SW64PresenceDocumentNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW64PresenceDocumentCurrentGeneration(t *testing.T) {
+func TestPresenceDocumentCurrentGeneration(t *testing.T) {
 	physical, other := "physical", "other"
 	before := domain.Bootstrap{Documents: []domain.Document{{ID: "target", SlugID: "current", TeamIDs: []string{"before"}, Creator: domain.User{ID: "before"}}}}
 	after := domain.Bootstrap{Documents: []domain.Document{{ID: "target", SlugID: "current", TeamIDs: []string{"after"}, Creator: domain.User{ID: "after"}}}}
 	otherData := domain.Bootstrap{Documents: []domain.Document{{ID: "target", SlugID: "current", TeamIDs: []string{"other"}}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{physical: before, other: otherData})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{physical: before, other: otherData})
 	view.lastWorkspaceKey = physical
 	old, _, err := view.BeginPresenceDocumentRead(t.Context(), physical, "target")
 	if err != nil {
@@ -168,7 +168,7 @@ func TestScaleP21SW64PresenceDocumentCurrentGeneration(t *testing.T) {
 			parent.Close()
 		}
 		read, found, err := view.BeginPresenceDocumentRead(pinned, physical, "target")
-		if err != nil || !found || !read.Found || !reflect.DeepEqual(read.Document, scaleP21SW64PresenceHeader(after.Documents[0])) {
+		if err != nil || !found || !read.Found || !reflect.DeepEqual(read.Document, presenceHeader(after.Documents[0])) {
 			t.Fatal("presence inherited an incidental old/closed installed pin", closedParent, found, err)
 		}
 		read.Close()
@@ -177,11 +177,11 @@ func TestScaleP21SW64PresenceDocumentCurrentGeneration(t *testing.T) {
 	view.lastWorkspaceKey = other
 	view.mu.Unlock()
 	read, found, err := view.BeginPresenceDocumentRead(pinned, "", "target")
-	if err != nil || !found || !read.Found || !reflect.DeepEqual(read.Document, scaleP21SW64PresenceHeader(otherData.Documents[0])) {
+	if err != nil || !found || !read.Found || !reflect.DeepEqual(read.Document, presenceHeader(otherData.Documents[0])) {
 		t.Fatal("presence inherited a pinned default instead of current default", found, err)
 	}
 	read.Close()
-	if !old.Found || !reflect.DeepEqual(old.Document, scaleP21SW64PresenceHeader(before.Documents[0])) {
+	if !old.Found || !reflect.DeepEqual(old.Document, presenceHeader(before.Documents[0])) {
 		t.Fatal("registry replacement changed an already-owned header")
 	}
 	old.Close()
@@ -190,11 +190,11 @@ func TestScaleP21SW64PresenceDocumentCurrentGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW64PresenceDocumentWarmReloadBodyBound(t *testing.T) {
+func TestPresenceDocumentWarmReloadBodyBoundPresenceDocumentRead(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -230,7 +230,7 @@ func TestScaleP21SW64PresenceDocumentWarmReloadBodyBound(t *testing.T) {
 				document, matched := f.DocumentByID(workspace, ref)
 				queries := 0
 				read, found, err := view.BeginPresenceDocumentRead(WithSQLStatementObserver(t.Context(), func(string) { queries++ }), workspace, ref)
-				if err != nil || !found || read.Found != matched || !reflect.DeepEqual(read.Document, scaleP21SW64PresenceHeader(document)) {
+				if err != nil || !found || read.Found != matched || !reflect.DeepEqual(read.Document, presenceHeader(document)) {
 					t.Fatal("warm/reloaded literal document header differs", size, reload, ref, err)
 				}
 				if ref == "sw64-target" {

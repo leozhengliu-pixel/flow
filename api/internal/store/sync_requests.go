@@ -8,9 +8,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW21RecordWorkMax = 64 << 20
-const scaleP21SW21RecordOverhead = 128 << 10
-const scaleP21SW21RecordExpansion = 24
+const recordWorkMax = 64 << 20
+const recordOverhead = 128 << 10
+const recordExpansion = 24
 
 // VisitOAuthSyncGroupRequests is a trusted snapshot-consistent compatibility
 // scan. Only candidate identities and lengths enter the header pages. One
@@ -33,7 +33,7 @@ func (s *SQLiteStore) VisitOAuthSyncGroupRequests(ctx context.Context, workspace
 		return err
 	}
 	defer tx.Rollback()
-	predicate, selectedArgs := s.scaleP21SW21ApplicationCandidate(applicationID)
+	predicate, selectedArgs := s.applicationCandidate(applicationID)
 	last, started, ordinal := "", false, int64(0)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -71,7 +71,7 @@ func (s *SQLiteStore) VisitOAuthSyncGroupRequests(ctx context.Context, workspace
 			return nil
 		}
 		for _, item := range page {
-			if err := s.scaleP21SW21VisitRequest(ctx, tx, workspace, applicationID, item.id, item.size, visit); err != nil {
+			if err := s.visitRequest(ctx, tx, workspace, applicationID, item.id, item.size, visit); err != nil {
 				return err
 			}
 		}
@@ -79,16 +79,16 @@ func (s *SQLiteStore) VisitOAuthSyncGroupRequests(ctx context.Context, workspace
 	}
 }
 
-func (s *SQLiteStore) scaleP21SW21VisitRequest(ctx context.Context, tx *sqlTx, workspace, applicationID, id string, size int64, visit func(context.Context, domain.OAuthSyncGroupRequest) error) error {
+func (s *SQLiteStore) visitRequest(ctx context.Context, tx *sqlTx, workspace, applicationID, id string, size int64, visit func(context.Context, domain.OAuthSyncGroupRequest) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if size < 0 || size > (scaleP21SW21RecordWorkMax-scaleP21SW21RecordOverhead)/scaleP21SW21RecordExpansion {
+	if size < 0 || size > (recordWorkMax-recordOverhead)/recordExpansion {
 		return fmt.Errorf("%w: sync request exceeds one-record compatibility allowance", ErrMetadataWorkBudget)
 	}
 	// Raw SQL bytes, typed strings, JSON escaping and the encoder's temporary
 	// buffers are charged together. No per-record lease survives this callback.
-	reservation := int(size)*scaleP21SW21RecordExpansion + scaleP21SW21RecordOverhead
+	reservation := int(size)*recordExpansion + recordOverhead
 	recordCtx, release, err := s.admitMetadataWork(ctx, reservation)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (s *SQLiteStore) scaleP21SW21VisitRequest(ctx context.Context, tx *sqlTx, w
 	return visit(recordCtx, item)
 }
 
-func (s *SQLiteStore) scaleP21SW21ApplicationCandidate(applicationID string) (string, []any) {
+func (s *SQLiteStore) applicationCandidate(applicationID string) (string, []any) {
 	switch s.dialect {
 	case "postgres":
 		// json, rather than jsonb, preserves duplicate object members. A

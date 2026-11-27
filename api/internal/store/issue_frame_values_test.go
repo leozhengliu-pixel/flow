@@ -21,7 +21,7 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-func scaleP21SW238Issue() domain.Issue {
+func issueFrameValuesIssue() domain.Issue {
 	at := time.Date(2026, 11, 16, 1, 2, 3, 456, time.UTC)
 	parent, cycle := "parent", "cycle"
 	return domain.Issue{
@@ -44,7 +44,7 @@ func scaleP21SW238Issue() domain.Issue {
 	}
 }
 
-func scaleP21SW238Frames(t *testing.T, repo *SQLiteStore, issue domain.Issue, auditedJSON bool) (*metadataLogicalBuilder, metadataLogicalNode) {
+func issueFrameValuesFrames(t *testing.T, repo *SQLiteStore, issue domain.Issue, auditedJSON bool) (*metadataLogicalBuilder, metadataLogicalNode) {
 	t.Helper()
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	frames, err := newMetadataLogicalBuilder(t.Context())
@@ -72,7 +72,7 @@ func scaleP21SW238Frames(t *testing.T, repo *SQLiteStore, issue domain.Issue, au
 	return frames, node
 }
 
-func scaleP21SW238CompareColumns(t *testing.T, expected, actual []any) {
+func compareColumns(t *testing.T, expected, actual []any) {
 	t.Helper()
 	if len(expected) != 20 || len(actual) != len(expected) {
 		t.Fatal("issue SQL column count changed", len(expected), len(actual))
@@ -95,7 +95,7 @@ func scaleP21SW238CompareColumns(t *testing.T, expected, actual []any) {
 	}
 }
 
-func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
+func TestIssueFrameValuesDifferential(t *testing.T) {
 	type fixture struct {
 		name        string
 		issue       domain.Issue
@@ -109,10 +109,10 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 			SubscriberIDs: []string{}, SubIssueIDs: []string{},
 			Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{},
 		}},
-		{name: "rich-native", issue: scaleP21SW238Issue()},
+		{name: "rich-native", issue: issueFrameValuesIssue()},
 	}
 	add := func(name string, change func(*domain.Issue)) {
-		issue := scaleP21SW238Issue()
+		issue := issueFrameValuesIssue()
 		change(&issue)
 		tests = append(tests, fixture{name: name, issue: issue})
 	}
@@ -139,7 +139,7 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 		{"nil-counts-stay-nil", nil, nil},
 		{"empty-counts-stay-empty", map[string][]string{}, map[string]int{}},
 	} {
-		issue := scaleP21SW238Issue()
+		issue := issueFrameValuesIssue()
 		issue.Reactions, issue.ReactionCounts = reaction.users, reaction.counts
 		tests = append(tests, fixture{name: "reactions/" + reaction.name, issue: issue})
 	}
@@ -156,7 +156,7 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 		{"nul-is-content-before-strip", "\x00", "", "", false},
 		{"invalid-utf8-is-content", string([]byte{0xff}), "", "", false},
 	} {
-		issue := scaleP21SW238Issue()
+		issue := issueFrameValuesIssue()
 		issue.Description, issue.DescriptionState, issue.HasContent = content.description, content.state, content.already
 		issue.DocumentContent.Content, issue.DocumentContent.ContentState = content.document, content.state
 		tests = append(tests, fixture{name: "content/" + content.name, issue: issue})
@@ -190,7 +190,7 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 	}
 	tests = append(tests, fixture{name: "audited-offset-times", issue: offset, auditedJSON: true})
 	for _, dialect := range []string{"sqlite", "postgres", "mysql"} {
-		tests = append(tests, fixture{name: "dialect/" + dialect, dialect: dialect, issue: scaleP21SW238Issue()})
+		tests = append(tests, fixture{name: "dialect/" + dialect, dialect: dialect, issue: issueFrameValuesIssue()})
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -204,13 +204,13 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 			if err != nil {
 				t.Fatal("valid fixture literal oracle", err)
 			}
-			frames, node := scaleP21SW238Frames(t, repo, test.issue, test.auditedJSON)
+			frames, node := issueFrameValuesFrames(t, repo, test.issue, test.auditedJSON)
 			actual, release, err := legacyIssueRecordFrameValues(t.Context(), repo, frames, node, workspace)
 			if err != nil || release == nil {
 				t.Fatal("valid framed columns must succeed", err)
 			}
 			defer release()
-			scaleP21SW238CompareColumns(t, expected, actual)
+			compareColumns(t, expected, actual)
 			var detail, list domain.Issue
 			if err := json.Unmarshal(actual[19].([]byte), &detail); err != nil {
 				t.Fatal(err)
@@ -241,7 +241,7 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 				t.Fatal("returned SQL byte buffers have no containing work owner", held)
 			}
 			frames.Close()
-			scaleP21SW238CompareColumns(t, expected, actual)
+			compareColumns(t, expected, actual)
 			if repo.MetadataWorkUsedForTesting() != held {
 				t.Fatal("closing frame input released live SQL argument bytes")
 			}
@@ -254,10 +254,10 @@ func TestScaleP21SW238IssueFrameValuesDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW238IssueFrameValuesErrors(t *testing.T) {
+func TestIssueFrameValuesErrors(t *testing.T) {
 	for _, field := range []string{"createdAt", "completedAt", "documentUpdatedAt", "labelCreatedAt", "title"} {
 		t.Run(field, func(t *testing.T) {
-			issue := scaleP21SW238Issue()
+			issue := issueFrameValuesIssue()
 			invalid := time.Date(10000, 1, 2, 3, 4, 5, 0, time.UTC)
 			switch field {
 			case "createdAt":
@@ -276,7 +276,7 @@ func TestScaleP21SW238IssueFrameValuesErrors(t *testing.T) {
 			if expectedErr == nil {
 				t.Fatal("invalid fixture literal oracle succeeded")
 			}
-			frames, node := scaleP21SW238Frames(t, repo, issue, false)
+			frames, node := issueFrameValuesFrames(t, repo, issue, false)
 			actual, release, err := legacyIssueRecordFrameValues(t.Context(), repo, frames, node, "workspace")
 			if release != nil {
 				release()
@@ -301,27 +301,27 @@ func TestScaleP21SW238IssueFrameValuesErrors(t *testing.T) {
 	}
 }
 
-type scaleP21SW238CancelContext struct {
+type issueFrameValuesCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	after  int64
 	calls  atomic.Int64
 }
 
-func (ctx *scaleP21SW238CancelContext) Err() error {
+func (ctx *issueFrameValuesCancelContext) Err() error {
 	if ctx.calls.Add(1) >= ctx.after {
 		ctx.cancel()
 	}
 	return ctx.Context.Err()
 }
 
-func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
+func TestIssueFrameValuesFailureRelease(t *testing.T) {
 	for _, mode := range []string{"cancel-before", "cancel-during", "input-io", "short-input", "denial", "late-denial"} {
 		t.Run(mode, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
-			issue := scaleP21SW238Issue()
+			issue := issueFrameValuesIssue()
 			issue.Description = strings.Repeat("body ", 32<<10)
-			input, node := scaleP21SW238Frames(t, repo, issue, false)
+			input, node := issueFrameValuesFrames(t, repo, issue, false)
 			output, err := newMetadataLogicalBuilder(t.Context())
 			if err != nil {
 				t.Fatal(err)
@@ -336,12 +336,12 @@ func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			var callContext context.Context = ctx
-			var during *scaleP21SW238CancelContext
+			var during *issueFrameValuesCancelContext
 			switch mode {
 			case "cancel-before":
 				cancel()
 			case "cancel-during":
-				during = &scaleP21SW238CancelContext{Context: ctx, cancel: cancel, after: 128}
+				during = &issueFrameValuesCancelContext{Context: ctx, cancel: cancel, after: 128}
 				callContext = during
 			case "input-io":
 				if err := input.storage.settleForTesting(); err != nil {
@@ -419,7 +419,7 @@ func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
 				t.Fatal("same store did not recover after failed encoding", recoveryErr, oracleErr)
 			}
 			defer done()
-			scaleP21SW238CompareColumns(t, expected, values)
+			compareColumns(t, expected, values)
 			done()
 			if repo.MetadataWorkUsedForTesting() != baseline {
 				t.Fatal("same-store recovery consumed the retained parent owner")
@@ -429,9 +429,9 @@ func TestScaleP21SW238IssueFrameValuesFailureRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW238IssueFrameValuesFinalCancellationDropsColumns(t *testing.T) {
+func TestIssueFrameValuesFinalCancellationDropsColumns(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
-	_, node := scaleP21SW238Frames(t, repo, domain.Issue{}, false)
+	_, node := issueFrameValuesFrames(t, repo, domain.Issue{}, false)
 	run := func(ctx context.Context) ([]any, func(), error) {
 		output, err := newMetadataLogicalBuilder(t.Context())
 		if err != nil {
@@ -443,7 +443,7 @@ func TestScaleP21SW238IssueFrameValuesFinalCancellationDropsColumns(t *testing.T
 	}
 	measure, stopMeasure := context.WithCancel(t.Context())
 	defer stopMeasure()
-	counter := &scaleP21SW238CancelContext{Context: measure, cancel: stopMeasure, after: 1<<63 - 1}
+	counter := &issueFrameValuesCancelContext{Context: measure, cancel: stopMeasure, after: 1<<63 - 1}
 	columns, warmRelease, err := run(counter)
 	if err != nil || warmRelease == nil || len(columns) != 20 {
 		t.Fatal("measure a completed minimal deterministic encoding", err)
@@ -455,7 +455,7 @@ func TestScaleP21SW238IssueFrameValuesFinalCancellationDropsColumns(t *testing.T
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	atLastCheck := &scaleP21SW238CancelContext{Context: cancelled, cancel: cancel, after: last}
+	atLastCheck := &issueFrameValuesCancelContext{Context: cancelled, cancel: cancel, after: last}
 	actual, release, err := run(atLastCheck)
 	if release != nil {
 		release()
@@ -466,14 +466,14 @@ func TestScaleP21SW238IssueFrameValuesFinalCancellationDropsColumns(t *testing.T
 	}
 }
 
-func TestScaleP21SW238IssueFrameValuesUnauditedNativeTimeRefuses(t *testing.T) {
-	issue := scaleP21SW238Issue()
+func TestIssueFrameValuesUnauditedNativeTimeRefuses(t *testing.T) {
+	issue := issueFrameValuesIssue()
 	issue.CreatedAt = issue.CreatedAt.In(time.FixedZone("caller-owned-zone", 5*60*60+45*60))
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	if _, err := repo.issueRecordColumns("workspace", issue); err != nil {
 		t.Fatal("native timestamp itself is valid; the refused input is its unaudited frame", err)
 	}
-	frames, node := scaleP21SW238Frames(t, repo, issue, false)
+	frames, node := issueFrameValuesFrames(t, repo, issue, false)
 	if !node.unavailable {
 		t.Fatal("unaudited location fixture no longer creates a wire-only native frame")
 	}
@@ -486,7 +486,7 @@ func TestScaleP21SW238IssueFrameValuesUnauditedNativeTimeRefuses(t *testing.T) {
 	}
 }
 
-func scaleP21SW238EditorIssue(t *testing.T) (domain.Issue, int) {
+func editorIssue(t *testing.T) (domain.Issue, int) {
 	t.Helper()
 	body := strings.Repeat("x", 4<<20)
 	document := map[string]any{
@@ -513,21 +513,21 @@ func scaleP21SW238EditorIssue(t *testing.T) (domain.Issue, int) {
 	if err != nil || len(request) >= 16<<20 {
 		t.Fatal("supported optional-field editor request exceeds its HTTP bound", len(request), err)
 	}
-	issue := scaleP21SW238Issue()
+	issue := issueFrameValuesIssue()
 	issue.Description, issue.DescriptionState = body, descriptionState
 	issue.DocumentContent.Content, issue.DocumentContent.ContentState = body, state
 	issue.DocumentContent.ContentData = nil
 	return issue, len(request)
 }
 
-func TestScaleP21SW238IssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
-	issue, requestBytes := scaleP21SW238EditorIssue(t)
+func TestIssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
+	issue, requestBytes := editorIssue(t)
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	expected, err := repo.issueRecordColumns("workspace", issue)
 	if err != nil || len(expected[19].([]byte)) <= 17<<20 {
 		t.Fatal("supported editor issue is not the approximately 18-MiB row witness", err)
 	}
-	frames, node := scaleP21SW238Frames(t, repo, issue, false)
+	frames, node := issueFrameValuesFrames(t, repo, issue, false)
 	// The frame bytes remain valid. A bounded full-root Value call and any
 	// bounded native body Value call must fail under these poisoned receipts.
 	node.cost = uint64(metadataWorkBytes()) + 1
@@ -558,13 +558,13 @@ func TestScaleP21SW238IssueFrameValuesLargeEditorNoNativeBody(t *testing.T) {
 		t.Fatal("supported large editor columns must succeed without native body decoding", err)
 	}
 	defer release()
-	scaleP21SW238CompareColumns(t, expected, actual)
+	compareColumns(t, expected, actual)
 	held := repo.MetadataWorkUsedForTesting()
 	if held < len(actual[18].([]byte))+len(actual[19].([]byte)) {
 		t.Fatal("large returned SQL argument bytes lost their lease", held)
 	}
 	frames.Close()
-	scaleP21SW238CompareColumns(t, expected, actual)
+	compareColumns(t, expected, actual)
 	release()
 	release()
 	if repo.MetadataWorkUsedForTesting() != 0 {

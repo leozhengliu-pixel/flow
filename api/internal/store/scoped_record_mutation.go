@@ -43,7 +43,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 			return errProjectRecordFallback
 		}
 		contentScope, scopedContent := mutationScopeFromContext(ctx)
-		if scopedContent && eventType != "project.deleted" && !scaleP16ResourceScopeOnly(contentScope) {
+		if scopedContent && eventType != "project.deleted" && !scaleResourceScopeOnly(contentScope) {
 			return errProjectRecordFallback
 		}
 		s.lockWorkspaceWrites()
@@ -69,7 +69,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 		}
 		base, known := s.copyRevisionLocked(workspace)
 		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspace, base, known)
-		before := scaleP16ProjectSnapshot(stored, scope)
+		before := scaleProjectSnapshot(stored, scope)
 		next := cloneCallbackInput(before)
 		refreshDisplayReferences(&next)
 		originalRole := next.ViewerRole
@@ -107,7 +107,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 		var loadedDeliveries map[string]bool
 		if scopedContent && eventType != "project.deleted" {
 			resourceKeys = scopedResourceKeys(contentScope.Resources, nil)
-			loadedDeliveries, err = scaleP16LoadResourceContent(ctx, tx, workspace, resourceKeys, &next)
+			loadedDeliveries, err = scaleLoadResourceContent(ctx, tx, workspace, resourceKeys, &next)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 		if err != nil {
 			return err
 		}
-		scaleP16RestoreReadRecords(&next, before, scope)
+		scaleRestoreReadRecords(&next, before, scope)
 		raw, err := json.Marshal(payload)
 		if err != nil {
 			return err
@@ -134,7 +134,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 			cascades = plan(&stored, &before, &next)
 		}
 		for _, cascade := range cascades {
-			if err := s.scaleP16RunCascade(ctx, tx, workspace, &stored, cascade); err != nil {
+			if err := s.scaleRunCascade(ctx, tx, workspace, &stored, cascade); err != nil {
 				return err
 			}
 		}
@@ -160,15 +160,15 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 				}
 			}
 		}
-		changes, root, err := scaleP16RecordChanges(before, next)
+		changes, root, err := scaleRecordChanges(before, next)
 		if err != nil {
 			return err
 		}
-		if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(next), changes); err != nil {
+		if err := scaleWriteChanges(ctx, tx, workspace, newIssueReferences(next), changes); err != nil {
 			return err
 		}
 		if len(root) > 0 {
-			if err := scaleP16WriteRoot(ctx, tx, workspace, root); err != nil {
+			if err := scaleWriteRoot(ctx, tx, workspace, root); err != nil {
 				return err
 			}
 		}
@@ -193,11 +193,11 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 			return nil
 		}
 		for _, cascade := range cascades {
-			if err := s.scaleP16InstallCascade(ctx, workspace, &stored, cascade); err != nil {
+			if err := s.scaleInstallCascade(ctx, workspace, &stored, cascade); err != nil {
 				return invalidateCopy(err)
 			}
 		}
-		if err := scaleP16InstallChanges(&stored, next, changes); err != nil {
+		if err := scaleInstallChanges(&stored, next, changes); err != nil {
 			return invalidateCopy(err)
 		}
 		for _, key := range scope.Write {
@@ -255,7 +255,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 
 var errProjectRecordFallback = errors.New("project callback requires canonical inputs")
 
-func scaleP16RestoreReadRecords(after *domain.Bootstrap, before domain.Bootstrap, scope MetadataRecordScope) {
+func scaleRestoreReadRecords(after *domain.Bootstrap, before domain.Bootstrap, scope MetadataRecordScope) {
 	for _, key := range scope.Read {
 		if metadataRecordSelected(scope, key.Kind, key.ID, true) {
 			continue
@@ -291,7 +291,7 @@ func scaleP16RestoreReadRecords(after *domain.Bootstrap, before domain.Bootstrap
 	}
 }
 
-func scaleP16ProjectSnapshot(source domain.Bootstrap, scope MetadataRecordScope) domain.Bootstrap {
+func scaleProjectSnapshot(source domain.Bootstrap, scope MetadataRecordScope) domain.Bootstrap {
 	fields := metadataRecordFields(scope)
 	scope.Fields = slices.DeleteFunc(slices.Clone(scope.Fields), func(field string) bool { return field == "projectUpdates" || field == "initiativeUpdates" })
 	result := metadataRecordSnapshot(source, scope, fields)
@@ -312,7 +312,7 @@ func scaleP16ProjectSnapshot(source domain.Bootstrap, scope MetadataRecordScope)
 	return result
 }
 
-func scaleP16WriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, changes []metadataRecordChange) error {
+func scaleWriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, changes []metadataRecordChange) error {
 	slices.SortFunc(changes, func(a, b metadataRecordChange) int {
 		if c := strings.Compare(a.field, b.field); c != 0 {
 			return c
@@ -374,7 +374,7 @@ func scaleP16WriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs
 	return nil
 }
 
-func scaleP16ResourceScopeOnly(scope MutationScope) bool {
+func scaleResourceScopeOnly(scope MutationScope) bool {
 	if len(scope.Resources) > MetadataRecordBatchMaxKeys {
 		return false
 	}
@@ -382,7 +382,7 @@ func scaleP16ResourceScopeOnly(scope MutationScope) bool {
 	return reflect.DeepEqual(scope, MutationScope{})
 }
 
-func scaleP16LoadResourceContent(ctx context.Context, tx *sqlTx, workspace string, keys []string, next *domain.Bootstrap) (map[string]bool, error) {
+func scaleLoadResourceContent(ctx context.Context, tx *sqlTx, workspace string, keys []string, next *domain.Bootstrap) (map[string]bool, error) {
 	var err error
 	if next.Comments, err = scopedContentChunked[domain.Comment](ctx, tx, workspace, "comment", keys); err != nil {
 		return nil, err
@@ -410,7 +410,7 @@ func scaleP16LoadResourceContent(ctx context.Context, tx *sqlTx, workspace strin
 
 // Split only the owned working set; never build an index of the resident
 // collection. The canonical writers retain merging, search and journal hooks.
-func scaleP16RecordChanges(before, after domain.Bootstrap) ([]metadataRecordChange, map[string]json.RawMessage, error) {
+func scaleRecordChanges(before, after domain.Bootstrap) ([]metadataRecordChange, map[string]json.RawMessage, error) {
 	a, err := json.Marshal(collectionMetadata(before))
 	if err != nil {
 		return nil, nil, err
@@ -450,7 +450,7 @@ func scaleP16RecordChanges(before, after domain.Bootstrap) ([]metadataRecordChan
 	return changes, root, nil
 }
 
-func scaleP16WriteRoot(ctx context.Context, tx *sqlTx, workspace string, changes map[string]json.RawMessage) error {
+func scaleWriteRoot(ctx context.Context, tx *sqlTx, workspace string, changes map[string]json.RawMessage) error {
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
 		return err
@@ -474,7 +474,7 @@ func scaleP16WriteRoot(ctx context.Context, tx *sqlTx, workspace string, changes
 
 // Readers copy under mu, as for team point writes. Install only committed
 // records while holding mu; failed callbacks and SQL never alter the copy.
-func scaleP16InstallChanges(stored *domain.Bootstrap, selected domain.Bootstrap, changes []metadataRecordChange) error {
+func scaleInstallChanges(stored *domain.Bootstrap, selected domain.Bootstrap, changes []metadataRecordChange) error {
 	root := reflect.ValueOf(stored).Elem()
 	for _, change := range changes {
 		field, kind, ok := metadataRecordType(change.field)

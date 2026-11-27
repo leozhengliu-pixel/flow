@@ -15,7 +15,7 @@ func TestEnsureBuiltinApplicationIsIdempotentAndFollowsAgentConfig(t *testing.T)
 		t.Fatal(err)
 	}
 	defer s.Close()
-	ctx := WithColdWork(scaleP21ResourceOutputContext(t), "built-in application maintenance")
+	ctx := WithColdWork(scaleResourceOutputContext(t), "built-in application maintenance")
 	d := s.Bootstrap()
 	workspace := d.Workspace.URLKey
 	// Disabled with nothing installed: nothing to do.

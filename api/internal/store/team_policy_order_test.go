@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW20TeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
+func TestTeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	type row struct {
 		key      any
@@ -109,7 +109,7 @@ func TestScaleP21SW20TeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
 			}
 			view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 			view.metadataResidency.requireCoverage = false
-			read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+			read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 			if err != nil {
 				t.Fatal("policy header scan rejected legal physical rows", err)
 			}
@@ -157,10 +157,10 @@ func TestScaleP21SW20TeamPolicyPhysicalKeyOrderDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20TeamPolicyNamespacePredicateDifferential(t *testing.T) {
+func TestTeamPolicyNamespacePredicateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "mysql" {
 		t.Skip("MySQL workspace collation and binary point-predicate control")
 	}

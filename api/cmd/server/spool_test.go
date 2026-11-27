@@ -25,7 +25,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP15BHTTPSpoolCleanup(t *testing.T) {
+func TestScaleBHTTPSpoolCleanup(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15b-signing-fixture")
 	for _, path := range []string{"legacy", "paged", "signed"} {
@@ -38,7 +38,7 @@ func TestScaleP15BHTTPSpoolCleanup(t *testing.T) {
 					ctx, cancel := context.WithCancel(t.Context())
 					defer cancel()
 					failure := errors.New("writer failed")
-					w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+					w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 						switch mode {
 						case "error":
 							return failure
@@ -105,7 +105,7 @@ func TestScaleP15BHTTPSpoolCleanup(t *testing.T) {
 	}
 }
 
-func TestScaleP15BConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
+func TestScaleBConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	const limit = 256 << 10
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(limit))
@@ -144,7 +144,7 @@ func TestScaleP15BConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
 			defer finished.Done()
 			started.Done()
 			started.Wait()
-			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+			w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 				check()
 				return nil
 			}}
@@ -173,7 +173,7 @@ func TestScaleP15BConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP15BUnavailableTemporaryDirectory(t *testing.T) {
+func TestScaleBUnavailableTemporaryDirectory(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
 	for _, handler := range []http.Handler{
@@ -190,7 +190,7 @@ func TestScaleP15BUnavailableTemporaryDirectory(t *testing.T) {
 	}
 }
 
-func TestScaleP15BSigningKeepsNonJSONHeaders(t *testing.T) {
+func TestScaleBSigningKeepsNonJSONHeaders(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
 	for _, status := range []int{http.StatusOK, http.StatusBadRequest} {
@@ -210,7 +210,7 @@ func TestScaleP15BSigningKeepsNonJSONHeaders(t *testing.T) {
 	}
 }
 
-func TestScaleP15BSigningSurvivesSpoolFallback(t *testing.T) {
+func TestScaleBSigningSurvivesSpoolFallback(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15b-signing-fixture")
 	t.Setenv("TMPDIR", t.TempDir())
@@ -258,13 +258,13 @@ func TestScaleP15BSigningSurvivesSpoolFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP15BProductionMiddlewareSignsWithoutSpool(t *testing.T) {
+func TestScaleBProductionMiddlewareSignsWithoutSpool(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	const signingKey = "p15b-production-middleware-fixture"
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", signingKey)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			prefix := strings.Repeat("body x ", 32<<10) + " ![image]("
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p15b.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -328,7 +328,7 @@ func TestScaleP15BProductionMiddlewareSignsWithoutSpool(t *testing.T) {
 	}
 }
 
-func TestScaleP15BSignedStringSourceDifferential(t *testing.T) {
+func TestScaleBSignedStringSourceDifferential(t *testing.T) {
 	signing := &hydratedURLSigning{key: []byte("key"), base: "https://flow.test", expires: time.Unix(1900000000, 0)}
 	ctx := context.WithValue(t.Context(), hydratedURLSigningKey{}, signing)
 	binary, err := base64.StdEncoding.DecodeString("/uploads/abc")
@@ -362,19 +362,19 @@ func TestScaleP15BSignedStringSourceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP15BPermissionDifferentialWithNoSpooling(t *testing.T) {
+func TestScaleBPermissionDifferentialWithNoSpooling(t *testing.T) {
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", "0")
-	TestScaleP15PermissionDifferential(t)
+	TestScalePermissionDifferentialRecordHydrationPermissions(t)
 }
 
-func TestScaleP15BSignedLargeHistoryEncodingIsBounded(t *testing.T) {
+func TestScaleBSignedLargeHistoryEncodingIsBounded(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	text := strings.Repeat("history x ", 1<<18) + " /uploads/picture.png"
 	signing := &hydratedURLSigning{key: []byte("key"), base: "https://flow.test", expires: time.Unix(1900000000, 0)}
 	ctx := context.WithValue(t.Context(), hydratedURLSigningKey{}, signing)
 	for _, value := range []any{text, json.RawMessage(`{"history":"` + text + `"}`), domain.AgentToolCall{ID: "partial", Result: json.RawMessage(text)}} {
 		t.Run(fmt.Sprintf("%T", value), func(t *testing.T) {
-			w := &scaleP15CountingWriter{header: make(http.Header)}
+			w := &scaleCountingWriter{header: make(http.Header)}
 			result := testing.Benchmark(func(b *testing.B) {
 				for range b.N {
 					buffer := bufio.NewWriterSize(w, 64<<10)

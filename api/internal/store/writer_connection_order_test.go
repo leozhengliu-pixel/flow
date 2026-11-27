@@ -10,13 +10,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW590: a writer that runs its SQL in one transaction under the store lock
+// A writer that runs its SQL in one transaction under the store lock
 // (lockWorkspaceWritesTx) takes the database connection before the store
 // lock. A read snapshot holds the connection (SQLite has one) and then waits
 // for the store's read lock (ResolveAccess, a resource read); a writer that
 // waited for the connection while holding the store lock deadlocked with it
 // until a request timed out (the load rig's 30-second label.delete).
-func TestScaleP21SW590WriterTakesConnectionBeforeStoreLock(t *testing.T) {
+func TestWriterTakesConnectionBeforeStoreLock(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "order.db"))
 	if err != nil {
 		t.Fatal(err)

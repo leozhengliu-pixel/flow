@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21ColdLoopFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string, string) {
+func scaleColdLoopFixture(t *testing.T) (scaleFixture, *SQLiteStore, string, string) {
 	t.Helper()
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+	f, view, workspace := scaleColdWriteFixture(t)
 	loopID := idgen.New("p21-cold-contract-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "loop.created", loopID, nil, func(data *domain.Bootstrap) error {
 		data.Loops = []domain.Loop{
@@ -39,11 +39,11 @@ func scaleP21ColdLoopFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, strin
 	return f, view, workspace, loopID
 }
 
-func scaleP21ColdLoopMutation(repo *SQLiteStore, ctx context.Context, workspace string, mutate func(*domain.Bootstrap) (string, error)) error {
+func scaleColdLoopMutation(repo *SQLiteStore, ctx context.Context, workspace string, mutate func(*domain.Bootstrap) (string, error)) error {
 	return repo.withColdMutation(ctx, workspace, "loop.output_contract", map[string]any{"source": "model"}, mutate)
 }
 
-func scaleP21ColdLoopChange(data *domain.Bootstrap, stamp time.Time) {
+func scaleColdLoopChange(data *domain.Bootstrap, stamp time.Time) {
 	data.Loops[0].OutputContract = &domain.LoopOutputContract{
 		Source: "model", ReadOnly: true, InstructionsHash: "current\x00hash",
 		Outputs: []domain.LoopContractOutput{}, ExtractedAt: &stamp,
@@ -53,8 +53,8 @@ func scaleP21ColdLoopChange(data *domain.Bootstrap, stamp time.Time) {
 	}
 }
 
-func TestScaleP21ColdLoopContractDecodesOnlyUsedFields(t *testing.T) {
-	_, view, workspace, loopID := scaleP21ColdLoopFixture(t)
+func TestScaleColdLoopContractDecodesOnlyUsedFields(t *testing.T) {
+	_, view, workspace, loopID := scaleColdLoopFixture(t)
 	if view.dialect != "sqlite" {
 		t.Skip("SQLite facade projection")
 	}
@@ -68,7 +68,7 @@ func TestScaleP21ColdLoopContractDecodesOnlyUsedFields(t *testing.T) {
 		if len(data.Loops) != 1 || len(data.LoopVersions) != 2 {
 			t.Fatal("loop contract callback did not read the selected canonical rows")
 		}
-		scaleP21ColdLoopChange(data, time.Now().UTC())
+		scaleColdLoopChange(data, time.Now().UTC())
 		return loopID, nil
 	})
 	if err != nil {
@@ -76,10 +76,10 @@ func TestScaleP21ColdLoopContractDecodesOnlyUsedFields(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
+func TestScaleColdLoopContractDispatchDifferential(t *testing.T) {
 	for _, offset := range []int{0, 345 * 60} {
 		t.Run(fmt.Sprintf("offset-%d", offset), func(t *testing.T) {
-			f, view, workspace, loopID := scaleP21ColdLoopFixture(t)
+			f, view, workspace, loopID := scaleColdLoopFixture(t)
 			f.mu.RLock()
 			original := cloneBootstrap(f.workspaces[workspace])
 			f.mu.RUnlock()
@@ -101,7 +101,7 @@ func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 			if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='loops' AND record_key=?`, raw, workspace, loopID); err != nil {
 				t.Fatal(err)
 			}
-			saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			stamp := time.Date(2026, 11, 13, 12, 0, 0, 0, time.FixedZone("", offset))
 			var input domain.Bootstrap
 			var oldEvents, coldEvents []domain.DomainEvent
@@ -130,7 +130,7 @@ func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 					} else {
 						input = snapshot
 					}
-					scaleP21ColdLoopChange(data, stamp)
+					scaleColdLoopChange(data, stamp)
 					data.AuditLog = append(data.AuditLog, domain.AuditLogEntry{
 						ID: idgen.New("p21-cold-loop-audit-"), Action: "p21.cold.loop.changed", Actor: f.data.Viewer,
 						CreatedAt: time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC),
@@ -142,9 +142,9 @@ func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 			if err := f.MutateWorkspaceWithAggregate(ctx, workspace, "loop.output_contract", map[string]any{"source": "model"}, callback(false)); err != nil {
 				t.Fatal(err)
 			}
-			want := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			want := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			wantNative, _ := f.WorkspaceMetadata(workspace)
-			scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
+			scaleColdPreferenceRestore(t, f, workspace, saved, original)
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -165,10 +165,10 @@ func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 					t.Error("loop install invented exact revision or released cold slot")
 				}
 			})
-			if err := scaleP21ColdLoopMutation(view, ctx, workspace, callback(true)); err != nil {
+			if err := scaleColdLoopMutation(view, ctx, workspace, callback(true)); err != nil {
 				t.Fatal(err)
 			}
-			if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, want) {
+			if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, want) {
 				t.Fatal("cold loop write changed canonical/search rows")
 			}
 			if err := view.withColdMetadataRead(ctx, func(_ context.Context, facade *SQLiteStore) error {
@@ -204,8 +204,8 @@ func TestScaleP21ColdLoopContractDispatchDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
-	f, view, workspace, loopID := scaleP21ColdLoopFixture(t)
+func TestScaleColdLoopContractRollbackAndNoopAudit(t *testing.T) {
+	f, view, workspace, loopID := scaleColdLoopFixture(t)
 	ctx := withMutationAggregateID(ContextWithActor(t.Context(), f.data.Viewer), loopID)
 	// The original writer canonical-round-trips the target's wide integer
 	// interface value. Settle that real legacy change before testing no-op.
@@ -217,7 +217,7 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 		t.Fatal(err)
 	}
-	saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+	saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 	source, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -251,8 +251,8 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 				view.metadataResidency.policyLimit = limit
 				f.db.commitHooks.Store(hooks)
 			}()
-			err := scaleP21ColdLoopMutation(view, ctx, workspace, func(data *domain.Bootstrap) (string, error) {
-				scaleP21ColdLoopChange(data, time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
+			err := scaleColdLoopMutation(view, ctx, workspace, func(data *domain.Bootstrap) (string, error) {
+				scaleColdLoopChange(data, time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
 				switch mode {
 				case "callback":
 					return "", errors.New("callback rejected")
@@ -275,7 +275,7 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 			if mode == "commit" && !prepared {
 				t.Fatal("commit failure did not exercise prepared publication")
 			}
-			if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, saved) {
+			if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, saved) {
 				t.Fatal("failed loop transaction changed rows")
 			}
 			current, err := view.retainMetadataLogicalSource(t.Context(), workspace)
@@ -303,7 +303,7 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 	if err := f.MutateWorkspaceWithAggregate(ctx, workspace, "loop.output_contract", nil, noop); err != nil {
 		t.Fatal(err)
 	}
-	if err := scaleP21ColdLoopMutation(view, ctx, workspace, noop); err != nil {
+	if err := scaleColdLoopMutation(view, ctx, workspace, noop); err != nil {
 		t.Fatal(err)
 	}
 	var count, audits int
@@ -313,13 +313,13 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 	if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM audit_events WHERE workspace_id=? AND action='p21.cold.loop.noop'`, f.data.Workspace.ID).Scan(&audits); err != nil || audits != 2 {
 		t.Fatal("original no-change pending audit fallback was lost", audits, err)
 	}
-	if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, saved) {
+	if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, saved) {
 		t.Fatal("no-change loop callback changed canonical rows")
 	}
 	t.Run("forced-full-dispatch", func(t *testing.T) {
 		forced := fullMutationsForced.Swap(true)
 		defer fullMutationsForced.Store(forced)
-		err := scaleP21ColdLoopMutation(view, ctx, workspace, func(*domain.Bootstrap) (string, error) {
+		err := scaleColdLoopMutation(view, ctx, workspace, func(*domain.Bootstrap) (string, error) {
 			t.Error("guard admitted unintegrated forced-full loop dispatch")
 			return loopID, nil
 		})
@@ -329,9 +329,9 @@ func TestScaleP21ColdLoopContractRollbackAndNoopAudit(t *testing.T) {
 	})
 }
 
-func TestScaleP21ColdLoopContractLatestParentAndDefaultBinding(t *testing.T) {
-	f, view, workspace, loopID := scaleP21ColdLoopFixture(t)
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-loop-second-")).Workspace.URLKey
+func TestScaleColdLoopContractLatestParentAndDefaultBinding(t *testing.T) {
+	f, view, workspace, loopID := scaleColdLoopFixture(t)
+	second := selectedExtraWorkspace(t, f, idgen.New("p21-cold-loop-second-")).Workspace.URLKey
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
 	}
@@ -349,18 +349,18 @@ func TestScaleP21ColdLoopContractLatestParentAndDefaultBinding(t *testing.T) {
 			return err
 		}
 		var locked string
-		facade.coordinator = scaleP21ColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
+		facade.coordinator = scaleColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
 			locked = key
 			view.mu.Lock()
 			view.lastWorkspaceKey = second
 			view.mu.Unlock()
 			return apply()
 		})
-		return scaleP21ColdLoopMutation(view, bound, "", func(data *domain.Bootstrap) (string, error) {
+		return scaleColdLoopMutation(view, bound, "", func(data *domain.Bootstrap) (string, error) {
 			if locked != workspace || data.Workspace.URLKey != locked {
 				t.Error("loop refresh changed coordinator-protected default", locked, data.Workspace.URLKey)
 			}
-			scaleP21ColdLoopChange(data, time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
+			scaleColdLoopChange(data, time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
 			return loopID, nil
 		})
 	}); err != nil {

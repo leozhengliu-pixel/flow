@@ -16,12 +16,12 @@ import (
 
 // These ordinary-producer witnesses distinguish installed native values from
 // canonical reloads and verify that bounded test views preserve that source.
-func TestScaleP21SW24ApplicationConsentSourceDifferential(t *testing.T) {
+func TestApplicationConsentSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, teamID := f.data.Workspace.URLKey, idgen.New("sw24-consent-source-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw24.consent_source", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: teamID, Name: "Consent before\x00after", Key: "SW24"})
@@ -78,13 +78,13 @@ func TestScaleP21SW24ApplicationConsentSourceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ApplicationDefaultSourceDifferential(t *testing.T) {
+func TestApplicationDefaultSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		if driver := scaleP03DatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
 			t.Skip("PostgreSQL text columns cannot contain physical NUL workspace keys")
 		}
 		physical := idgen.New("sw24-default-source-") + "\x00tail"
@@ -138,12 +138,12 @@ func TestScaleP21SW24ApplicationDefaultSourceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24WorkerDefinitionSourceHold(t *testing.T) {
+func TestWorkerDefinitionSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		service := &server{store: repo, authDisabled: true}
 		r := httptest.NewRequest(http.MethodPost, "/api/loops?workspace="+f.data.Workspace.URLKey,
 			strings.NewReader(`{"name":"Worker source","instructions":"Inspect before\u0000after","status":"draft"}`))
@@ -204,13 +204,13 @@ func TestScaleP21SW24WorkerDefinitionSourceHold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ExportNamespaceSourceDifferential(t *testing.T) {
+func TestExportNamespaceSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		if driver := scaleP03DatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
 			t.Skip("PostgreSQL text columns cannot contain physical NUL workspace keys")
 		}
 		physical, jobID := idgen.New("sw24-export-source-")+"\x00tail", idgen.New("sw24-export-")

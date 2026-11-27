@@ -175,11 +175,11 @@ func jsonStringBulkCompare(t *testing.T, name string, raw []byte, mode metadataJ
 	t.Helper()
 	want := jsonStringUnitReference(raw, mode)
 	if mode == metadataJSONStringCompactRaw || utf8.Valid(raw) {
-		if oracle := scaleP21SW144Expected(t, raw, mode); !bytes.Equal(oracle, want) {
+		if oracle := jsonStringSourceExpected(t, raw, mode); !bytes.Equal(oracle, want) {
 			t.Fatalf("%s: the unit reference differs from encoding/json", name)
 		}
 	}
-	_, owner := scaleP21SW144Owner(t)
+	_, owner := jsonStringSourceOwner(t)
 	defer owner.Close()
 	source, err := newMetadataJSONStringSource(t.Context(), owner, bytes.NewReader(raw), int64(len(raw)), mode)
 	if err != nil {
@@ -229,7 +229,7 @@ func jsonStringBulkCompare(t *testing.T, name string, raw []byte, mode metadataJ
 	random := rand.New(rand.NewSource(int64(len(raw))))
 	expected := bytes.NewReader(want)
 	for range 200 {
-		scaleP21SW144CompareAt(t, source, expected, random.Int63n(int64(len(want))+2), random.Intn(70000))
+		compareAt(t, source, expected, random.Int63n(int64(len(want))+2), random.Intn(70000))
 	}
 }
 
@@ -360,7 +360,7 @@ func TestJSONStringSourceBulkThroughput(t *testing.T) {
 		}
 	})
 	bounded := measure(func() {
-		_, owner := scaleP21SW144Owner(t)
+		_, owner := jsonStringSourceOwner(t)
 		defer owner.Close()
 		for _, input := range []struct {
 			raw  []byte
@@ -461,7 +461,7 @@ func TestJSONStringRunsMatchRunePaths(t *testing.T) {
 		for _, sizes := range jsonStringBulkTokenChunkings {
 			var got bytes.Buffer
 			stream := &logicalJSONStream{ctx: t.Context(), out: bufio.NewWriterSize(&got, 64)}
-			if err := stream.stringContent(&scaleP21SW228Chunks{data: text, sizes: sizes}); err != nil {
+			if err := stream.stringContent(&jsonRunsChunks{data: text, sizes: sizes}); err != nil {
 				t.Fatal(name, err)
 			}
 			if err := stream.out.Flush(); err != nil {
@@ -471,7 +471,7 @@ func TestJSONStringRunsMatchRunePaths(t *testing.T) {
 				t.Fatalf("%s chunks %v: string content differs from encoding/json", name, sizes)
 			}
 			var chunks [][]byte
-			null, err := VisitMetadataJSONStringChunks(t.Context(), &scaleP21SW228Chunks{data: token, sizes: sizes}, func(chunk []byte) error {
+			null, err := VisitMetadataJSONStringChunks(t.Context(), &jsonRunsChunks{data: token, sizes: sizes}, func(chunk []byte) error {
 				chunks = append(chunks, bytes.Clone(chunk))
 				return nil
 			})

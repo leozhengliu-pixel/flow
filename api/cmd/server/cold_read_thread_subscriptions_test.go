@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW108Normalized(t *testing.T, got scaleP21SW59Outcome, before scaleP21SW59Rows, started, finished time.Time) any {
+func coldReadThreadSubscriptionsNormalized(t *testing.T, got discussionWriteOutcome, before discussionWriteRows, started, finished time.Time) any {
 	t.Helper()
 	known := map[string]bool{}
 	for _, row := range before.Subscriptions {
@@ -38,7 +38,7 @@ func scaleP21SW108Normalized(t *testing.T, got scaleP21SW59Outcome, before scale
 		}
 		generated[id] = fmt.Sprintf("<generated-thread:%d>", len(generated))
 	}
-	value := scaleP21SW59Normalized(t, got, before, started, finished)
+	value := discussionWriteNormalized(t, got, before, started, finished)
 	var normalize func(any) any
 	normalize = func(value any) any {
 		switch item := value.(type) {
@@ -60,12 +60,12 @@ func scaleP21SW108Normalized(t *testing.T, got scaleP21SW59Outcome, before scale
 	return normalize(value)
 }
 
-func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
+func TestThreadSubscriptionRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -133,9 +133,9 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 		{name: "cyclic-thread", method: http.MethodPut, state: "muted", seed: "cycle", code: http.StatusNotFound},
 	}
 	// Keep production authorization separate from the ordinary handler-boundary
-	// cases above, whose contexts intentionally reach the full writer (SW106).
+	// cases above, whose contexts intentionally reach the full writer.
 	for actor, principal := range f.principals {
-		for _, credential := range scaleP21M3Credentials() {
+		for _, credential := range pointSettingsCredentialCases() {
 			for _, method := range []string{http.MethodPut, http.MethodDelete} {
 				tests = append(tests, testCase{
 					name:   principal.name + "/" + credential.name + "/" + method,
@@ -190,7 +190,7 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 					target = private.ID
 				}
 				var key *domain.APIKey
-				for _, credential := range scaleP21M3Credentials() {
+				for _, credential := range pointSettingsCredentialCases() {
 					if credential.name == test.credential {
 						key = credential.key
 						if key != nil && test.credential == "selected-set" {
@@ -201,7 +201,7 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 				var outputs []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(test, user, target)
-					before := scaleP21SW59SQL(t, f)
+					before := discussionWriteSql(t, f)
 					prior, err := repo.Events(t.Context(), target)
 					if err != nil {
 						t.Fatal(err)
@@ -210,15 +210,15 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 					for _, event := range prior {
 						ids[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 							"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 							"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot, "createdAt": event.CreatedAt,
 						}))
 					})
 					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					})
 					comment := target + "-reply"
 					if test.comment == "missing" {
@@ -248,7 +248,7 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 						}
 						mux := http.NewServeMux()
 						mux.Handle(test.method+" /api/"+family+"/{id}/comments/{commentId}/subscription", handler)
-						response := &scaleP21SW59ResponseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.code > 0 && test.code < 400}
+						response := &responseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.code > 0 && test.code < 400}
 						if !test.authorize || service.authorizeWorkspaceRequest(response, request, user) {
 							mux.ServeHTTP(response, request)
 						}
@@ -258,7 +258,7 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 					finished := time.Now().UTC()
 					source.SetWebhookSink(nil)
 					source.SetRealtimeSink(nil)
-					got.Rows = scaleP21SW59SQL(t, f)
+					got.Rows = discussionWriteSql(t, f)
 					after, err := repo.Events(t.Context(), target)
 					if err != nil {
 						t.Fatal(err)
@@ -279,10 +279,10 @@ func TestScaleP21SW108ThreadSubscriptionRoutesDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("thread route leaked work or hydrated full metadata")
 					}
-					outputs = append(outputs, scaleP21SW108Normalized(t, got, before, started, finished))
+					outputs = append(outputs, coldReadThreadSubscriptionsNormalized(t, got, before, started, finished))
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("thread route/SQL/events differ", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("thread route/SQL/events differ", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

@@ -108,7 +108,7 @@ var metadataMutationSlug = regexp.MustCompile(`-[a-f0-9]{12}`)
 
 func compareMetadataRecordCallbacks(first, second mutationCallbackResult, protected []byte) string {
 	// Creation generates a fresh suffix in addition to the IDs and clocks
-	// handled by P04. Existing suffixes and anything in the input stay exact.
+	// handled by record verification. Existing suffixes and anything in the input stay exact.
 	var slugs func(any) any
 	slugs = func(value any) any {
 		switch v := value.(type) {
@@ -131,7 +131,7 @@ func compareMetadataRecordCallbacks(first, second mutationCallbackResult, protec
 		return value
 	}
 	// An all-digit suffix would otherwise be interpreted as a generated ID
-	// by P04. Preserve it through that pass, then normalize it as a slug.
+	// by record verification. Preserve it through that pass, then normalize it as a slug.
 	stamps := slices.Clone(protected)
 	for _, result := range []mutationCallbackResult{first, second} {
 		raw, _ := json.Marshal(result)

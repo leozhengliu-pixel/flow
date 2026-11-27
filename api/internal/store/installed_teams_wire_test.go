@@ -14,23 +14,23 @@ import (
 	"flow/api/internal/domain"
 )
 
-func sw15WireTeamsPair(teams []domain.Team) (*SQLiteStore, *SQLiteStore) {
+func wireTeamsPair(teams []domain.Team) (*SQLiteStore, *SQLiteStore) {
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "logical-id", URLKey: "logical-key"}, Teams: teams}
 	return &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}, lastWorkspaceKey: "physical"},
 		&SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}, lastWorkspaceKey: "physical", metadataResidency: newMetadataResidency()}
 }
 
-func sw15WireTeamsUsed(s *SQLiteStore) int {
+func wireTeamsUsed(s *SQLiteStore) int {
 	s.metadataResidency.work.mu.Lock()
 	defer s.metadataResidency.work.mu.Unlock()
 	return s.metadataResidency.work.used
 }
 
-func sw15WireTimes(team domain.Team) []*time.Time {
+func wireTimes(team domain.Team) []*time.Time {
 	return []*time.Time{team.RetiredAt, team.ArchivedAt, team.CreatedAt, team.UpdatedAt}
 }
 
-func sw15WireJSONEqual(t *testing.T, actual, expected []domain.Team) {
+func wireJSONEqual(t *testing.T, actual, expected []domain.Team) {
 	t.Helper()
 	actualJSON, actualErr := json.Marshal(actual)
 	expectedJSON, expectedErr := json.Marshal(expected)
@@ -50,8 +50,8 @@ func sw15WireJSONEqual(t *testing.T, actual, expected []domain.Team) {
 		t.Fatal("Team streaming JSON error changed", actualErr, expectedErr)
 	}
 	for index := range actual {
-		for field, when := range sw15WireTimes(actual[index]) {
-			source := sw15WireTimes(expected[index])[field]
+		for field, when := range wireTimes(actual[index]) {
+			source := wireTimes(expected[index])[field]
 			if (when == nil) != (source == nil) {
 				t.Fatal("nil timestamp changed")
 			}
@@ -73,7 +73,7 @@ func sw15WireJSONEqual(t *testing.T, actual, expected []domain.Team) {
 	}
 }
 
-func TestScaleP21SW0InstalledTeamsWireDifferential(t *testing.T) {
+func TestInstalledTeamsWireDifferential(t *testing.T) {
 	kind := reflect.TypeFor[domain.Team]()
 	expectedFields := []string{"ID", "Name", "Key", "Color", "Icon", "Private", "ExternalSource", "RetiredAt", "ArchivedAt", "ArchivedByID", "CreatedAt", "UpdatedAt"}
 	var fields []string
@@ -110,7 +110,7 @@ func TestScaleP21SW0InstalledTeamsWireDifferential(t *testing.T) {
 				Key: "key", Color: "color", Icon: "icon", Private: true, ExternalSource: "hr:org:node:external",
 				RetiredAt: &when, ArchivedAt: &when, ArchivedByID: "actor", CreatedAt: &when, UpdatedAt: &when,
 			}
-			legacy, bounded := sw15WireTeamsPair([]domain.Team{full, {ID: full.ID}, {}, full})
+			legacy, bounded := wireTeamsPair([]domain.Team{full, {ID: full.ID}, {}, full})
 			expected, _ := legacy.WorkspaceMetadata("physical")
 			original := when
 			for _, source := range []*SQLiteStore{legacy, bounded} {
@@ -118,13 +118,13 @@ func TestScaleP21SW0InstalledTeamsWireDifferential(t *testing.T) {
 				if err != nil || !read.Found {
 					t.Fatal("wire read failed", err)
 				}
-				sw15WireJSONEqual(t, read.Teams, expected.Teams)
+				wireJSONEqual(t, read.Teams, expected.Teams)
 				if when != original || when.Location() != location {
 					t.Fatal("wire normalization mutated installed source time")
 				}
 				if source == bounded {
-					for field, output := range sw15WireTimes(read.Teams[0]) {
-						input := sw15WireTimes(full)[field]
+					for field, output := range wireTimes(read.Teams[0]) {
+						input := wireTimes(full)[field]
 						if output == input || output.Location().String() != "" {
 							t.Fatal("timestamp pointer/location not detached")
 						}
@@ -135,7 +135,7 @@ func TestScaleP21SW0InstalledTeamsWireDifferential(t *testing.T) {
 				}
 				read.Close()
 				read.Close()
-				if read.Teams != nil || read.Found || source == bounded && sw15WireTeamsUsed(source) != 0 {
+				if read.Teams != nil || read.Found || source == bounded && wireTeamsUsed(source) != 0 {
 					t.Fatal("Close retained output or admission")
 				}
 			}
@@ -143,7 +143,7 @@ func TestScaleP21SW0InstalledTeamsWireDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0InstalledTeamsWireEncodingErrors(t *testing.T) {
+func TestInstalledTeamsWireEncodingErrors(t *testing.T) {
 	for _, when := range []time.Time{
 		time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -162,7 +162,7 @@ func TestScaleP21SW0InstalledTeamsWireEncodingErrors(t *testing.T) {
 			case 3:
 				team.UpdatedAt = &when
 			}
-			legacy, bounded := sw15WireTeamsPair([]domain.Team{team})
+			legacy, bounded := wireTeamsPair([]domain.Team{team})
 			expected, _ := legacy.WorkspaceMetadata("physical")
 			if _, err := json.Marshal(expected.Teams); err == nil {
 				t.Fatal("encoding-error fixture unexpectedly valid")
@@ -171,15 +171,15 @@ func TestScaleP21SW0InstalledTeamsWireEncodingErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			sw15WireJSONEqual(t, read.Teams, expected.Teams)
+			wireJSONEqual(t, read.Teams, expected.Teams)
 			read.Close()
 		}
 	}
 }
 
-func TestScaleP21SW0InstalledTeamsWireNilKeysBounds(t *testing.T) {
+func TestInstalledTeamsWireNilKeysBounds(t *testing.T) {
 	for _, teams := range [][]domain.Team{nil, {}, {{ID: "team"}}} {
-		legacy, bounded := sw15WireTeamsPair(teams)
+		legacy, bounded := wireTeamsPair(teams)
 		for _, key := range []string{"physical", "", "missing", "PHYSICAL", "physical\x00", "logical-key"} {
 			expected, found := legacy.WorkspaceMetadata(key)
 			for _, source := range []*SQLiteStore{legacy, bounded} {
@@ -187,14 +187,14 @@ func TestScaleP21SW0InstalledTeamsWireNilKeysBounds(t *testing.T) {
 				if err != nil || read.Found != found {
 					t.Fatal("lookup changed", err)
 				}
-				sw15WireJSONEqual(t, read.Teams, expected.Teams)
+				wireJSONEqual(t, read.Teams, expected.Teams)
 				read.Close()
 			}
 		}
 	}
-	legacy, bounded := sw15WireTeamsPair([]domain.Team{{Name: strings.Repeat("<", installedTeamsWireReadMaxBytes/32)}})
+	legacy, bounded := wireTeamsPair([]domain.Team{{Name: strings.Repeat("<", installedTeamsWireReadMaxBytes/32)}})
 	read, err := bounded.BeginInstalledTeamsWireRead(t.Context(), "physical")
-	if read != nil || !errors.Is(err, ErrMetadataWorkBudget) || sw15WireTeamsUsed(bounded) != 0 {
+	if read != nil || !errors.Is(err, ErrMetadataWorkBudget) || wireTeamsUsed(bounded) != 0 {
 		t.Fatal("over-cap read cloned output or admitted work", err)
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
@@ -207,21 +207,21 @@ func TestScaleP21SW0InstalledTeamsWireNilKeysBounds(t *testing.T) {
 		t.Fatal("off branch acquired new cancellation behavior", err)
 	}
 	off.Close()
-	_, bounded = sw15WireTeamsPair([]domain.Team{{ID: "small"}})
+	_, bounded = wireTeamsPair([]domain.Team{{ID: "small"}})
 	bounded.metadataResidency.work.mu.Lock()
 	bounded.metadataResidency.work.limit = 1
 	bounded.metadataResidency.work.mu.Unlock()
-	if read, err := bounded.BeginInstalledTeamsWireRead(t.Context(), "physical"); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || sw15WireTeamsUsed(bounded) != 0 {
+	if read, err := bounded.BeginInstalledTeamsWireRead(t.Context(), "physical"); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || wireTeamsUsed(bounded) != 0 {
 		t.Fatal("process budget ignored", err)
 	}
 }
 
-func TestScaleP21SW0InstalledTeamsWireOwnedGeneration(t *testing.T) {
+func TestInstalledTeamsWireOwnedGeneration(t *testing.T) {
 	name := strings.Repeat("retired-owned-zone", 100000)
 	when := time.Date(2026, 11, 3, 12, 13, 14, 15, time.FixedZone(name, 3661))
 	originalTime := when
 	original := domain.Team{ID: "owned-id", Name: strings.Repeat("old<&>\x00", 1000), Key: "old-key", Color: "color", Icon: "icon", ExternalSource: "source", ArchivedByID: "actor", RetiredAt: &when, ArchivedAt: &when, CreatedAt: &when, UpdatedAt: &when}
-	_, bounded := sw15WireTeamsPair([]domain.Team{original})
+	_, bounded := wireTeamsPair([]domain.Team{original})
 	parentCtx, releaseParent, err := bounded.admitMetadataWork(t.Context(), 2<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -233,7 +233,7 @@ func TestScaleP21SW0InstalledTeamsWireOwnedGeneration(t *testing.T) {
 	}
 	defer read.Close()
 	releaseParent()
-	charged := sw15WireTeamsUsed(bounded)
+	charged := wireTeamsUsed(bounded)
 	if charged == 0 || charged >= len(name) {
 		t.Fatal("invalid retired generation fixture", charged)
 	}
@@ -251,15 +251,15 @@ func TestScaleP21SW0InstalledTeamsWireOwnedGeneration(t *testing.T) {
 	next.Teams = []domain.Team{{ID: "replacement"}}
 	bounded.workspaces["physical"] = next
 	bounded.mu.Unlock()
-	for _, output := range sw15WireTimes(read.Teams[0]) {
+	for _, output := range wireTimes(read.Teams[0]) {
 		if output == &when || output.Location() == when.Location() || output.Location().String() != "" {
 			t.Fatal("retired location name backing escaped into output")
 		}
 	}
-	if when != originalTime || sw15WireTeamsUsed(bounded) != charged {
+	if when != originalTime || wireTeamsUsed(bounded) != charged {
 		t.Fatal("replacement mutated source or revoked output charge")
 	}
-	sw15WireJSONEqual(t, read.Teams, []domain.Team{original})
+	wireJSONEqual(t, read.Teams, []domain.Team{original})
 	encoded, err := json.Marshal(read.Teams)
 	if err != nil || charged < 3*len(encoded)+len(original.Name) {
 		t.Fatal("encoding allowance too small", charged, len(encoded), err)
@@ -270,15 +270,15 @@ func TestScaleP21SW0InstalledTeamsWireOwnedGeneration(t *testing.T) {
 	}
 	fresh.Close()
 	read.Close()
-	if sw15WireTeamsUsed(bounded) != 0 {
+	if wireTeamsUsed(bounded) != 0 {
 		t.Fatal("retired wire generation leaked admission")
 	}
 }
 
-func TestScaleP21SW0InstalledTeamsWireWarmReload(t *testing.T) {
+func TestInstalledTeamsWireWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -299,7 +299,7 @@ func TestScaleP21SW0InstalledTeamsWireWarmReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	sw15WireJSONEqual(t, old.Teams, before.Teams)
+	wireJSONEqual(t, old.Teams, before.Teams)
 	if err := view.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -308,11 +308,11 @@ func TestScaleP21SW0InstalledTeamsWireWarmReload(t *testing.T) {
 	if err != nil || !found {
 		t.Fatal("missing reload source", err)
 	}
-	sw15WireJSONEqual(t, fresh.Teams, current.Teams)
-	sw15WireJSONEqual(t, old.Teams, before.Teams)
+	wireJSONEqual(t, fresh.Teams, current.Teams)
+	wireJSONEqual(t, old.Teams, before.Teams)
 	old.Close()
 	fresh.Close()
-	if view.WorkspaceMetadataDecodes() != 0 || sw15WireTeamsUsed(view) != 0 {
+	if view.WorkspaceMetadataDecodes() != 0 || wireTeamsUsed(view) != 0 {
 		t.Fatal("wire reader decoded SQL metadata or leaked admission")
 	}
 }

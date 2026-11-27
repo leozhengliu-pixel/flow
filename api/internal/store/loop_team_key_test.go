@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW23LegacyTeamKeyAllowed(repository *SQLiteStore, workspace, key string, allowed map[string]bool) bool {
+func legacyTeamKeyAllowed(repository *SQLiteStore, workspace, key string, allowed map[string]bool) bool {
 	data, ok := repository.WorkspaceMetadataFields(workspace, "teams")
 	if !ok {
 		return false
@@ -22,7 +22,7 @@ func scaleP21SW23LegacyTeamKeyAllowed(repository *SQLiteStore, workspace, key st
 	return false
 }
 
-func TestScaleP21SW23LoopTeamKeyInstalledDifferential(t *testing.T) {
+func TestLoopTeamKeyInstalledDifferential(t *testing.T) {
 	retired := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	data := domain.Bootstrap{
 		Teams: []domain.Team{
@@ -51,7 +51,7 @@ func TestScaleP21SW23LoopTeamKeyInstalledDifferential(t *testing.T) {
 		} {
 			for _, workspace := range []string{"workspace", "", "Case", "case", "trail ", "trail", "a\x00b", "ab", "missing"} {
 				for _, key := range []string{"dup", "DUP", "first ALIAS", "later alias", "K", "\u212a", "s", "\u017f", "nul\x00key", "nulkey", "nul\x00name", " with spaces ", "with spaces", "", "missing"} {
-					want := scaleP21SW23LegacyTeamKeyAllowed(repository, workspace, key, allowed)
+					want := legacyTeamKeyAllowed(repository, workspace, key, allowed)
 					got := repository.LoopTeamKeyAllowed(workspace, key, allowed)
 					if got != want {
 						t.Fatalf("installed lookup differs role=%s set=%d workspace=%q key=%q want=%v got=%v", role, index, workspace, key, want, got)
@@ -78,7 +78,7 @@ func TestScaleP21SW23LoopTeamKeyInstalledDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23LoopTeamKeyConstantAllocation(t *testing.T) {
+func TestLoopTeamKeyConstantAllocation(t *testing.T) {
 	for _, size := range []int{64 << 10, 8 << 20} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			name := strings.Repeat("x", size)
@@ -88,7 +88,7 @@ func TestScaleP21SW23LoopTeamKeyConstantAllocation(t *testing.T) {
 			}
 			allowed := map[string]bool{"team": true}
 			before := testing.AllocsPerRun(10, func() {
-				if !scaleP21SW23LegacyTeamKeyAllowed(repository, "workspace", name, allowed) {
+				if !legacyTeamKeyAllowed(repository, "workspace", name, allowed) {
 					panic("missing legacy fixture team")
 				}
 			})

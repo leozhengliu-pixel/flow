@@ -125,7 +125,7 @@ func (r *ApplicationAccessRead) installation(ctx context.Context, input io.Reade
 	ranges := map[string]metadataCollectionRange{}
 	typ := reflect.TypeFor[domain.ApplicationInstallation]()
 	target := reflect.ValueOf(&r.Installation).Elem()
-	err := sw17VisitCredentialFields(ctx, input, size, typ, func(index int, part metadataCollectionRange) error {
+	err := visitCredentialFields(ctx, input, size, typ, func(index int, part metadataCollectionRange) error {
 		field := typ.Field(index)
 		reader := io.NewSectionReader(input, part.offset, part.size)
 		selected := projection == "full" || !slices.Contains([]string{"ID", "InstalledBy", "WebhookURL", "CreatedAt", "UpdatedAt"}, field.Name)
@@ -145,13 +145,13 @@ func (r *ApplicationAccessRead) installation(ctx context.Context, input io.Reade
 			}
 			return json.NewDecoder(reader).Decode(target.Field(index).Addr().Interface())
 		case reflect.TypeFor[time.Time]():
-			value, err := scaleP21SW23TeamTime(ctx, reader)
+			value, err := teamTime(ctx, reader)
 			if err == nil && selected && value != nil {
 				target.Field(index).Set(reflect.ValueOf(*value))
 			}
 			return err
 		case reflect.TypeFor[[]string]():
-			scanner := sw17CredentialScanner(ctx, input, part.offset, part.size)
+			scanner := credentialScanner(ctx, input, part.offset, part.size)
 			first, err := scanner.peek()
 			if err != nil {
 				return err
@@ -178,7 +178,7 @@ func (r *ApplicationAccessRead) installation(ctx context.Context, input io.Reade
 	if err != nil {
 		return nil, err
 	}
-	err = sw17VisitCredentialFields(ctx, input, size, typ, func(index int, part metadataCollectionRange) error {
+	err = visitCredentialFields(ctx, input, size, typ, func(index int, part metadataCollectionRange) error {
 		field := typ.Field(index)
 		if field.Type != reflect.TypeFor[[]string]() || projection != "full" && field.Name == "TeamIDs" && r.Installation.AllTeams {
 			return nil
@@ -189,7 +189,7 @@ func (r *ApplicationAccessRead) installation(ctx context.Context, input io.Reade
 		if err := r.charge(ctx, part.size*16+512); err != nil {
 			return err
 		}
-		scanner := sw17CredentialScanner(ctx, input, part.offset, part.size)
+		scanner := credentialScanner(ctx, input, part.offset, part.size)
 		if first, err := scanner.peek(); err != nil {
 			return err
 		} else if first == '[' {
@@ -481,7 +481,7 @@ func (s *SQLiteStore) BeginApplicationListRead(ctx context.Context, workspace st
 		ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, reader: tx})
 	}
 	var count, bytes int64
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+s.scaleP21SW16AttachmentBytes("user_id")+"),0) FROM application_installations WHERE workspace_key=?", workspace).Scan(&count, &bytes); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+s.attachmentBytes("user_id")+"),0) FROM application_installations WHERE workspace_key=?", workspace).Scan(&count, &bytes); err != nil {
 		return nil, err
 	}
 	if count < 0 || bytes < 0 || count > applicationAccessMaxWork/4096 || bytes > (applicationAccessMaxWork-count*4096)/16 {

@@ -11,11 +11,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
+func TestScaleSelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "off")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	key := initial.Workspace.URLKey
 	ctx := ContextWithActor(t.Context(), initial.Viewer)
@@ -71,10 +71,10 @@ func TestScaleP17SelectedWritesPreserveOmittedRecordsAndOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP17DirectoryBodyGrowthDoesNotIncreaseAllocations(t *testing.T) {
+func TestScaleDirectoryBodyGrowthDoesNotIncreaseAllocations(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	key := initial.Workspace.URLKey
 	measure := func(size int) uint64 {
@@ -125,7 +125,7 @@ func TestScaleP17DirectoryBodyGrowthDoesNotIncreaseAllocations(t *testing.T) {
 	}
 }
 
-func TestScaleP17DifferentialOracleChecksSideEffects(t *testing.T) {
+func TestScaleDifferentialOracleChecksSideEffects(t *testing.T) {
 	before := domain.Bootstrap{Documents: []domain.Document{{ID: "target"}, {ID: "hidden"}}, Subscriptions: []domain.Subscription{{ID: "subscription", ResourceID: "target"}}}
 	full := cloneCallbackInput(before)
 	narrow := cloneCallbackInput(before)
@@ -147,7 +147,7 @@ func TestScaleP17DifferentialOracleChecksSideEffects(t *testing.T) {
 	}
 }
 
-func TestScaleP17StaleReferencesAndAmbiguousRecordsKeepCanonicalInput(t *testing.T) {
+func TestScaleStaleReferencesAndAmbiguousRecordsKeepCanonicalInput(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	user := domain.User{ID: "owner", Name: "Current"}
 	stale := user
@@ -166,10 +166,10 @@ func TestScaleP17StaleReferencesAndAmbiguousRecordsKeepCanonicalInput(t *testing
 	}
 }
 
-func TestScaleP17CanonicalReadDoesNotDecodeOtherPayloads(t *testing.T) {
+func TestScaleCanonicalReadDoesNotDecodeOtherPayloads(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	key := initial.Workspace.URLKey
 	if err := repo.MutateWorkspace(t.Context(), key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -189,7 +189,7 @@ func TestScaleP17CanonicalReadDoesNotDecodeOtherPayloads(t *testing.T) {
 	}
 }
 
-func TestScaleP17OracleKeepsCanonicalActorRefreshOrdering(t *testing.T) {
+func TestScaleOracleKeepsCanonicalActorRefreshOrdering(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "on")
 	storedUser := domain.User{ID: "owner", Name: "Stored actor"}

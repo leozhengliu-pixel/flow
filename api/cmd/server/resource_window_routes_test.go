@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW124Writer struct {
+type resourceWindowRoutesWriter struct {
 	*httptest.ResponseRecorder
 	t       *testing.T
 	source  *store.SQLiteStore
@@ -29,7 +29,7 @@ type scaleP21SW124Writer struct {
 	ended   time.Time
 }
 
-func (w *scaleP21SW124Writer) sample(code int) {
+func (w *resourceWindowRoutesWriter) sample(code int) {
 	work := w.source.MetadataWorkUsedForTesting()
 	w.held = max(w.held, work)
 	if w.source.BoundedMetadataEnabled() && code == http.StatusOK && work == 0 {
@@ -37,27 +37,27 @@ func (w *scaleP21SW124Writer) sample(code int) {
 	}
 }
 
-func (w *scaleP21SW124Writer) WriteHeader(code int) {
+func (w *resourceWindowRoutesWriter) WriteHeader(code int) {
 	w.sample(code)
 	w.headers++
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW124Writer) Write(raw []byte) (int, error) {
+func (w *resourceWindowRoutesWriter) Write(raw []byte) (int, error) {
 	w.sample(w.Code)
 	w.writes++
 	return w.ResponseRecorder.Write(raw)
 }
 
-func scaleP21SW124Key(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
-	value := scaleP21SW104StoredKey(prefix, user, key)
+func resourceWindowRoutesKey(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
+	value := storedKey(prefix, user, key)
 	if value != nil {
 		value.SecretHash = secretHash("sw124-" + value.ID)
 	}
 	return value
 }
 
-func scaleP21SW124Response(t *testing.T, writer *scaleP21SW124Writer, path string, development bool, viewerID string) []byte {
+func resourceWindowRoutesResponse(t *testing.T, writer *resourceWindowRoutesWriter, path string, development bool, viewerID string) []byte {
 	t.Helper()
 	core := strings.HasPrefix(path, "/api/sync/manifest?surface=resource-window")
 	materialized := development && strings.HasPrefix(path, "/api/resource-windows/members?collection=members")
@@ -132,15 +132,15 @@ func scaleP21SW124Response(t *testing.T, writer *scaleP21SW124Writer, path strin
 	return raw
 }
 
-func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
+func TestResourceWindowRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("w", 32))))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW115Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := queryWindowRoutesFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw124-")
 		at := time.Date(2026, time.November, 15, 12, 13, 14, 123456789, time.UTC)
 		privateTeam, childTeam := "", ""
@@ -203,14 +203,14 @@ func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}},
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}},
 				} {
-					data.APIKeys = append(data.APIKeys, *scaleP21SW124Key(prefix, principal.user, &key))
+					data.APIKeys = append(data.APIKeys, *resourceWindowRoutesKey(prefix, principal.user, &key))
 				}
 			}
 			return nil
 		}); err != nil {
 			t.Fatal(err)
 		}
-		_, former := scaleP03Join(t, f.scaleP03PlatformFixture, "SW124 departed", prefix+"departed@example.test", "member", f.public)
+		_, former := resourceAccessScaleJoin(t, f.scalePlatformFixture, "SW124 departed", prefix+"departed@example.test", "member", f.public)
 		if err := repo.RemoveMember(t.Context(), f.data.Workspace.ID, former.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -232,12 +232,12 @@ func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
 		for index, service := range services {
 			muxes[index] = http.NewServeMux()
 			service.registerSyncRoutes(muxes[index])
-			service.registerScaleP20Routes(muxes[index])
+			service.registerScaleRoutes(muxes[index])
 		}
-		// Dispatch real P20 routes using authenticated fixture users and stored
-		// credentials, as in the existing P20/SW115 harness. Usage telemetry and
+		// Dispatch real resource windows routes using authenticated fixture users and stored
+		// credentials, as in the existing resource windows/query window routes harness. Usage telemetry and
 		// Account/authenticate are outside this consumer boundary.
-		call := func(t *testing.T, index int, user domain.User, key *domain.APIKey, target, path string, outer, development bool) *scaleP21SW124Writer {
+		call := func(t *testing.T, index int, user domain.User, key *domain.APIKey, target, path string, outer, development bool) *resourceWindowRoutesWriter {
 			t.Helper()
 			request := f.literalRequest(user, key, nil)
 			request.Method = http.MethodGet
@@ -260,7 +260,7 @@ func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
 			defer closeOutput()
 			services[index].authDisabled = development
 			beforeDecodes := services[index].store.WorkspaceMetadataDecodes()
-			writer := &scaleP21SW124Writer{ResponseRecorder: httptest.NewRecorder(), t: t, source: services[index].store}
+			writer := &resourceWindowRoutesWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: services[index].store}
 			writer.started = time.Now()
 			muxes[index].ServeHTTP(writer, request)
 			writer.ended = time.Now()
@@ -279,8 +279,8 @@ func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
 			t.Helper()
 			old := call(t, 0, user, key, target, path, outer, development)
 			bounded := call(t, 1, user, key, target, path, outer, development)
-			oldBody := scaleP21SW124Response(t, old, path, development, user.ID)
-			boundedBody := scaleP21SW124Response(t, bounded, path, development, user.ID)
+			oldBody := resourceWindowRoutesResponse(t, old, path, development, user.ID)
+			boundedBody := resourceWindowRoutesResponse(t, bounded, path, development, user.ID)
 			if old.Code != code || bounded.Code != old.Code || !reflect.DeepEqual(old.Header(), bounded.Header()) || !bytes.Equal(oldBody, boundedBody) {
 				t.Fatalf("resource-window route differs path=%s outer=%t development=%t status=%d/%d want=%d\nliteral=%s\nbounded=%s",
 					path, outer, development, old.Code, bounded.Code, code, old.Body, bounded.Body)
@@ -301,7 +301,7 @@ func TestScaleP21SW124ResourceWindowRoutesDifferential(t *testing.T) {
 			{"invitations", "/api/resource-windows/members?collection=invitations&limit=100"},
 		}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-			key = scaleP21SW124Key(prefix, user, key)
+			key = resourceWindowRoutesKey(prefix, user, key)
 			if key != nil {
 				credential, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, key.SecretHash, nil)
 				if err != nil || credential.User.ID != user.ID || credential.Key.ID != key.ID {

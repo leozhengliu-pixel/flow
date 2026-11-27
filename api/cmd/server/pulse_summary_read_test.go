@@ -16,25 +16,25 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21PulseSummaryResponse struct {
+type scalePulseSummaryResponse struct {
 	*httptest.ResponseRecorder
 	t       *testing.T
 	bounded *store.SQLiteStore
 }
 
-func (w *scaleP21PulseSummaryResponse) Write(value []byte) (int, error) {
+func (w *scalePulseSummaryResponse) Write(value []byte) (int, error) {
 	if w.bounded != nil && w.Code == http.StatusOK && w.bounded.MetadataWorkUsedForTesting() == 0 {
 		w.t.Error("summary/audio output outlived its admitted Pulse source")
 	}
 	return w.ResponseRecorder.Write(value)
 }
 
-func TestScaleP21PulseSummaryReadDifferential(t *testing.T) {
+func TestScalePulseSummaryReadDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -231,11 +231,11 @@ func TestScaleP21PulseSummaryReadDifferential(t *testing.T) {
 						if scenario.wrongKey {
 							r.Header.Set("X-Workspace-Key", prefix+"absent")
 						}
-						w := &scaleP21PulseSummaryResponse{ResponseRecorder: httptest.NewRecorder(), t: t}
+						w := &scalePulseSummaryResponse{ResponseRecorder: httptest.NewRecorder(), t: t}
 						if bounded {
 							w.bounded = source
 						}
-						scaleP21CallWithOutputOwner(s, w, r, endpoint.handler)
+						scaleCallWithOutputOwner(s, w, r, endpoint.handler)
 						var body any
 						if strings.HasPrefix(w.Header().Get("Content-Type"), "audio/") {
 							body = w.Body.String()
@@ -261,7 +261,7 @@ func TestScaleP21PulseSummaryReadDifferential(t *testing.T) {
 					outcomes = append(outcomes, []any{responses, saved, aiCalls.Load() - beforeAI, audioCalls.Load() - beforeAudio, requests})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatal("summary/capabilities/audio/report/cache differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatal("summary/capabilities/audio/report/cache differential", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}

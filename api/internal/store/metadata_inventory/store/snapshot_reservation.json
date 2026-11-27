@@ -5,7 +5,7 @@
     "WorkspaceReadSnapshotReservation": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded residency returns HydratedSnapshotReservationMaxBytes before any graph traversal, allocation or hydration. SW109 locks that branch and compares the literal off scalar calculation with the on fixed allowance for default, explicit, missing and native-large workspaces under live/canceled containing contexts. Work, decode, disk and descriptor counters and native values remain unchanged; this scalar reservation does not certify downstream snapshot readers.",
+      "reason": "Bounded residency returns HydratedSnapshotReservationMaxBytes before any graph traversal, allocation or hydration. legacy read boundaries locks that branch and compares the literal off scalar calculation with the on fixed allowance for default, explicit, missing and native-large workspaces under live/canceled containing contexts. Work, decode, disk and descriptor counters and native values remain unchanged; this scalar reservation does not certify downstream snapshot readers.",
       "accessors": [
         "resident-state"
       ],

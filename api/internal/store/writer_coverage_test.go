@@ -17,7 +17,7 @@ import (
 // This is an inventory of canonical metadata, ACL, key, membership and account
 // writers, not a list of event names. Trigger capture also covers statements
 // built dynamically by these writers. A new writer must be reviewed and added.
-const scaleP09ReviewedWriters = `
+const scaleReviewedWriters = `
 api_key_authentication.go:writeAPIKeyUseRows
 application_agents.go:revokeApplicationCredentialsTx
 application_agents.go:writeApplicationInstallationTx
@@ -56,7 +56,7 @@ oauth_refresh_replay.go:revokeOAuthAccessFamily
 oauth_token_exchange.go:ExchangeOAuthGrant
 personal_data.go:EraseAccount
 personal_data.go:ErasePersonFromWorkspace
-load_seed.go:SeedScaleP01Principals
+load_seed.go:SeedScalePrincipals
 agent_session_sync.go:syncAgentSessionLifecycleCollection
 legacy_array_reorder.go:deleteArrayDropped
 legacy_array_reorder.go:flushUpserts
@@ -89,7 +89,7 @@ workspace_metadata_records.go:deleteMetadataRecordRow
 workspace_metadata_records.go:writeMetadataRecordRow
 `
 
-const scaleP09ReviewedDynamicWriters = `
+const scaleReviewedDynamicWriters = `
 chat_integrations.go:DeleteChatIntegration
 chat_integrations.go:PurgeChatHistory
 chat_threads.go:purgeChatThreads
@@ -120,7 +120,7 @@ workspace_rename.go:moveWorkspaceKeyRows
 workspace_rename.go:rewriteWorkspaceKeyJSON
 `
 
-func TestScaleP09WriterCoverage(t *testing.T) {
+func TestCanonicalRecordWriterCoverage(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func TestScaleP09WriterCoverage(t *testing.T) {
 			})
 		}
 	}
-	want := strings.Fields(scaleP09ReviewedWriters)
+	want := strings.Fields(scaleReviewedWriters)
 	slices.Sort(want)
 	got := make([]string, 0, len(actual))
 	for name := range actual {
@@ -192,7 +192,7 @@ func TestScaleP09WriterCoverage(t *testing.T) {
 	for name := range dynamic {
 		dynamicNames = append(dynamicNames, name)
 	}
-	dynamicWant := strings.Fields(scaleP09ReviewedDynamicWriters)
+	dynamicWant := strings.Fields(scaleReviewedDynamicWriters)
 	slices.Sort(dynamicNames)
 	slices.Sort(dynamicWant)
 	if !reflect.DeepEqual(dynamicNames, dynamicWant) {

@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW302Codec func(context.Context, *SQLiteStore, *metadataLogicalBuilder, legacySessionJSONPart) (metadataLogicalNode, error)
+type retryDocumentCodecCodec func(context.Context, *SQLiteStore, *metadataLogicalBuilder, legacySessionJSONPart) (metadataLogicalNode, error)
 
-func scaleP21SW302Oracle(t *testing.T, kind reflect.Type, raw []byte) (reflect.Value, []byte) {
+func retryDocumentCodecOracle(t *testing.T, kind reflect.Type, raw []byte) (reflect.Value, []byte) {
 	t.Helper()
 	value := reflect.New(kind)
 	if err := json.Unmarshal(raw, value.Interface()); err != nil {
@@ -29,7 +29,7 @@ func scaleP21SW302Oracle(t *testing.T, kind reflect.Type, raw []byte) (reflect.V
 	return value.Elem(), wire
 }
 
-func scaleP21SW302Compare(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, want reflect.Value, wire []byte) {
+func retryDocumentCodecCompare(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, want reflect.Value, wire []byte) {
 	t.Helper()
 	if node.Type() != want.Type() {
 		t.Fatal("canonical codec changed its declared domain type")
@@ -55,7 +55,7 @@ func scaleP21SW302Compare(t *testing.T, repo *SQLiteStore, node metadataLogicalN
 	}
 }
 
-func scaleP21SW302Success(t *testing.T, codec scaleP21SW302Codec, kind reflect.Type, raw string) {
+func retryDocumentCodecSuccess(t *testing.T, codec retryDocumentCodecCodec, kind reflect.Type, raw string) {
 	t.Helper()
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
@@ -73,7 +73,7 @@ func scaleP21SW302Success(t *testing.T, codec scaleP21SW302Codec, kind reflect.T
 		}
 	}()
 	input := []byte(raw)
-	want, wire := scaleP21SW302Oracle(t, kind, input)
+	want, wire := retryDocumentCodecOracle(t, kind, input)
 	node, err := codec(t.Context(), repo, frames, legacySessionJSONPart{bytes.NewReader(input), 0, int64(len(input))})
 	if err != nil {
 		t.Fatal("valid supported typed record must succeed", err)
@@ -81,10 +81,10 @@ func scaleP21SW302Success(t *testing.T, codec scaleP21SW302Codec, kind reflect.T
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("finished canonical frame retained its temporary native owner")
 	}
-	scaleP21SW302Compare(t, repo, node, want, wire)
+	retryDocumentCodecCompare(t, repo, node, want, wire)
 }
 
-func TestScaleP21SW302DocumentCanonicalTypedOracle(t *testing.T) {
+func TestDocumentCanonicalTypedOracle(t *testing.T) {
 	for _, test := range []struct{ name, raw string }{
 		{"null-root", `null`},
 		{"no-resident-defaults", `{"version":0,"contentVersion":0}`},
@@ -111,12 +111,12 @@ func TestScaleP21SW302DocumentCanonicalTypedOracle(t *testing.T) {
 		{"unknown-syntax-only", `{"unknown":{"number":1e400,"array":[{"name":"ignored"}]},"content":"kept","revisions":[{"id":"r","unknown":1e400}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			scaleP21SW302Success(t, metadataRetryDocumentCanonicalRecord, reflect.TypeFor[domain.Document](), test.raw)
+			retryDocumentCodecSuccess(t, metadataRetryDocumentCanonicalRecord, reflect.TypeFor[domain.Document](), test.raw)
 		})
 	}
 }
 
-func TestScaleP21SW302ProjectCanonicalTypedOracle(t *testing.T) {
+func TestProjectCanonicalTypedOracle(t *testing.T) {
 	for _, test := range []struct{ name, raw string }{
 		{"null-root", `null`},
 		{"missing-defaults", `{}`},
@@ -131,12 +131,12 @@ func TestScaleP21SW302ProjectCanonicalTypedOracle(t *testing.T) {
 		{"unknown-syntax-only", `{"description":"kept","unknown":{"number":1e400,"nested":[true,null]}}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			scaleP21SW302Success(t, metadataRetryProjectCanonicalRecord, reflect.TypeFor[domain.Project](), test.raw)
+			retryDocumentCodecSuccess(t, metadataRetryProjectCanonicalRecord, reflect.TypeFor[domain.Project](), test.raw)
 		})
 	}
 }
 
-func TestScaleP21SW302RetryPrivateOriginalCarry(t *testing.T) {
+func TestRetryPrivateOriginalCarry(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	frames, err := newMetadataLogicalBuilder(t.Context())
@@ -181,7 +181,7 @@ func TestScaleP21SW302RetryPrivateOriginalCarry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW302Compare(t, repo, node, want, wire)
+	retryDocumentCodecCompare(t, repo, node, want, wire)
 	owner := &ResourceRead{store: repo}
 	defer owner.Close()
 	if err := owner.reserve(t.Context(), node.cost*2+64<<10); err != nil {
@@ -196,11 +196,11 @@ func TestScaleP21SW302RetryPrivateOriginalCarry(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW302CanonicalInvalidKnownFields(t *testing.T) {
+func TestCanonicalInvalidKnownFields(t *testing.T) {
 	for _, family := range []struct {
 		name  string
 		kind  reflect.Type
-		codec scaleP21SW302Codec
+		codec retryDocumentCodecCodec
 		rows  []string
 	}{
 		{"document", reflect.TypeFor[domain.Document](), metadataRetryDocumentCanonicalRecord, []string{
@@ -256,17 +256,17 @@ func TestScaleP21SW302CanonicalInvalidKnownFields(t *testing.T) {
 	}
 }
 
-type scaleP21SW302ReadAt func([]byte, int64) (int, error)
+type retryDocumentCodecReadAt func([]byte, int64) (int, error)
 
-func (read scaleP21SW302ReadAt) ReadAt(output []byte, offset int64) (int, error) {
+func (read retryDocumentCodecReadAt) ReadAt(output []byte, offset int64) (int, error) {
 	return read(output, offset)
 }
 
-func TestScaleP21SW302CanonicalCancellationRelease(t *testing.T) {
+func TestCanonicalCancellationRelease(t *testing.T) {
 	for _, family := range []struct {
 		name, raw string
 		kind      reflect.Type
-		codec     scaleP21SW302Codec
+		codec     retryDocumentCodecCodec
 	}{
 		{"document-revision", `{"id":"doc","content":"kept","revisions":[{"id":"r","content":"stop-here","contentData":{"keep":true}}]}`, reflect.TypeFor[domain.Document](), metadataRetryDocumentCanonicalRecord},
 		{"project", `{"id":"project","description":"stop-here","name":"kept"}`, reflect.TypeFor[domain.Project](), metadataRetryProjectCanonicalRecord},
@@ -293,7 +293,7 @@ func TestScaleP21SW302CanonicalCancellationRelease(t *testing.T) {
 				reader := strings.NewReader(family.raw)
 				target := int64(strings.Index(family.raw, `"stop-here"`))
 				canceledAtBody := false
-				input := scaleP21SW302ReadAt(func(output []byte, offset int64) (int, error) {
+				input := retryDocumentCodecReadAt(func(output []byte, offset int64) (int, error) {
 					count, err := reader.ReadAt(output, offset)
 					if during && offset == target {
 						canceledAtBody = true
@@ -332,13 +332,13 @@ func TestScaleP21SW302CanonicalCancellationRelease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				want, wire := scaleP21SW302Oracle(t, family.kind, []byte(family.raw))
+				want, wire := retryDocumentCodecOracle(t, family.kind, []byte(family.raw))
 				node, err = family.codec(t.Context(), repo, recovery, legacySessionJSONPart{strings.NewReader(family.raw), 0, int64(len(family.raw))})
 				if err != nil {
 					recovery.Close()
 					t.Fatal("same-store canonical codec did not recover after cancellation", err)
 				}
-				scaleP21SW302Compare(t, repo, node, want, wire)
+				retryDocumentCodecCompare(t, repo, node, want, wire)
 				recovery.Close()
 				if repo.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk ||
 					metadataLogicalDescriptorsUsed.Load() != descriptors || recordSpoolBytes.Load() != spools {

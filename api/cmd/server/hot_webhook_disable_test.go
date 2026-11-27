@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotWebhookDisableCallbackDifferential(t *testing.T) {
+func TestScaleHotWebhookDisableCallbackDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	previousDefaults := domain.CurrentCreationDefaults()
@@ -22,7 +22,7 @@ func TestScaleP21HotWebhookDisableCallbackDifferential(t *testing.T) {
 	email, desktop, format := true, false, "immediate"
 	defaults.User.EmailNotifications, defaults.User.DesktopNotifications, defaults.User.EmailFormat = &email, &desktop, &format
 	domain.SetCreationDefaults(defaults)
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestScaleP21HotWebhookDisableCallbackDifferential(t *testing.T) {
 		{name: "first-duplicate-creator", priority: 3, duplicateUser: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace, target := f.data.Workspace.URLKey, idgen.New("wh-disable-callback-")
 			now := time.Date(2026, 11, 13, 22, 0, 0, 0, time.UTC)
 			type result struct {

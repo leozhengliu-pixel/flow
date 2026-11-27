@@ -11,7 +11,7 @@ import (
 // A user lookup of the display refresh returns the users field's last record
 // with the reference's ID, as the scan did, from the frame's ID index:
 // duplicates, a missing ID and stored or native references.
-func TestScaleP21AggregateUserIndexLookup(t *testing.T) {
+func TestScaleAggregateUserIndexLookup(t *testing.T) {
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "users", URLKey: "users", Name: "Users"}}
 	for i := range 300 {
 		data.Users = append(data.Users, domain.User{ID: fmt.Sprintf("user-%03d", i%250), Name: fmt.Sprintf("User %d", i)})

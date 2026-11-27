@@ -7,19 +7,19 @@ import (
 	"testing"
 )
 
-// SW559 (store/resident_image_readers_test.go) reviews the
+// resident image readers (store/resident_image_readers_test.go) reviews the
 // store accessors that read a non-resident field of the installed image. A
 // few are legacy accessors left reading the image because every server call
 // of them runs with bounded metadata off; this pins that: each call (or
-// method value) of them in this package must be flag-off-only by the SW270
+// method value) of them in this package must be flag-off-only by the server compatibility wrapper
 // rules, or sit in a function only flag-off-only references reach.
-var scaleP21SW559FlagOffAccessors = []string{"AccountCollections", "MetadataRecord", "TrashRecordHeader", "OAuthApplicationsWithLogo"}
+var flagOffAccessors = []string{"AccountCollections", "MetadataRecord", "TrashRecordHeader", "OAuthApplicationsWithLogo"}
 
-// scaleP21SW559FlagOnReachable answers the package functions that can run
+// flagOnReachable answers the package functions that can run
 // with bounded metadata on: every function no reference names (entries such
 // as main, init and dispatch from imported code) and every function a
 // reachable one names outside a flag-off-only branch.
-func scaleP21SW559FlagOnReachable(g *scaleP21SW270Graph) map[string]bool {
+func flagOnReachable(g *compatWrapperBoundaryGraph) map[string]bool {
 	reached := map[string]bool{}
 	var queue []string
 	for key := range g.funcs {
@@ -47,11 +47,11 @@ func scaleP21SW559FlagOnReachable(g *scaleP21SW270Graph) map[string]bool {
 	return reached
 }
 
-func TestScaleP21SW559FlagOffAccessorCallers(t *testing.T) {
-	g := scaleP21SW270Load(t, ".")
-	reached := scaleP21SW559FlagOnReachable(g)
+func TestFlagOffAccessorCallers(t *testing.T) {
+	g := compatWrapperBoundaryLoad(t, ".")
+	reached := flagOnReachable(g)
 	names := map[string]bool{}
-	for _, name := range scaleP21SW559FlagOffAccessors {
+	for _, name := range flagOffAccessors {
 		names[name] = true
 	}
 	var found, uses []string

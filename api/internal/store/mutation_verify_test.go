@@ -11,11 +11,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP04VerificationDetectsOmittedReadsAndWrites(t *testing.T) {
+func TestScaleVerificationDetectsOmittedReadsAndWrites(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	for _, write := range []bool{false, true} {
 		t.Run(fmt.Sprint(write), func(t *testing.T) {
-			repo := scaleP04Store(t)
+			repo := mutationInputsScaleStore(t)
 			stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 			stored.Settings = map[string]any{"p04Required": "required value"}
 			input := metadataFieldSnapshot(stored, []string{"users"})
@@ -43,9 +43,9 @@ func TestScaleP04VerificationDetectsOmittedReadsAndWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP04VerificationProductionFallback(t *testing.T) {
+func TestScaleVerificationProductionFallback(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	repo := scaleP04Store(t)
+	repo := mutationInputsScaleStore(t)
 	stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 	stored.Settings = map[string]any{"p04Required": "full result"}
 	input := metadataFieldSnapshot(stored, []string{"users"})
@@ -66,9 +66,9 @@ func TestScaleP04VerificationProductionFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP04VerificationDetectsResponseOnlyDifferences(t *testing.T) {
+func TestScaleVerificationDetectsResponseOnlyDifferences(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	repo := scaleP04Store(t)
+	repo := mutationInputsScaleStore(t)
 	stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 	stored.Settings = map[string]any{"required": "response metadata"}
 	input := metadataFieldSnapshot(stored, []string{"users"})
@@ -91,7 +91,7 @@ func TestScaleP04VerificationDetectsResponseOnlyDifferences(t *testing.T) {
 	}, true, false)
 }
 
-func TestScaleP04VerificationPreservesFieldsAndIdentities(t *testing.T) {
+func TestScaleVerificationPreservesFieldsAndIdentities(t *testing.T) {
 	stamp := idgen.Stamp()
 	protected, _ := json.Marshal(domain.Bootstrap{Settings: map[string]any{"existing": stamp}})
 	makeResult := func() mutationCallbackResult {

@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW18WorkerTrustedSourceHold(t *testing.T) {
+func TestWorkerTrustedSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -55,7 +55,7 @@ func TestScaleP21SW18WorkerTrustedSourceHold(t *testing.T) {
 				warm.AgentSessions[0].Messages[0].Status != spec.status || warm.AgentSessions[0].Messages[0].ID != spec.messageID {
 				t.Fatal("trusted writer no longer retains exact installed fields")
 			}
-			canonical, found, err := scaleP21SW30CanonicalMetadataWitness(t.Context(), view, workspace, MetadataRecordScope{Fields: []string{"agentSessions"}})
+			canonical, found, err := canonicalMetadataWitness(t.Context(), view, workspace, MetadataRecordScope{Fields: []string{"agentSessions"}})
 			if err != nil || !found {
 				t.Fatal("read canonical witness", found, err)
 			}

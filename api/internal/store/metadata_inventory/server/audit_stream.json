@@ -47,7 +47,7 @@
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Uses the proven scoped writer for one webhook point, preserving its literal original writer and context off mode. TestScaleP21SW45DeliveryAuditDifferential compares the actual ticker helper's canonical webhook, complete webhook event including Snapshot/PreviousValues, realtime output and absence of audit side effects against full hydration. A nested earlier Draft.ContentData match with hidden marker/count proves aggregate precedence across the principal/key matrix. Existing callback, cursor/retry semantics and logging remain unchanged; all work is released after publication with zero full metadata decodes.",
+      "reason": "Uses the proven scoped writer for one webhook point, preserving its literal original writer and context off mode. TestDeliveryAuditDifferential compares the actual ticker helper's canonical webhook, complete webhook event including Snapshot/PreviousValues, realtime output and absence of audit side effects against full hydration. A nested earlier Draft.ContentData match with hidden marker/count proves aggregate precedence across the principal/key matrix. Existing callback, cursor/retry semantics and logging remain unchanged; all work is released after publication with zero full metadata decodes.",
       "temperature": "hot",
       "temperatureReason": "Runtime cursor/health maintenance for the audit stream on delivery ticks.",
       "callers": [

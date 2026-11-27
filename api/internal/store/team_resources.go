@@ -50,7 +50,7 @@ func (s *SQLiteStore) BeginTeamResourceRead(ctx context.Context, workspace, team
 	}
 	var workspaceID string
 	var teams, sections, resources int
-	if err := tx.QueryRowContext(ctx, `SELECT workspace_id,`+s.scaleP21SW18CollectionState("teams")+`,`+s.scaleP21SW18CollectionState("teamResourceSections")+`,`+s.scaleP21SW18CollectionState("teamPinnedResources")+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&workspaceID, &teams, &sections, &resources); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_id,`+s.collectionState("teams")+`,`+s.collectionState("teamResourceSections")+`,`+s.collectionState("teamPinnedResources")+` FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&workspaceID, &teams, &sections, &resources); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, false, false, nil
@@ -149,7 +149,7 @@ func (r *TeamResourceRead) VisitResources(visit func(domain.TeamPinnedResource) 
 
 // A root manifest controls whether its canonical rows are active. Unsplit
 // nonempty arrays cannot be mistaken for empty canonical state.
-func (s *SQLiteStore) scaleP21SW18CollectionState(field string) string {
+func (s *SQLiteStore) collectionState(field string) string {
 	value := func(path string) string { return s.jsonText("data", path) }
 	kind := func(path string) string {
 		switch s.dialect {

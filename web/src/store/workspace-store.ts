@@ -1,7 +1,7 @@
 import { setLiveApplicationIdentities } from '@/lib/actor-attribution'
 import { syncClientFor, syncCollections } from '@/lib/sync-client'
 import type { QueryWindow } from '@/lib/query-window-store'
-import { modelRecordKind } from '@/lib/scale-p13-wire'
+import { modelRecordKind } from '@/lib/sync-wire'
 import type { BootstrapData, RecordCompleteness, RealtimeEvent, SyncPageRequest } from '@/types/flow'
 import { applyRealtimePatch, type RealtimePatchResult } from './apply-realtime-patch'
 import {

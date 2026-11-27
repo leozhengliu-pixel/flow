@@ -19,11 +19,11 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-func TestScaleP09ActivateB1MixedBinaryRollback(t *testing.T) {
+func TestScaleActivateB1MixedBinaryRollback(t *testing.T) {
 	scaleActivateB1MixedBinaryRollback(t, true)
 }
 
-func TestScaleP09ActivateB1JournalMixedBinaryRollback(t *testing.T) {
+func TestScaleActivateB1JournalMixedBinaryRollback(t *testing.T) {
 	scaleActivateB1MixedBinaryRollback(t, false)
 }
 
@@ -42,7 +42,7 @@ func scaleActivateB1MixedBinaryRollback(t *testing.T, consumers bool) {
 	}
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	if config.Driver != "sqlite" {
 		t.Skip("local mixed-binary fixture shares its owned SQLite file")
 	}
@@ -131,7 +131,7 @@ func scaleActivateB1MixedBinaryRollback(t *testing.T, consumers bool) {
 	}
 	for _, base := range []string{oldURL, host.URL} {
 		for _, token := range credentials {
-			status, body := scaleP01PermissionRead(t, scaleP01PermissionViewer{client: f.admin, secret: token}, base, workspace, "/api/projects/scope-hidden-project")
+			status, body := scalePermissionRead(t, scalePermissionViewer{client: f.admin, secret: token}, base, workspace, "/api/projects/scope-hidden-project")
 			if status != http.StatusForbidden || bytes.Contains(body, []byte("Hidden project")) {
 				t.Fatal("mixed replica leaked a hidden record")
 			}

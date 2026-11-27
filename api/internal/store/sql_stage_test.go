@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW199SQLStageMigration(t *testing.T) {
+func TestSQLStageMigration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	for index := 0; index < 2; index++ {
 		if err := fixture.createBoundedMetadataStagingSchema(t.Context()); err != nil {
 			t.Fatal("staging schema is not idempotent", err)
@@ -46,7 +46,7 @@ func TestScaleP21SW199SQLStageMigration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW199SQLStageDialectSQL(t *testing.T) {
+func TestSQLStageDialectSQL(t *testing.T) {
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
 		tx := &sqlTx{dialect: dialect}
 		stage := &metadataSQLWriteStage{tx: tx, id: "sw199-dialect"}
@@ -110,9 +110,9 @@ func TestScaleP21SW199SQLStageDialectSQL(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW199SQLStageScopedWritesAndCommit(t *testing.T) {
+func TestSQLStageScopedWritesAndCommit(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -184,9 +184,9 @@ func TestScaleP21SW199SQLStageScopedWritesAndCommit(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW199SQLStageCancellationAndRollback(t *testing.T) {
+func TestSQLStageCancellationAndRollback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -229,9 +229,9 @@ func TestScaleP21SW199SQLStageCancellationAndRollback(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW199SQLStageOpenCommitRefused(t *testing.T) {
+func TestSQLStageOpenCommitRefused(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

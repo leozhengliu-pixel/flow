@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
+func TestSettingsPointDifferential(t *testing.T) {
 	issueSeed := func(data *domain.Bootstrap, actor domain.User) {
 		data.IssueTemplates = []domain.IssueTemplate{
 			{ID: "sw5-issue-template", Name: "Target", Scope: "workspace", Creator: actor},
@@ -40,16 +40,16 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 		s.updateIntegration(w, r)
 	}
 	var templateTeamID string
-	operations := []scaleP21M3PointOperation{
+	operations := []pointDifferentialOperation{
 		{
-			name: "sw5-issue-template-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
+			name: "issue-template-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
 			seed: issueSeed, handler: (*server).deleteWorkspaceIssueTemplate,
 			otherKeys: []store.RecordKey{{Kind: "issueTemplates", ID: "sw5-other-issue-template"}},
 		},
 		{
 			// A team template is deleted through its team's route (the
 			// workspace route changes only templates no team owns).
-			name: "sw5-team-template-empty-visibility-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
+			name: "team-template-empty-visibility-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				issueSeed(data, actor)
 				templateTeamID = data.Teams[0].ID
@@ -64,7 +64,7 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 		},
 		{
 			// The workspace route leaves a team template alone.
-			name: "sw5-team-template-workspace-route-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
+			name: "team-template-workspace-route-delete", kind: "issueTemplates", id: "sw5-issue-template", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				issueSeed(data, actor)
 				data.IssueTemplates[0].Scope, data.IssueTemplates[0].TeamID = "team", data.Teams[0].ID
@@ -73,12 +73,12 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "issueTemplates", ID: "sw5-other-issue-template"}},
 		},
 		{
-			name: "sw5-document-template-delete", kind: "documentTemplates", id: "sw5-document-template", body: `{}`,
+			name: "document-template-delete", kind: "documentTemplates", id: "sw5-document-template", body: `{}`,
 			seed: documentSeed, handler: (*server).deleteDocumentTemplate,
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		},
 		{
-			name: "sw5-oauth-application-delete", kind: "oauthApplications", id: "sw5-application", body: `{}`,
+			name: "oauth-application-delete", kind: "oauthApplications", id: "sw5-application", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				data.OAuthApplications = []domain.OAuthApplication{
 					{ID: "sw5-application", ClientID: "sw5-client-" + data.Workspace.ID, Name: "Target", CreatorID: actor.ID},
@@ -89,34 +89,34 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "oauthApplications", ID: "sw5-other-application"}},
 		},
 		{
-			name: "sw5-integration-update", kind: "integrationConnections", id: "sw5-connection",
+			name: "integration-update", kind: "integrationConnections", id: "sw5-connection",
 			body: `{"name":"After","config":{"retained":"updated","new":"value","oauthAccessToken":"ignored"},"status":"paused","scopes":["WRITE","write","read"],"channels":[" after ","after"],"linkbackEnabled":true}`,
 			seed: integrationSeed, handler: integrationHandler,
 			otherKeys: []store.RecordKey{{Kind: "integrationConnections", ID: "sw5-other-connection"}},
 		},
 		{
-			name: "sw5-integration-noop", kind: "integrationConnections", id: "sw5-connection", body: `{}`,
+			name: "integration-noop", kind: "integrationConnections", id: "sw5-connection", body: `{}`,
 			seed: integrationSeed, handler: integrationHandler,
 			otherKeys: []store.RecordKey{{Kind: "integrationConnections", ID: "sw5-other-connection"}},
 		},
 		{
-			name: "sw5-document-template-update", kind: "documentTemplates", id: "sw5-document-template",
+			name: "document-template-update", kind: "documentTemplates", id: "sw5-document-template",
 			body: `{"name":"After","description":"After","title":"Title","content":"Body","contentState":"state","contentData":{"retained":false},"icon":"memo","color":"#123456"}`,
 			seed: documentSeed, handler: (*server).updateDocumentTemplate,
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		},
 		{
-			name: "sw5-document-template-noop", kind: "documentTemplates", id: "sw5-document-template", body: `{}`,
+			name: "document-template-noop", kind: "documentTemplates", id: "sw5-document-template", body: `{}`,
 			seed: documentSeed, handler: (*server).updateDocumentTemplate,
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		},
 		{
-			name: "sw5-document-template-invalid-name", kind: "documentTemplates", id: "sw5-document-template", body: `{"name":""}`,
+			name: "document-template-invalid-name", kind: "documentTemplates", id: "sw5-document-template", body: `{"name":""}`,
 			seed: documentSeed, handler: (*server).updateDocumentTemplate,
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		},
 		{
-			name: "sw5-document-template-invalid-team", kind: "documentTemplates", id: "sw5-document-template", body: `{"teamId":"sw5-unknown-team"}`,
+			name: "document-template-invalid-team", kind: "documentTemplates", id: "sw5-document-template", body: `{"teamId":"sw5-unknown-team"}`,
 			seed: documentSeed, handler: (*server).updateDocumentTemplate,
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		},
@@ -127,7 +127,7 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 		if clear {
 			name += "-clear"
 		}
-		operations = append(operations, scaleP21M3PointOperation{
+		operations = append(operations, pointDifferentialOperation{
 			name: name, kind: "documentTemplates", id: "sw5-document-template", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				documentSeed(data, actor)
@@ -146,14 +146,14 @@ func TestScaleP21SW5SettingsPointDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "documentTemplates", ID: "sw5-other-document-template"}},
 		})
 	}
-	scaleP21M3PointDifferential(t, operations)
+	checkPointOperationDifferential(t, operations)
 }
 
-func TestScaleP21SW5SettingsPointFailures(t *testing.T) {
+func TestSettingsPointFailures(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		target := idgen.New("sw5-errors-")
 		reset := func(large bool) {
@@ -195,16 +195,16 @@ func TestScaleP21SW5SettingsPointFailures(t *testing.T) {
 					if w.Code != spec.status {
 						t.Fatalf("%s: status=%d body=%s", spec.name, w.Code, w.Body.String())
 					}
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false), scaleP21M2Canonical(t, repo, workspace,
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false), policyCanonicalRecords(t, repo, workspace,
 						store.RecordKey{Kind: "issueTemplates", ID: target}, store.RecordKey{Kind: "documentTemplates", ID: target}, store.RecordKey{Kind: "integrationConnections", ID: target})})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("%s differs: %s", spec.name, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("%s differs: %s", spec.name, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})
 		reset(false)
-		before := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "documentTemplates", ID: target})
+		before := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "documentTemplates", ID: target})
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		r, w := f.request(f.data.Viewer, nil, map[string]string{"name": "After"}), httptest.NewRecorder()
@@ -215,7 +215,7 @@ func TestScaleP21SW5SettingsPointFailures(t *testing.T) {
 		if w.Code < 400 {
 			t.Fatal("cancelled mutation succeeded")
 		}
-		after := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "documentTemplates", ID: target})
+		after := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "documentTemplates", ID: target})
 		if !reflect.DeepEqual(before, after) {
 			t.Fatal("cancelled mutation changed canonical target")
 		}

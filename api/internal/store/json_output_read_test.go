@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21JSONOwner(t *testing.T, view *SQLiteStore, ctx context.Context) *MetadataJSONRead {
+func scaleJSONOwner(t *testing.T, view *SQLiteStore, ctx context.Context) *MetadataJSONRead {
 	t.Helper()
 	read, err := view.BeginMetadataJSONRead(ctx)
 	if err != nil {
@@ -28,7 +28,7 @@ func scaleP21JSONOwner(t *testing.T, view *SQLiteStore, ctx context.Context) *Me
 	return read
 }
 
-func TestScaleP21JSONOutputBeginAndIndependentLease(t *testing.T) {
+func TestScaleJSONOutputBeginAndIndependentLease(t *testing.T) {
 	if read, err := (&SQLiteStore{}).BeginMetadataJSONRead(t.Context()); read != nil || !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("literal store accepted bounded JSON ownership", read, err)
 	}
@@ -41,7 +41,7 @@ func TestScaleP21JSONOutputBeginAndIndependentLease(t *testing.T) {
 		t.Fatal("nil owner lost explicit coverage/default context behavior")
 	}
 	nilRead.Close()
-	view := scaleP21HotLogoStore(t, nil)
+	view := scaleHotLogoStore(t, nil)
 	view.metadataResidency.work.limit = 128<<10 - 1
 	if read, err := view.BeginMetadataJSONRead(t.Context()); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("base admission failure leaked or returned an owner", read, err)
@@ -56,7 +56,7 @@ func TestScaleP21JSONOutputBeginAndIndependentLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	read := scaleP21JSONOwner(t, view, parentContext)
+	read := scaleJSONOwner(t, view, parentContext)
 	if view.MetadataWorkUsedForTesting() != 1<<20+128<<10 {
 		t.Fatal("JSON owner borrowed the containing work lease", view.MetadataWorkUsedForTesting())
 	}
@@ -71,9 +71,9 @@ func TestScaleP21JSONOutputBeginAndIndependentLease(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputEncodedGrowth(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
-	read := scaleP21JSONOwner(t, view, t.Context())
+func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
+	read := scaleJSONOwner(t, view, t.Context())
 	const page = 64 << 10
 	for _, step := range []struct {
 		size, pages int
@@ -104,7 +104,7 @@ func TestScaleP21JSONOutputEncodedGrowth(t *testing.T) {
 	}
 	for _, size := range []int{-1, metadataWorkBytes()/4 + 1} {
 		view.metadataResidency.work.limit = metadataWorkBytes()
-		read := scaleP21JSONOwner(t, view, t.Context())
+		read := scaleJSONOwner(t, view, t.Context())
 		if err := read.ReserveEncoded(t.Context(), size); !errors.Is(err, ErrMetadataWorkBudget) || !errors.Is(read.Err(), err) {
 			t.Fatal("invalid absolute size did not latch", size, err, read.Err())
 		}
@@ -115,10 +115,10 @@ func TestScaleP21JSONOutputEncodedGrowth(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
+func TestScaleJSONOutputLargePlainAndDenseContainers(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
 	plain := strings.Repeat("p", 1<<20)
-	read := scaleP21JSONOwner(t, view, t.Context())
+	read := scaleJSONOwner(t, view, t.Context())
 	if err := read.ReserveEncoding(t.Context(), plain); err != nil {
 		t.Fatal("legal large text could not reserve encoding", err)
 	}
@@ -169,7 +169,7 @@ func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			view.metadataResidency.work.limit = 8 << 20
-			read := scaleP21JSONOwner(t, view, t.Context())
+			read := scaleJSONOwner(t, view, t.Context())
 			err := read.ReserveDecode(t.Context(), test.raw, nil)
 			if !errors.Is(err, test.want) {
 				t.Fatal("byte-only admission missed the container cost", err)
@@ -189,12 +189,12 @@ func TestScaleP21JSONOutputLargePlainAndDenseContainers(t *testing.T) {
 	t.Logf("plain_bytes=%d dense_bytes=%d plain_held_work=%d quota=%d", len(plainRaw), len(denseRaw), plainWork, 8<<20)
 }
 
-func TestScaleP21JSONOutputPreflightQuotas(t *testing.T) {
+func TestScaleJSONOutputPreflightQuotas(t *testing.T) {
 	for _, stage := range []string{"encoding", "decode", "previous-graph"} {
 		t.Run(stage, func(t *testing.T) {
-			view := scaleP21HotLogoStore(t, nil)
+			view := scaleHotLogoStore(t, nil)
 			view.metadataResidency.work.limit = 1 << 20
-			read := scaleP21JSONOwner(t, view, t.Context())
+			read := scaleJSONOwner(t, view, t.Context())
 			previous := map[string]any{"unchanged": strings.Repeat("existing ", 300000)}
 			before := maps.Clone(previous)
 			var err error
@@ -226,7 +226,7 @@ func TestScaleP21JSONOutputPreflightQuotas(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputOriginalAndPartialDestination(t *testing.T) {
+func TestScaleJSONOutputOriginalAndPartialDestination(t *testing.T) {
 	type nested struct {
 		Keep    string `json:"keep"`
 		Changed string `json:"changed"`
@@ -249,8 +249,8 @@ func TestScaleP21JSONOutputOriginalAndPartialDestination(t *testing.T) {
 		`{"count":"invalid integer","nested":{"changed":"after"},"settings":{"added":"after"},"tail":"after"}`,
 	} {
 		t.Run(fmt.Sprint("partialError=", strings.Contains(raw, "invalid")), func(t *testing.T) {
-			view := scaleP21HotLogoStore(t, nil)
-			read := scaleP21JSONOwner(t, view, t.Context())
+			view := scaleHotLogoStore(t, nil)
+			read := scaleJSONOwner(t, view, t.Context())
 			want, got := initial(), initial()
 			originalNested := got.Nested
 			if err := read.ReserveDecode(t.Context(), []byte(raw), &got); err != nil {
@@ -277,10 +277,10 @@ func TestScaleP21JSONOutputOriginalAndPartialDestination(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputCancellationAndChildren(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
+func TestScaleJSONOutputCancellationAndChildren(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
 	request, cancel := context.WithCancel(t.Context())
-	read := scaleP21JSONOwner(t, view, request)
+	read := scaleJSONOwner(t, view, request)
 	ctx := read.Context(request)
 	if !metadataOutputOwnerPresent(ctx) || read.Context(ctx) == nil {
 		t.Fatal("JSON owner did not bind subordinate output")
@@ -325,10 +325,10 @@ func TestScaleP21JSONOutputCancellationAndChildren(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputErrorLatchAndIndependentOwners(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
-	first := scaleP21JSONOwner(t, view, t.Context())
-	second := scaleP21JSONOwner(t, view, first.Context(t.Context()))
+func TestScaleJSONOutputErrorLatchAndIndependentOwners(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
+	first := scaleJSONOwner(t, view, t.Context())
+	second := scaleJSONOwner(t, view, first.Context(t.Context()))
 	firstCtx, secondCtx := first.Context(t.Context()), second.Context(t.Context())
 	var firstCloses, secondCloses int
 	if !registerMetadataOutputClose(firstCtx, func() { firstCloses++ }) ||
@@ -368,9 +368,9 @@ func TestScaleP21JSONOutputErrorLatchAndIndependentOwners(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputConcurrentGrowthAndClose(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
-	read := scaleP21JSONOwner(t, view, t.Context())
+func TestScaleJSONOutputConcurrentGrowthAndClose(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
+	read := scaleJSONOwner(t, view, t.Context())
 	var workers sync.WaitGroup
 	failures := make(chan error, 64)
 	for index := range 64 {
@@ -432,12 +432,12 @@ func TestScaleP21JSONOutputConcurrentGrowthAndClose(t *testing.T) {
 	}
 }
 
-func TestScaleP21JSONOutputActualPointLifetime(t *testing.T) {
+func TestScaleJSONOutputActualPointLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprint("reload=", reload), func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			projectID := idgen.New("json-point-")
 			if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.json_point", "", nil, func(data *domain.Bootstrap) error {
@@ -467,7 +467,7 @@ func TestScaleP21JSONOutputActualPointLifetime(t *testing.T) {
 			}
 			request, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			read := scaleP21JSONOwner(t, view, request)
+			read := scaleJSONOwner(t, view, request)
 			ctx := read.Context(request)
 			data, allowed, err := view.ResourceReadMetadata(ctx, access, "projects", projectID)
 			if err != nil || !allowed || len(data.Projects) != 1 || data.Projects[0].ID != projectID ||

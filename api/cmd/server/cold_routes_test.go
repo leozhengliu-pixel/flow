@@ -22,7 +22,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW191ColdRouteBindings(t *testing.T) {
+func TestColdRouteBindings(t *testing.T) {
 	_, path, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate production route registrations")
@@ -45,7 +45,7 @@ func TestScaleP21SW191ColdRouteBindings(t *testing.T) {
 		files = append(files, file)
 	}
 	roots, expected := map[string]bool{}, map[string]string{}
-	for _, route := range scaleP21ColdRoutes {
+	for _, route := range scaleColdRoutes {
 		_, method, found := strings.Cut(route.consumer, ":")
 		if !found {
 			t.Fatal("cold manifest lacks its inventoried consumer", route)
@@ -89,7 +89,7 @@ func TestScaleP21SW191ColdRouteBindings(t *testing.T) {
 	}
 }
 
-func scaleP21SW191Serve(t *testing.T, service *server, request *http.Request) *httptest.ResponseRecorder {
+func coldRoutesServe(t *testing.T, service *server, request *http.Request) *httptest.ResponseRecorder {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/loop-config", service.getLoopConfig)
@@ -100,12 +100,12 @@ func scaleP21SW191Serve(t *testing.T, service *server, request *http.Request) *h
 	return result
 }
 
-func TestScaleP21SW191ColdLoopRoutesDifferential(t *testing.T) {
+func TestColdLoopRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, app := f.data.Workspace.URLKey, idgen.New("sw191-app-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "members", "integrationConnections"), workspace, "scale_p21.sw191_seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Members = append(data.Members, domain.WorkspaceMember{User: domain.User{ID: app, Name: "warm\x00app"}, Role: "app", Status: "active"})
@@ -159,7 +159,7 @@ func TestScaleP21SW191ColdLoopRoutesDifferential(t *testing.T) {
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					request := f.literalRequest(user, key, nil)
 					request.Method, request.URL.Path = http.MethodGet, path
-					actual := scaleP21SW191Serve(t, &server{store: source}, request)
+					actual := coldRoutesServe(t, &server{store: source}, request)
 					if source == repo {
 						expected = actual
 					} else if actual.Code != expected.Code || !bytes.Equal(actual.Body.Bytes(), expected.Body.Bytes()) {
@@ -194,7 +194,7 @@ func TestScaleP21SW191ColdLoopRoutesDifferential(t *testing.T) {
 						request := f.literalRequest(f.data.Viewer, nil, nil)
 						request.Method, request.URL.Path = http.MethodPatch, "/api/workspace/loop-settings"
 						request.Body = io.NopCloser(strings.NewReader(test.body))
-						actual := scaleP21SW191Serve(t, &server{store: source}, request)
+						actual := coldRoutesServe(t, &server{store: source}, request)
 						if actual.Code != test.code {
 							t.Fatalf("bounded=%t status=%d body=%s", bounded, actual.Code, actual.Body.String())
 						}
@@ -215,7 +215,7 @@ func TestScaleP21SW191ColdLoopRoutesDifferential(t *testing.T) {
 							}
 							read := f.literalRequest(f.data.Viewer, nil, nil)
 							read.Method, read.URL.Path = http.MethodGet, "/api/workspace/loop-settings"
-							after := scaleP21SW191Serve(t, &server{store: source}, read)
+							after := coldRoutesServe(t, &server{store: source}, read)
 							if test.code == http.StatusOK && !bytes.Equal(actual.Body.Bytes(), after.Body.Bytes()) {
 								t.Fatal("next cold reader missed the committed settings")
 							}

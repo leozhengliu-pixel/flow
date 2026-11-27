@@ -377,7 +377,7 @@ func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
 		updates[index].Snapshot = nil
 	}
 	if r.URL.Query().Get("window") == "1" {
-		s.scaleP19UpdatePage(w, r, "projects", updates)
+		s.scaleUpdatePage(w, r, "projects", updates)
 		return
 	}
 	writeJSON(w, http.StatusOK, updates)
@@ -448,7 +448,7 @@ func (s *server) listInitiativeUpdates(w http.ResponseWriter, r *http.Request) {
 		updates[index].Snapshot = nil
 	}
 	if r.URL.Query().Get("window") == "1" {
-		s.scaleP19UpdatePage(w, r, "initiatives", updates)
+		s.scaleUpdatePage(w, r, "initiatives", updates)
 		return
 	}
 	writeJSON(w, http.StatusOK, updates)

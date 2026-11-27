@@ -18,9 +18,9 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-var scaleP21CRDTBudget = errors.New("test CRDT work exhausted")
+var scaleCRDTBudget = errors.New("test CRDT work exhausted")
 
-type scaleP21CRDTAdmission struct {
+type scaleCRDTAdmission struct {
 	used, peak uint64
 	limit      uint64
 	calls      int
@@ -29,13 +29,13 @@ type scaleP21CRDTAdmission struct {
 	cancel     context.CancelFunc
 }
 
-func (a *scaleP21CRDTAdmission) acquire(size uint64) (func(), error) {
+func (a *scaleCRDTAdmission) acquire(size uint64) (func(), error) {
 	a.calls++
 	if a.failAt != 0 && a.calls >= a.failAt {
-		return nil, scaleP21CRDTBudget
+		return nil, scaleCRDTBudget
 	}
 	if a.limit != 0 && size > a.limit-a.used {
-		return nil, scaleP21CRDTBudget
+		return nil, scaleCRDTBudget
 	}
 	a.used += size
 	a.peak = max(a.peak, a.used)
@@ -51,7 +51,7 @@ func (a *scaleP21CRDTAdmission) acquire(size uint64) (func(), error) {
 	}, nil
 }
 
-func scaleP21CRDTTree(d *ygo.Doc) map[string]any {
+func scaleCRDTTree(d *ygo.Doc) map[string]any {
 	var children func(interface{ Range(func(uint64, any) bool) }) []any
 	children = func(parent interface{ Range(func(uint64, any) bool) }) []any {
 		out := []any{}
@@ -70,7 +70,7 @@ func scaleP21CRDTTree(d *ygo.Doc) map[string]any {
 	return map[string]any{"type": "doc", "content": children(ygo.NewXmlFragment(d, "prosemirror"))}
 }
 
-func scaleP21CRDTUpdates(t *testing.T, large bool) [][]byte {
+func scaleCRDTUpdates(t *testing.T, large bool) [][]byte {
 	t.Helper()
 	d := ygo.NewDocWithOptions(ygo.Options{ClientID: 31})
 	updates := [][]byte{}
@@ -108,13 +108,13 @@ func scaleP21CRDTUpdates(t *testing.T, large bool) [][]byte {
 	return updates
 }
 
-func TestScaleP21BoundedCRDTProducerDifferential(t *testing.T) {
+func TestScaleBoundedCRDTProducerDifferential(t *testing.T) {
 	for _, large := range []bool{false, true} {
-		updates := scaleP21CRDTUpdates(t, large)
+		updates := scaleCRDTUpdates(t, large)
 		for _, mode := range []string{"warm", "reloaded", "out-of-order"} {
 			t.Run(mode+map[bool]string{false: "", true: "/large"}[large], func(t *testing.T) {
 				old := ygo.NewDocWithOptions(ygo.Options{ClientID: 32})
-				a := &scaleP21CRDTAdmission{}
+				a := &scaleCRDTAdmission{}
 				d, err := NewDoc(t.Context(), a.acquire)
 				if err != nil {
 					t.Fatal(err)
@@ -151,7 +151,7 @@ func TestScaleP21BoundedCRDTProducerDifferential(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if want := scaleP21CRDTTree(old); !reflect.DeepEqual(got, want) {
+					if want := scaleCRDTTree(old); !reflect.DeepEqual(got, want) {
 						t.Fatalf("tree differs at update %d", i)
 					}
 				}
@@ -161,9 +161,9 @@ func TestScaleP21BoundedCRDTProducerDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21BoundedCRDTAdmissionUnwind(t *testing.T) {
-	updates := scaleP21CRDTUpdates(t, true)
-	run := func(t *testing.T, a *scaleP21CRDTAdmission, ctx context.Context) error {
+func TestScaleBoundedCRDTAdmissionUnwind(t *testing.T) {
+	updates := scaleCRDTUpdates(t, true)
+	run := func(t *testing.T, a *scaleCRDTAdmission, ctx context.Context) error {
 		t.Helper()
 		d, err := NewDoc(ctx, a.acquire)
 		if err != nil {
@@ -200,17 +200,17 @@ func TestScaleP21BoundedCRDTAdmissionUnwind(t *testing.T) {
 		}
 		return err
 	}
-	baseline := &scaleP21CRDTAdmission{}
+	baseline := &scaleCRDTAdmission{}
 	if err := run(t, baseline, t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	for ordinal := 1; ordinal <= baseline.calls; ordinal++ {
-		a := &scaleP21CRDTAdmission{failAt: ordinal}
-		if err := run(t, a, t.Context()); !errors.Is(err, scaleP21CRDTBudget) {
+		a := &scaleCRDTAdmission{failAt: ordinal}
+		if err := run(t, a, t.Context()); !errors.Is(err, scaleCRDTBudget) {
 			t.Fatalf("failure %d: %v", ordinal, err)
 		}
 		ctx, cancel := context.WithCancel(t.Context())
-		a = &scaleP21CRDTAdmission{cancelAt: ordinal, cancel: cancel}
+		a = &scaleCRDTAdmission{cancelAt: ordinal, cancel: cancel}
 		err := run(t, a, ctx)
 		cancel()
 		if !errors.Is(err, context.Canceled) {
@@ -220,9 +220,9 @@ func TestScaleP21BoundedCRDTAdmissionUnwind(t *testing.T) {
 	t.Logf("proved every acquisition ordinal 1..%d", baseline.calls)
 }
 
-func TestScaleP21BoundedCRDTMalformed(t *testing.T) {
+func TestScaleBoundedCRDTMalformed(t *testing.T) {
 	for _, raw := range [][]byte{nil, {}, {0}, {1, 255, 255, 255, 255, 127}, {1, 1, 1, 0, 255}, {0, 1, 1, 255}} {
-		a := &scaleP21CRDTAdmission{}
+		a := &scaleCRDTAdmission{}
 		d, err := NewDoc(t.Context(), a.acquire)
 		if err != nil {
 			t.Fatal(err)
@@ -237,7 +237,7 @@ func TestScaleP21BoundedCRDTMalformed(t *testing.T) {
 	}
 }
 
-func TestScaleP21BoundedCRDTStructuralAdmission(t *testing.T) {
+func TestScaleBoundedCRDTStructuralAdmission(t *testing.T) {
 	// Scalar clock ranges are not node/expansion counts.
 	for _, kind := range []byte{0, 10, 1} {
 		raw := []byte{1, 1, 1, 0, kind}
@@ -247,7 +247,7 @@ func TestScaleP21BoundedCRDTStructuralAdmission(t *testing.T) {
 		}
 		raw = lib0.WriteVarUint(nil, raw, 1<<52)
 		raw = append(raw, 0)
-		a := &scaleP21CRDTAdmission{limit: 1 << 20}
+		a := &scaleCRDTAdmission{limit: 1 << 20}
 		d, err := NewDoc(t.Context(), a.acquire)
 		if err != nil {
 			t.Fatal(err)
@@ -260,7 +260,7 @@ func TestScaleP21BoundedCRDTStructuralAdmission(t *testing.T) {
 			t.Fatal("bounded scalar range", kind, err)
 		}
 		got, err := d.MentionDocument()
-		if err != nil || !reflect.DeepEqual(got, scaleP21CRDTTree(old)) {
+		if err != nil || !reflect.DeepEqual(got, scaleCRDTTree(old)) {
 			t.Fatal("scalar range tree differs", kind, err)
 		}
 		d.Close()
@@ -281,12 +281,12 @@ func TestScaleP21BoundedCRDTStructuralAdmission(t *testing.T) {
 	for i := 0; i < 4000; i++ {
 		raw = append(raw, 126)
 	}
-	a := &scaleP21CRDTAdmission{limit: 256 << 10}
+	a := &scaleCRDTAdmission{limit: 256 << 10}
 	d, err := NewDoc(t.Context(), a.acquire)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.ApplyUpdate(raw); !errors.Is(err, scaleP21CRDTBudget) {
+	if err := d.ApplyUpdate(raw); !errors.Is(err, scaleCRDTBudget) {
 		t.Fatal("attempted capacities were not refused by admission", err)
 	}
 	d.Close()
@@ -295,10 +295,10 @@ func TestScaleP21BoundedCRDTStructuralAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21BoundedCRDTTrailingAndBase64(t *testing.T) {
-	update := scaleP21CRDTUpdates(t, false)[0]
+func TestScaleBoundedCRDTTrailingAndBase64(t *testing.T) {
+	update := scaleCRDTUpdates(t, false)[0]
 	update = append(append([]byte(nil), update...), 255, 0, 255)
-	a := &scaleP21CRDTAdmission{}
+	a := &scaleCRDTAdmission{}
 	d, err := NewDoc(t.Context(), a.acquire)
 	if err != nil {
 		t.Fatal(err)
@@ -315,13 +315,13 @@ func TestScaleP21BoundedCRDTTrailingAndBase64(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := d.MentionDocument()
-	if err != nil || !reflect.DeepEqual(got, scaleP21CRDTTree(old)) {
+	if err != nil || !reflect.DeepEqual(got, scaleCRDTTree(old)) {
 		t.Fatal("legacy trailing-byte acceptance changed", err)
 	}
 }
 
-func TestScaleP21BoundedCRDTClosedOwner(t *testing.T) {
-	a := &scaleP21CRDTAdmission{}
+func TestScaleBoundedCRDTClosedOwner(t *testing.T) {
+	a := &scaleCRDTAdmission{}
 	d, err := NewDoc(t.Context(), a.acquire)
 	if err != nil {
 		t.Fatal(err)
@@ -343,7 +343,7 @@ func TestScaleP21BoundedCRDTClosedOwner(t *testing.T) {
 	}
 }
 
-func TestScaleP21BoundedCRDTQueuedOverwriteAdmission(t *testing.T) {
+func TestScaleBoundedCRDTQueuedOverwriteAdmission(t *testing.T) {
 	producer := ygo.NewDocWithOptions(ygo.Options{ClientID: 193})
 	var updates [][]byte
 	stop := producer.OnUpdate(func(raw []byte, _ any) {
@@ -362,7 +362,7 @@ func TestScaleP21BoundedCRDTQueuedOverwriteAdmission(t *testing.T) {
 	}
 	for _, count := range []int{1000, 10000} {
 		t.Run(strconv.Itoa(count), func(t *testing.T) {
-			a := &scaleP21CRDTAdmission{limit: 256 << 20}
+			a := &scaleCRDTAdmission{limit: 256 << 20}
 			d, err := NewDoc(t.Context(), a.acquire)
 			if err != nil {
 				t.Fatal(err)
@@ -383,7 +383,7 @@ func TestScaleP21BoundedCRDTQueuedOverwriteAdmission(t *testing.T) {
 				}
 			}
 			got, err := d.MentionDocument()
-			if err != nil || !reflect.DeepEqual(got, scaleP21CRDTTree(old)) {
+			if err != nil || !reflect.DeepEqual(got, scaleCRDTTree(old)) {
 				t.Fatal("queued overwrite tree differs", err)
 			}
 			t.Logf("queued=%d admitted_peak=%d", count, a.peak)
@@ -391,7 +391,7 @@ func TestScaleP21BoundedCRDTQueuedOverwriteAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21BoundedCRDTJSONDifferential(t *testing.T) {
+func TestScaleBoundedCRDTJSONDifferential(t *testing.T) {
 	cases := [][]byte{
 		[]byte(`null`), []byte(`[]`), []byte(`[{}]`), []byte(`{"a":1}`),
 		[]byte(`{"same":{"a":1},"same":{"b":2}}`), []byte(`"\ud800"`),
@@ -412,7 +412,7 @@ func TestScaleP21BoundedCRDTJSONDifferential(t *testing.T) {
 	for i, raw := range cases {
 		var want any
 		wantErr := json.Unmarshal(raw, &want)
-		a := &scaleP21CRDTAdmission{}
+		a := &scaleCRDTAdmission{}
 		got, release, err := DecodeJSON(t.Context(), a.acquire, raw)
 		if (err == nil) != (wantErr == nil) {
 			t.Fatalf("case %d validity: %v vs %v", i, err, wantErr)

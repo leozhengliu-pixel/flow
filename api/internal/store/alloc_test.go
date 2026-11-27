@@ -12,9 +12,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-var scaleP04InputSink domain.Bootstrap
+var scaleInputSink domain.Bootstrap
 
-func scaleP04AllocationFixture(t testing.TB) domain.Bootstrap {
+func scaleAllocationFixture(t testing.TB) domain.Bootstrap {
 	t.Helper()
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
@@ -32,19 +32,19 @@ func scaleP04AllocationFixture(t testing.TB) domain.Bootstrap {
 	return data
 }
 
-func BenchmarkScaleP04MutationInputs(b *testing.B) {
-	data := scaleP04AllocationFixture(b)
+func BenchmarkScaleMutationInputs(b *testing.B) {
+	data := scaleAllocationFixture(b)
 	fields := issueRecordCallbackFields(domain.IssueUpdateInput{})
 	b.Run("issue", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			scaleP04InputSink = issueUpdateMetadata(data, fields...)
+			scaleInputSink = issueUpdateMetadata(data, fields...)
 		}
 	})
 	b.Run("comment", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			scaleP04InputSink, _ = issueScopeCallbackInput(data, true)
+			scaleInputSink, _ = issueScopeCallbackInput(data, true)
 		}
 	})
 	b.Run("team", func(b *testing.B) {
@@ -52,13 +52,13 @@ func BenchmarkScaleP04MutationInputs(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			next, _ := teamCallbackInput(data, "team.updated", map[string]string{"name": "Renamed"})
 			_ = snapshotTeamMutation("team.updated", "team_test", &data)
-			scaleP04InputSink = next
+			scaleInputSink = next
 		}
 	})
 }
 
-func TestScaleP04CallbackAllocationBudget(t *testing.T) {
-	data := scaleP04AllocationFixture(t)
+func TestScaleCallbackAllocationBudget(t *testing.T) {
+	data := scaleAllocationFixture(t)
 	for _, kind := range []string{"issue", "comment"} {
 		t.Run(kind, func(t *testing.T) {
 			measure := func(mode string) uint64 {
@@ -66,9 +66,9 @@ func TestScaleP04CallbackAllocationBudget(t *testing.T) {
 				fields := issueRecordCallbackFields(domain.IssueUpdateInput{})
 				apply := func() {
 					if kind == "issue" {
-						scaleP04InputSink = issueUpdateMetadata(data, fields...)
+						scaleInputSink = issueUpdateMetadata(data, fields...)
 					} else {
-						scaleP04InputSink, _ = issueScopeCallbackInput(data, true)
+						scaleInputSink, _ = issueScopeCallbackInput(data, true)
 					}
 				}
 				apply()
@@ -90,7 +90,7 @@ func TestScaleP04CallbackAllocationBudget(t *testing.T) {
 	}
 }
 
-func BenchmarkScaleP04TeamCreationInputs(b *testing.B) {
+func BenchmarkScaleTeamCreationInputs(b *testing.B) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(b.TempDir(), "flow.db"))
 	if err != nil {
 		b.Fatal(err)
@@ -108,13 +108,13 @@ func BenchmarkScaleP04TeamCreationInputs(b *testing.B) {
 	b.Run("input", func(b *testing.B) {
 		b.ReportAllocs()
 		for range b.N {
-			scaleP04InputSink, _ = teamCallbackInput(data, "team.created", nil)
+			scaleInputSink, _ = teamCallbackInput(data, "team.created", nil)
 		}
 	})
 	b.Run("settings", func(b *testing.B) {
 		b.ReportAllocs()
 		for range b.N {
-			scaleP04InputSink.TeamSettings = maps.Clone(data.TeamSettings)
+			scaleInputSink.TeamSettings = maps.Clone(data.TeamSettings)
 		}
 	})
 	b.Run("directory", func(b *testing.B) {
@@ -122,7 +122,7 @@ func BenchmarkScaleP04TeamCreationInputs(b *testing.B) {
 		for range b.N {
 			next := data
 			domain.RebuildTeamDirectory(&next)
-			scaleP04InputSink = next
+			scaleInputSink = next
 		}
 	})
 }

@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21AskStatusProjection(data domain.Bootstrap, id string) (found bool, status, note string) {
+func scaleAskStatusProjection(data domain.Bootstrap, id string) (found bool, status, note string) {
 	for _, ask := range data.Asks {
 		if ask.ID != id {
 			continue
@@ -30,15 +30,15 @@ func scaleP21AskStatusProjection(data domain.Bootstrap, id string) (found bool, 
 	return
 }
 
-func scaleP21AskStatusEqual(t *testing.T, read *AskStatusRead, data domain.Bootstrap, id string) {
+func scaleAskStatusEqual(t *testing.T, read *AskStatusRead, data domain.Bootstrap, id string) {
 	t.Helper()
-	found, status, note := scaleP21AskStatusProjection(data, id)
+	found, status, note := scaleAskStatusProjection(data, id)
 	if read.AskFound != found || read.Status != status || read.Note != note {
 		t.Fatal("first Ask status or final rejected note changed", id, read.AskFound, read.Status)
 	}
 }
 
-func TestScaleP21AskStatusNativeOwnership(t *testing.T) {
+func TestScaleAskStatusNativeOwnership(t *testing.T) {
 	large := strings.Repeat("unused body and note ", 50000)
 	data := domain.Bootstrap{Asks: []domain.Ask{
 		{ID: "duplicate", Status: "accepted", Body: large, Approvals: []domain.AskApproval{{Decision: "rejected", Note: large}}},
@@ -54,7 +54,7 @@ func TestScaleP21AskStatusNativeOwnership(t *testing.T) {
 		{ID: "empty-approvals", Status: "rejected", Approvals: []domain.AskApproval{}},
 		{ID: "case-sensitive", Status: "Rejected", Approvals: []domain.AskApproval{{Decision: "rejected", Note: large}}},
 	}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, id := range []string{"duplicate", "", "ask\x00id", "empty-note", "nil-approvals", "empty-approvals", "case-sensitive", "missing"} {
 		for _, key := range []string{"physical", ""} {
@@ -63,7 +63,7 @@ func TestScaleP21AskStatusNativeOwnership(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			scaleP21AskStatusEqual(t, read, data, id)
+			scaleAskStatusEqual(t, read, data, id)
 			if statements != 0 || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used == 0 {
 				t.Fatal("status output hydrated metadata or lost ownership", statements)
 			}
@@ -112,7 +112,7 @@ func TestScaleP21AskStatusNativeOwnership(t *testing.T) {
 					t.Error(found, err)
 					return
 				}
-				scaleP21AskStatusEqual(t, read, data, "ask\x00id")
+				scaleAskStatusEqual(t, read, data, "ask\x00id")
 				read.Close()
 			}
 		})
@@ -123,10 +123,10 @@ func TestScaleP21AskStatusNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21AskStatusSelectedNoteBudget(t *testing.T) {
+func TestScaleAskStatusSelectedNoteBudget(t *testing.T) {
 	note := strings.Repeat("complete selected note ", 15000)
 	data := domain.Bootstrap{Asks: []domain.Ask{{ID: "large", Status: "rejected", Approvals: []domain.AskApproval{{Decision: "rejected", Note: note}}}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, found, err := view.BeginAskStatusRead(t.Context(), "physical", "large")
 	if err != nil || !found || read.Note != note {
 		t.Fatal("complete large selected note changed", found, err)
@@ -139,10 +139,10 @@ func TestScaleP21AskStatusSelectedNoteBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21AskStatusWarmReloadAndPin(t *testing.T) {
+func TestScaleAskStatusWarmReloadAndPin(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, askID := f.data.Workspace.URLKey, "ask-status-source"
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -185,7 +185,7 @@ func TestScaleP21AskStatusWarmReloadAndPin(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			scaleP21AskStatusEqual(t, read, data, askID)
+			scaleAskStatusEqual(t, read, data, askID)
 			held := view.metadataResidency.work.used
 			if expected[reload] == 0 {
 				expected[reload] = held
@@ -221,7 +221,7 @@ func TestScaleP21AskStatusWarmReloadAndPin(t *testing.T) {
 		t.Fatal(found, err)
 	}
 	parent.Close()
-	scaleP21AskStatusEqual(t, read, old, askID)
+	scaleAskStatusEqual(t, read, old, askID)
 	read.Close()
 	fresh, _, err := view.BeginAskStatusRead(t.Context(), workspace, askID)
 	if err != nil || fresh.Status != "accepted" || fresh.Note != "" {

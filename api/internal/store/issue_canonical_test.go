@@ -17,13 +17,13 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-type scaleP21SW234ReaderAt func([]byte, int64) (int, error)
+type issueCanonicalReaderAt func([]byte, int64) (int, error)
 
-func (read scaleP21SW234ReaderAt) ReadAt(dst []byte, offset int64) (int, error) {
+func (read issueCanonicalReaderAt) ReadAt(dst []byte, offset int64) (int, error) {
 	return read(dst, offset)
 }
 
-func scaleP21SW234ExpectWire(t *testing.T, raw []byte) (domain.Issue, []byte) {
+func expectWire(t *testing.T, raw []byte) (domain.Issue, []byte) {
 	t.Helper()
 	var oracle domain.Issue
 	if err := json.Unmarshal(raw, &oracle); err != nil {
@@ -37,7 +37,7 @@ func scaleP21SW234ExpectWire(t *testing.T, raw []byte) (domain.Issue, []byte) {
 	return oracle, wire
 }
 
-func scaleP21SW234CompareFrame(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, oracle domain.Issue, expected []byte, native bool) {
+func compareFrame(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, oracle domain.Issue, expected []byte, native bool) {
 	t.Helper()
 	if node.typ != reflect.TypeFor[domain.Issue]() {
 		t.Fatal("canonical frame changed its exact domain type")
@@ -72,7 +72,7 @@ func scaleP21SW234CompareFrame(t *testing.T, repo *SQLiteStore, node metadataLog
 	}
 }
 
-func TestScaleP21SW234IssueCanonicalDifferential(t *testing.T) {
+func TestIssueCanonicalDifferential(t *testing.T) {
 	rawProducer := domain.Issue{
 		ID: "raw-producer",
 		DocumentContent: &domain.DocumentContent{ContentData: map[string]any{
@@ -135,7 +135,7 @@ func TestScaleP21SW234IssueCanonicalDifferential(t *testing.T) {
 				}
 			}()
 			raw := []byte(test.raw)
-			oracle, expected := scaleP21SW234ExpectWire(t, raw)
+			oracle, expected := expectWire(t, raw)
 			node, err := legacyIssueCanonicalRecord(t.Context(), repo, frames, legacySessionJSONPart{bytes.NewReader(raw), 0, int64(len(raw))})
 			if err != nil {
 				t.Fatal("valid typed Issue must succeed, not match an error outcome", err)
@@ -143,7 +143,7 @@ func TestScaleP21SW234IssueCanonicalDifferential(t *testing.T) {
 			if repo.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("completed canonical frame retained a temporary native owner")
 			}
-			scaleP21SW234CompareFrame(t, repo, node, oracle, expected, true)
+			compareFrame(t, repo, node, oracle, expected, true)
 		})
 	}
 	for _, test := range []struct{ name, raw string }{
@@ -196,7 +196,7 @@ func TestScaleP21SW234IssueCanonicalDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW234EditorProducerRow(t *testing.T) ([]byte, int, int) {
+func editorProducerRow(t *testing.T) ([]byte, int, int) {
 	t.Helper()
 	body := strings.Repeat("x", 4<<20)
 	documentJSON, err := json.Marshal(map[string]any{
@@ -223,7 +223,7 @@ func scaleP21SW234EditorProducerRow(t *testing.T) ([]byte, int, int) {
 		t.Fatal("supported optional-field editor request exceeds HTTP limit", err, len(request))
 	}
 	// These are the exact fields retained by server.applyUpdate, already
-	// exercised through that real producer in SW201 legal-large-editor-state.
+	// exercised through that real producer in large workflow actions legal-large-editor-state.
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	raw, err := json.Marshal(domain.Issue{
 		ID: "sw234-editor", Version: 1, Identifier: "SW234-1", Number: 1,
@@ -242,9 +242,9 @@ func scaleP21SW234EditorProducerRow(t *testing.T) ([]byte, int, int) {
 	return raw, len(request), len(state)
 }
 
-func TestScaleP21SW234IssueCanonicalLargeAndRelease(t *testing.T) {
-	raw, requestBytes, stateBytes := scaleP21SW234EditorProducerRow(t)
-	oracle, expected := scaleP21SW234ExpectWire(t, raw)
+func TestIssueCanonicalLargeAndRelease(t *testing.T) {
+	raw, requestBytes, stateBytes := editorProducerRow(t)
+	oracle, expected := expectWire(t, raw)
 	sentinel := errors.New("sw234 backing read failed")
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	// An 18-MiB row must not require owning its complete raw/native image.
@@ -276,7 +276,7 @@ func TestScaleP21SW234IssueCanonicalLargeAndRelease(t *testing.T) {
 				input = bytes.NewReader(raw[:len(raw)-5])
 			}
 			readBytes, observedWork := int64(0), 0
-			reader := scaleP21SW234ReaderAt(func(dst []byte, offset int64) (int, error) {
+			reader := issueCanonicalReaderAt(func(dst []byte, offset int64) (int, error) {
 				if mode == "backing-io" && readBytes >= 64<<10 {
 					return 0, sentinel
 				}
@@ -301,7 +301,7 @@ func TestScaleP21SW234IssueCanonicalLargeAndRelease(t *testing.T) {
 				if repo.MetadataWorkUsedForTesting() != 0 {
 					t.Fatal("finished large frame retained a whole native decode")
 				}
-				scaleP21SW234CompareFrame(t, repo, node, oracle, expected, false)
+				compareFrame(t, repo, node, oracle, expected, false)
 				t.Logf("request_bytes=%d row_bytes=%d content_state_bytes=%d observed_IO_work=%d",
 					requestBytes, len(raw), stateBytes, observedWork)
 			case "cancel-before", "cancel-during-read":

@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW74LegacyContentImage(t *testing.T) {
+func TestLegacyContentImage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw74-content-")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

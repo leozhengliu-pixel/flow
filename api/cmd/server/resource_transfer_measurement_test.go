@@ -16,11 +16,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP20TransferMeasurement(t *testing.T) {
+func TestScaleTransferMeasurement(t *testing.T) {
 	if os.Getenv("FLOW_P20_MEASURE") == "" {
 		t.Skip("set FLOW_P20_MEASURE=legacy or bounded")
 	}
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
 	ctx := store.ContextWithActor(context.Background(), db.users[0])
 	if err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {

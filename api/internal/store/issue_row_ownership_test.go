@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW347IssueRowOwnership(t *testing.T) {
+func TestIssueRowOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("sw347-row-")
 	at := time.Date(2026, 11, 17, 1, 2, 3, 456, time.FixedZone("stored", 5400))
 	issue := domain.Issue{

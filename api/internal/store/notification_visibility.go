@@ -394,7 +394,7 @@ func (r *NotificationVisibilityRead) headers(q NotificationQuery, id string) ([]
 	for _, name := range []string{"recipientId", "issueId", "projectId", "reviewId", "sourceType", "sourceId"} {
 		columns = append(columns, "COALESCE("+s.jsonText("data", name)+",'')")
 	}
-	size := s.scaleP21SW22VisibilityLength(columns...)
+	size := s.visibilityLength(columns...)
 	selected := []string{size}
 	for _, column := range columns {
 		selected = append(selected, "CASE WHEN ("+size+")<=65536 THEN "+column+" ELSE NULL END")
@@ -489,7 +489,7 @@ func (r *NotificationVisibilityRead) readBody(id string) (domain.Notification, e
 }
 
 func (r *NotificationVisibilityRead) boundedBody(table, expression, where string, args []any) ([]byte, error) {
-	length := r.store.scaleP21SW22VisibilityLength(expression)
+	length := r.store.visibilityLength(expression)
 	var size int64
 	var raw []byte
 	bindings := append([]any{r.access.policy.workspace}, args...)

@@ -15,13 +15,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW350HistoryAuthorizationDifferential(t *testing.T) {
+func TestHistoryAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
-	foreign := scaleP03Fixture(t, repo)
+	foreign := resourceAccessScaleFixture(t, repo)
 	prefix := idgen.New("sw350-")
 	projectID, initiativeID, privateInitiative := prefix+"project", prefix+"initiative", prefix+"private-initiative"
 	oldProject, oldInitiative := prefix+"old-project", prefix+"old-initiative"
@@ -99,7 +99,7 @@ func TestScaleP21SW350HistoryAuthorizationDifferential(t *testing.T) {
 				}
 			}
 			if phase == "reloaded" {
-				scaleP21SW201ReloadSource(t, f.reader, source)
+				metadataReloadSourceReloadSource(t, f.reader, source)
 			}
 			request := f.literalRequest(user, key, nil)
 			request.Method = method

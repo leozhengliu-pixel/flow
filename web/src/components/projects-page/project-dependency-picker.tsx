@@ -14,9 +14,9 @@ import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { matchesSearch } from '@/lib/search-match'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { BootstrapData, ProjectDependencyRelationInput } from '@/types/flow'
-import { useScaleP19ProjectWindow } from './scale-p19-project-window'
-import { ScaleP19ProjectPager } from './scale-p19-project-pager'
-import { scaleP19DependencyOption, useScaleP19DependencyOptions } from './scale-p19-dependency-options'
+import { useProjectQueryWindow } from './project-query-window'
+import { ProjectWindowPager } from './project-window-pager'
+import { projectWindowDependencyOption, useProjectWindowDependencyOptions } from './project-dependency-options'
 
 import './project-dependency-picker.css'
 
@@ -90,7 +90,7 @@ export function ProjectDependencyPicker({
   const [rootQuery, setRootQuery] = useState('')
   const rootInputRef = useRef<HTMLInputElement>(null)
   const open = controlledOpen ?? uncontrolledOpen
-  const directory = useScaleP19DependencyOptions(projects, value)
+  const directory = useProjectWindowDependencyOptions(projects, value)
   const options = directory.options
   const projectById = useMemo(() => new Map(options.map(project => [project.id, project])), [options])
 
@@ -221,13 +221,13 @@ function DirectionPicker({ active, catalog, closeOnSelect, direction, label, onC
   const phone = usePhoneLayout()
   const [search, setSearch] = useState('')
   const workspace = location.pathname.split('/').filter(Boolean)[0] ?? ''
-  const window = useScaleP19ProjectWindow(workspace, { q: search, archived: 'false' }, active)
+  const window = useProjectQueryWindow(workspace, { q: search, archived: 'false' }, active)
   const [wasActive, setWasActive] = useState(active)
   if (wasActive !== active) { setWasActive(active); if (active) setSearch('') }
   const options = useMemo(() => {
     if (!window.enabled) return projects
     const selected = projects.filter(project => value.some(item => item.projectId === project.id) || Boolean(search) && matchesSearch(search, [project.label, project.keywords], t, { fuzzy: true }))
-    const remote = (window.page?.items ?? []).map(project => projects.find(option => option.id === project.id) ?? scaleP19DependencyOption(project, viewerId, catalog))
+    const remote = (window.page?.items ?? []).map(project => projects.find(option => option.id === project.id) ?? projectWindowDependencyOption(project, viewerId, catalog))
     return [...selected, ...remote.filter(project => !selected.some(item => item.id === project.id))]
   }, [catalog, projects, search, t, value, viewerId, window.enabled, window.page])
   const { inputRef, ...command } = usePropertyCommand({
@@ -313,7 +313,7 @@ function DirectionPicker({ active, catalog, closeOnSelect, direction, label, onC
           {!filtered.length && <div className="project-dependency-picker__empty">{t(window.enabled && window.loading ? 'Loading…' : 'No projects found')}</div>}
           {window.enabled && window.error && <button type="button" onClick={() => { void window.load(0) }}>{t('Retry')}</button>}
         </div>
-        {window.enabled && <ScaleP19ProjectPager page={window.page} loading={window.loading} onPage={index => { void window.load(index) }}/ >}
+        {window.enabled && <ProjectWindowPager page={window.page} loading={window.loading} onPage={index => { void window.load(index) }}/ >}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

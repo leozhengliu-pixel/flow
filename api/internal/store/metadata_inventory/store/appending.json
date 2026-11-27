@@ -5,13 +5,13 @@
     "MutateWorkspaceAppending": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode forwards unchanged. Bounded insertion declares collection kinds, locks root membership, checks created IDs and indexed maximum ordinals, and writes only selected and created rows in callback order. TestScaleP21SW0Appending differentials and race tests cover unrelated oversized bodies, canonical ordering, sinks, shape creation, concurrent views, duplicates, undeclared/read-only changes, limits, rollback, cancellation and admission release.",
+      "reason": "Off mode forwards unchanged. Bounded insertion declares collection kinds, locks root membership, checks created IDs and indexed maximum ordinals, and writes only selected and created rows in callback order. Appending tests differentials and race tests cover unrelated oversized bodies, canonical ordering, sinks, shape creation, concurrent views, duplicates, undeclared/read-only changes, limits, rollback, cancellation and admission release.",
       "accessors": ["Bootstrap", "MutateWorkspace"]
     },
     "MutateWorkspaceAppendingWithAggregate": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode forwards unchanged. Bounded ordered insertion shares declared point/field authorization inputs and canonical mutation hooks, with created-ID validation and indexed ordinals rather than collection hydration. TestScaleP21SW0Appending differentials and race tests cover ordered multi-record creation, point changes, canonical state and sinks, concurrent views, first shape, invalid declarations, budget/cancellation rollback and work release. Callers remain separately inventoried.",
+      "reason": "Off mode forwards unchanged. Bounded ordered insertion shares declared point/field authorization inputs and canonical mutation hooks, with created-ID validation and indexed ordinals rather than collection hydration. Appending tests differentials and race tests cover ordered multi-record creation, point changes, canonical state and sinks, concurrent views, first shape, invalid declarations, budget/cancellation rollback and work release. Callers remain separately inventoried.",
       "accessors": ["MutateWorkspaceWithAggregate"]
     }
   }

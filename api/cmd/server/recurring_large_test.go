@@ -10,21 +10,21 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW338RecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
+func TestRecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 29, 15, 0, 0, 0, time.UTC)
 	body := strings.Repeat("x", 4<<20)
-	test := scaleP21SW206Case{
+	test := recurringOccurrenceCase{
 		name: "required-four-MiB-description", want: 4,
-		edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, _ time.Time) {
+		edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, _ time.Time) {
 			for index := range data.Issues {
-				if data.Issues[index].ID == f.sw206ID("source") {
+				if data.Issues[index].ID == f.recurringOccurrenceId("source") {
 					data.Issues[index].Description = body
 					return
 				}
@@ -36,10 +36,10 @@ func TestScaleP21SW338RecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
 		t.Run(fmt.Sprintf("sql-reloaded=%t", reload), func(t *testing.T) {
 			var expected string
 			for _, bounded := range []bool{false, true} {
-				scaleP21SW206Seed(t, f, test, now, false)
+				recurringOccurrenceSeed(t, f, test, now, false)
 				source := f.repository
 				if reload {
-					scaleP21SW209ReloadSource(t, f.scaleP21SW10Fixture, source)
+					advancedScheduleReloadSource(t, f.notificationsFixture, source)
 				}
 				if bounded {
 					source = f.probe
@@ -51,10 +51,10 @@ func TestScaleP21SW338RecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
 						}
 						// The constructor captures installed native values.
 						// Advance again to force the bounded SQL loader too.
-						scaleP21SW209ReloadSource(t, f.scaleP21SW10Fixture, source)
+						advancedScheduleReloadSource(t, f.notificationsFixture, source)
 					}
 				}
-				got, started := scaleP21SW206Run(t, f, source, test, now, scaleP21SW206Call(f, test, now))
+				got, started := recurringOccurrenceRun(t, f, source, test, now, recurringOccurrenceCall(f, test, now))
 				created, ok := got.Created.(*domain.Issue)
 				if got.Error != "" || !ok || created == nil || created.Description != body || len(created.SubIssueIDs) != test.want-1 {
 					t.Fatalf("bounded=%t: required 4 MiB recurring family success failed: error=%q created=%t",
@@ -64,7 +64,7 @@ func TestScaleP21SW338RecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
 					t.Fatalf("bounded=%t: required recurring publication missing: events=%d webhooks=%d realtime=%d",
 						bounded, len(got.Events), len(got.Webhooks), len(got.Realtime))
 				}
-				complete := map[string]bool{f.sw206ID("source"): false, created.ID: false}
+				complete := map[string]bool{f.recurringOccurrenceId("source"): false, created.ID: false}
 				for _, value := range got.Rows.Issues {
 					row, ok := value.([]any)
 					if !ok || len(row) != 4 {
@@ -95,11 +95,11 @@ func TestScaleP21SW338RecurringFourMiBDescriptionRequiredSuccess(t *testing.T) {
 						t.Fatalf("bounded=%t: required complete canonical row missing for %s", bounded, id)
 					}
 				}
-				normalized := scaleP21SW206Normalize(t, got, started)
+				normalized := recurringOccurrenceNormalize(t, got, started)
 				if !bounded {
 					expected = normalized
 				} else if normalized != expected {
-					t.Fatalf("required 4 MiB recurring output/canonical/publication differs: %s", scaleP21M2Diff(expected, normalized))
+					t.Fatalf("required 4 MiB recurring output/canonical/publication differs: %s", policyFirstDifference(expected, normalized))
 				}
 			}
 		})

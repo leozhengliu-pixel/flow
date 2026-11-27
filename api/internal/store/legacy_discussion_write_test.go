@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW98Capture struct {
+type legacyDiscussionWriteCapture struct {
 	Viewer            domain.User
 	Via               *domain.ActorBot
 	Role              string
@@ -27,12 +27,12 @@ type scaleP21SW98Capture struct {
 	CommentNumbers    []string
 }
 
-type scaleP21SW98Outcome struct {
-	Business                   scaleP21SW63Business
-	Metadata                   scaleP21SW76Metadata
+type legacyDiscussionWriteOutcome struct {
+	Business                   discussionWriterBusiness
+	Metadata                   legacyActorWriteMetadata
 	Indexes                    map[string][][]any
 	Events, Webhooks, Realtime []any
-	Callback                   []scaleP21SW98Capture
+	Callback                   []legacyDiscussionWriteCapture
 	Installed                  domain.Bootstrap
 	InstalledVia               *domain.ActorBot
 	ErrorType, ErrorText       string
@@ -41,7 +41,7 @@ type scaleP21SW98Outcome struct {
 	Calls                      int
 }
 
-func scaleP21SW98FirstDiff(want, got any, path string) string {
+func firstDiff(want, got any, path string) string {
 	if reflect.DeepEqual(want, got) {
 		return ""
 	}
@@ -65,7 +65,7 @@ func scaleP21SW98FirstDiff(want, got any, path string) string {
 				if foundA != foundB {
 					return fmt.Sprintf("%s presence old=%t bounded=%t", child, foundA, foundB)
 				}
-				if diff := scaleP21SW98FirstDiff(a, b, child); diff != "" {
+				if diff := firstDiff(a, b, child); diff != "" {
 					return diff
 				}
 			}
@@ -76,7 +76,7 @@ func scaleP21SW98FirstDiff(want, got any, path string) string {
 				return fmt.Sprintf("%s length old=%d bounded=%d", path, len(old), len(next))
 			}
 			for index := range old {
-				if diff := scaleP21SW98FirstDiff(old[index], next[index], fmt.Sprintf("%s[%d]", path, index)); diff != "" {
+				if diff := firstDiff(old[index], next[index], fmt.Sprintf("%s[%d]", path, index)); diff != "" {
 					return diff
 				}
 			}
@@ -92,7 +92,7 @@ func scaleP21SW98FirstDiff(want, got any, path string) string {
 	return fmt.Sprintf("%s old=%s bounded=%s", path, preview(want), preview(got))
 }
 
-func scaleP21SW98Indexes(t *testing.T, repo *SQLiteStore, workspace string) map[string][][]any {
+func legacyDiscussionWriteIndexes(t *testing.T, repo *SQLiteStore, workspace string) map[string][][]any {
 	t.Helper()
 	result := map[string][][]any{}
 	for name, query := range map[string]string{
@@ -142,7 +142,7 @@ func scaleP21SW98Indexes(t *testing.T, repo *SQLiteStore, workspace string) map[
 	return result
 }
 
-func scaleP21SW98Installed(t *testing.T, repo *SQLiteStore, workspace string) domain.Bootstrap {
+func legacyDiscussionWriteInstalled(t *testing.T, repo *SQLiteStore, workspace string) domain.Bootstrap {
 	t.Helper()
 	scope := MetadataRecordScope{Fields: []string{
 		"users", "members", "teams", "teamSettings", "workspaceSettings", "labels", "projects",
@@ -178,7 +178,7 @@ func scaleP21SW98Installed(t *testing.T, repo *SQLiteStore, workspace string) do
 	return data
 }
 
-func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
+func TestOrdinaryLegacyDiscussionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -211,7 +211,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 			{name: "snapshot-success-late-write-refusal", operation: "update", role: "member", status: "active", failure: "snapshot-write", snapshot: true},
 		} {
 			t.Run(fmt.Sprintf("reload=%t/%s", reload, test.name), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected project"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected project"}}, nil)
 				if test.ignoredLookup && f.db.journalStop != nil {
 					f.db.journalStop()
 					f.db.journalWorkers.Wait()
@@ -219,8 +219,8 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 				issue.Labels = []domain.IssueLabel{{ID: "sw98-count-label", Name: "SW98 count label", Scope: issue.Team.ID}}
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 1, 12, 0, 0, 123, time.UTC)
-				actorBase := scaleP21SW69OwnedActor(f.data.Viewer)
-				actor := scaleP21SW69OwnedActor(actorBase)
+				actorBase := ownedActor(f.data.Viewer)
+				actor := ownedActor(actorBase)
 				actor.Name, actor.Active = "SW98 live actor", !test.inactive
 				actor.Via = &domain.ActorBot{ID: "sw98-request-app", Name: "Ordinary request attribution", Type: domain.ActorBotTypeOAuthApplication}
 				if test.unbound {
@@ -236,7 +236,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 				var statementCounts []int64
 				for _, bounded := range []bool{false, true} {
 					writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadataSeed))
-					scaleP21SW63Seed(t, f, issue, at)
+					discussionWriterSeed(t, f, issue, at)
 					if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw98_seed", "", nil, func(data *domain.Bootstrap) error {
 						data.Viewer = actorBase
 						if index := slices.IndexFunc(data.Users, func(user domain.User) bool { return user.ID == actorBase.ID }); index >= 0 {
@@ -259,7 +259,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 						}
 						for index := range data.Projects {
 							if data.Projects[index].ID == "p21-project" {
-								stale := scaleP21SW69OwnedActor(actorBase)
+								stale := ownedActor(actorBase)
 								stale.Name = "SW98 stale embedded lead"
 								data.Projects[index].Lead = &stale
 							}
@@ -273,7 +273,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
 					nativeBefore, found := f.WorkspaceMetadata(workspace)
 					if !found {
 						t.Fatal("ordinary native preimage missing")
@@ -284,10 +284,10 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					} else {
 						t.Fatal("canonical actor peer fixture missing")
 					}
-					before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					beforeMetadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-					beforeIndexes := scaleP21SW98Indexes(t, repo, workspace)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					before := businessRows(t, repo, workspace, issue.ID)
+					beforeMetadata := metadataImage(t, repo.db, workspace)
+					beforeIndexes := legacyDiscussionWriteIndexes(t, repo, workspace)
+					prior := eventIDs(t, repo, workspace)
 					ctx := ContextWithActor(t.Context(), actor)
 					var snapshot *sqlTx
 					if test.snapshot {
@@ -330,7 +330,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					if UsesIssueRecordMutations(ctx) || IsIssueDiscussionMutation(ctx) {
 						t.Fatal("ordinary differential accidentally selected a record/discussion callback context")
 					}
-					got := scaleP21SW98Outcome{}
+					got := legacyDiscussionWriteOutcome{}
 					var captured []*domain.Bootstrap
 					repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						if bounded && repo.MetadataWorkUsedForTesting() <= outerWork {
@@ -423,15 +423,15 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 							}
 							data.Activities[issue.ID] = append(data.Activities[issue.ID], domain.ActivityEvent{ID: issue.ID + "-activity", Type: event, Actor: data.Viewer, CreatedAt: at.Add(3 * time.Second), Metadata: domain.ActivityMetadata{"commentId": issue.ID + "-root"}})
 						}
-						result := scaleP21SW98Capture{Viewer: data.Viewer, Via: data.Viewer.Via, Role: data.ViewerRole, TeamIDs: slices.Clone(data.ViewerTeamIDs), Issue: data.Issues[index], Comments: data.Comments[issue.ID]}
+						result := legacyDiscussionWriteCapture{Viewer: data.Viewer, Via: data.Viewer.Via, Role: data.ViewerRole, TeamIDs: slices.Clone(data.ViewerTeamIDs), Issue: data.Issues[index], Comments: data.Comments[issue.ID]}
 						result.BeforeCountLabels = slices.Clone(result.Issue.Labels)
 						for _, comment := range result.Comments {
 							result.CommentNumbers = append(result.CommentNumbers, fmt.Sprintf("%T", comment.BodyData["native"]))
 						}
 						got.Callback = append(got.Callback, result)
 						if test.peer != "" {
-							tx := scaleP21SW76Begin(t, f)
-							scaleP21SW83Peer(t, tx, workspace, test.peer, peerBefore)
+							tx := legacyActorWriteBegin(t, f)
+							legacyMetadataWritePeer(t, tx, workspace, test.peer, peerBefore)
 							if err := tx.Commit(); err != nil {
 								t.Fatal(err)
 							}
@@ -451,7 +451,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					repo.SetWebhookSink(nil)
 					repo.SetRealtimeSink(nil)
 					if snapshot != nil {
-						scaleP21SW70Usable(t, snapshot)
+						legacyIssueScanUsable(t, snapshot)
 						if err := snapshot.Rollback(); err != nil {
 							t.Fatal("ordinary callback consumed the caller's read snapshot", err)
 						}
@@ -483,11 +483,11 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					if test.failure == "snapshot-write" && (err == nil || err.Error() != "cannot start a transaction inside a workspace read snapshot") {
 						t.Fatal("ordinary snapshot rejected the successful callback before its eventual write", err)
 					}
-					got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					got.Metadata = scaleP21SW76MetadataImage(t, repo.db, workspace)
-					got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
-					got.Installed = scaleP21SW98Installed(t, repo, workspace)
+					got.Business = businessRows(t, repo, workspace, issue.ID)
+					got.Metadata = metadataImage(t, repo.db, workspace)
+					got.Indexes = legacyDiscussionWriteIndexes(t, repo, workspace)
+					got.Events = newEvents(t, repo, workspace, prior)
+					got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
 					got.InstalledVia = got.Installed.Viewer.Via
 					if got.Installed.ViewerRole != nativeBefore.ViewerRole {
 						t.Fatal("ordinary writer persisted callback-only actor role")
@@ -515,7 +515,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 						expectedPrevious := aggregatePreviousValues(domain.Bootstrap{Issues: []domain.Issue{preimage}},
 							domain.Bootstrap{Issues: []domain.Issue{beforeCounts}}, issue.ID)
 						webhook := got.Webhooks[0].([]any)
-						if !reflect.DeepEqual(scaleP21SW63JSON(t, webhook[4]), scaleP21SW63JSON(t, expectedPrevious)) {
+						if !reflect.DeepEqual(discussionWriterJSON(t, webhook[4]), discussionWriterJSON(t, expectedPrevious)) {
 							t.Fatal("ordinary PreviousValues was calculated after refreshing resource counts")
 						}
 						realtime := got.Realtime[0].([]any)
@@ -581,14 +581,14 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 						// The bounded image must equal that SQL load; the two
 						// writers' images are not equated.
 						if bounded {
-							loaded := scaleP21SW98Installed(t, scaleP21IssuePersistenceView(t, f, true, true), workspace)
+							loaded := legacyDiscussionWriteInstalled(t, scaleIssuePersistenceView(t, f, true, true), workspace)
 							if !reflect.DeepEqual(installed, loaded) {
 								t.Fatalf("bounded image after the peer race differs from the SQL load: fields=%v", changedMetadataFields(loaded, installed))
 							}
 						}
 						got.Installed, got.InstalledVia = domain.Bootstrap{}, nil
 					}
-					outputs = append(outputs, scaleP21SW63JSON(t, got))
+					outputs = append(outputs, discussionWriterJSON(t, got))
 					installedOutputs = append(installedOutputs, got.Installed)
 					installedVia = append(installedVia, got.InstalledVia)
 					if bounded {
@@ -599,7 +599,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 								t.Fatal("closed ordinary response retained callback data")
 							}
 						}
-						if !reflect.DeepEqual(scaleP21SW98Installed(t, repo, workspace), installed) ||
+						if !reflect.DeepEqual(legacyDiscussionWriteInstalled(t, repo, workspace), installed) ||
 							repo.MetadataWorkUsedForTesting() != 0 || repo.WorkspaceMetadataDecodes() != 0 {
 							t.Fatal("ordinary response close damaged installed source or leaked/hydrated metadata")
 						}
@@ -611,7 +611,7 @@ func TestScaleP21SW98OrdinaryLegacyDiscussionDifferential(t *testing.T) {
 					t.Fatalf("ordinary literal/bounded differential: nativeFields=%v nativeViaEqual=%t first=%s",
 						changedMetadataFields(installedOutputs[0], installedOutputs[1]),
 						reflect.DeepEqual(installedVia[0], installedVia[1]),
-						scaleP21SW98FirstDiff(outputs[0], outputs[1], "$"))
+						firstDiff(outputs[0], outputs[1], "$"))
 				}
 				if test.failure == "" {
 					t.Logf("ordinary synchronous SQL reload=%t scenario=%s old=%d bounded=%d delta=%+d",

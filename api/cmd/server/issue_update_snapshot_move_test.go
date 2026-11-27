@@ -16,11 +16,11 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW214Member struct {
+type issueUpdateSnapshotMoveMember struct {
 	ID, Role, Status string
 }
 
-func scaleP21SW214ReloadSource(t *testing.T, f scaleP21IssueUpdateFixture, repo *store.SQLiteStore) {
+func issueUpdateSnapshotMoveReloadSource(t *testing.T, f scaleIssueUpdateFixture, repo *store.SQLiteStore) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	name := func() string {
@@ -89,7 +89,7 @@ func scaleP21SW214ReloadSource(t *testing.T, f scaleP21IssueUpdateFixture, repo 
 	}
 }
 
-func scaleP21SW214Apply(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) error {
+func issueUpdateSnapshotMoveApply(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) error {
 	changes, err := applyUpdate(data, issue, input)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func scaleP21SW214Apply(data *domain.Bootstrap, issue *domain.Issue, input domai
 	return nil
 }
 
-func scaleP21SW214Prepare(t *testing.T, f scaleP21IssueUpdateFixture) {
+func issueUpdateSnapshotMovePrepare(t *testing.T, f scaleIssueUpdateFixture) {
 	t.Helper()
 	owner, recipient := f.data.Viewer, f.principals[2].user
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -132,28 +132,28 @@ func scaleP21SW214Prepare(t *testing.T, f scaleP21IssueUpdateFixture) {
 	}
 }
 
-func TestScaleP21SW214IssueUpdateStoredMoveAudienceDifferential(t *testing.T) {
+func TestIssueUpdateStoredMoveAudienceDifferential(t *testing.T) {
 	for _, reload := range []bool{false, true} {
 		name := "installed"
 		if reload {
 			name = "canonical-reloaded"
 		}
-		t.Run(name, func(t *testing.T) { scaleP21SW214StoredMoveDifferential(t, reload) })
+		t.Run(name, func(t *testing.T) { storedMoveDifferential(t, reload) })
 	}
 }
 
-func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
+func storedMoveDifferential(t *testing.T, reload bool) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, recipient := f.data.Viewer, f.principals[2].user
-	test := scaleP21IssueUpdateCase{
-		opts:  scaleP21TeamMoveOptions{triageTarget: true, project: "tm-p-cross"},
-		setup: func(t *testing.T) { scaleP21SW214Prepare(t, f) },
+	test := scaleIssueUpdateCase{
+		opts:  scaleTeamMoveOptions{triageTarget: true, project: "tm-p-cross"},
+		setup: func(t *testing.T) { issueUpdateSnapshotMovePrepare(t, f) },
 	}
 	prepare := f.prepare(test)
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		prepare(t)
 		if reload {
 			if err := f.repository.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
@@ -161,7 +161,7 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 			}
 		}
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	for _, mode := range []struct {
 		name          string
 		actor, marker bool
@@ -173,7 +173,7 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 		t.Run(mode.name, func(t *testing.T) {
 			outcomes := f.differential(t, mode.name, func(service *server) *httptest.ResponseRecorder {
 				if reload {
-					scaleP21SW214ReloadSource(t, f, service.store)
+					issueUpdateSnapshotMoveReloadSource(t, f, service.store)
 				}
 				ctx := t.Context()
 				if mode.actor {
@@ -192,7 +192,7 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 				}
 				team := "tm-triage"
 				input := domain.IssueUpdateInput{TeamID: &team}
-				var captured []scaleP21SW214Member
+				var captured []issueUpdateSnapshotMoveMember
 				var capturedTeams []domain.TeamMember
 				next := 0
 				updated, err := service.store.UpdateIssueRecord(ctx, f.data.Workspace.URLKey, f.triage.ID, nil,
@@ -201,7 +201,7 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 						captured, capturedTeams = nil, nil
 						for _, member := range data.Members {
 							if member.User.ID == owner.ID || member.User.ID == recipient.ID {
-								captured = append(captured, scaleP21SW214Member{member.User.ID, member.Role, member.Status})
+								captured = append(captured, issueUpdateSnapshotMoveMember{member.User.ID, member.Role, member.Status})
 							}
 						}
 						for _, member := range data.TeamMembers {
@@ -209,7 +209,7 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 								capturedTeams = append(capturedTeams, member)
 							}
 						}
-						return scaleP21SW214Apply(data, issue, input)
+						return issueUpdateSnapshotMoveApply(data, issue, input)
 					})
 				w := httptest.NewRecorder()
 				if err != nil {
@@ -220,10 +220,10 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 				return w
 			})
 			var result struct {
-				Issue   domain.Issue          `json:"issue"`
-				Members []scaleP21SW214Member `json:"members"`
-				Teams   []domain.TeamMember   `json:"teams"`
-				Next    int                   `json:"next"`
+				Issue   domain.Issue                    `json:"issue"`
+				Members []issueUpdateSnapshotMoveMember `json:"members"`
+				Teams   []domain.TeamMember             `json:"teams"`
+				Next    int                             `json:"next"`
 			}
 			if err := json.Unmarshal(outcomes[0].Body, &result); err != nil {
 				t.Fatal(err)
@@ -237,10 +237,10 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 				!slices.ContainsFunc(result.Teams, func(member domain.TeamMember) bool { return member.UserID == owner.ID && member.TeamID == "tm-triage" }) {
 				t.Fatal("fixture did not preserve stale stored member snapshots", result.Members, result.Teams)
 			}
-			if result.Issue.State.ID == "tmt-triage" || scaleP21IssueUpdateNotifications(outcomes[0])[recipient.ID] {
+			if result.Issue.State.ID == "tmt-triage" || scaleIssueUpdateNotifications(outcomes[0])[recipient.ID] {
 				t.Fatal("legacy did not use stored triage membership and first suspended-member precedence")
 			}
-			sequence := scaleP21TeamMoveInt(t, outcomes[0].State.Sequence[0][0])
+			sequence := scaleTeamMoveInt(t, outcomes[0].State.Sequence[0][0])
 			if !mode.marker && sequence != f.sequence || mode.marker && sequence != int64(result.Issue.Number) {
 				t.Fatal("unlocked/renumbered move changed sequence semantics", sequence, mode.marker)
 			}
@@ -248,26 +248,26 @@ func scaleP21SW214StoredMoveDifferential(t *testing.T, reload bool) {
 	}
 }
 
-func TestScaleP21SW214IssueUpdateStalePeerRouteDifferential(t *testing.T) {
+func TestIssueUpdateStalePeerRouteDifferential(t *testing.T) {
 	for _, reload := range []bool{false, true} {
 		name := "installed"
 		if reload {
 			name = "canonical-reloaded"
 		}
-		t.Run(name, func(t *testing.T) { scaleP21SW214StalePeerRouteDifferential(t, reload) })
+		t.Run(name, func(t *testing.T) { stalePeerRouteDifferential(t, reload) })
 	}
 }
 
-func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
+func stalePeerRouteDifferential(t *testing.T, reload bool) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	prepare := f.prepare(scaleP21IssueUpdateCase{
-		opts:  scaleP21TeamMoveOptions{project: "tm-p-cross"},
-		setup: func(t *testing.T) { scaleP21SW214Prepare(t, f) },
+	f := scaleIssueUpdateSetup(t)
+	prepare := f.prepare(scaleIssueUpdateCase{
+		opts:  scaleTeamMoveOptions{project: "tm-p-cross"},
+		setup: func(t *testing.T) { issueUpdateSnapshotMovePrepare(t, f) },
 	})
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		prepare(t)
 		if reload {
 			if err := f.repository.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
@@ -275,13 +275,13 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 			}
 		}
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	owner := f.data.Viewer
 	// A peer can leave the literal installed documents stale relative to SQL.
 	// Compare both images to their corresponding oracle, without equating them.
-	outcomes := f.scaleP21TriageWriterFixture.differential(t, "stale-peer-after-handler-read", func(service *server) *httptest.ResponseRecorder {
+	outcomes := f.scaleTriageWriterFixture.differential(t, "stale-peer-after-handler-read", func(service *server) *httptest.ResponseRecorder {
 		if reload {
-			scaleP21SW214ReloadSource(t, f, service.store)
+			issueUpdateSnapshotMoveReloadSource(t, f, service.store)
 		}
 		priorEvents := map[any][]any{}
 		for _, event := range f.state(t).Events {
@@ -326,7 +326,9 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 			input := domain.IssueUpdateInput{TeamID: &peerTeam}
 			updated, err := peer.UpdateIssueRecord(store.WithIssueRenumbering(store.ContextWithActor(t.Context(), owner)),
 				f.data.Workspace.URLKey, f.triage.ID, nil, store.IssueMutationScope{Payload: input},
-				func(data *domain.Bootstrap, issue *domain.Issue) error { return scaleP21SW214Apply(data, issue, input) })
+				func(data *domain.Bootstrap, issue *domain.Issue) error {
+					return issueUpdateSnapshotMoveApply(data, issue, input)
+				})
 			if err != nil || updated.Team.ID != peerTeam || updated.Number != peerNumber {
 				t.Fatal("same-version peer did not move the row", updated, err)
 			}
@@ -357,7 +359,7 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 			// copy at an unknown revision. Compare the bounded image to the
 			// SQL load instead of equating the two writers' images.
 			if service.store.BoundedMetadataEnabled() && !bytes.Equal(installed, reloadedImage) {
-				t.Fatal("bounded image after the peer race differs from the SQL load", scaleP21M2Diff(string(installed), string(reloadedImage)))
+				t.Fatal("bounded image after the peer race differs from the SQL load", policyFirstDifference(string(installed), string(reloadedImage)))
 			}
 			installed = nil
 		}
@@ -382,7 +384,7 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 		result := httptest.NewRecorder()
 		writeJSON(result, w.Code, struct {
 			Body                json.RawMessage
-			State               scaleP21IssueUpdateState
+			State               scaleIssueUpdateState
 			Installed, Reloaded json.RawMessage
 		}{json.RawMessage(w.Body.Bytes()), state, installed, reloadedImage})
 		return result
@@ -403,7 +405,7 @@ func scaleP21SW214StalePeerRouteDifferential(t *testing.T, reload bool) {
 		issue.Title != "SW214 stale same-team request" || !slices.Contains(issue.PreviousIdentifiers, "TMP-"+strconv.Itoa(int(f.sequence)+100)) {
 		t.Fatal("legacy stale request did not retain its unlocked snapshot move", outcomes[0].Code, issue, string(outcomes[0].Body))
 	}
-	if sequence := scaleP21TeamMoveInt(t, snapshot.State.Sequence[0][0]); sequence != f.sequence+100 {
+	if sequence := scaleTeamMoveInt(t, snapshot.State.Sequence[0][0]); sequence != f.sequence+100 {
 		t.Fatal("incoming stale request advanced the peer's sequence", sequence)
 	}
 }

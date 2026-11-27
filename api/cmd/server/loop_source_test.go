@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW18LoopSettingsSourceHold(t *testing.T) {
+func TestLoopSettingsSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		appID := idgen.New("sw18-loop-app-")
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())
@@ -109,12 +109,12 @@ func TestScaleP21SW18LoopSettingsSourceHold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW18LoopVersionsSourceHold(t *testing.T) {
+func TestLoopVersionsSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("sw18-loop-version-")
 		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		first := domain.LoopVersion{

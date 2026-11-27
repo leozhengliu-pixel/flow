@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW20TeamPurgeMaxWork = 64 << 20
+const teamPurgeMaxWork = 64 << 20
 
 // ExpiredTeamPolicyRead owns the ordered due IDs and their work allowance.
 // Context carries that allowance into sequential downstream processing; a
@@ -43,7 +43,7 @@ func (s *SQLiteStore) BeginExpiredTeamPolicyRead(ctx context.Context, workspace 
 			workspace = s.lastWorkspaceKey
 		}
 		_, found := s.workspaces[workspace]
-		cost, _, err := scaleP21SW20TeamPurgeCost(ctx, s.workspaces[workspace].Teams, now, window)
+		cost, _, err := teamPurgeCost(ctx, s.workspaces[workspace].Teams, now, window)
 		s.mu.RUnlock()
 		if !found {
 			return nil, false, nil
@@ -65,7 +65,7 @@ func (s *SQLiteStore) BeginExpiredTeamPolicyRead(ctx context.Context, workspace 
 		}
 		s.mu.RLock()
 		source, found := s.workspaces[workspace]
-		current, currentCount, err := scaleP21SW20TeamPurgeCost(admitted, source.Teams, now, window)
+		current, currentCount, err := teamPurgeCost(admitted, source.Teams, now, window)
 		if !found || err != nil || current > cost {
 			s.mu.RUnlock()
 			release()
@@ -89,7 +89,7 @@ func (s *SQLiteStore) BeginExpiredTeamPolicyRead(ctx context.Context, workspace 
 	}
 }
 
-func scaleP21SW20TeamPurgeCost(ctx context.Context, teams []domain.Team, now time.Time, window time.Duration) (int, int, error) {
+func teamPurgeCost(ctx context.Context, teams []domain.Team, now time.Time, window time.Duration) (int, int, error) {
 	cost := int64(2<<20) + int64(unsafe.Sizeof(ExpiredTeamPolicyRead{}))
 	count := 0
 	for _, team := range teams {
@@ -101,7 +101,7 @@ func scaleP21SW20TeamPurgeCost(ctx context.Context, teams []domain.Team, now tim
 		}
 		count++
 		cost += int64(len(team.ID)) + int64(unsafe.Sizeof("")) + 64
-		if cost > scaleP21SW20TeamPurgeMaxWork {
+		if cost > teamPurgeMaxWork {
 			return 0, 0, ErrMetadataWorkBudget
 		}
 	}

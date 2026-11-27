@@ -15,19 +15,19 @@ import (
 
 // The transfer fixture is opt-in; normal and shared-database runs use the
 // smaller differential fixtures in coverage_enable_test.go.
-func TestScaleP19EnableTransferMeasurement(t *testing.T) {
+func TestScaleEnableTransferMeasurement(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P19_MEASURE") == "" {
 		t.Skip("set FLOW_SCALE_P19_MEASURE to measure the 23,210-project fixture")
 	}
-	scaleP19Options(t)
-	config := scaleP03DatabaseConfig(t)
+	scaleOptions(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	config.MaxTransactionBytes = 512 << 20
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	err = repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects, data.Initiatives = nil, nil
 		now := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
@@ -56,16 +56,16 @@ func TestScaleP19EnableTransferMeasurement(t *testing.T) {
 		Milliseconds float64 `json:"milliseconds"`
 	}
 	pairs := [][]measurement{}
-	projectQuery := scaleP19ProjectQuery()
+	projectQuery := scaleProjectQuery()
 	projectQuery.Display.Layout = "timeline"
 	projectQuery.Display.Ordering = "Name"
-	initiativeQuery := scaleP19ProjectQuery()
+	initiativeQuery := scaleProjectQuery()
 	initiativeQuery.View = "active"
 	for pair := range 3 {
 		rows := []measurement{}
-		for _, path := range []string{"/api/bootstrap?issues=none", "/api/projects/p19-00000/updates", "/api/sync/manifest?surface=projects-page", scaleP19Path("projects", projectQuery, "", 100), scaleP19Path("initiatives", initiativeQuery, "", 100), "/api/projects/p19-00000/updates?window=1&limit=20"} {
+		for _, path := range []string{"/api/bootstrap?issues=none", "/api/projects/p19-00000/updates", "/api/sync/manifest?surface=projects-page", scalePath("projects", projectQuery, "", 100), scalePath("initiatives", initiativeQuery, "", 100), "/api/projects/p19-00000/updates?window=1&limit=20"} {
 			start := time.Now()
-			w := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, f.data.Workspace.URLKey)
+			w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, f.data.Workspace.URLKey)
 			if w.Code != http.StatusOK {
 				t.Fatalf("%s: status %d: %.400s", path, w.Code, w.Body.String())
 			}

@@ -5,7 +5,7 @@
     "allowManualCustomerEdit": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Reads only complete workspaceSettings; original API-key bypass and manual-edit feature check unchanged. TestScaleP21M2PolicyDifferential compares all principal/key classes and oversized unrelated metadata.",
+      "reason": "Reads only complete workspaceSettings; original API-key bypass and manual-edit feature check unchanged. TestScalePolicyDifferential compares all principal/key classes and oversized unrelated metadata.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -13,7 +13,7 @@
     "createCustomerTaxonomy": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending exact installed logical taxonomy source and bounded creator: validates all active names, removes all archived same-name rows and computes global append position; canonical SQL changes accepted warm NUL duplicate semantics. TestScaleP21SW22CustomerTaxonomySourceHold proves the source mismatch; TestScaleP21SW22CustomerTaxonomyAtomicScopeHold proves legacy creation after 75 options versus scoped pre-callback rejection.",
+      "reason": "Pending exact installed logical taxonomy source and bounded creator: validates all active names, removes all archived same-name rows and computes global append position; canonical SQL changes accepted warm NUL duplicate semantics. TestCustomerTaxonomySourceHold proves the source mismatch; TestCustomerTaxonomyAtomicScopeHold proves legacy creation after 75 options versus scoped pre-callback rejection.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -28,7 +28,7 @@
     "deleteCustomerTaxonomy": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending exact logical taxonomy source plus atomic streamed customer reassignment writer. Deleting an active status/tier can rewrite arbitrarily many customers; complete scoped selection rejects legal >50-customer edits before callback. TestScaleP21SW22CustomerTaxonomyAtomicScopeHold verifies all 75 legacy customer effects across rename/archive/restore/delete.",
+      "reason": "Pending exact logical taxonomy source plus atomic streamed customer reassignment writer. Deleting an active status/tier can rewrite arbitrarily many customers; complete scoped selection rejects legal >50-customer edits before callback. TestCustomerTaxonomyAtomicScopeHold verifies all 75 legacy customer effects across rename/archive/restore/delete.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -43,7 +43,7 @@
     "listCustomerTaxonomy": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending installed logical nonpolicy collection read with bounded response spool. workspaceData reads installed taxonomy including load defaults and accepted warm values; canonical SQL strips accepted NULs. TestScaleP21SW22CustomerTaxonomySourceHold verifies exact legacy values across admin/member/guest and session/unrestricted/selected-empty/selected-set credentials.",
+      "reason": "Pending installed logical nonpolicy collection read with bounded response spool. workspaceData reads installed taxonomy including load defaults and accepted warm values; canonical SQL strips accepted NULs. TestCustomerTaxonomySourceHold verifies exact legacy values across admin/member/guest and session/unrestricted/selected-empty/selected-set credentials.",
       "accessors": [
         "workspaceData"
       ],
@@ -56,7 +56,7 @@
     "updateCustomerTaxonomy": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending exact logical taxonomy source plus atomic streamed bulk customer writer. Rename/archive/restore scans every customer and can change >50 rows in one commit; do not truncate, split publication or reject previously legal operation through complete scoped fields. TestScaleP21SW22CustomerTaxonomyAtomicScopeHold proves 75-row legacy effects and pre-callback scoped rejection.",
+      "reason": "Pending exact logical taxonomy source plus atomic streamed bulk customer writer. Rename/archive/restore scans every customer and can change >50 rows in one commit; do not truncate, split publication or reject previously legal operation through complete scoped fields. TestCustomerTaxonomyAtomicScopeHold proves 75-row legacy effects and pre-callback scoped rejection.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

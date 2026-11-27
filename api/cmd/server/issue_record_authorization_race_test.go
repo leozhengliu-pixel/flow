@@ -22,10 +22,10 @@ func TestBoundedSQLiteIssueAuthorizationPolicyRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	team := f.data.Teams[0].ID
-	_, member := scaleP03Join(t, f, "Issue writer", "issue-policy-race@example.test", "member", team)
+	_, member := resourceAccessScaleJoin(t, f, "Issue writer", "issue-policy-race@example.test", "member", team)
 	issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 		map[string]string{"title": "Policy race", "teamId": team}, workspace, http.StatusCreated)
 	if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "teams", "teamSettings"), workspace, "team.updated", team, nil, func(data *domain.Bootstrap) error {

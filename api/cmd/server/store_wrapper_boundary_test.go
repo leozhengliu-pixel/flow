@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// The SW286 guard closes the seven store compatibility read wrappers
+// The store wrapper guard closes the seven store compatibility read wrappers
 // (Bootstrap, BootstrapFor, BootstrapForContext, BootstrapForUser,
 // WorkspaceMetadata, WorkspaceMetadataForRead, WorkspaceMetadataFields) by
 // reachability across cmd/server and internal/store together. The wrappers
@@ -69,7 +69,7 @@ import (
 //
 // For each wrapper the guard walks every flag-on reference backwards from
 // the wrapper, stopping at route registrations (a route's temperature is its
-// own inventory classification) and at the pinned scaleP21SW286Boundaries.
+// own inventory classification) and at the pinned storeWrapperBoundaryBoundaries.
 // Every inventory consumer it meets whose temperature is hot is a HOT
 // reacher, except the pinned relays (helpers judged by their callers), the
 // closed consumers (nothing references them with the flag on) and unrouted
@@ -83,16 +83,16 @@ import (
 // shrinks as the migrations land. A wrapper is reviewed in the inventory
 // exactly when no allow-list entry names it.
 
-var scaleP21SW286Root = "."
+var storeWrapperBoundaryRoot = "."
 
-type scaleP21SW286Func struct {
+type storeWrapperBoundaryFunc struct {
 	key, pkg, file string
 	decl           *ast.FuncDecl
 	imports        map[string]bool // the file's import names
 	scope          *types.Scope    // the package scope
 }
 
-type scaleP21SW286Ref struct {
+type storeWrapperBoundaryRef struct {
 	from, to, file string
 	line           int
 	kind           string // call, value or route
@@ -103,14 +103,14 @@ type scaleP21SW286Ref struct {
 	pattern        string
 }
 
-type scaleP21SW286Graph struct {
+type storeWrapperBoundaryGraph struct {
 	fset      *token.FileSet
 	info      *types.Info
 	pkgs      map[*types.Package]string // package -> server or store
-	funcs     map[string]*scaleP21SW286Func
+	funcs     map[string]*storeWrapperBoundaryFunc
 	byName    map[string][]string
 	named     []*types.Named
-	refs      []scaleP21SW286Ref
+	refs      []storeWrapperBoundaryRef
 	into      map[string][]int
 	pkgLevel  map[string][]string
 	onTrue    map[string]bool
@@ -127,17 +127,17 @@ type scaleP21SW286Graph struct {
 
 // enter makes fn the function whose identifiers are being resolved and
 // returns the restore of the previous one.
-func (g *scaleP21SW286Graph) enter(fn *scaleP21SW286Func) func() {
+func (g *storeWrapperBoundaryGraph) enter(fn *storeWrapperBoundaryFunc) func() {
 	imports, scope := g.imports, g.scope
 	g.imports, g.scope = fn.imports, fn.scope
 	return func() { g.imports, g.scope = imports, scope }
 }
 
-type scaleP21SW286Importer struct {
+type storeWrapperBoundaryImporter struct {
 	store *types.Package
 }
 
-func (importer scaleP21SW286Importer) Import(path string) (*types.Package, error) {
+func (importer storeWrapperBoundaryImporter) Import(path string) (*types.Package, error) {
 	if path == "flow/api/internal/store" && importer.store != nil {
 		return importer.store, nil
 	}
@@ -146,7 +146,7 @@ func (importer scaleP21SW286Importer) Import(path string) (*types.Package, error
 	return imported, nil
 }
 
-func scaleP21SW286Source(set *token.FileSet, node ast.Node) string {
+func storeWrapperBoundarySource(set *token.FileSet, node ast.Node) string {
 	var text bytes.Buffer
 	if err := format.Node(&text, set, node); err != nil {
 		return fmt.Sprintf("<%T>", node)
@@ -156,7 +156,7 @@ func scaleP21SW286Source(set *token.FileSet, node ast.Node) string {
 
 // key names a package function as server/name or store/name and a method as
 // server/Type.name or store/Type.name. Interface methods have no key.
-func (g *scaleP21SW286Graph) key(fn *types.Func) string {
+func (g *storeWrapperBoundaryGraph) key(fn *types.Func) string {
 	if fn == nil {
 		return ""
 	}
@@ -183,7 +183,7 @@ func (g *scaleP21SW286Graph) key(fn *types.Func) string {
 	return ""
 }
 
-func (g *scaleP21SW286Graph) parse(t *testing.T, dir string) []*ast.File {
+func (g *storeWrapperBoundaryGraph) parse(t *testing.T, dir string) []*ast.File {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
@@ -209,22 +209,22 @@ func (g *scaleP21SW286Graph) parse(t *testing.T, dir string) []*ast.File {
 	return files
 }
 
-func scaleP21SW286Load(t *testing.T) *scaleP21SW286Graph {
+func storeWrapperBoundaryLoad(t *testing.T) *storeWrapperBoundaryGraph {
 	t.Helper()
-	graph := &scaleP21SW286Graph{
-		fset: token.NewFileSet(), pkgs: map[*types.Package]string{}, funcs: map[string]*scaleP21SW286Func{},
+	graph := &storeWrapperBoundaryGraph{
+		fset: token.NewFileSet(), pkgs: map[*types.Package]string{}, funcs: map[string]*storeWrapperBoundaryFunc{},
 		byName: map[string][]string{}, into: map[string][]int{}, pkgLevel: map[string][]string{},
 		onTrue: map[string]bool{}, onTrueRun: map[string]bool{}, flagVars: map[types.Object][]types.Object{},
 		prepared: map[string]bool{}, single: map[string]map[types.Object]int{},
 		info: &types.Info{Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
 			Selections: map[*ast.SelectorExpr]*types.Selection{}, Types: map[ast.Expr]types.TypeAndValue{}},
 	}
-	storeFiles := graph.parse(t, filepath.Join(scaleP21SW286Root, "../../internal/store"))
-	storeConfig := types.Config{Importer: scaleP21SW286Importer{}, Error: func(error) {}}
+	storeFiles := graph.parse(t, filepath.Join(storeWrapperBoundaryRoot, "../../internal/store"))
+	storeConfig := types.Config{Importer: storeWrapperBoundaryImporter{}, Error: func(error) {}}
 	storePackage, _ := storeConfig.Check("flow/api/internal/store", graph.fset, storeFiles, graph.info)
 	graph.pkgs[storePackage] = "store"
-	serverFiles := graph.parse(t, scaleP21SW286Root)
-	serverConfig := types.Config{Importer: scaleP21SW286Importer{store: storePackage}, Error: func(error) {}}
+	serverFiles := graph.parse(t, storeWrapperBoundaryRoot)
+	serverConfig := types.Config{Importer: storeWrapperBoundaryImporter{store: storePackage}, Error: func(error) {}}
 	serverPackage, _ := serverConfig.Check("main", graph.fset, serverFiles, graph.info)
 	graph.pkgs[serverPackage] = "server"
 	for _, pkg := range []*types.Package{storePackage, serverPackage} {
@@ -259,7 +259,7 @@ func scaleP21SW286Load(t *testing.T) *scaleP21SW286Graph {
 				if key == "" || graph.funcs[key] != nil {
 					t.Fatalf("function %s in %s/%s has no unique key %q", fn.Name.Name, pkg, name, key)
 				}
-				graph.funcs[key] = &scaleP21SW286Func{key: key, pkg: pkg, file: name, decl: fn, imports: imports, scope: scopes[pkg]}
+				graph.funcs[key] = &storeWrapperBoundaryFunc{key: key, pkg: pkg, file: name, decl: fn, imports: imports, scope: scopes[pkg]}
 				if fn.Recv != nil {
 					graph.byName[fn.Name.Name] = append(graph.byName[fn.Name.Name], key)
 				}
@@ -291,7 +291,7 @@ func scaleP21SW286Load(t *testing.T) *scaleP21SW286Graph {
 	return graph
 }
 
-func (g *scaleP21SW286Graph) declKey(pkg, file string, fn *ast.FuncDecl) string {
+func (g *storeWrapperBoundaryGraph) declKey(pkg, file string, fn *ast.FuncDecl) string {
 	if fn.Name.Name == "init" && fn.Recv == nil {
 		return pkg + "/init@" + file
 	}
@@ -299,7 +299,7 @@ func (g *scaleP21SW286Graph) declKey(pkg, file string, fn *ast.FuncDecl) string 
 	return g.key(object)
 }
 
-func scaleP21SW286RouteCall(node ast.Node) bool {
+func storeWrapperBoundaryRouteCall(node ast.Node) bool {
 	call, ok := node.(*ast.CallExpr)
 	if !ok {
 		return false
@@ -310,7 +310,7 @@ func scaleP21SW286RouteCall(node ast.Node) bool {
 
 // implementers returns the package methods called method on every package
 // type whose method set names every method of iface.
-func (g *scaleP21SW286Graph) implementers(iface *types.Interface, method string) []string {
+func (g *storeWrapperBoundaryGraph) implementers(iface *types.Interface, method string) []string {
 	var names []string
 	for index := 0; index < iface.NumMethods(); index++ {
 		names = append(names, iface.Method(index).Name())
@@ -342,14 +342,14 @@ func (g *scaleP21SW286Graph) implementers(iface *types.Interface, method string)
 	return result
 }
 
-func (g *scaleP21SW286Graph) targets(node ast.Node, parent ast.Node) []string {
+func (g *storeWrapperBoundaryGraph) targets(node ast.Node, parent ast.Node) []string {
 	result, _ := g.resolve(node, parent)
 	return result
 }
 
 // resolve also reports whether the targets come from the conservative
 // by-name fallback for an unresolved receiver.
-func (g *scaleP21SW286Graph) resolve(node ast.Node, parent ast.Node) ([]string, bool) {
+func (g *storeWrapperBoundaryGraph) resolve(node ast.Node, parent ast.Node) ([]string, bool) {
 	switch expression := node.(type) {
 	case *ast.SelectorExpr:
 		if selection := g.info.Selections[expression]; selection != nil {
@@ -418,7 +418,7 @@ func (g *scaleP21SW286Graph) resolve(node ast.Node, parent ast.Node) ([]string, 
 	return nil, false
 }
 
-func (g *scaleP21SW286Graph) collect(owner *scaleP21SW286Func) {
+func (g *storeWrapperBoundaryGraph) collect(owner *storeWrapperBoundaryFunc) {
 	defer g.enter(owner)()
 	g.prepare(owner)
 	var ancestors []ast.Node
@@ -440,13 +440,13 @@ func (g *scaleP21SW286Graph) collect(owner *scaleP21SW286Func) {
 			kind = "call"
 		}
 		for index, ancestor := range ancestors[:len(ancestors)-1] {
-			if scaleP21SW286RouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
+			if storeWrapperBoundaryRouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
 				kind = "route"
 			}
 		}
 		pattern := ""
 		for index, ancestor := range ancestors[:len(ancestors)-1] {
-			if scaleP21SW286RouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
+			if storeWrapperBoundaryRouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
 				if literal, ok := ancestor.(*ast.CallExpr).Args[0].(*ast.BasicLit); ok {
 					pattern, _ = strconv.Unquote(literal.Value)
 				}
@@ -454,11 +454,11 @@ func (g *scaleP21SW286Graph) collect(owner *scaleP21SW286Func) {
 		}
 		offOnly := g.offOnly(ancestors) || kind == "value" && g.rebound(owner, ancestors)
 		async := backgroundReference(ancestors)
-		authOnly := scaleP21SW286AuthOnly(ancestors)
+		authOnly := storeWrapperBoundaryAuthOnly(ancestors)
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {
 			g.into[target] = append(g.into[target], len(g.refs))
-			g.refs = append(g.refs, scaleP21SW286Ref{from: owner.key, to: target, file: owner.pkg + "/" + owner.file, line: position.Line,
+			g.refs = append(g.refs, storeWrapperBoundaryRef{from: owner.key, to: target, file: owner.pkg + "/" + owner.file, line: position.Line,
 				kind: kind, offOnly: offOnly, async: async, byName: byName, authOnly: authOnly, pattern: pattern})
 		}
 		return true
@@ -492,7 +492,7 @@ func backgroundReference(ancestors []ast.Node) bool {
 //	}
 //
 // The local must have exactly these two assignments.
-func (g *scaleP21SW286Graph) rebound(owner *scaleP21SW286Func, ancestors []ast.Node) bool {
+func (g *storeWrapperBoundaryGraph) rebound(owner *storeWrapperBoundaryFunc, ancestors []ast.Node) bool {
 	if len(ancestors) < 3 {
 		return false
 	}
@@ -534,7 +534,7 @@ func (g *scaleP21SW286Graph) rebound(owner *scaleP21SW286Func, ancestors []ast.N
 //     which is the flag wherever every one of those locals is known true;
 //   - a result of a call whose every flag-on return yields true there
 //     (metadata, handled, err := s.chatCardMetadata(...)).
-func (g *scaleP21SW286Graph) prepare(fn *scaleP21SW286Func) {
+func (g *storeWrapperBoundaryGraph) prepare(fn *storeWrapperBoundaryFunc) {
 	if fn == nil || g.prepared[fn.key] {
 		return
 	}
@@ -607,7 +607,7 @@ func (g *scaleP21SW286Graph) prepare(fn *scaleP21SW286Func) {
 // conditionalFlag reports an expression that is true whenever the flag is on
 // and every returned local is true: a conjunction of plain locals and at
 // least one unconditional flag expression.
-func (g *scaleP21SW286Graph) conditionalFlag(expression ast.Expr) ([]types.Object, bool) {
+func (g *storeWrapperBoundaryGraph) conditionalFlag(expression ast.Expr) ([]types.Object, bool) {
 	if g.onImplied(expression, nil) {
 		return nil, true
 	}
@@ -640,7 +640,7 @@ func (g *scaleP21SW286Graph) conditionalFlag(expression ast.Expr) ([]types.Objec
 	return nil, false
 }
 
-func (g *scaleP21SW286Graph) flagReceiver(expression ast.Expr) bool {
+func (g *storeWrapperBoundaryGraph) flagReceiver(expression ast.Expr) bool {
 	switch receiver := expression.(type) {
 	case *ast.SelectorExpr:
 		return receiver.Sel.Name == "store"
@@ -660,7 +660,7 @@ func (g *scaleP21SW286Graph) flagReceiver(expression ast.Expr) bool {
 	return false
 }
 
-func (g *scaleP21SW286Graph) flagCall(expression ast.Expr) bool {
+func (g *storeWrapperBoundaryGraph) flagCall(expression ast.Expr) bool {
 	call, ok := expression.(*ast.CallExpr)
 	if !ok || len(call.Args) != 0 {
 		return false
@@ -671,7 +671,7 @@ func (g *scaleP21SW286Graph) flagCall(expression ast.Expr) bool {
 
 // residency reports s.metadataResidency compared with nil inside the store:
 // on is true for !=, false for ==.
-func (g *scaleP21SW286Graph) residency(expression *ast.BinaryExpr) (on, ok bool) {
+func (g *storeWrapperBoundaryGraph) residency(expression *ast.BinaryExpr) (on, ok bool) {
 	if expression.Op != token.NEQ && expression.Op != token.EQL {
 		return false, false
 	}
@@ -685,7 +685,7 @@ func (g *scaleP21SW286Graph) residency(expression *ast.BinaryExpr) (on, ok bool)
 
 // onImplied reports whether expression is true whenever the flag is on, given
 // the locals known true at that point.
-func (g *scaleP21SW286Graph) onImplied(expression ast.Expr, known map[types.Object]bool) bool {
+func (g *storeWrapperBoundaryGraph) onImplied(expression ast.Expr, known map[types.Object]bool) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.onImplied(value.X, known)
@@ -715,7 +715,7 @@ func (g *scaleP21SW286Graph) onImplied(expression ast.Expr, known map[types.Obje
 }
 
 // offImplied reports whether expression is false whenever the flag is on.
-func (g *scaleP21SW286Graph) offImplied(expression ast.Expr, known map[types.Object]bool) bool {
+func (g *storeWrapperBoundaryGraph) offImplied(expression ast.Expr, known map[types.Object]bool) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.offImplied(value.X, known)
@@ -738,7 +738,7 @@ func (g *scaleP21SW286Graph) offImplied(expression ast.Expr, known map[types.Obj
 // resultOnTrue reports whether result index of the arity-result function key
 // is the literal true in every return statement that can run with the flag
 // on (there is at least one, and no naked return).
-func (g *scaleP21SW286Graph) resultOnTrue(key string, index, arity int) bool {
+func (g *storeWrapperBoundaryGraph) resultOnTrue(key string, index, arity int) bool {
 	memo := fmt.Sprintf("%s#%d/%d", key, index, arity)
 	if done, ok := g.onTrue[memo]; ok {
 		return done
@@ -784,7 +784,7 @@ func (g *scaleP21SW286Graph) resultOnTrue(key string, index, arity int) bool {
 	return result
 }
 
-func scaleP21SW286Terminates(body *ast.BlockStmt) bool {
+func storeWrapperBoundaryTerminates(body *ast.BlockStmt) bool {
 	if len(body.List) == 0 {
 		return false
 	}
@@ -809,7 +809,7 @@ func scaleP21SW286Terminates(body *ast.BlockStmt) bool {
 // the flag on. ancestors[0] is the function body. Conditions are evaluated
 // from the outside in, each with the locals known true by the then-branches
 // enclosing it.
-func (g *scaleP21SW286Graph) offOnly(ancestors []ast.Node) bool {
+func (g *storeWrapperBoundaryGraph) offOnly(ancestors []ast.Node) bool {
 	known := map[types.Object]bool{}
 	for index := 0; index < len(ancestors)-1; index++ {
 		child := ancestors[index+1]
@@ -847,7 +847,7 @@ func (g *scaleP21SW286Graph) offOnly(ancestors []ast.Node) bool {
 
 // withConjuncts adds the plain single-assignment locals that are top-level
 // conjuncts of a then-branch condition.
-func (g *scaleP21SW286Graph) withConjuncts(known map[types.Object]bool, condition ast.Expr) map[types.Object]bool {
+func (g *storeWrapperBoundaryGraph) withConjuncts(known map[types.Object]bool, condition ast.Expr) map[types.Object]bool {
 	var locals []types.Object
 	var walk func(ast.Expr)
 	walk = func(expression ast.Expr) {
@@ -876,30 +876,30 @@ func (g *scaleP21SW286Graph) withConjuncts(known map[types.Object]bool, conditio
 	return result
 }
 
-func (g *scaleP21SW286Graph) dominatedByOnReturn(list []ast.Stmt, child ast.Node, known map[types.Object]bool) bool {
+func (g *storeWrapperBoundaryGraph) dominatedByOnReturn(list []ast.Stmt, child ast.Node, known map[types.Object]bool) bool {
 	for _, statement := range list {
 		if ast.Node(statement) == child {
 			return false
 		}
 		branch, ok := statement.(*ast.IfStmt)
-		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond, known) && scaleP21SW286Terminates(branch.Body) {
+		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond, known) && storeWrapperBoundaryTerminates(branch.Body) {
 			return true
 		}
 	}
 	return false
 }
 
-type scaleP21SW286Review struct {
+type storeWrapperBoundaryReview struct {
 	Status, Temperature, TemperatureReason, Reason string
 }
 
-// scaleP21SW286Inventory reads both inventories keyed server/<file>:<name>
+// storeWrapperBoundaryInventory reads both inventories keyed server/<file>:<name>
 // and store/<file>:<name>.
-func scaleP21SW286Inventory(t *testing.T) map[string]scaleP21SW286Review {
+func storeWrapperBoundaryInventory(t *testing.T) map[string]storeWrapperBoundaryReview {
 	t.Helper()
-	result := map[string]scaleP21SW286Review{}
+	result := map[string]storeWrapperBoundaryReview{}
 	for _, pkg := range []string{"server", "store"} {
-		paths, err := filepath.Glob(filepath.Join(scaleP21SW286Root, "../../internal/store/metadata_inventory", pkg, "*.json"))
+		paths, err := filepath.Glob(filepath.Join(storeWrapperBoundaryRoot, "../../internal/store/metadata_inventory", pkg, "*.json"))
 		if err != nil || len(paths) == 0 {
 			t.Fatalf("%s inventory missing: %v", pkg, err)
 		}
@@ -909,7 +909,7 @@ func scaleP21SW286Inventory(t *testing.T) map[string]scaleP21SW286Review {
 				t.Fatal(err)
 			}
 			var file struct {
-				Consumers map[string]scaleP21SW286Review `json:"consumers"`
+				Consumers map[string]storeWrapperBoundaryReview `json:"consumers"`
 			}
 			if err := json.Unmarshal(raw, &file); err != nil {
 				t.Fatal(err)
@@ -925,7 +925,7 @@ func scaleP21SW286Inventory(t *testing.T) map[string]scaleP21SW286Review {
 	return result
 }
 
-func (g *scaleP21SW286Graph) inventoryKey(key string) string {
+func (g *storeWrapperBoundaryGraph) inventoryKey(key string) string {
 	fn := g.funcs[key]
 	if fn == nil {
 		return ""
@@ -933,9 +933,9 @@ func (g *scaleP21SW286Graph) inventoryKey(key string) string {
 	return fn.pkg + "/" + fn.file + ":" + fn.decl.Name.Name
 }
 
-func scaleP21SW286AuthDisabled(expression ast.Expr) bool {
+func storeWrapperBoundaryAuthDisabled(expression ast.Expr) bool {
 	if paren, ok := expression.(*ast.ParenExpr); ok {
-		return scaleP21SW286AuthDisabled(paren.X)
+		return storeWrapperBoundaryAuthDisabled(paren.X)
 	}
 	selector, ok := expression.(*ast.SelectorExpr)
 	if !ok || selector.Sel.Name != "authDisabled" {
@@ -945,36 +945,36 @@ func scaleP21SW286AuthDisabled(expression ast.Expr) bool {
 	return ok && receiver.Name == "s"
 }
 
-func scaleP21SW286AuthEnabled(expression ast.Expr) bool {
+func storeWrapperBoundaryAuthEnabled(expression ast.Expr) bool {
 	unary, ok := expression.(*ast.UnaryExpr)
-	return ok && unary.Op == token.NOT && scaleP21SW286AuthDisabled(unary.X)
+	return ok && unary.Op == token.NOT && storeWrapperBoundaryAuthDisabled(unary.X)
 }
 
-func scaleP21SW286Conjuncts(expression ast.Expr) []ast.Expr {
+func storeWrapperBoundaryConjuncts(expression ast.Expr) []ast.Expr {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
-		return scaleP21SW286Conjuncts(value.X)
+		return storeWrapperBoundaryConjuncts(value.X)
 	case *ast.BinaryExpr:
 		if value.Op == token.LAND {
-			return append(scaleP21SW286Conjuncts(value.X), scaleP21SW286Conjuncts(value.Y)...)
+			return append(storeWrapperBoundaryConjuncts(value.X), storeWrapperBoundaryConjuncts(value.Y)...)
 		}
 	}
 	return []ast.Expr{expression}
 }
 
-// scaleP21SW286AuthOnly reports a node that runs only with authentication
+// storeWrapperBoundaryAuthOnly reports a node that runs only with authentication
 // disabled: in the then-branch of if s.authDisabled [&& ...], the else-branch
 // of if !s.authDisabled, or after if !s.authDisabled { ...; return }.
-func scaleP21SW286AuthOnly(ancestors []ast.Node) bool {
+func storeWrapperBoundaryAuthOnly(ancestors []ast.Node) bool {
 	for index := len(ancestors) - 2; index >= 0; index-- {
 		child := ancestors[index+1]
 		var list []ast.Stmt
 		switch parent := ancestors[index].(type) {
 		case *ast.IfStmt:
-			if child == parent.Body && slices.ContainsFunc(scaleP21SW286Conjuncts(parent.Cond), scaleP21SW286AuthDisabled) {
+			if child == parent.Body && slices.ContainsFunc(storeWrapperBoundaryConjuncts(parent.Cond), storeWrapperBoundaryAuthDisabled) {
 				return true
 			}
-			if parent.Else != nil && child == parent.Else && scaleP21SW286AuthEnabled(parent.Cond) {
+			if parent.Else != nil && child == parent.Else && storeWrapperBoundaryAuthEnabled(parent.Cond) {
 				return true
 			}
 		case *ast.BlockStmt:
@@ -987,7 +987,7 @@ func scaleP21SW286AuthOnly(ancestors []ast.Node) bool {
 				break
 			}
 			branch, ok := statement.(*ast.IfStmt)
-			if ok && branch.Init == nil && branch.Else == nil && scaleP21SW286AuthEnabled(branch.Cond) && scaleP21SW286Terminates(branch.Body) {
+			if ok && branch.Init == nil && branch.Else == nil && storeWrapperBoundaryAuthEnabled(branch.Cond) && storeWrapperBoundaryTerminates(branch.Body) {
 				return true
 			}
 		}
@@ -995,7 +995,7 @@ func scaleP21SW286AuthOnly(ancestors []ast.Node) bool {
 	return false
 }
 
-var scaleP21SW286Wrappers = []string{
+var storeWrapperBoundaryWrappers = []string{
 	"store/SQLiteStore.Bootstrap",
 	"store/SQLiteStore.BootstrapFor",
 	"store/SQLiteStore.BootstrapForContext",
@@ -1005,11 +1005,11 @@ var scaleP21SW286Wrappers = []string{
 	"store/SQLiteStore.WorkspaceMetadataFields",
 }
 
-func scaleP21SW286Short(wrapper string) string {
+func storeWrapperBoundaryShort(wrapper string) string {
 	return wrapper[strings.LastIndex(wrapper, ".")+1:]
 }
 
-type scaleP21SW286Boundary struct {
+type storeWrapperBoundaryBoundary struct {
 	mode, reason string
 	// proof and auth only:
 	test    string            // an existing test of this package that proves the edge
@@ -1020,7 +1020,7 @@ type scaleP21SW286Boundary struct {
 	routes  string            // method prefix of every route binding the edge's caller
 }
 
-// scaleP21SW286Boundaries are the edges at which the walk stops, besides
+// storeWrapperBoundaryBoundaries are the edges at which the walk stops, besides
 // route registrations. Each is pinned by verifyBoundaries:
 //   - "async": every reference runs inside a go statement that hands an AI
 //     run to its worker after the HOT start boundary has committed;
@@ -1036,7 +1036,7 @@ type scaleP21SW286Boundary struct {
 //     and the callee reaches a wrapper only in development mode; a forward
 //     walk from the callee that skips development-only references must reach
 //     no wrapper.
-var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
+var storeWrapperBoundaryBoundaries = map[string]storeWrapperBoundaryBoundary{
 	"server/server.startLoopRun->server/server.executeLoopRun": {mode: "async",
 		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server/server.startBoundedLoopRun->server/server.executeLoopRun": {mode: "async",
@@ -1051,7 +1051,7 @@ var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
 		reason: "s.coding.service.Bootstrap is the sandbox runtime protocol of internal/coding, not the store wrapper"},
 	"server/server.createIssue->store/SQLiteStore.BootstrapForUser": {mode: "proof",
 		reason: "the literal default-team read runs only without the issue-record mutation marker; the only in-process caller adds the marker and POST /api/issues is rewritten to /api/issue-records before dispatch",
-		test:   "TestScaleP21LegacyIssueWritesReachRecordRoutes",
+		test:   "TestScaleLegacyIssueWritesReachRecordRoutes",
 		guard:  "else:store.UsesIssueRecordMutations(r.Context())",
 		pins: map[string]string{
 			"server/server.createIssueRecord": "s.createIssue(w, r.WithContext(store.WithIssueRecordMutations(r.Context())))",
@@ -1060,16 +1060,16 @@ var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
 		callers: map[string]int{"server/server.createIssueRecord": 1}},
 	"server/server.chatAuthorizedMutation->server/server.issueRecordsBootstrapData": {mode: "proof",
 		reason: "HOT chat callers select an owned bootstrap kind (or a point read that refuses in-process bootstrap) and return through the owned reader first; only COLD group/unfurl callers reach the literal bootstrap",
-		test:   "TestScaleP21SW225IssueBootstrapLegacyBoundaries"},
+		test:   "TestIssueBootstrapLegacyBoundaries"},
 	"server/server.teamForMemberRequest->server/server.publicMetadata": {mode: "auth",
 		reason: "with the flag on the team-member routes fall through to publicMetadata only with an authenticated paged handoff; publicMetadata reads WorkspaceMetadata only in development mode",
-		test:   "TestScaleP21HotTeamMemberRequestDevelopmentAndErrors",
+		test:   "TestScaleHotTeamMemberRequestDevelopmentAndErrors",
 		pins: map[string]string{
 			"server/server.teamForMemberRequest": "handedOff := !s.authDisabled && handoff != nil && handoff.workspace == workspace && handoff.userID == authUser(r).ID && !handoff.taken.Load()",
 		}},
 	"store/PulseRead.LoadSchedule->store/SQLiteStore.WorkspaceMetadataFields": {mode: "proof",
 		reason: "a pulse read has no logical source only when the flag-off branch of beginPulseRead built it; the bounded branch retains a non-nil source or returns no read",
-		test:   "TestScaleP21SW288PulseScheduleReadSource",
+		test:   "TestPulseScheduleReadSource",
 		guard:  "then:r.source == nil",
 		pins: map[string]string{
 			"store/SQLiteStore.beginPulseRead": "read.source, err = owner.retainSource(ctx, owner.workspace)",
@@ -1079,7 +1079,7 @@ var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
 		}},
 	"server/server.listIssuePermissions->server/server.findIssueForPermissions": {mode: "proof",
 		reason:  "both permission-list routes are GET patterns (which also serve HEAD), and with the flag on every GET or HEAD permission list reads the retained authorized issue headers; only the COLD permission writers reach workspaceData",
-		test:    "TestScaleP21SW113IssuePermissionGETMiddlewareDifferential",
+		test:    "TestIssuePermissionGETMiddlewareDifferential",
 		routes:  "GET ",
 		callers: map[string]int{},
 		pins: map[string]string{
@@ -1087,17 +1087,17 @@ var scaleP21SW286Boundaries = map[string]scaleP21SW286Boundary{
 		}},
 }
 
-// scaleP21SW286Unrouted are HOT inventory consumers whose every reference is
+// unrouted are HOT inventory consumers whose every reference is
 // a route registration that no request reaches: the outermost handler
 // wrapper rewrites the path first. They are not reachers.
-var scaleP21SW286Unrouted = map[string]string{
-	"server/server.updateIssue": "boundedLegacyIssueWrites rewrites every PATCH /api/issues/{id} to /api/issue-records/{id} before dispatch (TestScaleP21LegacyIssueWritesReachRecordRoutes)",
+var unrouted = map[string]string{
+	"server/server.updateIssue": "boundedLegacyIssueWrites rewrites every PATCH /api/issues/{id} to /api/issue-records/{id} before dispatch (TestScaleLegacyIssueWritesReachRecordRoutes)",
 }
 
-// scaleP21SW286Relays are HOT inventory consumers that are neither routes
+// relays are HOT inventory consumers that are neither routes
 // nor tickers: helpers whose temperature comes from their callers. The walk
 // passes them and judges their callers instead.
-var scaleP21SW286Relays = map[string]string{
+var storeWrapperBoundaryRelays = map[string]string{
 	"server/server.workspaceData":             "server compatibility wrapper: every HOT caller dispatches to an owned reader first (SW270 on the compat-wrappers branch)",
 	"server/server.workspaceDataWithError":    "server compatibility projection: SW270 pins the workspaceData relay and the scoped adapter's flag-off call",
 	"server/server.findIssueForPermissions":   "permission helper shared by the GET list and the COLD permission writers",
@@ -1105,34 +1105,34 @@ var scaleP21SW286Relays = map[string]string{
 	"server/server.publicMetadata":            "public API metadata helper: its other callers are COLD public API routes",
 }
 
-// scaleP21SW286Closed are HOT inventory consumers that call a wrapper
+// storeWrapperBoundaryClosed are HOT inventory consumers that call a wrapper
 // directly but that nothing references with the flag on (no call, value,
 // route or package-level reference outside a flag-off-only branch): their
 // bounded callers dispatch to an owned reader first. Each names the existing
 // differential that proves the bounded dispatch. The walk passes them.
-var scaleP21SW286Closed = map[string]string{
-	"server/server.oauthApplicationsByClient": "TestScaleP21SW295ApplicationWebhookClients",
-	"server/server.socketWorkspaceMetadata":   "TestScaleP21SW520FormerMemberDocumentDifferential",
+var storeWrapperBoundaryClosed = map[string]string{
+	"server/server.oauthApplicationsByClient": "TestApplicationWebhookClients",
+	"server/server.socketWorkspaceMetadata":   "TestFormerMemberDocumentDifferential",
 }
 
-type scaleP21SW286Allowance struct {
+type storeWrapperBoundaryAllowance struct {
 	wrappers      []string // short wrapper names the consumer reaches with the flag on
 	owner, reason string
 }
 
-// scaleP21SW286Allowed names every consumer still migrating whose HOT paths
+// storeWrapperBoundaryAllowed names every consumer still migrating whose HOT paths
 // reach a wrapper with the flag on. The walk does not pass them. An entry
 // must name exactly the wrappers it still reaches when the other entries are
 // not passed either: the test fails when one no longer reaches a wrapper, so
 // the list shrinks as the migrations land.
-var scaleP21SW286Allowed = map[string]scaleP21SW286Allowance{}
+var storeWrapperBoundaryAllowed = map[string]storeWrapperBoundaryAllowance{}
 
-func scaleP21SW286Cut(ref scaleP21SW286Ref) bool {
-	_, cut := scaleP21SW286Boundaries[ref.from+"->"+ref.to]
+func storeWrapperBoundaryCut(ref storeWrapperBoundaryRef) bool {
+	_, cut := storeWrapperBoundaryBoundaries[ref.from+"->"+ref.to]
 	return cut
 }
 
-func (g *scaleP21SW286Graph) refAncestors(ref scaleP21SW286Ref) [][]ast.Node {
+func (g *storeWrapperBoundaryGraph) refAncestors(ref storeWrapperBoundaryRef) [][]ast.Node {
 	fn := g.funcs[ref.from]
 	defer g.enter(fn)()
 	var result [][]ast.Node
@@ -1156,7 +1156,7 @@ func (g *scaleP21SW286Graph) refAncestors(ref scaleP21SW286Ref) [][]ast.Node {
 
 // statements returns the statements of fn whose source is text, each with
 // whether it runs only with the flag off.
-func (g *scaleP21SW286Graph) statements(key, text string) []bool {
+func (g *storeWrapperBoundaryGraph) statements(key, text string) []bool {
 	fn := g.funcs[key]
 	if fn == nil {
 		return nil
@@ -1170,7 +1170,7 @@ func (g *scaleP21SW286Graph) statements(key, text string) []bool {
 			return false
 		}
 		ancestors = append(ancestors, node)
-		if statement, ok := node.(ast.Stmt); ok && scaleP21SW286Source(g.fset, statement) == text {
+		if statement, ok := node.(ast.Stmt); ok && storeWrapperBoundarySource(g.fset, statement) == text {
 			result = append(result, g.offOnly(ancestors))
 		}
 		return true
@@ -1178,11 +1178,11 @@ func (g *scaleP21SW286Graph) statements(key, text string) []bool {
 	return result
 }
 
-// scaleP21SW286TestExists finds a test of cmd/server or internal/store.
-func scaleP21SW286TestExists(t *testing.T, name string) bool {
+// storeWrapperBoundaryTestExists finds a test of cmd/server or internal/store.
+func storeWrapperBoundaryTestExists(t *testing.T, name string) bool {
 	t.Helper()
 	var paths []string
-	for _, dir := range []string{scaleP21SW286Root, filepath.Join(scaleP21SW286Root, "../../internal/store")} {
+	for _, dir := range []string{storeWrapperBoundaryRoot, filepath.Join(storeWrapperBoundaryRoot, "../../internal/store")} {
 		found, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
 		if err != nil {
 			t.Fatal(err)
@@ -1201,9 +1201,9 @@ func scaleP21SW286TestExists(t *testing.T, name string) bool {
 	return false
 }
 
-func (g *scaleP21SW286Graph) verifyBoundaries(t *testing.T) {
+func (g *storeWrapperBoundaryGraph) verifyBoundaries(t *testing.T) {
 	t.Helper()
-	for edge, boundary := range scaleP21SW286Boundaries {
+	for edge, boundary := range storeWrapperBoundaryBoundaries {
 		from, to, _ := strings.Cut(edge, "->")
 		count, routed := 0, false
 		for _, index := range g.into[to] {
@@ -1237,7 +1237,7 @@ func (g *scaleP21SW286Graph) verifyBoundaries(t *testing.T) {
 					guarded := false
 					for depth := 0; depth+1 < len(ancestors); depth++ {
 						statement, ok := ancestors[depth].(*ast.IfStmt)
-						if !ok || scaleP21SW286Source(g.fset, statement.Cond) != condition {
+						if !ok || storeWrapperBoundarySource(g.fset, statement.Cond) != condition {
 							continue
 						}
 						if branch == "then" && ancestors[depth+1] == statement.Body || branch == "else" && statement.Else != nil && ancestors[depth+1] == statement.Else {
@@ -1261,7 +1261,7 @@ func (g *scaleP21SW286Graph) verifyBoundaries(t *testing.T) {
 		if boundary.mode != "proof" && boundary.mode != "auth" {
 			continue
 		}
-		if boundary.test == "" || !scaleP21SW286TestExists(t, boundary.test) {
+		if boundary.test == "" || !storeWrapperBoundaryTestExists(t, boundary.test) {
 			t.Errorf("boundary %s cites a missing test %q", edge, boundary.test)
 		}
 		for key, text := range boundary.pins {
@@ -1300,12 +1300,12 @@ func (g *scaleP21SW286Graph) verifyBoundaries(t *testing.T) {
 			}
 		}
 		if boundary.mode == "auth" {
-			if paths := g.forward(to, func(ref scaleP21SW286Ref) bool { return ref.authOnly }); len(paths) != 0 {
+			if paths := g.forward(to, func(ref storeWrapperBoundaryRef) bool { return ref.authOnly }); len(paths) != 0 {
 				t.Errorf("boundary %s: %s reaches a wrapper with authentication enabled:\n  %s", edge, to, strings.Join(paths, "\n  "))
 			}
 		}
 	}
-	for key := range scaleP21SW286Unrouted {
+	for key := range unrouted {
 		if g.funcs[key] == nil || len(g.into[key]) == 0 {
 			t.Errorf("stale unrouted consumer %s", key)
 		}
@@ -1328,7 +1328,7 @@ func (g *scaleP21SW286Graph) verifyBoundaries(t *testing.T) {
 
 // forward returns a path to every wrapper start reaches with the flag on,
 // skipping references for which skip is true.
-func (g *scaleP21SW286Graph) forward(start string, skip func(scaleP21SW286Ref) bool) []string {
+func (g *storeWrapperBoundaryGraph) forward(start string, skip func(storeWrapperBoundaryRef) bool) []string {
 	out := map[string][]int{}
 	for index, ref := range g.refs {
 		out[ref.from] = append(out[ref.from], index)
@@ -1341,11 +1341,11 @@ func (g *scaleP21SW286Graph) forward(start string, skip func(scaleP21SW286Ref) b
 		queue = queue[1:]
 		for _, index := range out[current] {
 			ref := g.refs[index]
-			if ref.offOnly || ref.kind == "route" || skip(ref) || paths[ref.to] != "" || scaleP21SW286Cut(ref) {
+			if ref.offOnly || ref.kind == "route" || skip(ref) || paths[ref.to] != "" || storeWrapperBoundaryCut(ref) {
 				continue
 			}
 			paths[ref.to] = fmt.Sprintf("%s -(%s %s:%d)-> %s", paths[current], ref.kind, ref.file, ref.line, ref.to)
-			if slices.Contains(scaleP21SW286Wrappers, ref.to) {
+			if slices.Contains(storeWrapperBoundaryWrappers, ref.to) {
 				result = append(result, paths[ref.to])
 				continue
 			}
@@ -1356,7 +1356,7 @@ func (g *scaleP21SW286Graph) forward(start string, skip func(scaleP21SW286Ref) b
 	return result
 }
 
-type scaleP21SW286Reacher struct {
+type storeWrapperBoundaryReacher struct {
 	key, path string
 }
 
@@ -1365,7 +1365,7 @@ type scaleP21SW286Reacher struct {
 // handlers excepted) with the shortest path that reached each, the
 // allow-listed consumers in stop it met (it does not pass them) and the
 // relays and closed consumers it passed.
-func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, start string, stop map[string]bool) (reachers []scaleP21SW286Reacher, met, relays map[string]string) {
+func (g *storeWrapperBoundaryGraph) reach(inventory map[string]storeWrapperBoundaryReview, start string, stop map[string]bool) (reachers []storeWrapperBoundaryReacher, met, relays map[string]string) {
 	type step struct{ key, path string }
 	seen := map[string]bool{start: true}
 	queue := []step{{start, start}}
@@ -1375,7 +1375,7 @@ func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, sta
 		queue = queue[1:]
 		for _, index := range g.into[current.key] {
 			ref := g.refs[index]
-			if ref.offOnly || ref.kind == "route" || seen[ref.from] || scaleP21SW286Cut(ref) {
+			if ref.offOnly || ref.kind == "route" || seen[ref.from] || storeWrapperBoundaryCut(ref) {
 				continue
 			}
 			seen[ref.from] = true
@@ -1384,12 +1384,12 @@ func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, sta
 				met[ref.from] = path
 				continue
 			}
-			if scaleP21SW286Relays[ref.from] != "" {
+			if storeWrapperBoundaryRelays[ref.from] != "" {
 				relays[ref.from] = path
-			} else if scaleP21SW286Closed[ref.from] != "" {
+			} else if storeWrapperBoundaryClosed[ref.from] != "" {
 				relays[ref.from] = path
-			} else if review := inventory[g.inventoryKey(ref.from)]; review.Temperature == "hot" && scaleP21SW286Unrouted[ref.from] == "" && !slices.Contains(scaleP21SW286Wrappers, ref.from) {
-				reachers = append(reachers, scaleP21SW286Reacher{ref.from, path})
+			} else if review := inventory[g.inventoryKey(ref.from)]; review.Temperature == "hot" && unrouted[ref.from] == "" && !slices.Contains(storeWrapperBoundaryWrappers, ref.from) {
+				reachers = append(reachers, storeWrapperBoundaryReacher{ref.from, path})
 			}
 			queue = append(queue, step{ref.from, path})
 		}
@@ -1402,7 +1402,7 @@ func (g *scaleP21SW286Graph) reach(inventory map[string]scaleP21SW286Review, sta
 // functions the inventory gives no temperature (and relays), and returns
 // every route handler and startup root (main, init) it meets: an entry point
 // whose HOT or COLD temperature nothing in the inventory decides.
-func (g *scaleP21SW286Graph) unclassified(inventory map[string]scaleP21SW286Review, start string, stop map[string]bool) []string {
+func (g *storeWrapperBoundaryGraph) unclassified(inventory map[string]storeWrapperBoundaryReview, start string, stop map[string]bool) []string {
 	seen := map[string]bool{start: true}
 	queue := []string{start}
 	var result []string
@@ -1411,11 +1411,11 @@ func (g *scaleP21SW286Graph) unclassified(inventory map[string]scaleP21SW286Revi
 		queue = queue[1:]
 		for _, index := range g.into[current] {
 			ref := g.refs[index]
-			if ref.offOnly || scaleP21SW286Cut(ref) {
+			if ref.offOnly || storeWrapperBoundaryCut(ref) {
 				continue
 			}
 			if ref.kind == "route" {
-				if !seen["route:"+current] && scaleP21SW286Unrouted[current] == "" {
+				if !seen["route:"+current] && unrouted[current] == "" {
 					seen["route:"+current] = true
 					result = append(result, fmt.Sprintf("route %q -> %s (%s:%d)", ref.pattern, current, ref.file, ref.line))
 				}
@@ -1426,7 +1426,7 @@ func (g *scaleP21SW286Graph) unclassified(inventory map[string]scaleP21SW286Revi
 			}
 			seen[ref.from] = true
 			review := inventory[g.inventoryKey(ref.from)]
-			if review.Temperature != "" && scaleP21SW286Relays[ref.from] == "" && !slices.Contains(scaleP21SW286Wrappers, ref.from) {
+			if review.Temperature != "" && storeWrapperBoundaryRelays[ref.from] == "" && !slices.Contains(storeWrapperBoundaryWrappers, ref.from) {
 				continue
 			}
 			if ref.from == "server/main" || strings.Contains(ref.from, "/init@") {
@@ -1440,19 +1440,19 @@ func (g *scaleP21SW286Graph) unclassified(inventory map[string]scaleP21SW286Revi
 	return result
 }
 
-// TestScaleP21SW286StoreWrapperHotBoundaries computes, for each of the seven
+// TestStoreWrapperHotBoundaries computes, for each of the seven
 // store compatibility read wrappers, every HOT inventory consumer that can
 // reach it with FLOW_BOUNDED_METADATA on, and fails on any not explained by
 // the named allow-list (and on any allow-list entry that no longer reaches
 // its wrapper). A wrapper is reviewed in the inventory exactly when no
 // allow-list entry names it, and a pending wrapper's reason names every
 // remaining allow-listed consumer.
-func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
-	graph := scaleP21SW286Load(t)
-	inventory := scaleP21SW286Inventory(t)
+func TestStoreWrapperHotBoundaries(t *testing.T) {
+	graph := storeWrapperBoundaryLoad(t)
+	inventory := storeWrapperBoundaryInventory(t)
 	graph.verifyBoundaries(t)
 	stop := map[string]bool{}
-	for consumer, allowance := range scaleP21SW286Allowed {
+	for consumer, allowance := range storeWrapperBoundaryAllowed {
 		if graph.funcs[consumer] == nil {
 			t.Errorf("allow-listed consumer %s no longer exists", consumer)
 		}
@@ -1463,8 +1463,8 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 	}
 	passedRelays := map[string]bool{}
 	pending := map[string][]string{}
-	for _, wrapper := range scaleP21SW286Wrappers {
-		short := scaleP21SW286Short(wrapper)
+	for _, wrapper := range storeWrapperBoundaryWrappers {
+		short := storeWrapperBoundaryShort(wrapper)
 		if graph.funcs[wrapper] == nil {
 			t.Fatalf("wrapper %s missing", wrapper)
 		}
@@ -1481,7 +1481,7 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 		for relay := range relays {
 			passedRelays[relay] = true
 		}
-		for consumer, allowance := range scaleP21SW286Allowed {
+		for consumer, allowance := range storeWrapperBoundaryAllowed {
 			listed := slices.Contains(allowance.wrappers, short)
 			path, reached := met[consumer]
 			switch {
@@ -1494,7 +1494,7 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 			}
 		}
 	}
-	for relay, reason := range scaleP21SW286Relays {
+	for relay, reason := range storeWrapperBoundaryRelays {
 		if review := inventory[graph.inventoryKey(relay)]; review.Temperature != "hot" || reason == "" {
 			t.Errorf("relay %s is not a HOT inventory consumer (%+v)", relay, review)
 		}
@@ -1507,14 +1507,14 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 			t.Errorf("stale relay %s: no wrapper walk passes it", relay)
 		}
 	}
-	for consumer, test := range scaleP21SW286Closed {
+	for consumer, test := range storeWrapperBoundaryClosed {
 		if graph.funcs[consumer] == nil {
 			t.Errorf("closed consumer %s no longer exists", consumer)
 		}
 		if review := inventory[graph.inventoryKey(consumer)]; review.Temperature != "hot" || review.Status != "reviewed" {
 			t.Errorf("closed consumer %s is not a reviewed HOT inventory consumer (%+v)", consumer, review)
 		}
-		if !scaleP21SW286TestExists(t, test) {
+		if !storeWrapperBoundaryTestExists(t, test) {
 			t.Errorf("closed consumer %s cites a missing test %q", consumer, test)
 		}
 		if files := graph.pkgLevel[consumer]; len(files) != 0 {
@@ -1529,8 +1529,8 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 			t.Errorf("stale closed consumer %s: no wrapper walk meets it", consumer)
 		}
 	}
-	for _, wrapper := range scaleP21SW286Wrappers {
-		short := scaleP21SW286Short(wrapper)
+	for _, wrapper := range storeWrapperBoundaryWrappers {
+		short := storeWrapperBoundaryShort(wrapper)
 		key := graph.inventoryKey(wrapper)
 		review, ok := inventory[key]
 		if !ok {
@@ -1553,13 +1553,13 @@ func TestScaleP21SW286StoreWrapperHotBoundaries(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW290WrapperGuardDetectsFlagOnReach runs the SW286 graph over
+// TestWrapperGuardDetectsFlagOnReach runs the store wrapper graph over
 // a probe store and server: a direct call, a method value, an interface
 // method, a goroutine launch, a captured literal, a falling-through bounded
 // branch, a reassigned or unconditioned flag local and a development-only
 // branch reach the wrapper with the flag on; the recognised flag-off forms do
 // not.
-func TestScaleP21SW290WrapperGuardDetectsFlagOnReach(t *testing.T) {
+func TestWrapperGuardDetectsFlagOnReach(t *testing.T) {
 	root := t.TempDir()
 	write := func(path, source string) {
 		t.Helper()
@@ -1684,10 +1684,10 @@ func (s *server) loop(keys []string) {
 }
 func main() {}
 `)
-	previous := scaleP21SW286Root
-	scaleP21SW286Root = filepath.Join(root, "cmd/server")
-	defer func() { scaleP21SW286Root = previous }()
-	graph := scaleP21SW286Load(t)
+	previous := storeWrapperBoundaryRoot
+	storeWrapperBoundaryRoot = filepath.Join(root, "cmd/server")
+	defer func() { storeWrapperBoundaryRoot = previous }()
+	graph := storeWrapperBoundaryLoad(t)
 	wrapper := "store/SQLiteStore.WorkspaceMetadata"
 	direct, development := map[string]bool{}, map[string]bool{}
 	for _, index := range graph.into[wrapper] {
@@ -1706,10 +1706,10 @@ func main() {}
 	if !maps.Equal(development, map[string]bool{"server/server.development": true}) {
 		t.Fatalf("development-only references = %v", development)
 	}
-	if paths := graph.forward("server/server.async", func(scaleP21SW286Ref) bool { return false }); len(paths) != 1 {
+	if paths := graph.forward("server/server.async", func(storeWrapperBoundaryRef) bool { return false }); len(paths) != 1 {
 		t.Fatalf("goroutine launch does not reach the wrapper: %v", paths)
 	}
-	if paths := graph.forward("server/server.development", func(ref scaleP21SW286Ref) bool { return ref.authOnly }); len(paths) != 0 {
+	if paths := graph.forward("server/server.development", func(ref storeWrapperBoundaryRef) bool { return ref.authOnly }); len(paths) != 0 {
 		t.Fatalf("development-only reach was not skipped: %v", paths)
 	}
 }

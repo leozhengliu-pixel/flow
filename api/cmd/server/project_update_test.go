@@ -18,10 +18,10 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21ProjectUpdateServe runs PATCH /api/projects/{id} as the server
+// scaleProjectUpdateServe runs PATCH /api/projects/{id} as the server
 // does: the COLD route mux (the route's own temperature), the real session or
 // API-key authentication and workspace authorization, then the handler.
-func scaleP21ProjectUpdateServe(f scaleP21M2Fixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, ref string, body any) *httptest.ResponseRecorder {
+func scaleProjectUpdateServe(f policyDifferentialFixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, ref string, body any) *httptest.ResponseRecorder {
 	service := &server{store: source, realtime: newRealtimeHub(), uploadPath: f.testingT.TempDir()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("PATCH /api/projects/{id}", service.updatePortfolioProject)
@@ -48,10 +48,10 @@ func scaleP21ProjectUpdateServe(f scaleP21M2Fixture, source *store.SQLiteStore, 
 	return w
 }
 
-// scaleP21ProjectUpdateNormalize replaces the values a write generates (IDs
+// scaleProjectUpdateNormalize replaces the values a write generates (IDs
 // it creates and clocks inside [started, finished]) with stable names, in a
 // sorted walk, so a literal and a bounded outcome compare exactly.
-func scaleP21ProjectUpdateNormalize(t *testing.T, value any, existing map[string]bool, started, finished time.Time) any {
+func scaleProjectUpdateNormalize(t *testing.T, value any, existing map[string]bool, started, finished time.Time) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -114,11 +114,11 @@ func scaleP21ProjectUpdateNormalize(t *testing.T, value any, existing map[string
 	return walk(decoded)
 }
 
-// scaleP21ProjectUpdateEmptyAsNull: an installed field compares nil and
+// scaleProjectUpdateEmptyAsNull: an installed field compares nil and
 // empty lists as one value. A legacy copy keeps the nil lists the write left
 // and a published image the empty lists the load normalization gives them;
 // both decode to the same records.
-func scaleP21ProjectUpdateEmptyAsNull(t *testing.T, fields map[string]json.RawMessage) map[string]any {
+func scaleProjectUpdateEmptyAsNull(t *testing.T, fields map[string]json.RawMessage) map[string]any {
 	t.Helper()
 	var walk func(any) any
 	walk = func(value any) any {
@@ -150,7 +150,7 @@ func scaleP21ProjectUpdateEmptyAsNull(t *testing.T, fields map[string]json.RawMe
 	return result
 }
 
-func scaleP21ProjectUpdateInstalled(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]json.RawMessage {
+func scaleProjectUpdateInstalled(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]json.RawMessage {
 	t.Helper()
 	names := []string{"projects", "projectRelations", "projectUpdates", "documents"}
 	result := map[string]json.RawMessage{}
@@ -187,7 +187,7 @@ func scaleP21ProjectUpdateInstalled(t *testing.T, repo *store.SQLiteStore, works
 	return result
 }
 
-func scaleP21ProjectUpdateRows(t *testing.T, reader *scaleP04Database, workspace string) [][]any {
+func scaleProjectUpdateRows(t *testing.T, reader *scaleDatabase, workspace string) [][]any {
 	t.Helper()
 	rows := reader.query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','projectRelations','projectUpdates','documents','users','issueSuggestions') ORDER BY field,record_key`, workspace)
 	defer rows.Close()
@@ -207,7 +207,7 @@ func scaleP21ProjectUpdateRows(t *testing.T, reader *scaleP04Database, workspace
 	return result
 }
 
-// TestScaleP21ProjectUpdateDifferential runs PATCH /api/projects/{id} with
+// TestScaleProjectUpdateDifferential runs PATCH /api/projects/{id} with
 // bounded metadata on against the literal flag-off route, warm and after a
 // SQL reload, for every field the edit takes and every effect it has: the
 // response, the canonical project, relation, update, user and suggestion
@@ -216,27 +216,27 @@ func scaleP21ProjectUpdateRows(t *testing.T, reader *scaleP04Database, workspace
 // a slug reference compare too, and so does the session and API key matrix
 // on a shared and a private-team project and for an outsider. With the flag
 // on, no edit takes the COLD slot or a legacy view.
-func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
+func TestScaleProjectUpdateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
 	testStarted := time.Now().UTC()
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("projupd-")
-	reader := &scaleP04Database{config: config, key: workspace, workspaceID: f.data.Workspace.ID}
+	reader := &scaleDatabase{config: config, key: workspace, workspaceID: f.data.Workspace.ID}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
 		}
 	})
-	sqlFixture := scaleP21SW10Fixture{reader: reader}
+	sqlFixture := notificationsFixture{reader: reader}
 	sqlFixture.data.Workspace.URLKey = workspace
 	projectID, dependencyID, otherID, privateID := prefix+"project", prefix+"dependency", prefix+"other", prefix+"private"
 	inlineID := prefix + strings.Repeat("x", 192)
@@ -475,7 +475,7 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 				source = f.probe
 			}
 			memberDirectories.Delete(fmt.Sprintf("%p:%s", source, f.data.Workspace.ID))
-			before := scaleP21SW59SQL(t, sqlFixture)
+			before := discussionWriteSql(t, sqlFixture)
 			priorEvents, err := repo.Events(t.Context(), test.ref)
 			if err != nil {
 				t.Fatal(err)
@@ -492,12 +492,12 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 			for _, audit := range priorAudits {
 				auditIDs[audit.ID] = true
 			}
-			got := scaleP21SW59Outcome{}
+			got := discussionWriteOutcome{}
 			source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-				got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+				got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 			})
 			captureRealtime := func(_ string, event domain.RealtimeEvent) {
-				got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+				got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 			}
 			source.SetRealtimeSink(captureRealtime)
 			if source != repo {
@@ -506,7 +506,7 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 			coldBefore := store.ColdSlotAcquisitionsForTesting()
 			viewsBefore := store.ColdAccessorReadsForTesting()
 			began := time.Now().UTC()
-			response := scaleP21ProjectUpdateServe(f, source, tokens[principal.ID], principal, credential, test.ref, test.body)
+			response := scaleProjectUpdateServe(f, source, tokens[principal.ID], principal, credential, test.ref, test.body)
 			finished := time.Now().UTC()
 			coldTaken := store.ColdSlotAcquisitionsForTesting() - coldBefore
 			viewsTaken := store.ColdAccessorReadsForTesting() - viewsBefore
@@ -516,8 +516,8 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 			if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("project edit left work admitted", source.MetadataWorkUsedForTesting())
 			}
-			installed := scaleP21ProjectUpdateInstalled(t, source, workspace)
-			got.Code, got.Header, got.Rows = response.Code, response.Header(), scaleP21SW59SQL(t, sqlFixture)
+			installed := scaleProjectUpdateInstalled(t, source, workspace)
+			got.Code, got.Header, got.Rows = response.Code, response.Header(), discussionWriteSql(t, sqlFixture)
 			after, err := repo.Events(t.Context(), test.ref)
 			if err != nil {
 				t.Fatal(err)
@@ -538,20 +538,20 @@ func TestScaleP21ProjectUpdateDifferential(t *testing.T) {
 				}
 			}
 			got.Response, err = json.Marshal(map[string]any{
-				"response": json.RawMessage(response.Body.Bytes()), "installed": scaleP21ProjectUpdateEmptyAsNull(t, installed), "audits": newAudits,
-				"canonical": scaleP21ProjectUpdateRows(t, reader, workspace),
+				"response": json.RawMessage(response.Body.Bytes()), "installed": scaleProjectUpdateEmptyAsNull(t, installed), "audits": newAudits,
+				"canonical": scaleProjectUpdateRows(t, reader, workspace),
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			normalized := scaleP21ProjectUpdateNormalize(t, scaleP21SW59Normalized(t, got, before, began, finished), existing, testStarted, finished)
+			normalized := scaleProjectUpdateNormalize(t, discussionWriteNormalized(t, got, before, began, finished), existing, testStarted, finished)
 			if strings.HasPrefix(mode, "legacy") {
 				// Each bounded mode is compared with the literal answer of
 				// the same start (warm, or reloaded with its load
 				// normalization).
 				expected = normalized
 			} else if !reflect.DeepEqual(expected, normalized) {
-				t.Fatalf("project update differs: case=%s mode=%s principal=%s status=%d: %s", test.name, mode, principal.ID, response.Code, scaleP21SW480Path(expected, normalized, ""))
+				t.Fatalf("project update differs: case=%s mode=%s principal=%s status=%d: %s", test.name, mode, principal.ID, response.Code, documentUpdateDiffPath(expected, normalized, ""))
 			}
 			if test.code != 0 && response.Code != test.code {
 				t.Fatalf("project update case=%s mode=%s status=%d want %d: %s", test.name, mode, response.Code, test.code, response.Body.String())

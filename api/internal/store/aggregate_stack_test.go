@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW205AggregateTraversalReusesSiblingHighWater(t *testing.T) {
+func TestAggregateTraversalReusesSiblingHighWater(t *testing.T) {
 	const depth, siblings = 160, 200
-	left, right := scaleP21SW205NestedJSON(depth), scaleP21SW205NestedJSON(depth)
+	left, right := nestedJSON(depth), nestedJSON(depth)
 	leftRows, rightRows := make([]any, siblings), make([]any, siblings)
 	for i := range leftRows {
 		leftRows[i], rightRows[i] = left, right
@@ -37,9 +37,9 @@ func TestScaleP21SW205AggregateTraversalReusesSiblingHighWater(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW205AggregateTraversalDeepEncodingOwned(t *testing.T) {
+func TestAggregateTraversalDeepEncodingOwned(t *testing.T) {
 	for _, depth := range []int{180, 2000} {
-		value := scaleP21SW205NestedJSON(depth)
+		value := nestedJSON(depth)
 		want, err := json.Marshal(value)
 		if err != nil {
 			t.Fatal(err)
@@ -49,7 +49,7 @@ func TestScaleP21SW205AggregateTraversalDeepEncodingOwned(t *testing.T) {
 		if err != nil || !bytes.Equal(raw, want) {
 			t.Fatal("required deep RawMessage fallback changed/refused", depth, err)
 		}
-		if probe.MetadataWorkUsedForTesting() != scaleP21SW205ByteCharge(len(raw)) {
+		if probe.MetadataWorkUsedForTesting() != byteCharge(len(raw)) {
 			t.Fatal("graph-walk/encoder stack survived output construction", probe.MetadataWorkUsedForTesting())
 		}
 		release()
@@ -59,15 +59,15 @@ func TestScaleP21SW205AggregateTraversalDeepEncodingOwned(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW205AggregateTraversalQuotaAndCancellation(t *testing.T) {
-	value := scaleP21SW205NestedJSON(200)
+func TestAggregateTraversalQuotaAndCancellation(t *testing.T) {
+	value := nestedJSON(200)
 	for _, canceled := range []bool{false, true} {
 		probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
 		ctx, cancel := context.WithCancel(t.Context())
 		var work context.Context = ctx
 		want := ErrMetadataWorkBudget
 		if canceled {
-			work = &scaleP21SW205CancelContext{Context: ctx, cancel: cancel, at: 10}
+			work = &aggregatePublicationCancelContext{Context: ctx, cancel: cancel, at: 10}
 			want = context.Canceled
 		} else {
 			probe.metadataResidency.work.limit = 32 << 10
@@ -83,14 +83,14 @@ func TestScaleP21SW205AggregateTraversalQuotaAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW205AggregateDiffTraversalRefusalReleases(t *testing.T) {
+func TestAggregateDiffTraversalRefusalReleases(t *testing.T) {
 	for _, canceled := range []bool{false, true} {
 		probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
 		ctx, cancel := context.WithCancel(t.Context())
 		var work context.Context = ctx
 		want := ErrMetadataWorkBudget
 		if canceled {
-			work = &scaleP21SW205CancelContext{Context: ctx, cancel: cancel, at: 10}
+			work = &aggregatePublicationCancelContext{Context: ctx, cancel: cancel, at: 10}
 			want = context.Canceled
 		} else {
 			probe.metadataResidency.work.limit = 32 << 10
@@ -100,8 +100,8 @@ func TestScaleP21SW205AggregateDiffTraversalRefusalReleases(t *testing.T) {
 			return release, err
 		}
 		diff, release, err := metadataAggregateOwnedDiff(work, admit,
-			map[string]any{"deep": scaleP21SW205NestedJSON(200)},
-			map[string]any{"deep": scaleP21SW205NestedJSON(200)})
+			map[string]any{"deep": nestedJSON(200)},
+			map[string]any{"deep": nestedJSON(200)})
 		cancel()
 		if release != nil {
 			release()
@@ -112,7 +112,7 @@ func TestScaleP21SW205AggregateDiffTraversalRefusalReleases(t *testing.T) {
 	}
 }
 
-func scaleP21SW205NestedJSON(depth int) any {
+func nestedJSON(depth int) any {
 	var value any = float64(7)
 	for i := 0; i < depth; i++ {
 		value = []any{value}

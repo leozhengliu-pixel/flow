@@ -2,11 +2,11 @@ import { fetchSyncBatch, fetchSyncChanges, fetchSyncManifest, fetchSyncRecords, 
 import { ApiError } from '@/lib/api-client'
 import { QueryWindowStore } from '@/lib/query-window-store'
 import { RecordLoader, recordKey } from '@/lib/record-loader'
-import { cacheStringBytes } from '@/lib/scale-p08'
-import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } from '@/lib/scale-p13-wire'
-import { scaleP19CoreSupported, scaleP19InitiativeCatalogSupported, scaleP19ManifestMatches, scaleP19WindowCoreSupported } from '@/lib/scale-p19-surfaces'
-import { scaleP19NeedsCore, scaleP19WindowChanges } from '@/lib/scale-p19-sync'
-import { releaseScaleP19Bytes, retainScaleP19Core } from '@/lib/scale-p19-budget'
+import { cacheStringBytes } from '@/lib/realtime-cache-limits'
+import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } from '@/lib/sync-wire'
+import { queryCoreSupported, initiativeCatalogSupported, queryWindowManifestMatches, queryWindowCoreSupported } from '@/lib/query-window-surfaces'
+import { queryWindowNeedsCore, queryWindowChanges } from '@/lib/query-window-invalidation'
+import { releaseQueryWindowBytes, retainQueryWindowCore } from '@/lib/query-window-budget'
 import type { BootstrapData, FlowDocument, RecordKey, SyncChanges, SyncManifest, SyncPageRequest, SyncRecord, SyncRecordBatch, SyncRecordPage, WorkspaceSyncState } from '@/types/flow'
 
 export type SyncSurface = 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory' | 'projects-page' | 'initiatives-page'
@@ -21,7 +21,7 @@ export function syncBootstrapRequestKey(base: string, surface?: SyncSurface) {
 export const SYNC_DETAIL_MAX_BYTES = 32 * 1024 * 1024
 export const SYNC_SUMMARY_MAX_BYTES = 16 * 1024 * 1024
 
-export { syncCollections } from '@/lib/scale-p13-wire'
+export { syncCollections } from '@/lib/sync-wire'
 
 const clients = new WeakMap<WorkspaceSyncState, SyncClient>()
 export const syncClientFor = (data?: BootstrapData | null) => data?.sync ? clients.get(data.sync) : undefined
@@ -199,14 +199,14 @@ export class SyncClient {
     if (frame.schema === 2 && typeof frame.authzEpoch === 'string' && frame.transaction && typeof frame.transaction.seq === 'string' && typeof frame.transaction.txId === 'string' && Array.isArray(frame.transaction.upserts) && Array.isArray(frame.transaction.removals) && Array.isArray(frame.transaction.invalidations)) {
       if (compareSyncVersions(frame.transaction.seq, this.cursor) <= 0) return true
       const page = modelChanges({ next: frame.transaction.seq, head: frame.transaction.seq, authzEpoch: frame.authzEpoch, transactions: [frame.transaction], hasMore: false, resyncRequired: false })
-      if (this.p19Windows && scaleP19NeedsCore(page)) return false
+      if (this.hasQueryWindows && queryWindowNeedsCore(page)) return false
       try { this.applyChanges(page) }
       catch (error) { this.failRequest(error) }
       return true
     }
     const page = payload as SyncChanges
     if (!Array.isArray(page.transactions) || typeof page.next !== 'string' || typeof page.head !== 'string' || typeof page.authzEpoch !== 'string' || typeof page.hasMore !== 'boolean' || typeof page.resyncRequired !== 'boolean') return false
-    if (this.p19Windows && scaleP19NeedsCore(modelChanges(page))) return false
+    if (this.hasQueryWindows && queryWindowNeedsCore(modelChanges(page))) return false
     this.applyChanges(modelChanges(page))
     return true
   }
@@ -215,9 +215,9 @@ export class SyncClient {
     this.checkEpoch(page.authzEpoch)
     if (page.resyncRequired) { this.requestReset(); throw new SyncResetRequired('Sync baseline expired') }
     if (compareSyncVersions(page.next, this.cursor) < 0 || compareSyncVersions(page.next, page.head) > 0 || page.hasMore && page.next === this.cursor) throw new Error('Invalid sync cursor')
-    if (this.p19Windows) {
-      if (scaleP19NeedsCore(page) && !this.pendingCore) { this.requestReset(); throw new SyncResetRequired('Core refresh required') }
-      page = scaleP19WindowChanges(page)
+    if (this.hasQueryWindows) {
+      if (queryWindowNeedsCore(page) && !this.pendingCore) { this.requestReset(); throw new SyncResetRequired('Core refresh required') }
+      page = queryWindowChanges(page)
     }
     const migratedKinds = this.surface === 'initiatives-page' || this.surface === 'projects-page' && this.manifest.capabilities.includes('query-windows-v1') ? ['issue', 'document', 'project', 'initiative'] : this.surface === 'projects-page' ? ['issue', 'document', 'project'] : this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
     if (this.surface && page.transactions.some(transaction => [...transaction.upserts, ...transaction.removals].some(item => !migratedKinds.includes(modelRecordKind(item.key.kind))) || transaction.invalidations.some(kind => !migratedKinds.includes(modelRecordKind(kind))))) {
@@ -250,10 +250,10 @@ export class SyncClient {
       if (pages >= 100) throw new SyncResetRequired('Sync catch-up exceeds page budget')
       const page = await this.transport.changes(this.cursor, this.controller.signal)
       this.checkEpoch(page.authzEpoch)
-      if (this.p19Windows && scaleP19NeedsCore(page)) {
+      if (this.hasQueryWindows && queryWindowNeedsCore(page)) {
         const manifest = await fetchSyncManifest(this.manifest.core.workspace.urlKey, this.controller.signal, undefined, this.surface as 'projects-page' | 'initiatives-page')
         this.checkEpoch(manifest.authzEpoch)
-        if (!scaleP19ManifestMatches(this.manifest, manifest) || !scaleP19WindowCoreSupported(manifest) || !retainScaleP19Core(this, manifest.core)) this.requireLegacy('Core refresh unavailable')
+        if (!queryWindowManifestMatches(this.manifest, manifest) || !queryWindowCoreSupported(manifest) || !retainQueryWindowCore(this, manifest.core)) this.requireLegacy('Core refresh unavailable')
         if (compareSyncVersions(page.next, this.cursor) < 0) continue
         this.pendingCore = manifest
       }
@@ -358,7 +358,7 @@ export class SyncClient {
         // Keep the mounted editor's full model while its newer body loads, including any acknowledged local save.
         const documentDetail = item.completeness === 'stale' && kind === 'document' ? previousDocument && Object.hasOwn(previousDocument, 'content') ? previousDocument : item.loadedDetail?.value : undefined
         const value = documentDetail ?? (kind === 'issue' && item.completeness !== 'detail' ? { ...item.value, isSummary: item.completeness === 'summary', needsDetailRefresh: true } : item.value)
-        const header = this.p19Windows && kind === 'initiative' ? core?.find(header => header.id === item.key.id) : undefined
+        const header = this.hasQueryWindows && kind === 'initiative' ? core?.find(header => header.id === item.key.id) : undefined
         valuesById.set(item.key.id, (header ? { ...value, ...header } : value) as { id: string })
       }
       const values = [...valuesById.values()]
@@ -374,7 +374,7 @@ export class SyncClient {
   dispose() {
     if (this.closed) return
     this.closed = true
-    releaseScaleP19Bytes(this)
+    releaseQueryWindowBytes(this)
     this.controller.abort()
     this.loader.dispose()
     this.windows.clear()
@@ -391,7 +391,7 @@ export class SyncClient {
   }
 
   private assertActive() { if (this.closed) throw new SyncResetRequired('Sync context expired') }
-  private get p19Windows() { return (this.surface === 'projects-page' || this.surface === 'initiatives-page') && this.manifest.capabilities.includes('query-windows-v1') }
+  private get hasQueryWindows() { return (this.surface === 'projects-page' || this.surface === 'initiatives-page') && this.manifest.capabilities.includes('query-windows-v1') }
   private requireLegacy(message: string): never { this.requestReset(true); throw new SyncProtocolUnavailable(message) }
   private failRequest(error: unknown): never {
     if (error instanceof SyncWireVersionError) this.requireLegacy(error.message)
@@ -422,10 +422,10 @@ export async function fetchSurfaceBootstrap(workspaceKey: string, surface: SyncS
     throw error
   }
   if (manifest.schema !== 2 || !manifest.capabilities?.includes('sync-v2')) return legacy()
-  if (!scaleP19WindowCoreSupported(manifest) && (surface === 'initiatives-page' && !scaleP19InitiativeCatalogSupported(manifest.core, manifest.collections) || surface === 'projects-page' && !scaleP19CoreSupported(manifest.core, manifest.collections))) return legacy()
+  if (!queryWindowCoreSupported(manifest) && (surface === 'initiatives-page' && !initiativeCatalogSupported(manifest.core, manifest.collections) || surface === 'projects-page' && !queryCoreSupported(manifest.core, manifest.collections))) return legacy()
   const client = new SyncClient(manifest, workspaceKey)
   client.surface = surface
-  if ((surface === 'projects-page' || surface === 'initiatives-page') && !retainScaleP19Core(client, manifest.core)) { client.dispose(); return legacy() }
+  if ((surface === 'projects-page' || surface === 'initiatives-page') && !retainQueryWindowCore(client, manifest.core)) { client.dispose(); return legacy() }
   const abort = () => client.dispose()
   signal?.addEventListener('abort', abort, { once: true })
   try {

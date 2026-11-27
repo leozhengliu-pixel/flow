@@ -124,7 +124,7 @@ func TestBoundedMetadataStartupHistoryHeavy(t *testing.T) {
 	}
 	opener := func(name string) func() *SQLiteStore {
 		path := filepath.Join(dir, name)
-		scaleP21SW557CopyDatabase(t, seedPath, path)
+		copyDatabase(t, seedPath, path)
 		return func() *SQLiteStore {
 			repo, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path})
 			if err != nil {

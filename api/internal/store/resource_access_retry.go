@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// accessChangedReadAttempts bounds the snapshots a P19 summary read takes
+// accessChangedReadAttempts bounds the snapshots a project and initiative queries summary read takes
 // while the workspace's metadata keeps moving past the installed copy
 // (ErrResourceAccessChanged). One background write can retire the copy twice:
 // its commit advances the stored revision, and its later install under the
@@ -17,7 +17,7 @@ const accessChangedReadAttempts = 8
 
 type accessChangedReadHookKey struct{}
 
-// WithAccessChangedReadHookForTesting runs hook in every attempt of a P19
+// WithAccessChangedReadHookForTesting runs hook in every attempt of a project and initiative queries
 // summary read made with ctx, after the attempt read the stored metadata
 // revision and before it checks the installed copy against it: a write the
 // hook commits then retires the snapshot. attempt counts from 1.

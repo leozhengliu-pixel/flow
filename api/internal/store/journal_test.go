@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP09Fixture struct {
+type scaleFixture struct {
 	*SQLiteStore
 	data domain.Bootstrap
 }
 
-func scaleP09Database(t *testing.T) scaleP09Fixture {
+func journalScaleDatabase(t *testing.T) scaleFixture {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -71,10 +71,10 @@ func scaleP09Database(t *testing.T) scaleP09Fixture {
 		t.Fatal(err)
 	}
 	workspace = data.Workspace.URLKey
-	return scaleP09Fixture{repo, data}
+	return scaleFixture{repo, data}
 }
 
-func scaleP09Head(t *testing.T, f scaleP09Fixture) string {
+func scaleHead(t *testing.T, f scaleFixture) string {
 	t.Helper()
 	head, err := f.RecordJournalHead(t.Context(), f.data.Workspace.ID)
 	if err != nil {
@@ -83,7 +83,7 @@ func scaleP09Head(t *testing.T, f scaleP09Fixture) string {
 	return head
 }
 
-func scaleP09Put(t *testing.T, tx *sqlTx, workspace, kind, id string, value any) {
+func journalScalePut(t *testing.T, tx *sqlTx, workspace, kind, id string, value any) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -94,7 +94,7 @@ func scaleP09Put(t *testing.T, tx *sqlTx, workspace, kind, id string, value any)
 	}
 }
 
-func scaleP09Event(t *testing.T, f scaleP09Fixture, tx *sqlTx, payload []byte) string {
+func scaleEvent(t *testing.T, f scaleFixture, tx *sqlTx, payload []byte) string {
 	t.Helper()
 	id := idgen.New("p09-event-")
 	if _, err := insertDomainEvent(t.Context(), tx, domainEventRow{ID: id, Type: "project.updated", WorkspaceKey: f.data.Workspace.URLKey, WorkspaceID: f.data.Workspace.ID, AggregateID: "p09-project", Payload: payload, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
@@ -103,13 +103,13 @@ func scaleP09Event(t *testing.T, f scaleP09Fixture, tx *sqlTx, payload []byte) s
 	return id
 }
 
-func TestScaleP09TransactionalJournal(t *testing.T) {
+func TestScaleTransactionalJournal(t *testing.T) {
 	for _, mode := range []string{"shadow", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_JOURNAL", mode)
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
-			after := scaleP09Head(t, f)
+			after := scaleHead(t, f)
 			tx, err := f.db.BeginTx(t.Context(), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -125,8 +125,8 @@ func TestScaleP09TransactionalJournal(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload := []byte(`{"name":"First","legacy":null}`)
-			event := scaleP09Event(t, f, tx, payload)
-			second := scaleP09Event(t, f, tx, []byte(`{"second":true}`))
+			event := scaleEvent(t, f, tx, payload)
+			second := scaleEvent(t, f, tx, []byte(`{"second":true}`))
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
@@ -161,11 +161,11 @@ func TestScaleP09TransactionalJournal(t *testing.T) {
 	}
 }
 
-func TestScaleP09RollbackIsAtomic(t *testing.T) {
+func TestScaleRollbackIsAtomic(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	epoch, err := f.AuthzEpoch(t.Context(), f.data.Workspace.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +179,8 @@ func TestScaleP09RollbackIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	scaleP09Put(t, tx, workspace, "projects", "p09-rollback", domain.Project{ID: "p09-rollback", Name: "Must vanish"})
-	event := scaleP09Event(t, f, tx, []byte(`{}`))
+	journalScalePut(t, tx, workspace, "projects", "p09-rollback", domain.Project{ID: "p09-rollback", Name: "Must vanish"})
+	event := scaleEvent(t, f, tx, []byte(`{}`))
 	if err := tx.Commit(); !errors.Is(err, injected) {
 		t.Fatalf("injected failure = %v", err)
 	}
@@ -196,16 +196,16 @@ func TestScaleP09RollbackIsAtomic(t *testing.T) {
 		t.Fatalf("event survived rollback: %d %v", events, err)
 	}
 	got, err := f.AuthzEpoch(t.Context(), f.data.Workspace.ID)
-	if err != nil || got != epoch || scaleP09Head(t, f) != after {
+	if err != nil || got != epoch || scaleHead(t, f) != after {
 		t.Fatalf("epoch/head survived rollback: %s -> %s: %v", epoch, got, err)
 	}
 }
 
-func TestScaleP09DirectSQLVersionsAndTombstones(t *testing.T) {
+func TestScaleDirectSQLVersionsAndTombstones(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	key := RecordKey{"projects", "p09-recreate"}
 	for index, query := range []string{
 		`INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'projects','p09-recreate',0,'{"id":"p09-recreate","name":"one"}')`,
@@ -230,14 +230,14 @@ func TestScaleP09DirectSQLVersionsAndTombstones(t *testing.T) {
 	}
 }
 
-func TestScaleP09OldWritersFailCoverageAndRevokeAccess(t *testing.T) {
+func TestScaleOldWritersFailCoverageAndRevokeAccess(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	access, err := f.ResolveAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
 	if err != nil || strings.HasPrefix(access.AuthzEpoch, "p03:") {
 		t.Fatalf("authoritative epoch missing: %+v %v", access, err)
 	}
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	// Bypass sqlDatabase exactly as an old replica or direct SQL tool does.
 	if _, err := f.db.DB.ExecContext(t.Context(), rewriteSQL(`UPDATE workspace_memberships SET role='member' WHERE workspace_id=? AND user_id=?`, f.dialect), f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
@@ -270,9 +270,9 @@ func TestScaleP09OldWritersFailCoverageAndRevokeAccess(t *testing.T) {
 	}
 }
 
-func TestScaleP09AuthorizationWriters(t *testing.T) {
+func TestScaleAuthorizationWriters(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID, user := f.data.Workspace.URLKey, f.data.Workspace.ID, f.data.Viewer.ID
 	// Enumerate ACL, key, membership and account writers. Use one identity
 	// with its own workspace; never assume a seeded admin exists in CI.
@@ -308,7 +308,7 @@ func TestScaleP09AuthorizationWriters(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			after := scaleP09Head(t, f)
+			after := scaleHead(t, f)
 			if _, err := f.db.ExecContext(t.Context(), write.query, write.args...); err != nil {
 				t.Fatal(err)
 			}
@@ -331,9 +331,9 @@ func TestScaleP09AuthorizationWriters(t *testing.T) {
 	}
 }
 
-func TestScaleP09PulseCursorKeepsAuthorization(t *testing.T) {
+func TestScalePulseCursorKeepsAuthorization(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, f.data.Workspace.ID
 	epoch, err := f.AuthzEpoch(t.Context(), id)
 	if err != nil {
@@ -344,7 +344,7 @@ func TestScaleP09PulseCursorKeepsAuthorization(t *testing.T) {
 		`UPDATE workspace_metadata_records SET data='{"user":"2026-11-23T06:00:00Z"}' WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`,
 		`DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`,
 	} {
-		head := scaleP09Head(t, f)
+		head := scaleHead(t, f)
 		if _, err := f.db.ExecContext(t.Context(), query, workspace); err != nil {
 			t.Fatal(err)
 		}
@@ -359,23 +359,23 @@ func TestScaleP09PulseCursorKeepsAuthorization(t *testing.T) {
 	}
 }
 
-func TestScaleP09BoundedTransactions(t *testing.T) {
+func TestScaleBoundedTransactions(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	observed := 0
 	f.setRecordJournalCommitHook(func(_ context.Context, _ *sqlTx, _ string, records []RecordDelta) error {
 		observed += len(records)
 		return nil
 	})
 	t.Cleanup(func() { f.setRecordJournalCommitHook(nil) })
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	for i := range 700 {
-		scaleP09Put(t, tx, f.data.Workspace.URLKey, "projects", fmt.Sprintf("p09-bulk-%04d", i), domain.Project{ID: fmt.Sprintf("p09-bulk-%04d", i), Name: strings.Repeat("title", 20)})
+		journalScalePut(t, tx, f.data.Workspace.URLKey, "projects", fmt.Sprintf("p09-bulk-%04d", i), domain.Project{ID: fmt.Sprintf("p09-bulk-%04d", i), Name: strings.Repeat("title", 20)})
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -394,14 +394,14 @@ func TestScaleP09BoundedTransactions(t *testing.T) {
 	}
 }
 
-func TestScaleP09OffRestoresLegacyWrites(t *testing.T) {
+func TestScaleOffRestoresLegacyWrites(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
-	after := scaleP09Head(t, f)
+	f := journalScaleDatabase(t)
+	after := scaleHead(t, f)
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_memberships SET role='admin' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
 	}
-	if scaleP09Head(t, f) != after {
+	if scaleHead(t, f) != after {
 		t.Fatal("disabled journal allocated a cursor")
 	}
 	if _, err := f.ReadCommittedChanges(t.Context(), f.data.Workspace.ID, after, 100, 4096); !errors.Is(err, ErrRecordJournalUnavailable) {
@@ -415,10 +415,10 @@ func TestScaleP09OffRestoresLegacyWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP09CommitBeforeNotificationRecovery(t *testing.T) {
+func TestScaleCommitBeforeNotificationRecovery(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
-	after := scaleP09Head(t, f)
+	f := journalScaleDatabase(t)
+	after := scaleHead(t, f)
 	// Simulate losing the writer after durable commit, before sequencing and
 	// notification. The reader's existing stale-sequencing rescue must finish it.
 	f.db.commitHooks.Store(&commitHooks{afterCommit: func(tx *sqlTx) { tx.sequencing = nil }})
@@ -428,8 +428,8 @@ func TestScaleP09CommitBeforeNotificationRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	scaleP09Put(t, tx, f.data.Workspace.URLKey, "projects", "p09-recover", domain.Project{ID: "p09-recover", Name: "Durable"})
-	event := scaleP09Event(t, f, tx, []byte(`{"name":"Durable"}`))
+	journalScalePut(t, tx, f.data.Workspace.URLKey, "projects", "p09-recover", domain.Project{ID: "p09-recover", Name: "Durable"})
+	event := scaleEvent(t, f, tx, []byte(`{"name":"Durable"}`))
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -443,14 +443,14 @@ func TestScaleP09CommitBeforeNotificationRecovery(t *testing.T) {
 	}
 }
 
-func TestScaleP09LegacySequencesRemainGapFree(t *testing.T) {
+func TestScaleLegacySequencesRemainGapFree(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	legacy, err := f.WorkspaceChangeHead(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_memberships SET role='admin' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +463,7 @@ func TestScaleP09LegacySequencesRemainGapFree(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	event := scaleP09Event(t, f, tx, []byte(`{"name":"Existing payload"}`))
+	event := scaleEvent(t, f, tx, []byte(`{"name":"Existing payload"}`))
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -479,17 +479,17 @@ func TestScaleP09LegacySequencesRemainGapFree(t *testing.T) {
 	}
 }
 
-func TestScaleP09OrderedPagesAndRetention(t *testing.T) {
+func TestScaleOrderedPagesAndRetention(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	after := scaleP09Head(t, f)
+	after := scaleHead(t, f)
 	for i := range 3 {
 		tx, err := f.db.BeginTx(t.Context(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP09Put(t, tx, workspace, "projects", "p09-versioned", domain.Project{ID: "p09-versioned", Name: fmt.Sprintf("Version %d", i)})
+		journalScalePut(t, tx, workspace, "projects", "p09-versioned", domain.Project{ID: "p09-versioned", Name: fmt.Sprintf("Version %d", i)})
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
@@ -524,15 +524,15 @@ func TestScaleP09OrderedPagesAndRetention(t *testing.T) {
 	}
 }
 
-func TestScaleP09UsageTelemetryDoesNotRevoke(t *testing.T) {
+func TestScaleUsageTelemetryDoesNotRevoke(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP09Put(t, tx, f.data.Workspace.URLKey, "apiKeys", "p09-use", domain.APIKey{ID: "p09-use", Scopes: []string{"read"}})
-	scaleP09Put(t, tx, f.data.Workspace.URLKey, "projects", "p09-use-project", domain.Project{ID: "p09-use-project", Name: "Still authorized"})
+	journalScalePut(t, tx, f.data.Workspace.URLKey, "apiKeys", "p09-use", domain.APIKey{ID: "p09-use", Scopes: []string{"read"}})
+	journalScalePut(t, tx, f.data.Workspace.URLKey, "projects", "p09-use-project", domain.Project{ID: "p09-use-project", Name: "Still authorized"})
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -556,10 +556,10 @@ func TestScaleP09UsageTelemetryDoesNotRevoke(t *testing.T) {
 	}
 }
 
-func TestScaleP09RepairStrandedJournal(t *testing.T) {
+func TestScaleRepairStrandedJournal(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
-	after := scaleP09Head(t, f)
+	f := journalScaleDatabase(t)
+	after := scaleHead(t, f)
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_memberships SET role='admin' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -580,10 +580,10 @@ func TestScaleP09RepairStrandedJournal(t *testing.T) {
 	}
 }
 
-func TestScaleP09ContentKeysRetainParentScope(t *testing.T) {
+func TestScaleContentKeysRetainParentScope(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
-	after := scaleP09Head(t, f)
+	f := journalScaleDatabase(t)
+	after := scaleHead(t, f)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -614,12 +614,12 @@ func TestScaleP09ContentKeysRetainParentScope(t *testing.T) {
 	}
 }
 
-func TestScaleP09MySQLStaleSessionToken(t *testing.T) {
+func TestScaleMySQLStaleSessionToken(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	if os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "mysql" {
 		t.Skip("requires the shared CI MySQL database")
 	}
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.RecordJournalCapture() == RecordJournalCaptureApplication && !f.db.captureTriggers.Load() {
 		t.Skip("application capture without triggers sets no session token")
 	}
@@ -661,9 +661,9 @@ func TestScaleP09MySQLStaleSessionToken(t *testing.T) {
 	}
 }
 
-func TestScaleP09RetentionWorkerStops(t *testing.T) {
+func TestScaleRetentionWorkerStops(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.db.journalStop == nil {
 		t.Fatal("journal retention worker was not started")
 	}
@@ -680,17 +680,17 @@ func TestScaleP09RetentionWorkerStops(t *testing.T) {
 	}
 }
 
-func TestScaleP09JournalPreservesLegacyWriteBudget(t *testing.T) {
+func TestScaleJournalPreservesLegacyWriteBudget(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	for _, phase := range []string{"journal", "audit"} {
 		t.Run(phase, func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			tx, err := f.db.BeginTx(t.Context(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			scaleP09Put(t, tx, workspace, "projects", "p09-budget", map[string]string{"id": "p09-budget", "name": "Before"})
+			journalScalePut(t, tx, workspace, "projects", "p09-budget", map[string]string{"id": "p09-budget", "name": "Before"})
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
@@ -703,7 +703,7 @@ func TestScaleP09JournalPreservesLegacyWriteBudget(t *testing.T) {
 					break
 				}
 			}
-			after := scaleP09Head(t, f)
+			after := scaleHead(t, f)
 			eventID, auditID := idgen.New("p09-budget-event-"), idgen.New("p09-budget-audit-")
 			countKey := issueStatsKey{Scope: "team", ID: "p09-budget-count"}
 			prepare := func() *sqlTx {
@@ -711,7 +711,7 @@ func TestScaleP09JournalPreservesLegacyWriteBudget(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				scaleP09Put(t, tx, workspace, "projects", "p09-budget", map[string]string{"id": "p09-budget", "name": "Committed"})
+				journalScalePut(t, tx, workspace, "projects", "p09-budget", map[string]string{"id": "p09-budget", "name": "Committed"})
 				if _, err := insertDomainEvent(t.Context(), tx, domainEventRow{ID: eventID, Type: "project.updated", WorkspaceID: f.data.Workspace.ID, Payload: []byte(`{"name":"Committed"}`), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
 					t.Fatal(err)
 				}

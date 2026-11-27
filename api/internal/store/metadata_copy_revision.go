@@ -92,7 +92,7 @@ func readMetadataStamp(ctx context.Context, reader metadataRowReader, workspace 
 // false when there is no copy or its revision is unknown. The caller holds mu.
 // A bounded image holds only the resident fields, so it is never the exact
 // copy of a revision: readers that certify the installed copy before reading
-// its collections fall back to their canonical reads (SW559).
+// its collections fall back to their canonical reads.
 func (s *SQLiteStore) copyRevisionLocked(workspace string) (copyRevision, bool) {
 	if s.metadataResidency != nil {
 		return copyRevision{}, false

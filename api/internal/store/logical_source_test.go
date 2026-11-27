@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW27WarmLogicalFixture(t *testing.T) (scaleP09Fixture, domain.Bootstrap, copyStamp) {
+func warmLogicalFixture(t *testing.T) (scaleFixture, domain.Bootstrap, copyStamp) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2026, 11, 13, 12, 34, 56, 789, time.UTC)
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21_sw27.source_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -61,7 +61,7 @@ func scaleP21SW27WarmLogicalFixture(t *testing.T) (scaleP09Fixture, domain.Boots
 	return f, warm, storedStamp
 }
 
-func scaleP21SW27AssertWarmSource(t *testing.T, data domain.Bootstrap) {
+func assertWarmSource(t *testing.T, data domain.Bootstrap) {
 	t.Helper()
 	if len(data.IntegrationConnections) != 1 ||
 		data.IntegrationConnections[0].Provider != "git\x00hub" ||
@@ -94,9 +94,9 @@ func scaleP21SW27AssertWarmSource(t *testing.T, data domain.Bootstrap) {
 	}
 }
 
-func TestScaleP21SW27LiteralLogicalLifecycleBaseline(t *testing.T) {
-	f, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
-	scaleP21SW27AssertWarmSource(t, warm)
+func TestLiteralLogicalLifecycleBaseline(t *testing.T) {
+	f, warm, stamp := warmLogicalFixture(t)
+	assertWarmSource(t, warm)
 	workspace := f.data.Workspace.URLKey
 	var connectionRaw []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='integrationConnections' AND record_key=?`,
@@ -188,15 +188,15 @@ func TestScaleP21SW27LiteralLogicalLifecycleBaseline(t *testing.T) {
 	t.Logf("literal request snapshot used exact installed source=%v", exact && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision)
 }
 
-func scaleP21SW27CancelledContext(t *testing.T) context.Context {
+func cancelledContext(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	return ctx
 }
 
-func TestScaleP21SW27CapturedLogicalSourceWarmAndReloaded(t *testing.T) {
-	f, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestCapturedLogicalSourceWarmAndReloaded(t *testing.T) {
+	f, warm, stamp := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	cold, coldStamp, err := f.loadWorkspaceStamped(t.Context(), workspace)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestScaleP21SW27CapturedLogicalSourceWarmAndReloaded(t *testing.T) {
 				t.Fatalf("bounded source replaced literal %s values with another representation:\nactual=%#v\nexpected=%#v", fixture.name, actual.Settings, expected.Settings)
 			}
 			if fixture.name == "accepted-warm" {
-				scaleP21SW27AssertWarmSource(t, actual)
+				assertWarmSource(t, actual)
 			}
 			actual.Settings["sw27Typed"].(map[string]any)["integer"] = "caller-owned"
 			actual.IntegrationConnections[0].Config["warm"] = "caller-owned"
@@ -241,8 +241,8 @@ func TestScaleP21SW27CapturedLogicalSourceWarmAndReloaded(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27CapturedLogicalSourceRetainedGeneration(t *testing.T) {
-	f, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestCapturedLogicalSourceRetainedGeneration(t *testing.T) {
+	f, warm, stamp := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Fields: []string{"integrationConnections", "cycles", "settings", "userSettings"}}
 	source, err := captureMetadataLogicalSource(t.Context(), warm, stamp)
@@ -274,7 +274,7 @@ func TestScaleP21SW27CapturedLogicalSourceRetainedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW27AssertWarmSource(t, actual)
+	assertWarmSource(t, actual)
 	if actual.IntegrationConnections[0].Status != "configured" || source.Stamp() != stamp {
 		t.Fatal("retained old handoff followed latest canonical rows")
 	}
@@ -288,8 +288,8 @@ func TestScaleP21SW27CapturedLogicalSourceRetainedGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27CapturedLogicalSourceLargeAndCancelled(t *testing.T) {
-	f, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestCapturedLogicalSourceLargeAndCancelled(t *testing.T) {
+	f, warm, stamp := warmLogicalFixture(t)
 	decodes := f.WorkspaceMetadataDecodes()
 	warm.Settings["sw27Large"] = strings.Repeat("legal body ", 1<<20)
 	source, err := captureMetadataLogicalSource(t.Context(), warm, stamp)
@@ -308,7 +308,7 @@ func TestScaleP21SW27CapturedLogicalSourceLargeAndCancelled(t *testing.T) {
 	if _, err := source.Select(t.Context(), MetadataRecordScope{Read: []RecordKey{{Kind: "settings", ID: "sw27Large"}}}, 256<<10); err == nil {
 		t.Fatal("large selected value bypassed decoded-work budget")
 	}
-	cancelled := scaleP21SW27CancelledContext(t)
+	cancelled := cancelledContext(t)
 	if _, err := source.Select(cancelled, scope, 256<<10); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled logical selection changed cancellation", err)
 	}
@@ -322,8 +322,8 @@ func TestScaleP21SW27CapturedLogicalSourceLargeAndCancelled(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalSourceIntegratedWarmHandoff(t *testing.T) {
-	f, warm, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceIntegratedWarmHandoff(t *testing.T) {
+	f, warm, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -338,7 +338,7 @@ func TestScaleP21SW27LogicalSourceIntegratedWarmHandoff(t *testing.T) {
 		if err != nil || !found || !reflect.DeepEqual(actual, expected) {
 			t.Fatalf("%s bounded accessor did not read actual owner-installed state: found=%v error=%v settings=%#v", label, found, err, actual.Settings)
 		}
-		scaleP21SW27AssertWarmSource(t, actual)
+		assertWarmSource(t, actual)
 	}
 	read("initial")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "integrationConnections", "settings"), workspace, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
@@ -357,13 +357,13 @@ func TestScaleP21SW27LogicalSourceIntegratedWarmHandoff(t *testing.T) {
 	if !found {
 		t.Fatal("old store lost workspace")
 	}
-	actual, found, err := f.WorkspaceMetadataScoped(scaleP21SW27CancelledContext(t), workspace, MetadataRecordScope{Fields: []string{"not-a-real-field"}})
+	actual, found, err := f.WorkspaceMetadataScoped(cancelledContext(t), workspace, MetadataRecordScope{Fields: []string{"not-a-real-field"}})
 	if err != nil || !found || !reflect.DeepEqual(actual, offExpected) {
 		t.Fatal("flag-off store stopped forwarding literal original accessor before context/scope validation", found, err)
 	}
 }
 
-func TestScaleP21SW27LogicalSourceStreamsLegalLargeBytes(t *testing.T) {
+func TestLogicalSourceStreamsLegalLargeBytes(t *testing.T) {
 	raw := append(bytes.Repeat([]byte{'a', 0, 255, 128, 'z'}, 1<<20), []byte("tail")...)
 	body := string(raw)
 	data := domain.Bootstrap{Settings: map[string]any{"largeString": body, "largeBytes": raw}}
@@ -422,8 +422,8 @@ func TestScaleP21SW27LogicalSourceStreamsLegalLargeBytes(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalSourceForkPreservesUnselectedGraph(t *testing.T) {
-	_, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceForkPreservesUnselectedGraph(t *testing.T) {
+	_, warm, stamp := warmLogicalFixture(t)
 	source, err := captureMetadataLogicalSource(t.Context(), warm, stamp)
 	if err != nil {
 		t.Fatal(err)
@@ -476,8 +476,8 @@ func TestScaleP21SW27LogicalSourceForkPreservesUnselectedGraph(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalSourceAcceptedOpaqueTimestampHold(t *testing.T) {
-	f, _, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceAcceptedOpaqueTimestampHold(t *testing.T) {
+	f, _, stamp := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	fixed := time.Date(2026, 11, 13, 9, 8, 7, 6, time.FixedZone("sw27-owned-zone", 3456))
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings"), workspace, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
@@ -504,7 +504,7 @@ func TestScaleP21SW27LogicalSourceAcceptedOpaqueTimestampHold(t *testing.T) {
 	t.Log("coverage hold: arbitrary native time.Location accepted by legacy writes still requires an audited detached representation")
 }
 
-func scaleP21SW27CompareRawLogicalRecovery(t *testing.T, f scaleP09Fixture) {
+func compareRawLogicalRecovery(t *testing.T, f scaleFixture) {
 	t.Helper()
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
@@ -568,15 +568,15 @@ func scaleP21SW27CompareRawLogicalRecovery(t *testing.T, f scaleP09Fixture) {
 	}
 }
 
-func TestScaleP21SW27RawLogicalRecoveryMatchesLegacyRows(t *testing.T) {
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
-	scaleP21SW27CompareRawLogicalRecovery(t, f)
+func TestRawLogicalRecoveryMatchesLegacyRows(t *testing.T) {
+	f, _, _ := warmLogicalFixture(t)
+	compareRawLogicalRecovery(t, f)
 }
 
-func TestScaleP21SW27RawLogicalRecoveryRepeatedInlineAndUpdates(t *testing.T) {
+func TestRawLogicalRecoveryRepeatedInlineAndUpdates(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
@@ -599,11 +599,11 @@ func TestScaleP21SW27RawLogicalRecoveryRepeatedInlineAndUpdates(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	scaleP21SW27CompareRawLogicalRecovery(t, f)
+	compareRawLogicalRecovery(t, f)
 }
 
-func TestScaleP21SW27RawLogicalRecoveryCancellationAndQuotas(t *testing.T) {
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestRawLogicalRecoveryCancellationAndQuotas(t *testing.T) {
+	f, _, _ := warmLogicalFixture(t)
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes, metadataResidency: newMetadataResidency()}
 	ctx, release, err := view.admitMetadataWork(t.Context(), 2<<20)
 	if err != nil {
@@ -628,7 +628,7 @@ func TestScaleP21SW27RawLogicalRecoveryCancellationAndQuotas(t *testing.T) {
 			}
 			defer restore()
 			if mode == "mid-recovery-cancel" {
-				request = &scaleP21SW27CancelAfterChecks{Context: ctx, limit: 20}
+				request = &cancelAfterChecks{Context: ctx, limit: 20}
 			} else {
 				injected = metadataLogicalDiskCap() - metadataLogicalDiskUsed.Load()
 				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskCap()) {
@@ -657,10 +657,10 @@ func TestScaleP21SW27RawLogicalRecoveryCancellationAndQuotas(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27RawLogicalRecoveryLegalLargeRecord(t *testing.T) {
+func TestRawLogicalRecoveryLegalLargeRecord(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	for _, size := range []int{5 << 20, 8 << 20} {
 		raw, err := json.Marshal(domain.User{ID: f.data.Viewer.ID, Name: strings.Repeat("x", size)})
@@ -670,7 +670,7 @@ func TestScaleP21SW27RawLogicalRecoveryLegalLargeRecord(t *testing.T) {
 		if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='users' AND record_key=?`, raw, workspace, f.data.Viewer.ID); err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW27CompareRawLogicalRecovery(t, f)
+		compareRawLogicalRecovery(t, f)
 	}
 	t.Run("decoded-object-budget", func(t *testing.T) {
 		dense := []byte("[" + strings.Repeat("0,", 2100000) + "0]")
@@ -711,11 +711,11 @@ func TestScaleP21SW27RawLogicalRecoveryLegalLargeRecord(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW27RawLogicalRecoveryPhysicalOrder(t *testing.T) {
+func TestRawLogicalRecoveryPhysicalOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("mixed TEXT/BLOB physical record identities are a SQLite storage case")
 	}
@@ -745,13 +745,13 @@ func TestScaleP21SW27RawLogicalRecoveryPhysicalOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	scaleP21SW27CompareRawLogicalRecovery(t, f)
+	compareRawLogicalRecovery(t, f)
 }
 
-func TestScaleP21SW27RawLogicalRecoveryOrphanOffloadValidation(t *testing.T) {
+func TestRawLogicalRecoveryOrphanOffloadValidation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
@@ -790,10 +790,10 @@ func TestScaleP21SW27RawLogicalRecoveryOrphanOffloadValidation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27RawLogicalRecoveryJSONFixedZones(t *testing.T) {
+func TestRawLogicalRecoveryJSONFixedZones(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -810,11 +810,11 @@ func TestScaleP21SW27RawLogicalRecoveryJSONFixedZones(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW27CompareRawLogicalRecovery(t, f)
+	compareRawLogicalRecovery(t, f)
 }
 
-func TestScaleP21SW27LogicalSourceNativeMonotonicTime(t *testing.T) {
-	f, _, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceNativeMonotonicTime(t *testing.T) {
+	f, _, stamp := warmLogicalFixture(t)
 	first := time.Now()
 	second := first.Add(37*time.Second + 123*time.Nanosecond)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings"), f.data.Workspace.URLKey, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
@@ -842,23 +842,23 @@ func TestScaleP21SW27LogicalSourceNativeMonotonicTime(t *testing.T) {
 	}
 }
 
-// scaleP21SW27CancelAfterChecks is cancelled from its limit-th Err call on.
+// cancelAfterChecks is cancelled from its limit-th Err call on.
 // database/sql calls Err from its rows' context goroutines too, so the count
 // is atomic.
-type scaleP21SW27CancelAfterChecks struct {
+type cancelAfterChecks struct {
 	context.Context
 	checks atomic.Int64
 	limit  int64
 }
 
-func (ctx *scaleP21SW27CancelAfterChecks) Err() error {
+func (ctx *cancelAfterChecks) Err() error {
 	if ctx.checks.Add(1) >= ctx.limit {
 		return context.Canceled
 	}
 	return ctx.Context.Err()
 }
 
-func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
+func TestLogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 	diskBefore, descriptorsBefore := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	data := domain.Bootstrap{Settings: map[string]any{"small": "value"}}
 	t.Run("descriptor-admission", func(t *testing.T) {
@@ -884,7 +884,7 @@ func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 		}
 	})
 	t.Run("mid-capture-cancel", func(t *testing.T) {
-		ctx := &scaleP21SW27CancelAfterChecks{Context: t.Context(), limit: 12}
+		ctx := &cancelAfterChecks{Context: t.Context(), limit: 12}
 		source, err := captureMetadataLogicalSource(ctx, data, copyStamp{})
 		if source != nil || !errors.Is(err, context.Canceled) || ctx.checks.Load() < ctx.limit {
 			t.Fatal("capture ignored cancellation after storage creation", source != nil, err, ctx.checks.Load())
@@ -914,8 +914,8 @@ func TestScaleP21SW27LogicalSourceCaptureQuotasAndCleanup(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalSourceUnknownOwnerDoesNotClaimPeerStamp(t *testing.T) {
-	f, warm, originalStamp := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceUnknownOwnerDoesNotClaimPeerStamp(t *testing.T) {
+	f, warm, originalStamp := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	peer, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -962,8 +962,8 @@ func TestScaleP21SW27LogicalSourceUnknownOwnerDoesNotClaimPeerStamp(t *testing.T
 	}
 }
 
-func TestScaleP21SW27LogicalSourceStaleUncoordinatedWriterDifferential(t *testing.T) {
-	f, warm, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestLogicalSourceStaleUncoordinatedWriterDifferential(t *testing.T) {
+	f, warm, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	ctx := WithMetadataFields(t.Context(), "settings")
 	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "settings", ID: "sw27Counter"}}}
@@ -1083,7 +1083,7 @@ func TestScaleP21SW27LogicalSourceStaleUncoordinatedWriterDifferential(t *testin
 	}
 }
 
-func TestScaleP21SW27LogicalSourcePointForkDiskBoundMeasurement(t *testing.T) {
+func TestLogicalSourcePointForkDiskBoundMeasurement(t *testing.T) {
 	for _, size := range []int{64 << 10, 4 << 20} {
 		t.Run(idgen.New("size-"), func(t *testing.T) {
 			startDisk, startDescriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()

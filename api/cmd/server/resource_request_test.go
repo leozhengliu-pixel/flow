@@ -19,7 +19,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21ResourceRequestWriter struct {
+type scaleResourceRequestWriter struct {
 	*httptest.ResponseRecorder
 	entered chan struct{}
 	resume  chan struct{}
@@ -28,7 +28,7 @@ type scaleP21ResourceRequestWriter struct {
 	panicAt any
 }
 
-func (w *scaleP21ResourceRequestWriter) Write(raw []byte) (int, error) {
+func (w *scaleResourceRequestWriter) Write(raw []byte) (int, error) {
 	w.once.Do(func() { close(w.entered) })
 	<-w.resume
 	if w.panicAt != nil {
@@ -42,7 +42,7 @@ func (w *scaleP21ResourceRequestWriter) Write(raw []byte) (int, error) {
 	return w.ResponseRecorder.Write(raw)
 }
 
-func scaleP21ResourceRequest(t *testing.T, f scaleP21M2Fixture, client *http.Client, kind, ref string) *http.Request {
+func scaleResourceRequest(t *testing.T, f policyDifferentialFixture, client *http.Client, kind, ref string) *http.Request {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/api/"+kind+"/"+ref, nil)
 	r.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
@@ -57,7 +57,7 @@ func scaleP21ResourceRequest(t *testing.T, f scaleP21M2Fixture, client *http.Cli
 	return r
 }
 
-func scaleP21ResourceRequestServe(s *server, kind string, w http.ResponseWriter, r *http.Request) {
+func scaleResourceRequestServe(s *server, kind string, w http.ResponseWriter, r *http.Request) {
 	if kind == "projects" {
 		s.getProjectRecord(w, r)
 	} else {
@@ -65,7 +65,7 @@ func scaleP21ResourceRequestServe(s *server, kind string, w http.ResponseWriter,
 	}
 }
 
-func scaleP21ResourceRequestReleased(t *testing.T, repo *store.SQLiteStore, handoff *resourceReadHandoff, owner *store.ResourceRead) {
+func scaleResourceRequestReleased(t *testing.T, repo *store.SQLiteStore, handoff *resourceReadHandoff, owner *store.ResourceRead) {
 	t.Helper()
 	if handoff == nil || !handoff.released || handoff.owner != nil || handoff.allowed ||
 		!reflect.DeepEqual(handoff.data, domain.Bootstrap{}) || !reflect.DeepEqual(handoff.access, store.AccessContext{}) {
@@ -79,13 +79,13 @@ func scaleP21ResourceRequestReleased(t *testing.T, repo *store.SQLiteStore, hand
 	}
 }
 
-func TestScaleP21ResourceRequestLifetime(t *testing.T) {
+func TestScaleResourceRequestLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		prefix := idgen.New("p21-request-resource-")
 		projectID, initiativeID := prefix+"project", prefix+"initiative"
@@ -112,11 +112,11 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 		for _, resource := range []struct{ kind, ref string }{{"projects", projectID}, {"initiatives", initiativeID}} {
 			for _, exit := range []string{"normal", "canceled", "panic"} {
 				t.Run(resource.kind+"/"+exit, func(t *testing.T) {
-					request := scaleP21ResourceRequest(t, f, f.admin, resource.kind, resource.ref)
+					request := scaleResourceRequest(t, f, f.admin, resource.kind, resource.ref)
 					ctx, cancel := context.WithCancel(request.Context())
 					defer cancel()
 					request = request.WithContext(ctx)
-					writer := &scaleP21ResourceRequestWriter{
+					writer := &scaleResourceRequestWriter{
 						ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{}),
 					}
 					var resume sync.Once
@@ -142,7 +142,7 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 							owner = handoff.owner
 						}
 						captured <- capturedRead{handoff, owner, scope}
-						scaleP21ResourceRequestServe(service, resource.kind, w, r)
+						scaleResourceRequestServe(service, resource.kind, w, r)
 					}))
 					done := make(chan any, 1)
 					go func() {
@@ -194,16 +194,16 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 					case <-time.After(10 * time.Second):
 						t.Fatal("request did not finish after response release")
 					}
-					scaleP21ResourceRequestReleased(t, f.probe, held.handoff, held.owner)
+					scaleResourceRequestReleased(t, f.probe, held.handoff, held.owner)
 					held.scope.close()
-					scaleP21ResourceRequestReleased(t, f.probe, held.handoff, held.owner)
+					scaleResourceRequestReleased(t, f.probe, held.handoff, held.owner)
 				})
 			}
 		}
 		member := authClient(t)
 		authRequest[domain.AuthSession](t, member, http.MethodPost, f.host.URL+"/api/auth/login", map[string]string{"email": f.principals[2].user.Email, "password": "p03-fixture-password"}, "", http.StatusOK)
 		t.Run("denied-response", func(t *testing.T) {
-			writer := &scaleP21ResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
+			writer := &scaleResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
 			var resume sync.Once
 			release := func() { resume.Do(func() { close(writer.resume) }) }
 			defer release()
@@ -212,7 +212,7 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				handler.ServeHTTP(writer, scaleP21ResourceRequest(t, f, member, "projects", "m2-unrelated"))
+				handler.ServeHTTP(writer, scaleResourceRequest(t, f, member, "projects", "m2-unrelated"))
 			}()
 			select {
 			case <-writer.entered:
@@ -234,7 +234,7 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 			mutated, retried := false, false
 			var mutationErr error
 			var resolveBytes, heldBefore, heldAtRetry int
-			request := scaleP21ResourceRequest(t, f, f.admin, "projects", projectID)
+			request := scaleResourceRequest(t, f, f.admin, "projects", projectID)
 			request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(query string) {
 				used := f.probe.MetadataWorkUsedForTesting()
 				if !mutated && strings.Contains(query, "FROM workspace_memberships m JOIN auth_users") {
@@ -265,7 +265,7 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 			if mutationErr != nil || !mutated || !retried || heldBefore <= resolveBytes || heldAtRetry != resolveBytes || w.Code != http.StatusOK {
 				t.Fatalf("retry ownership changed: mutation=%v triggered=%t retried=%t bytes=%d/%d resolve=%d status=%d body-bytes=%d", mutationErr, mutated, retried, heldBefore, heldAtRetry, resolveBytes, w.Code, w.Body.Len())
 			}
-			scaleP21ResourceRequestReleased(t, f.probe, handoff, owner)
+			scaleResourceRequestReleased(t, f.probe, handoff, owner)
 		})
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
@@ -304,7 +304,7 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 					service.shadowResourceRecord(request, "projects", domain.Project{ID: projectID})
 				}
 				handoff, _ := request.Context().Value(resourceReadHandoffKey{}).(*resourceReadHandoff)
-				scaleP21ResourceRequestReleased(t, f.probe, handoff, nil)
+				scaleResourceRequestReleased(t, f.probe, handoff, nil)
 			}
 		})
 		if f.probe.WorkspaceMetadataDecodes() != 0 {
@@ -313,13 +313,13 @@ func TestScaleP21ResourceRequestLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceRequestOffContextAndHTTPParity(t *testing.T) {
+func TestScaleResourceRequestOffContextAndHTTPParity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		prefix := idgen.New("p21-resource-wire-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.resource_wire_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -344,7 +344,7 @@ func TestScaleP21ResourceRequestOffContextAndHTTPParity(t *testing.T) {
 				var outcomes []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					service := &server{store: source}
-					request := scaleP21ResourceRequest(t, f, f.admin, resource.kind, resource.ref)
+					request := scaleResourceRequest(t, f, f.admin, resource.kind, resource.ref)
 					ctx, cancel := context.WithTimeout(context.WithValue(request.Context(), contextMarker{}, marker), time.Minute)
 					defer cancel()
 					request = request.WithContext(ctx)
@@ -379,7 +379,7 @@ func TestScaleP21ResourceRequestOffContextAndHTTPParity(t *testing.T) {
 								offFailure = "off mode replaced the literal unowned accessor"
 							}
 						}
-						scaleP21ResourceRequestServe(service, resource.kind, w, r)
+						scaleResourceRequestServe(service, resource.kind, w, r)
 					}))
 					w := httptest.NewRecorder()
 					handler.ServeHTTP(w, request)
@@ -399,7 +399,7 @@ func TestScaleP21ResourceRequestOffContextAndHTTPParity(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("state=%s kind=%s HTTP output changed: %s", state, resource.kind, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("state=%s kind=%s HTTP output changed: %s", state, resource.kind, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		}

@@ -18,25 +18,25 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW174States struct {
+type workflowHeaderStates struct {
 	Options []map[string]any
 	IDs     []string
 	Default string
 }
 
-type scaleP21SW174Default struct {
+type workflowHeaderDefault struct {
 	Action chatCardAction
 	Error  string
 }
 
-type scaleP21SW174Output struct {
+type workflowHeadersOutput struct {
 	Error                        string
 	Languages                    []string
 	Creatable                    []map[string]any
-	States                       map[string]scaleP21SW174States
+	States                       map[string]workflowHeaderStates
 	Assignees                    []map[string]any
 	AssigneeIDs                  []string
-	Defaults                     map[string]scaleP21SW174Default
+	Defaults                     map[string]workflowHeaderDefault
 	TemplatePermitted            map[string]bool
 	ViewerTeamIDs                []string
 	DefaultPriority              int
@@ -47,10 +47,10 @@ type scaleP21SW174Output struct {
 	Roles                        map[string]string
 }
 
-func scaleP21SW174Evaluate(service *server, data domain.Bootstrap, workspace, prefix, public, private, child, userID string, creator domain.User, guestID string) scaleP21SW174Output {
-	result := scaleP21SW174Output{
+func workflowHeadersEvaluate(service *server, data domain.Bootstrap, workspace, prefix, public, private, child, userID string, creator domain.User, guestID string) workflowHeadersOutput {
+	result := workflowHeadersOutput{
 		Languages: []string{chatLanguage(data, userID, "lark"), chatLanguage(data, userID, "feishu")},
-		States:    map[string]scaleP21SW174States{}, Defaults: map[string]scaleP21SW174Default{},
+		States:    map[string]workflowHeaderStates{}, Defaults: map[string]workflowHeaderDefault{},
 		TemplatePermitted: map[string]bool{}, Roles: map[string]string{},
 		ViewerTeamIDs: slices.Clone(data.ViewerTeamIDs),
 	}
@@ -59,7 +59,7 @@ func scaleP21SW174Evaluate(service *server, data domain.Bootstrap, workspace, pr
 	}
 	for _, teamID := range []string{public, private, child, prefix + "fallback"} {
 		options, ids, selected := chatStateOptions(data, teamID)
-		result.States[teamID] = scaleP21SW174States{options, ids, selected}
+		result.States[teamID] = workflowHeaderStates{options, ids, selected}
 	}
 	result.Assignees, result.AssigneeIDs = chatAssigneeOptions(result.Languages[0], data, userID)
 	binding := domain.ChatBinding{
@@ -79,7 +79,7 @@ func scaleP21SW174Evaluate(service *server, data domain.Bootstrap, workspace, pr
 		if err != nil {
 			failure = err.Error()
 		}
-		result.Defaults[name] = scaleP21SW174Default{action, failure}
+		result.Defaults[name] = workflowHeaderDefault{action, failure}
 		result.TemplatePermitted[name] = chatBindingTemplatePermitted(data, binding, template)
 	}
 	result.DefaultPriority = teamSettings(&data, public).DefaultPriority
@@ -109,7 +109,7 @@ func scaleP21SW174Evaluate(service *server, data domain.Bootstrap, workspace, pr
 	return result
 }
 
-func scaleP21SW174Call(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID, prefix, public, private, child string, creator domain.User, guestID string) json.RawMessage {
+func workflowHeadersCall(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID, prefix, public, private, child string, creator domain.User, guestID string) json.RawMessage {
 	t.Helper()
 	ctx, closeOutput := beginMetadataOutputReads(ctx)
 	defer closeOutput()
@@ -121,7 +121,7 @@ func scaleP21SW174Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 	} else {
 		err = service.chatAuthorizedMutation(ctx, workspace, userID, http.MethodGet, "/api/issue-records/bootstrap", nil, &data)
 	}
-	result := scaleP21SW174Output{Error: scaleP21ChatPointError(err)}
+	result := workflowHeadersOutput{Error: scaleChatPointError(err)}
 	if err != nil {
 		if data.ViewerRole != "unchanged-destination" {
 			t.Fatal("refused workflow headers changed their destination")
@@ -130,7 +130,7 @@ func scaleP21SW174Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 		if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
 			t.Fatal("workflow header values lost their containing output owner")
 		}
-		result = scaleP21SW174Evaluate(service, data, workspace, prefix, public, private, child, userID, creator, guestID)
+		result = workflowHeadersEvaluate(service, data, workspace, prefix, public, private, child, userID, creator, guestID)
 	}
 	// Freeze the small observable result while the real headers are owned.
 	// The test oracle does not keep borrowed card strings after Close.
@@ -145,11 +145,11 @@ func scaleP21SW174Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 	return encoded
 }
 
-func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
+func TestWorkflowHeadersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -221,16 +221,16 @@ func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	pair := func(t *testing.T, ctx context.Context, userID string) scaleP21SW174Output {
+	pair := func(t *testing.T, ctx context.Context, userID string) workflowHeadersOutput {
 		t.Helper()
 		var outputs []json.RawMessage
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
-			outputs = append(outputs, scaleP21SW174Call(t, source, ctx, workspace, userID, prefix, f.public, private, child, creator, guest.ID))
+			outputs = append(outputs, workflowHeadersCall(t, source, ctx, workspace, userID, prefix, f.public, private, child, creator, guest.ID))
 		}
 		if !bytes.Equal(outputs[0], outputs[1]) {
 			t.Fatalf("workflow options/validation differ:\nlegacy=%s\nbounded=%s", outputs[0], outputs[1])
 		}
-		var result scaleP21SW174Output
+		var result workflowHeadersOutput
 		if err := json.Unmarshal(outputs[1], &result); err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 					f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-						ctx := scaleP21ChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
+						ctx := scaleChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
 						pair(t, ctx, user.ID)
 					})
 				})
@@ -258,7 +258,7 @@ func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
 		})
 	}
 	t.Run("nonempty-success-witnesses", func(t *testing.T) {
-		result := pair(t, scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID), f.data.Viewer.ID)
+		result := pair(t, scaleChatPointIdentity(t.Context(), f.data.Viewer.ID), f.data.Viewer.ID)
 		if result.Error != "" || result.DefaultPriority != 4 || result.RequestState == nil || *result.RequestState != prefix+"backlog" ||
 			result.RequestProject != nil || result.TemplatePermitted["form-fields"] || result.TemplatePermitted["form-type"] || result.TemplatePermitted["duplicate"] ||
 			!result.TemplatePermitted["template"] || result.Defaults["template"].Action.Title != "Exact template title" ||
@@ -269,13 +269,13 @@ func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
 		}
 	})
 	t.Run("canceled", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID))
+		ctx, cancel := context.WithCancel(scaleChatPointIdentity(t.Context(), f.data.Viewer.ID))
 		cancel()
 		pair(t, ctx, f.data.Viewer.ID)
 	})
 	for _, state := range []string{"missing", "closed"} {
 		t.Run("owner="+state, func(t *testing.T) {
-			ctx := scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID)
+			ctx := scaleChatPointIdentity(t.Context(), f.data.Viewer.ID)
 			if state == "closed" {
 				var closeOutput func()
 				ctx, closeOutput = beginMetadataOutputReads(ctx)
@@ -342,7 +342,7 @@ func TestScaleP21SW174WorkflowHeadersDifferential(t *testing.T) {
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		ctx, closeSnapshot, err := repo.BeginWorkspaceRead(scaleP21ChatPointIdentity(t.Context(), guest.ID), workspace)
+		ctx, closeSnapshot, err := repo.BeginWorkspaceRead(scaleChatPointIdentity(t.Context(), guest.ID), workspace)
 		if err != nil {
 			t.Fatal(err)
 		}

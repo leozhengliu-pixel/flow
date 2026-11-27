@@ -7,6 +7,7 @@
 #   go-test-shard.sh plan  PACKAGE TOTAL         print each shard's test count and predicted seconds
 #   go-test-shard.sh known PACKAGE SCOPE         print the known-failing tests of PACKAGE in SCOPE
 #   go-test-shard.sh baseline                    fail unless the known-failing list is well formed
+#   go-test-shard.sh selection SUITE PACKAGE     print the -run regex for a named suite
 #
 # Run it from the Go module root (api/). PACKAGE is an import path or a relative
 # path such as ./cmd/server. Extra flags for `go test -list` come from
@@ -32,9 +33,9 @@
 #
 # Which tests take part
 #
-# GO_TEST_SHARD_FILTER (an extended regex, optional) keeps only the matching
-# names (the dialect jobs shard the TestScaleP tests alone). SHARD_SCOPE (race,
-# plain, postgres or mysql) leaves out the tests that scripts/ci/known-failing-tests.txt
+# GO_TEST_SHARD_SELECTION keeps only the named suite in go-test-selections.tsv.
+# GO_TEST_SHARD_FILTER (an extended regex, optional) filters the remaining names.
+# SHARD_SCOPE (race, plain, postgres or mysql) leaves out the tests that scripts/ci/known-failing-tests.txt
 # (KNOWN_FAILING points at another file) lists for this package and scope: the
 # "Known failing (tracked)" job runs those instead. The check command fails when
 # a listed test no longer exists, so a fixed and renamed or deleted test cannot
@@ -49,11 +50,12 @@ set -euo pipefail
 MAX_PATTERN_BYTES=100000
 timings_file=${GO_TEST_TIMINGS:-$(dirname "$0")/go-test-timings.json}
 known_file=${KNOWN_FAILING:-$(dirname "$0")/known-failing-tests.txt}
+selections_file=$(dirname "$0")/go-test-selections.tsv
 known_packages='./cmd/server ./internal/store'
 known_scopes='race plain postgres mysql'
 
 usage() {
-  sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '4,10p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -83,14 +85,34 @@ known_tests() {
   known_entries | awk -v package="$(timings_key "$package")" -v scope="$scope" '$1 == package && $3 == scope { print $2 }' | LC_ALL=C sort -u
 }
 
-# The tests this run shards: the filter applied and the scope's known failures left out.
+# The sorted top-level names of one named suite.
+selected_tests() {
+  awk -v suite="$1" -v package="$(timings_key "$2")" '$1 == suite && $2 == package { print $3 }' "$selections_file" |
+    LC_ALL=C sort -u
+}
+
+# The tests this run shards, with the scope's known failures left out.
 all_tests() {
-  local package=$1
+  local package=$1 candidates="$work/full"
   full_tests "$package" > "$work/full"
+  if [ -n "${GO_TEST_SHARD_SELECTION:-}" ]; then
+    selected_tests "$GO_TEST_SHARD_SELECTION" "$package" > "$work/selected"
+    if [ ! -s "$work/selected" ]; then
+      echo "$package: no tests for selection $GO_TEST_SHARD_SELECTION" >&2
+      return 1
+    fi
+    LC_ALL=C comm -23 "$work/selected" "$work/full" > "$work/missing"
+    if [ -s "$work/missing" ]; then
+      echo "$package: missing tests in selection $GO_TEST_SHARD_SELECTION:" >&2
+      cat "$work/missing" >&2
+      return 1
+    fi
+    candidates="$work/selected"
+  fi
   if [ -n "${GO_TEST_SHARD_FILTER:-}" ]; then
-    grep -E "$GO_TEST_SHARD_FILTER" "$work/full" > "$work/filtered" || true
+    grep -E "$GO_TEST_SHARD_FILTER" "$candidates" > "$work/filtered" || true
   else
-    cp "$work/full" "$work/filtered"
+    cp "$candidates" "$work/filtered"
   fi
   if [ -n "${SHARD_SCOPE:-}" ]; then
     known_tests "$package" "$SHARD_SCOPE" > "$work/known"
@@ -215,6 +237,15 @@ validate_shard() {
 
 command=${1:-}
 case $command in
+  selection)
+    [ "$#" -eq 3 ] || usage
+    selected_tests "$2" "$3" > "$work/selected"
+    if [ ! -s "$work/selected" ]; then
+      echo "$3: no tests for selection $2" >&2
+      exit 1
+    fi
+    regex_of < "$work/selected"
+    ;;
   run | list)
     [ "$#" -eq 4 ] || usage
     package=$2 index=$3 total=$4

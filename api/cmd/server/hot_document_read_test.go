@@ -13,14 +13,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21HotDocumentReadHTTPMatrix(t *testing.T) {
+func TestScaleHotDocumentReadHTTPMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-document-http-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.document_http_seed", "", nil, func(data *domain.Bootstrap) error {
 			private, child := "", ""
@@ -120,9 +120,9 @@ func TestScaleP21HotDocumentReadHTTPMatrix(t *testing.T) {
 								case "history":
 									service.documentContentHistory(w, r)
 								case "revision":
-									service.scaleP20Revision(w, r)
+									service.scaleRevision(w, r)
 								case "trash":
-									service.scaleP20Trash(w, r)
+									service.scaleTrash(w, r)
 								case "batch":
 									service.syncBatch(w, r)
 								}
@@ -149,14 +149,14 @@ func TestScaleP21HotDocumentReadHTTPMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadEncodingLifetime(t *testing.T) {
+func TestScaleHotDocumentReadEncodingLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		target := idgen.New("p21-document-lifetime-")
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.document_lifetime", "", nil, func(data *domain.Bootstrap) error {
 			document := domain.Document{ID: target, Title: "Lifetime", Content: strings.Repeat("body ", 100000), Creator: data.Viewer, TeamIDs: []string{f.public}, Revisions: []domain.DocumentRevision{{ID: target + "-revision", Content: "Earlier body", Author: data.Viewer}}}
@@ -197,7 +197,7 @@ func TestScaleP21HotDocumentReadEncodingLifetime(t *testing.T) {
 					ctx, cancel := context.WithCancel(r.Context())
 					defer cancel()
 					r, release := beginRequestResourceReads(r.WithContext(ctx))
-					w := &scaleP21ResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
+					w := &scaleResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
 					if exit == "canceled" {
 						w.err = ctx.Err
 					}
@@ -215,9 +215,9 @@ func TestScaleP21HotDocumentReadEncodingLifetime(t *testing.T) {
 						case "history":
 							service.documentContentHistory(w, r)
 						case "revision":
-							service.scaleP20Revision(w, r)
+							service.scaleRevision(w, r)
 						case "trash":
-							service.scaleP20Trash(w, r)
+							service.scaleTrash(w, r)
 						}
 					}()
 					select {
@@ -249,13 +249,13 @@ func TestScaleP21HotDocumentReadEncodingLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadBatch50(t *testing.T) {
+func TestScaleHotDocumentReadBatch50(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		target := idgen.New("p21-document-batch-")
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.document_batch", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = append(data.Documents, domain.Document{ID: target, Title: "Large batch detail", Content: strings.Repeat("body ", 140000), Creator: data.Viewer, TeamIDs: []string{f.public}})

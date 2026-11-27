@@ -5,7 +5,7 @@
     "ErasePersonFromWorkspace": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Existing storedWorkspace lookup copies only a struct header and consumes resident core Workspace.ID; it never clones or reads metadata collections. The finite native SQL transaction and trusted caller authorization contract are unchanged. TestScaleP21SW21PersonalErasureUsesResidentIdentity compares legacy and policy-only stores across actor identities, membership/departure/search/recent/chat/notification SQL effects, account invalidation and complete event sinks, unrelated oversized metadata, cross-workspace isolation, missing workspace, cancellation rollback and zero full decodes.",
+      "reason": "Existing storedWorkspace lookup copies only a struct header and consumes resident core Workspace.ID; it never clones or reads metadata collections. The finite native SQL transaction and trusted caller authorization contract are unchanged. TestPersonalErasureUsesResidentIdentity compares legacy and policy-only stores across actor identities, membership/departure/search/recent/chat/notification SQL effects, account invalidation and complete event sinks, unrelated oversized metadata, cross-workspace isolation, missing workspace, cancellation rollback and zero full decodes.",
       "accessors": [
         "storedWorkspace"
       ]
@@ -13,7 +13,7 @@
     "PersonalDataLeaks": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Existing storedWorkspace header lookup consumes only resident core Workspace.ID; remaining work consists of SQL scalar COUNT predicates and small leak labels, with no metadata body transfer or accumulation. TestScaleP21SW21PersonalLeakCheckUsesResidentIdentity compares legacy/policy-only results for real identity copies, escaped/no-match/blank/repeated text, missing workspace and cancellation's existing error-as-leak behavior, unchanged canonical bytes, no publication and zero full decodes. This trusted verifier does not authorize requests.",
+      "reason": "Existing storedWorkspace header lookup consumes only resident core Workspace.ID; remaining work consists of SQL scalar COUNT predicates and small leak labels, with no metadata body transfer or accumulation. TestPersonalLeakCheckUsesResidentIdentity compares legacy/policy-only results for real identity copies, escaped/no-match/blank/repeated text, missing workspace and cancellation's existing error-as-leak behavior, unchanged canonical bytes, no publication and zero full decodes. This trusted verifier does not authorize requests.",
       "accessors": [
         "storedWorkspace"
       ]
@@ -21,7 +21,7 @@
     "ScrubPersonCopies": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Genuine erasure full scan keeps the native five-table SQL baseline and resident core Workspace.ID. Bounded mode keysets at most 50 headers, reads fixed byte chunks and preflights each JSON structure before separately admitting its decoded/encoded rewrite within the process 256 MiB work budget; one repeatable-read write transaction preserves atomic publication without an accumulating update slice. Header keys are capped at 8 KiB, above schema limits; oversized structure/output fails with rollback rather than omission. The original ScrubPersonJSON codec preserves first-value/trailing-byte, duplicate-key, number and NUL semantics. TestScaleP21SW21PersonalScrub compares exact SQL bytes and 76 changed values across all targets, a multi-megabyte expanding record, Unicode TEXT across chunk boundaries, trusted actor classes, matching foreign-workspace copies, idempotence, cancellation and transaction/child-admission rollback, pool-one/spool-zero reload, zero full decodes and released work. Persistent SQLite count=2 passes; credentials and team visibility are upstream of this trusted operation. Long erasure snapshots remain an explicit tradeoff; flag-off uses the untouched legacy implementation.",
+      "reason": "Genuine erasure full scan keeps the native five-table SQL baseline and resident core Workspace.ID. Bounded mode keysets at most 50 headers, reads fixed byte chunks and preflights each JSON structure before separately admitting its decoded/encoded rewrite within the process 256 MiB work budget; one repeatable-read write transaction preserves atomic publication without an accumulating update slice. Header keys are capped at 8 KiB, above schema limits; oversized structure/output fails with rollback rather than omission. The original ScrubPersonJSON codec preserves first-value/trailing-byte, duplicate-key, number and NUL semantics. Personal Scrub tests compares exact SQL bytes and 76 changed values across all targets, a multi-megabyte expanding record, Unicode TEXT across chunk boundaries, trusted actor classes, matching foreign-workspace copies, idempotence, cancellation and transaction/child-admission rollback, pool-one/spool-zero reload, zero full decodes and released work. Persistent SQLite count=2 passes; credentials and team visibility are upstream of this trusted operation. Long erasure snapshots remain an explicit tradeoff; flag-off uses the untouched legacy implementation.",
       "accessors": [
         "storedWorkspace"
       ]

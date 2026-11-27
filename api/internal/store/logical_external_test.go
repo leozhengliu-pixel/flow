@@ -12,9 +12,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW29LogicalExternalHydrationDifferential(t *testing.T) {
+func TestLogicalExternalHydrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx, workspace := t.Context(), f.data.Workspace.URLKey
 	warm, found := f.storedWorkspace(workspace)
 	if !found {
@@ -120,9 +120,9 @@ func TestScaleP21SW29LogicalExternalHydrationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalExternalUnrelatedInputError(t *testing.T) {
+func TestLogicalExternalUnrelatedInputError(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx, workspace := t.Context(), f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -37,8 +37,8 @@ type PageRequest struct {
 
 // MetadataRecord is owned by the caller. Omitted records keep a detail key;
 // missing canonical rows are not presented as versioned tombstones.
-// P05 versions are content fingerprints for shadow equality, not ordered
-// journal versions. P09 must supply committed versions before sync serving.
+// metadata catalog versions are content fingerprints for shadow equality, not ordered
+// journal versions. record journal must supply committed versions before sync serving.
 type MetadataRecord struct {
 	Key     RecordKey       `json:"key"`
 	Version string          `json:"version"`
@@ -94,7 +94,7 @@ func metadataFingerprint(raw []byte) string {
 }
 
 // ReadCanonicalRecords is a trusted storage primitive, not an authorization
-// boundary. P03/P10 must authorize, redact and check epochs around it. It never
+// boundary. resource access/sync authorization must authorize, redact and check epochs around it. It never
 // consults the shadow catalog, even when that catalog has finished a pass.
 func (s *SQLiteStore) ReadCanonicalRecords(ctx context.Context, workspace string, keys []RecordKey, projection string) (RecordBatch, error) {
 	if s.metadataResidency != nil {
@@ -179,9 +179,9 @@ func (s *SQLiteStore) readCanonicalRecords(ctx context.Context, tx *sqlTx, works
 	return result, nil
 }
 
-// ReadCanonicalRecordPage is the unfiltered hydration primitive for P15.
+// ReadCanonicalRecordPage is the unfiltered hydration primitive for record hydration.
 // Its opaque cursor is private to this trusted adapter; serving a viewer's
-// page additionally requires P03/P10's policy, epoch and token binding.
+// page additionally requires resource access/sync authorization's policy, epoch and token binding.
 func (s *SQLiteStore) ReadCanonicalRecordPage(ctx context.Context, workspace string, q PageRequest) (RecordPage, error) {
 	page := RecordPage{Items: []MetadataRecord{}}
 	limit, _, err := metadataPageLimits(q)

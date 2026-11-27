@@ -25,7 +25,7 @@ func (c *reloadWaitContext) Done() <-chan struct{} {
 }
 
 func TestBoundedWorkspaceReloadWaitsForTarget(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+	f, workspace := routeTemperatureGuardFixture(t)
 	redis := miniredis.RunT(t)
 	coordinator, err := coordination.Open(t.Context(), coordination.Config{
 		Mode: "standalone", Addrs: []string{redis.Addr()}, Prefix: "shared-reload", ConnectTimeout: time.Second,
@@ -67,7 +67,7 @@ func TestBoundedWorkspaceReloadWaitsForTarget(t *testing.T) {
 }
 
 func TestWorkspaceReloadPanicBecomesRequestError(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+	f, workspace := routeTemperatureGuardFixture(t)
 	redis := miniredis.RunT(t)
 	coordinator, err := coordination.Open(t.Context(), coordination.Config{
 		Mode: "standalone", Addrs: []string{redis.Addr()}, Prefix: "reload-panic", ConnectTimeout: time.Second,
@@ -95,7 +95,7 @@ func TestWorkspaceReloadPanicBecomesRequestError(t *testing.T) {
 }
 
 func TestWorkspaceFreshnessDeadlineProbeAcceptsOnlyCurrentState(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+	f, workspace := routeTemperatureGuardFixture(t)
 	for _, test := range []struct {
 		name        string
 		mutate      bool
@@ -145,7 +145,7 @@ func TestWorkspaceFreshnessDeadlineProbeHandlesCompletedRefreshRace(t *testing.T
 		{name: "stale", mutate: true, wantErr: context.DeadlineExceeded},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f, workspace := scaleP21SW550Fixture(t)
+			f, workspace := routeTemperatureGuardFixture(t)
 			if test.mutate {
 				if err := f.repository.MutateWorkspace(t.Context(), workspace, "freshness.race", "", nil, func(data *domain.Bootstrap) error {
 					data.Workspace.Name = "freshness-race-stale"
@@ -185,7 +185,7 @@ func TestLegacyWorkspaceFreshnessDeadlineProbeAcceptsOnlyCurrentState(t *testing
 		{name: "stale", mutate: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f, workspace := scaleP21SW550Fixture(t)
+			f, workspace := routeTemperatureGuardFixture(t)
 			if test.mutate {
 				if err := f.repository.MutateWorkspace(t.Context(), workspace, "freshness.legacy-stale", "", nil, func(data *domain.Bootstrap) error {
 					data.Workspace.Name = "freshness-legacy-stale"

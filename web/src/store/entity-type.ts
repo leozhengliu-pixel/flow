@@ -1,6 +1,6 @@
 /**
  * Workspace entity kinds addressable via useWorkspaceStore().getById / hydrateModel.
- * Aligned with BootstrapData collections (Wave 2 store spine — LS-0770 / LS-0718).
+ * Aligned with BootstrapData collections.
  */
 export type WorkspaceEntityType =
   | 'issue'

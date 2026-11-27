@@ -12,13 +12,13 @@ import (
 // conflictSignalFixture seeds SQL with the project as persisting stores it
 // (NUL stripped) and installs in the view the image of an owner that still
 // holds the project natively, NUL included.
-func conflictSignalFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string, domain.Bootstrap) {
+func conflictSignalFixture(t *testing.T) (scaleFixture, *SQLiteStore, string, domain.Bootstrap) {
 	t.Helper()
-	f, view := scaleP21SW78Fixture(t)
+	f, view := legacyCountWriteFixture(t)
 	workspace := f.data.Workspace.URLKey
-	base := scaleP21SW296Base(f)
-	base.Projects = []domain.Project{{ID: "conflict-signal-project", Name: "Signal", Description: "kept\x00 text", CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At}}
-	scaleP21SW296Seed(t, f, base)
+	base := largeRowWriteBase(f)
+	base.Projects = []domain.Project{{ID: "conflict-signal-project", Name: "Signal", Description: "kept\x00 text", CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt}}
+	largeRowWriteSeed(t, f, base)
 	f.mu.Lock()
 	f.workspaces[workspace] = base
 	f.mu.Unlock()
@@ -52,7 +52,7 @@ func conflictSignalProject(t *testing.T, view *SQLiteStore, workspace string) do
 	return data.Projects[0]
 }
 
-func conflictSignalRow(t *testing.T, f scaleP09Fixture, workspace string) domain.Project {
+func conflictSignalRow(t *testing.T, f scaleFixture, workspace string) domain.Project {
 	t.Helper()
 	var raw []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key=?`, workspace, "conflict-signal-project").Scan(&raw); err != nil {
@@ -67,7 +67,7 @@ func conflictSignalRow(t *testing.T, f scaleP09Fixture, workspace string) domain
 
 // A conflict whose row differs from the installed record only by what
 // persisting drops (a NUL character) is no evidence of another writer.
-func TestScaleP21ConflictSignalNormalisationOnlyIsNotBehind(t *testing.T) {
+func TestScaleConflictSignalNormalisationOnlyIsNotBehind(t *testing.T) {
 	f, view, workspace, _ := conflictSignalFixture(t)
 	if conflictSignalBehind(view, workspace) {
 		t.Fatal("fixture image starts behind")
@@ -92,7 +92,7 @@ func TestScaleP21ConflictSignalNormalisationOnlyIsNotBehind(t *testing.T) {
 
 // A row another writer changed is evidence: the image is marked behind and
 // equals what a reload from SQL gives.
-func TestScaleP21ConflictSignalPeerWriteIsBehind(t *testing.T) {
+func TestScaleConflictSignalPeerWriteIsBehind(t *testing.T) {
 	f, view, workspace, _ := conflictSignalFixture(t)
 	peer := conflictSignalRow(t, f, workspace)
 	peer.Name = "Peer renamed"
@@ -100,7 +100,7 @@ func TestScaleP21ConflictSignalPeerWriteIsBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW296Put(t, tx, workspace, "projects", peer.ID, peer, scaleP21SW296Order(t, tx, workspace, "projects", peer.ID))
+	largeRowWritePut(t, tx, workspace, "projects", peer.ID, peer, largeRowWriteOrder(t, tx, workspace, "projects", peer.ID))
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}

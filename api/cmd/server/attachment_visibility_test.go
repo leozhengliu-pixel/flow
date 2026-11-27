@@ -17,26 +17,26 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW268Fixture struct {
-	scaleP21M2Fixture
+type attachmentVisibilityFixture struct {
+	policyDifferentialFixture
 	other      string
-	principals []scaleP21M2Principal
+	principals []policyFixturePrincipal
 	urls       []string
 	uploads    string
 }
 
-const scaleP21SW268Prefix = "/uploads/sw268-"
+const attachmentVisibilityPrefix = "/uploads/sw268-"
 
-func scaleP21SW268URL(name string) string { return scaleP21SW268Prefix + name + ".png" }
+func attachmentVisibilityURL(name string) string { return attachmentVisibilityPrefix + name + ".png" }
 
-func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixture {
+func attachmentVisibilitySeed(t *testing.T, repo *store.SQLiteStore) attachmentVisibilityFixture {
 	t.Helper()
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw268-")
 	stamp := time.Date(2026, time.November, 17, 10, 0, 0, 0, time.UTC)
 	member, guest := f.principals[2].user, f.principals[3].user
 	attachment := func(name string) domain.Attachment {
-		return domain.Attachment{ID: prefix + name, URL: scaleP21SW268URL(name), Title: name, CreatedAt: stamp}
+		return domain.Attachment{ID: prefix + name, URL: attachmentVisibilityURL(name), Title: name, CreatedAt: stamp}
 	}
 	attachments := func(names ...string) []domain.Attachment {
 		result := []domain.Attachment{}
@@ -45,7 +45,7 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 		}
 		return result
 	}
-	urls := []string{scaleP21SW268URL("unreferenced"), "/uploads/agent_upload_" + agentUploadOwner(member.ID) + "_sw268.png"}
+	urls := []string{attachmentVisibilityURL("unreferenced"), "/uploads/agent_upload_" + agentUploadOwner(member.ID) + "_sw268.png"}
 	restore := store.ForceFullMutationsForTesting(true)
 	err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw268_seed", "", nil, func(data *domain.Bootstrap) error {
 		private, public := "", f.public
@@ -83,11 +83,11 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 		data.Loops = append(data.Loops, domain.Loop{
 			ID: prefix + "loop", Name: "Private loop", TeamID: private, Level: "team", Status: "draft", OwnerID: owner.ID,
 			Creator: owner, CreatedAt: stamp, UpdatedAt: stamp,
-			Attachments: []domain.LoopAttachment{{ID: prefix + "loop-a", Name: "a", URL: scaleP21SW268URL("loop-attached"), CreatedAt: stamp}},
+			Attachments: []domain.LoopAttachment{{ID: prefix + "loop-a", Name: "a", URL: attachmentVisibilityURL("loop-attached"), CreatedAt: stamp}},
 		})
 		data.LoopAttachments = append(data.LoopAttachments,
-			domain.LoopAttachment{ID: prefix + "draft-own", URL: scaleP21SW268URL("loop-draft-own"), CreatorID: member.ID, CreatedAt: stamp},
-			domain.LoopAttachment{ID: prefix + "draft-linked", URL: scaleP21SW268URL("loop-draft-linked"), CreatorID: guest.ID, LoopID: prefix + "loop", CreatedAt: stamp},
+			domain.LoopAttachment{ID: prefix + "draft-own", URL: attachmentVisibilityURL("loop-draft-own"), CreatorID: member.ID, CreatedAt: stamp},
+			domain.LoopAttachment{ID: prefix + "draft-linked", URL: attachmentVisibilityURL("loop-draft-linked"), CreatorID: guest.ID, LoopID: prefix + "loop", CreatedAt: stamp},
 		)
 		// Customer requests: guests never; links follow issue/project visibility.
 		data.Customers = append(data.Customers, domain.Customer{ID: prefix + "customer", Name: "Customer", Status: "active"})
@@ -126,9 +126,9 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 		deleted := stamp
 		data.AgentSessions = append(data.AgentSessions,
 			domain.AgentSession{ID: prefix + "session", SlugID: prefix + "session", UserID: member.ID, Title: "Mine", CreatedAt: stamp, UpdatedAt: stamp,
-				Messages: []domain.AgentMessage{{ID: prefix + "m1", Role: "user", Content: "see file", CreatedAt: stamp, Attachments: []domain.AgentMessageAttachment{{Name: "f", URL: scaleP21SW268URL("session-own")}}}}},
+				Messages: []domain.AgentMessage{{ID: prefix + "m1", Role: "user", Content: "see file", CreatedAt: stamp, Attachments: []domain.AgentMessageAttachment{{Name: "f", URL: attachmentVisibilityURL("session-own")}}}}},
 			domain.AgentSession{ID: prefix + "session-deleted", SlugID: prefix + "session-deleted", UserID: member.ID, Title: "Gone", DeletedAt: &deleted, CreatedAt: stamp, UpdatedAt: stamp,
-				Messages: []domain.AgentMessage{{ID: prefix + "m2", Role: "user", Content: "see file", CreatedAt: stamp, Attachments: []domain.AgentMessageAttachment{{Name: "f", URL: scaleP21SW268URL("session-deleted")}}}}},
+				Messages: []domain.AgentMessage{{ID: prefix + "m2", Role: "user", Content: "see file", CreatedAt: stamp, Attachments: []domain.AgentMessageAttachment{{Name: "f", URL: attachmentVisibilityURL("session-deleted")}}}}},
 		)
 		data.Initiatives = append(data.Initiatives,
 			domain.Initiative{ID: prefix + "initiative-public", Name: "Public", SlugID: prefix + "ip", LeadTeamID: public, CommentAttachments: attachments("initiative-public"), CreatedAt: stamp, UpdatedAt: stamp},
@@ -157,7 +157,7 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 		"initiative-public", "initiative-private", "initiative-workspace", "initiative-update-public", "initiative-update-private",
 		"review-open", "review-hidden", "review-public", "other-workspace",
 	} {
-		urls = append(urls, scaleP21SW268URL(name))
+		urls = append(urls, attachmentVisibilityURL(name))
 	}
 	// A second membership: only its own owner (the member) sees its file.
 	other, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), member), "SW268 other", idgen.New("sw268-other-"), "us")
@@ -196,18 +196,18 @@ func scaleP21SW268Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW268Fixtu
 			t.Fatal(err)
 		}
 	}
-	principals := append(append([]scaleP21M2Principal{}, f.principals...), scaleP21M2Principal{"app", app})
-	return scaleP21SW268Fixture{scaleP21M2Fixture: f, other: other.Workspace.URLKey, principals: principals, urls: urls, uploads: uploads}
+	principals := append(append([]policyFixturePrincipal{}, f.principals...), policyFixturePrincipal{"app", app})
+	return attachmentVisibilityFixture{policyDifferentialFixture: f, other: other.Workspace.URLKey, principals: principals, urls: urls, uploads: uploads}
 }
 
-type scaleP21SW268Outcome struct {
+type attachmentVisibilityOutcome struct {
 	Status   int
 	Header   http.Header
 	Body     string
 	Readable bool
 }
 
-func scaleP21SW268Serve(t *testing.T, f scaleP21SW268Fixture, source *store.SQLiteStore, user domain.User, url string) scaleP21SW268Outcome {
+func attachmentVisibilityServe(t *testing.T, f attachmentVisibilityFixture, source *store.SQLiteStore, user domain.User, url string) attachmentVisibilityOutcome {
 	t.Helper()
 	service := &server{store: source, uploadPath: f.uploads}
 	name := strings.TrimPrefix(url, "/uploads/")
@@ -228,15 +228,15 @@ func scaleP21SW268Serve(t *testing.T, f scaleP21SW268Fixture, source *store.SQLi
 	if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != held || source.WorkspaceMetadataDecodes() != decodes) {
 		t.Fatal("bounded upload visibility retained work or decoded a workspace", source.MetadataWorkUsedForTesting())
 	}
-	return scaleP21SW268Outcome{writer.Code, writer.Header().Clone(), writer.Body.String(), readable}
+	return attachmentVisibilityOutcome{writer.Code, writer.Header().Clone(), writer.Body.String(), readable}
 }
 
-func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
+func TestAttachmentVisibilityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW268Seed(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := attachmentVisibilitySeed(t, repo)
 		workspace := f.data.Workspace.URLKey
 		for _, reload := range []bool{false, true} {
 			if reload {
@@ -253,9 +253,9 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 			visible := map[string]map[string]bool{}
 			for _, principal := range f.principals {
 				for _, url := range f.urls {
-					t.Run(fmt.Sprintf("reload=%t/%s/%s", reload, principal.name, strings.TrimPrefix(url, scaleP21SW268Prefix)), func(t *testing.T) {
-						want := scaleP21SW268Serve(t, f, repo, principal.user, url)
-						got := scaleP21SW268Serve(t, f, view, principal.user, url)
+					t.Run(fmt.Sprintf("reload=%t/%s/%s", reload, principal.name, strings.TrimPrefix(url, attachmentVisibilityPrefix)), func(t *testing.T) {
+						want := attachmentVisibilityServe(t, f, repo, principal.user, url)
+						got := attachmentVisibilityServe(t, f, view, principal.user, url)
 						if !reflect.DeepEqual(want, got) {
 							t.Fatalf("upload visibility differs:\nlegacy=%+v\nbounded=%+v", want, got)
 						}
@@ -282,13 +282,13 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 					{"document-public", true}, {"session-own", true}, {"loop-draft-own", true},
 					{"unreferenced", true}, {"agent", false},
 				} {
-					url := scaleP21SW268URL(test.name)
+					url := attachmentVisibilityURL(test.name)
 					if test.name == "agent" {
 						url = "/uploads/agent_upload_" + agentUploadOwner(member.ID) + "_sw268.png"
 					}
-					want := scaleP21SW268Serve(t, f, repo, member, url)
-					release := scaleP21SW266HoldBudget(t, view)
-					got := scaleP21SW268Serve(t, f, view, member, url)
+					want := attachmentVisibilityServe(t, f, repo, member, url)
+					release := holdBudget(t, view)
+					got := attachmentVisibilityServe(t, f, view, member, url)
 					release()
 					if !test.refused {
 						if !reflect.DeepEqual(want, got) {
@@ -301,7 +301,7 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 						json.Unmarshal([]byte(got.Body), &payload) != nil || payload["error"] == "" {
 						t.Fatalf("%s: refused upload check is not a retryable 503: %+v", test.name, got)
 					}
-					if after := scaleP21SW268Serve(t, f, view, member, url); !reflect.DeepEqual(want, after) {
+					if after := attachmentVisibilityServe(t, f, view, member, url); !reflect.DeepEqual(want, after) {
 						t.Fatalf("%s: upload differs after the budget was released:\nlegacy=%+v\nbounded=%+v", test.name, want, after)
 					}
 				}
@@ -310,7 +310,7 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 			// viewer predicate, and the expected outcome where it has none.
 			expect := func(name, principal string, readable bool) {
 				t.Helper()
-				if got := visible[scaleP21SW268URL(name)][principal]; got != readable {
+				if got := visible[attachmentVisibilityURL(name)][principal]; got != readable {
 					t.Errorf("reload=%t %s for %s: readable=%t want %t", reload, name, principal, got, readable)
 				}
 			}
@@ -324,7 +324,7 @@ func TestScaleP21SW268AttachmentVisibilityDifferential(t *testing.T) {
 				expect("loop-draft-linked", principal.name, loopReader)
 				expect("session-deleted", principal.name, false)
 				expect("document-trashed", principal.name, false)
-				expect("missing", principal.name, visible[scaleP21SW268URL("document-public")][principal.name])
+				expect("missing", principal.name, visible[attachmentVisibilityURL("document-public")][principal.name])
 			}
 			expect("loop-draft-own", "member-private-outsider", true)
 			expect("loop-draft-own", "admin", false)

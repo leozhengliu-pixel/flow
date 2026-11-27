@@ -20,14 +20,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP16EnabledPermissionsAndSideEffects(t *testing.T) {
+func TestScaleEnabledPermissionsAndSideEffects(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	t.Run("permissions", TestScaleP16PermissionDifferential)
-	t.Run("sql-events-webhooks", TestScaleP16MutationSideEffectsDifferential)
-	t.Run("queued-and-replayed-revocation", TestScaleP16QueuedAndReplayRevocation)
+	t.Run("permissions", TestScalePermissionDifferentialPermissions)
+	t.Run("sql-events-webhooks", TestScaleMutationSideEffectsDifferentialMutations)
+	t.Run("queued-and-replayed-revocation", TestScaleQueuedAndReplayRevocationPermissions)
 }
 
-func scaleP16CascadeFixture(t *testing.T, db *scaleP04Database) (string, string, string) {
+func scaleCascadeFixture(t *testing.T, db *scaleDatabase) (string, string, string) {
 	t.Helper()
 	data, _ := db.repo.BootstrapFor(db.key)
 	projectID, initiativeID := data.Projects[0].ID, "p16-cascade-initiative"
@@ -67,7 +67,7 @@ func scaleP16CascadeFixture(t *testing.T, db *scaleP04Database) (string, string,
 	return projectID, initiativeID, "p16-move-team"
 }
 
-func scaleP16DatabaseState(t *testing.T, db *scaleP04Database) map[string]string {
+func scaleDatabaseState(t *testing.T, db *scaleDatabase) map[string]string {
 	t.Helper()
 	replace := []string{db.key, "fixture-workspace-key", db.workspaceID, "fixture-workspace"}
 	for i, user := range db.users {
@@ -104,7 +104,7 @@ func scaleP16DatabaseState(t *testing.T, db *scaleP04Database) map[string]string
 			}
 			var record []string
 			for _, value := range values {
-				record = append(record, scaleP04Normalize([]byte(identity.Replace(value.String))))
+				record = append(record, scaleNormalize([]byte(identity.Replace(value.String))))
 			}
 			if name == "metadata" && (values[0].String == "projectUpdates" || values[0].String == "initiativeUpdates") {
 				var update struct {
@@ -123,7 +123,7 @@ func scaleP16DatabaseState(t *testing.T, db *scaleP04Database) map[string]string
 				if values[1].String != fmt.Sprintf("%x", sha256.Sum256(key)) {
 					t.Fatal("invalid split update identity")
 				}
-				record[1] = scaleP04Normalize([]byte(identity.Replace(string(key))))
+				record[1] = scaleNormalize([]byte(identity.Replace(string(key))))
 			}
 			raw, _ := json.Marshal(record)
 			records = append(records, string(raw))
@@ -141,15 +141,15 @@ func scaleP16DatabaseState(t *testing.T, db *scaleP04Database) map[string]string
 	return result
 }
 
-func TestScaleP16PaginatedCascadesDifferential(t *testing.T) {
+func TestScalePaginatedCascadesDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
 	var want map[string]string
 	for _, mode := range []string{"off", "on"} {
 		t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
 		t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", mode)
-		db := newScaleP04Database(t)
-		project, initiative, team := scaleP16CascadeFixture(t, db)
+		db := newScaleDatabase(t)
+		project, initiative, team := scaleCascadeFixture(t, db)
 		base := db.handler(t, true)
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Header.Set("X-Request-ID", "scale-p16-cascade")
@@ -160,7 +160,7 @@ func TestScaleP16PaginatedCascadesDifferential(t *testing.T) {
 		requestJSON[any](t, handler, "PATCH", "/api/initiatives/"+initiative, map[string]any{"name": "Reconcile links"}, 200)
 		requestJSON[any](t, handler, "DELETE", "/api/initiatives/"+initiative, nil, 204)
 		requestJSON[any](t, handler, "DELETE", "/api/projects/"+project, nil, 204)
-		got := scaleP16DatabaseState(t, db)
+		got := scaleDatabaseState(t, db)
 		if mode == "off" {
 			want = got
 		} else {
@@ -177,14 +177,14 @@ func TestScaleP16PaginatedCascadesDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP16CascadeCrashResume(t *testing.T) {
+func TestScaleCascadeCrashResume(t *testing.T) {
 	if workspace := os.Getenv("FLOW_P16_CRASH_WORKSPACE"); workspace != "" {
-		repo, err := store.OpenDatabase(scaleP04DatabaseConfig(t))
+		repo, err := store.OpenDatabase(httpAllocationDatabaseFixtureScaleDatabaseConfig(t))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer repo.Close()
-		_, token, err := repo.Login(t.Context(), os.Getenv("FLOW_P16_CRASH_USER"), scaleP04Password)
+		_, token, err := repo.Login(t.Context(), os.Getenv("FLOW_P16_CRASH_USER"), scalePassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,31 +212,31 @@ func TestScaleP16CascadeCrashResume(t *testing.T) {
 	t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
 	t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	db := newScaleP04Database(t)
-	project, _, _ := scaleP16CascadeFixture(t, db)
+	db := newScaleDatabase(t)
+	project, _, _ := scaleCascadeFixture(t, db)
 	_ = db.handler(t, true)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestScaleP16CascadeCrashResume$", "-test.v")
+	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestScaleCascadeCrashResume$", "-test.v")
 	url := db.config.URL
 	if db.config.Driver == "sqlite" {
 		url = db.config.Path
 	}
 	command.Env = append(os.Environ(), "FLOW_TEST_DATABASE_DRIVER="+db.config.Driver, "FLOW_TEST_DATABASE_URL="+url, "FLOW_P16_CRASH_WORKSPACE="+db.key, "FLOW_P16_CRASH_PROJECT="+project, "FLOW_P16_CRASH_USER="+db.users[0].Email)
-	warmup := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestScaleP16CascadeCrashResume$")
+	warmup := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestScaleCascadeCrashResume$")
 	warmup.Env = append(slices.Clone(command.Env), "FLOW_P16_CRASH_WARMUP=1")
 	if output, err := warmup.CombinedOutput(); err != nil {
 		t.Fatalf("crash probe warmup: %v %.1000s", err, output)
 	}
-	before := scaleP16DatabaseState(t, db)
+	before := scaleDatabaseState(t, db)
 	output, err := command.CombinedOutput()
 	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 71 {
 		t.Fatalf("expected process interruption 71: %v %.1000s", err, output)
 	}
-	afterCrash := scaleP16DatabaseState(t, db)
+	afterCrash := scaleDatabaseState(t, db)
 	if !reflect.DeepEqual(before, afterCrash) {
-		scaleP16SaveDifferential(t, "crash-before", before)
-		scaleP16SaveDifferential(t, "crash-after", afterCrash)
+		scaleSaveDifferential(t, "crash-before", before)
+		scaleSaveDifferential(t, "crash-after", afterCrash)
 		for name := range before {
 			if before[name] != afterCrash[name] {
 				t.Errorf("interrupted transaction changed %s", name)
@@ -282,14 +282,14 @@ func TestScaleP16CascadeCrashResume(t *testing.T) {
 	}
 }
 
-func TestScaleP16UpdateNotificationsDifferential(t *testing.T) {
+func TestScaleUpdateNotificationsDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
 	var want map[string]string
 	for _, mode := range []string{"off", "on"} {
 		t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
 		t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", mode)
-		db := newScaleP04Database(t)
+		db := newScaleDatabase(t)
 		data, _ := db.repo.BootstrapFor(db.key)
 		base := db.handler(t, false)
 		host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -321,7 +321,7 @@ func TestScaleP16UpdateNotificationsDifferential(t *testing.T) {
 		if comments != 2 || reactions != 2 {
 			t.Fatalf("%s: missing author notifications: comments=%d reactions=%d", mode, comments, reactions)
 		}
-		got := scaleP16DatabaseState(t, db)
+		got := scaleDatabaseState(t, db)
 		if mode == "off" {
 			want = got
 		} else {
@@ -334,17 +334,17 @@ func TestScaleP16UpdateNotificationsDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP16MixedReplicaWrites(t *testing.T) {
+func TestScaleMixedReplicaWrites(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	data, _ := db.repo.BootstrapFor(db.key)
 	other, err := store.OpenDatabase(db.config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { other.Close() })
-	_, token, err := other.Login(t.Context(), db.users[0].Email, scaleP04Password)
+	_, token, err := other.Login(t.Context(), db.users[0].Email, scalePassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,11 +389,11 @@ func TestScaleP16MixedReplicaWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP16TeamMoveWithEarlierValidationRecord(t *testing.T) {
+func TestScaleTeamMoveWithEarlierValidationRecord(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	data, _ := db.repo.BootstrapFor(db.key)
 	ctx := store.ContextWithActor(t.Context(), db.users[0])
 	if err := db.repo.MutateWorkspace(workspaceFixtureContext(ctx), db.key, "scale_p16.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -431,7 +431,7 @@ func TestScaleP16TeamMoveWithEarlierValidationRecord(t *testing.T) {
 	}
 }
 
-func scaleP16SaveDifferential(t *testing.T, name string, data map[string]string) {
+func scaleSaveDifferential(t *testing.T, name string, data map[string]string) {
 	t.Helper()
 	if dir := os.Getenv("FLOW_P16_DIFFERENTIAL_DIR"); dir != "" {
 		raw, err := json.MarshalIndent(data, "", "  ")

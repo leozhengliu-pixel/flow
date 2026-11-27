@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 )
 
-func scaleP21SW195StringWidth(t *testing.T, value string) uint64 {
+func stringWidth(t *testing.T, value string) uint64 {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -29,9 +29,9 @@ func scaleP21SW195StringWidth(t *testing.T, value string) uint64 {
 	return got
 }
 
-func TestScaleP21SW195StringEncodingDifferential(t *testing.T) {
+func TestStringEncodingDifferential(t *testing.T) {
 	for char := range 256 {
-		scaleP21SW195StringWidth(t, string([]byte{byte(char)}))
+		stringWidth(t, string([]byte{byte(char)}))
 	}
 	var pairs []byte
 	for first := range 256 {
@@ -39,14 +39,14 @@ func TestScaleP21SW195StringEncodingDifferential(t *testing.T) {
 			pairs = append(pairs, byte(first), byte(second))
 		}
 	}
-	scaleP21SW195StringWidth(t, string(pairs))
+	stringWidth(t, string(pairs))
 	for _, value := range []string{
 		"", "ordinary ASCII", `backslash \ and quote "`, "<script>&</script>",
 		"\x00\b\f\n\r\t\x1f\x7f", "\u2028\u2029", "\ufffd",
 		"\u00a2\u754c\U0001f30d\U0010ffff",
 		string([]byte{0xc0, 0xaf, 0xed, 0xa0, 0x80, 0xf0, 0x9f, 0x92, 0xff}),
 	} {
-		scaleP21SW195StringWidth(t, value)
+		stringWidth(t, value)
 	}
 	var valid strings.Builder
 	valid.Grow(4 << 20)
@@ -56,18 +56,18 @@ func TestScaleP21SW195StringEncodingDifferential(t *testing.T) {
 		}
 		valid.WriteRune(char)
 	}
-	scaleP21SW195StringWidth(t, valid.String())
+	stringWidth(t, valid.String())
 	rng := rand.New(rand.NewSource(195))
 	for range 4096 {
 		value := make([]byte, rng.Intn(257))
 		if _, err := rng.Read(value); err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW195StringWidth(t, string(value))
+		stringWidth(t, string(value))
 	}
 }
 
-func TestScaleP21SW195StringEncodingLarge(t *testing.T) {
+func TestStringEncodingLarge(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		value string
@@ -78,19 +78,19 @@ func TestScaleP21SW195StringEncodingLarge(t *testing.T) {
 		{"UTF8-separators", strings.Repeat("\u2028\u2029", 1<<17)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			work := scaleP21SW195StringWidth(t, test.value)
+			work := stringWidth(t, test.value)
 			t.Logf("input_bytes=%d previous_string_allowance=%d exact_string_allowance=%d", len(test.value), len(test.value)*24, work)
 		})
 	}
 }
 
-type scaleP21SW195CheckedContext struct {
+type checkedContext struct {
 	context.Context
 	checks, cancelAt int
 	cancel           context.CancelFunc
 }
 
-func (c *scaleP21SW195CheckedContext) Err() error {
+func (c *checkedContext) Err() error {
 	c.checks++
 	if c.cancelAt > 0 && c.checks == c.cancelAt {
 		c.cancel()
@@ -98,7 +98,7 @@ func (c *scaleP21SW195CheckedContext) Err() error {
 	return c.Context.Err()
 }
 
-func TestScaleP21SW195StringEncodingCancellation(t *testing.T) {
+func TestStringEncodingCancellation(t *testing.T) {
 	for _, value := range []string{"", "ASCII", strings.Repeat("\u754c", 1<<15)} {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
@@ -111,7 +111,7 @@ func TestScaleP21SW195StringEncodingCancellation(t *testing.T) {
 		strings.Repeat("\u754c", 1<<15),
 		"\u00a2" + strings.Repeat("\u754c", 1<<15),
 	} {
-		checked := &scaleP21SW195CheckedContext{Context: t.Context()}
+		checked := &checkedContext{Context: t.Context()}
 		if _, err := metadataAggregateStringEncodingWork(checked, value); err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +119,7 @@ func TestScaleP21SW195StringEncodingCancellation(t *testing.T) {
 			t.Fatalf("UTF8 stepping skipped cancellation checks: bytes=%d checks=%d minimum=%d", len(value), checked.checks, minimum)
 		}
 		ctx, cancel := context.WithCancel(t.Context())
-		checked = &scaleP21SW195CheckedContext{Context: ctx, cancelAt: 2, cancel: cancel}
+		checked = &checkedContext{Context: ctx, cancelAt: 2, cancel: cancel}
 		work, err := metadataAggregateStringEncodingWork(checked, value)
 		cancel()
 		if work != 0 || !errors.Is(err, context.Canceled) || checked.checks != 2 {
@@ -128,7 +128,7 @@ func TestScaleP21SW195StringEncodingCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW195StringEncodingBudgetBoundary(t *testing.T) {
+func TestStringEncodingBudgetBoundary(t *testing.T) {
 	encodedLimit := metadataWorkBytes() / 4
 	repeated := strings.Repeat("<", (encodedLimit-2)/6)
 	atLimit := repeated + strings.Repeat("a", encodedLimit-2-len(repeated)*6)

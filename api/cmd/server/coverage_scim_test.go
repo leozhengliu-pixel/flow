@@ -16,12 +16,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
+func TestSCIMGroupOrTeamDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		targetID := idgen.New("team_sw19_")
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -45,7 +45,7 @@ func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		before := scaleP21SW19Hash(t, repo, workspace, "teams", "")
+		before := automationHash(t, repo, workspace, "teams", "")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, id string
@@ -101,16 +101,16 @@ func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
 						if spec.id == existing.ID && (!reflect.DeepEqual(group, existing) || team != nil) {
 							t.Fatal("existing SQL group lookup changed")
 						}
-						outcomes = append(outcomes, scaleP21SW19JSON(t, []any{errors.Is(err, sql.ErrNoRows), group, team, stored, count}, clocks...))
+						outcomes = append(outcomes, automationJSON(t, []any{errors.Is(err, sql.ErrNoRows), group, team, stored, count}, clocks...))
 						if team != nil {
 							team.Name = "owned return"
-							if scaleP21SW19Hash(t, repo, workspace, "teams", "") != before {
+							if automationHash(t, repo, workspace, "teams", "") != before {
 								t.Fatal("returned team aliases canonical state")
 							}
 						}
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("SCIM group/team differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("SCIM group/team differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -212,7 +212,7 @@ func TestScaleP21SW19SCIMGroupOrTeamDifferential(t *testing.T) {
 		if _, team, err := (&server{store: f.probe}).scimGroupOrTeam(t.Context(), workspace, f.data.Workspace.ID, targetID, false); err != nil || team == nil || team.ID != targetID {
 			t.Fatalf("team read after budget failure did not recover: %v", err)
 		}
-		if scaleP21SW19Hash(t, repo, workspace, "teams", "") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if automationHash(t, repo, workspace, "teams", "") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("SCIM lookup changed team rows or decoded full metadata")
 		}
 	}

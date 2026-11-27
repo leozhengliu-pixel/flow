@@ -13,10 +13,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW0ScopedIdentityMissingInstalledKeyAvoidsSQL(t *testing.T) {
+func TestScopedIdentityMissingInstalledKeyAvoidsSQL(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -71,10 +71,10 @@ func TestScaleP21SW0ScopedIdentityMissingInstalledKeyAvoidsSQL(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ScopedIdentityExactDefaultAndOffBranch(t *testing.T) {
+func TestScopedIdentityExactDefaultAndOffBranch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -109,10 +109,10 @@ func TestScaleP21SW0ScopedIdentityExactDefaultAndOffBranch(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ScopedIdentityNULPhysicalWorkspace(t *testing.T) {
+func TestScopedIdentityNULPhysicalWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect == "postgres" {
 		t.Skip("Postgres text storage excludes physical NUL keys")
 	}
@@ -149,7 +149,7 @@ func TestScaleP21SW0ScopedIdentityNULPhysicalWorkspace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ScopedIdentityRejectsAliasesWithoutDatabase(t *testing.T) {
+func TestScopedIdentityRejectsAliasesWithoutDatabase(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(dialect, func(t *testing.T) {

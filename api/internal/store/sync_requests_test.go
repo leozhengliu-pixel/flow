@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
+func TestTypedSyncRequestVisitor(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	scaleP21SW21SyncManifest(t, f)
+	syncManifest(t, f)
 	raws := []string{
 		`{"id":"sparse","applicationId":"target","unknown":{"private":"never output"}}`,
 		`{"id":"duplicates","applicationId":"wrong","applicationId":"target","groupName":"first","groupName":"last"}`,
@@ -71,7 +71,7 @@ func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
 			got := []domain.OAuthSyncGroupRequest{}
 			err := probe.VisitOAuthSyncGroupRequests(t.Context(), workspace, selector, func(ctx context.Context, item domain.OAuthSyncGroupRequest) error {
 				lease, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease)
-				if !ok || !lease.live || lease.bytes > scaleP21SW21RecordWorkMax || lease.bytes < scaleP21SW21RecordOverhead || probe.metadataResidency.work.used < lease.bytes+256<<10 {
+				if !ok || !lease.live || lease.bytes > recordWorkMax || lease.bytes < recordOverhead || probe.metadataResidency.work.used < lease.bytes+256<<10 {
 					t.Fatal("record encoding did not retain its adaptive admission lease")
 				}
 				encoded, err := json.Marshal(item)
@@ -117,7 +117,7 @@ func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	maximum := (scaleP21SW21RecordWorkMax-scaleP21SW21RecordOverhead)/scaleP21SW21RecordExpansion + 1
+	maximum := (recordWorkMax-recordOverhead)/recordExpansion + 1
 	over, _ := json.Marshal(domain.OAuthSyncGroupRequest{ID: "over", ApplicationID: "over-budget", GroupName: strings.Repeat("x", maximum)})
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'oauthSyncGroupRequests','sw21-over',999,?)`, workspace, over); err != nil {
 		t.Fatal(err)
@@ -136,12 +136,12 @@ func TestScaleP21SW21TypedSyncRequestVisitor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW21SyncRequestSnapshot(t *testing.T) {
+func TestSyncRequestSnapshot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	scaleP21SW21SyncManifest(t, f)
+	syncManifest(t, f)
 	for i := range 55 {
 		raw, _ := json.Marshal(domain.OAuthSyncGroupRequest{ID: fmt.Sprintf("snapshot-%d", i), ApplicationID: "target", GroupName: "before"})
 		if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'oauthSyncGroupRequests',?,?,?)`, workspace, fmt.Sprintf("sw21-snapshot-%03d", i), i, raw); err != nil {
@@ -171,7 +171,7 @@ func TestScaleP21SW21SyncRequestSnapshot(t *testing.T) {
 	}
 }
 
-func scaleP21SW21SyncManifest(t *testing.T, f scaleP09Fixture) {
+func syncManifest(t *testing.T, f scaleFixture) {
 	t.Helper()
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "oauthSyncGroupRequests"), f.data.Workspace.URLKey, "scale_p21_sw21.manifest", "", nil, func(data *domain.Bootstrap) error {
 		data.OAuthSyncGroupRequests = []domain.OAuthSyncGroupRequest{{ID: "sw21-manifest", ApplicationID: "unused"}}

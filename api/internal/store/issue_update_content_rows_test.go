@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW66IssueUpdateContentRows(t *testing.T) {
+func TestIssueUpdateContentRows(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, issue := f.data.Workspace.URLKey, idgen.New("sw66-issue-")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

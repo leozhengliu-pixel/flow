@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW205NativeByteWork(t *testing.T) {
+func TestNativeByteWork(t *testing.T) {
 	backing := make([]byte, 8<<20)
 	raw := json.RawMessage(`{"body":"` + strings.Repeat("x", 4<<20) + `"}`)
 	type bytesAlias []byte
@@ -28,7 +28,7 @@ func TestScaleP21SW205NativeByteWork(t *testing.T) {
 				node.Type(), node.Len(), node.Cap(), cost, want, err)
 		}
 	}
-	view := scaleP21HotLogoStore(t, nil)
+	view := scaleHotLogoStore(t, nil)
 	work := &ResourceRead{store: view}
 	cost, err := metadataAggregateNativeCost(t.Context(), reflect.ValueOf(raw), 0)
 	if err != nil || cost >= 16<<20 {

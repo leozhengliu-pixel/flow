@@ -11,38 +11,38 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW29Integer int64
-type scaleP21SW29Pointer *scaleP21SW29Integer
-type scaleP21SW29Bytes []byte
-type scaleP21SW29Key struct {
+type logicalCodecInteger int64
+type logicalCodecPointer *logicalCodecInteger
+type logicalCodecBytes []byte
+type logicalCodecKey struct {
 	Text string
 	N    int64
 }
-type scaleP21SW29Graph struct {
+type graph struct {
 	ID     string
 	Hidden map[string]any `json:"-"`
 	Values [3]any
-	Map    map[scaleP21SW29Key]any
+	Map    map[logicalCodecKey]any
 }
 
-func TestScaleP21SW29LogicalCodecTypedRoundTrip(t *testing.T) {
-	value := scaleP21SW29Integer(1<<60 + 19)
-	named := scaleP21SW29Pointer(&value)
+func TestLogicalCodecTypedRoundTrip(t *testing.T) {
+	value := logicalCodecInteger(1<<60 + 19)
+	named := logicalCodecPointer(&value)
 	instant := time.Now()
-	var nilPointer *scaleP21SW29Integer
-	var nilSlice scaleP21SW29Bytes
+	var nilPointer *logicalCodecInteger
+	var nilSlice logicalCodecBytes
 	values := []any{
 		int(-19), int8(-8), int16(-190), int32(-1999), int64(-1 << 61),
 		uint(19), uint8(250), uint16(65000), uint32(1 << 31), uint64(1<<64 - 1),
 		uintptr(123), float32(1.25), float64(-19.5), complex64(1 + 2i), complex128(-19 + 18i),
-		scaleP21SW29Integer(1<<60 + 29), named, nilPointer, nilSlice, scaleP21SW29Bytes{},
-		scaleP21SW29Bytes{0, 255, 128}, map[string]any(nil), map[string]any{},
+		logicalCodecInteger(1<<60 + 29), named, nilPointer, nilSlice, logicalCodecBytes{},
+		logicalCodecBytes{0, 255, 128}, map[string]any(nil), map[string]any{},
 		[]any{nil, (*int)(nil), []string{}, map[string]any{"x": int64(1<<60 + 9)}},
-		scaleP21SW29Graph{
+		graph{
 			ID:     "native\x00\xff",
 			Hidden: map[string]any{"must": "drop"},
-			Values: [3]any{instant, instant.Add(17 * time.Nanosecond), scaleP21SW29Bytes{255, 0}},
-			Map: map[scaleP21SW29Key]any{
+			Values: [3]any{instant, instant.Add(17 * time.Nanosecond), logicalCodecBytes{255, 0}},
+			Map: map[logicalCodecKey]any{
 				{Text: "\x00\xff", N: 7}: [2]any{named, "value\xff\x00"},
 			},
 		},
@@ -65,7 +65,7 @@ func TestScaleP21SW29LogicalCodecTypedRoundTrip(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalCodecDeferredOpaque(t *testing.T) {
+func TestLogicalCodecDeferredOpaque(t *testing.T) {
 	ctx := context.Background()
 	data := domain.Bootstrap{Settings: map[string]any{
 		"safe":   int64(1<<60 + 7),
@@ -105,7 +105,7 @@ func TestScaleP21SW29LogicalCodecDeferredOpaque(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalCodecLargeUnrelatedKeys(t *testing.T) {
+func TestLogicalCodecLargeUnrelatedKeys(t *testing.T) {
 	ctx := context.Background()
 	key := strings.Repeat("x", 2<<20)
 	data := domain.Bootstrap{Settings: map[string]any{
@@ -132,10 +132,10 @@ func TestScaleP21SW29LogicalCodecLargeUnrelatedKeys(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalCodecIncrementalBuilder(t *testing.T) {
+func TestLogicalCodecIncrementalBuilder(t *testing.T) {
 	ctx := context.Background()
 	data := domain.Bootstrap{
-		Settings: map[string]any{"typed": scaleP21SW29Integer(1<<60 + 1)},
+		Settings: map[string]any{"typed": logicalCodecInteger(1<<60 + 1)},
 		Teams:    []domain.Team{{ID: "team_old", Name: "before\xff\x00"}},
 	}
 	b, err := newMetadataLogicalBuilder(ctx)
@@ -208,7 +208,7 @@ func TestScaleP21SW29LogicalCodecIncrementalBuilder(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalCodecDisplayTransform(t *testing.T) {
+func TestLogicalCodecDisplayTransform(t *testing.T) {
 	ctx := context.Background()
 	user := domain.User{ID: "usr_current", Name: "updated\x00\xff"}
 	stale := user
@@ -263,7 +263,7 @@ func TestScaleP21SW29LogicalCodecDisplayTransform(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalCodecForeignLargeUserTransform(t *testing.T) {
+func TestLogicalCodecForeignLargeUserTransform(t *testing.T) {
 	ctx := context.Background()
 	stale := domain.User{ID: "usr_display", Name: "old"}
 	data := domain.Bootstrap{

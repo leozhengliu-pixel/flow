@@ -74,7 +74,7 @@ func (s *SQLiteStore) RealtimeSourceVersionAndEpoch(ctx context.Context, workspa
 	return version, generation + ":" + strconv.FormatInt(epoch, 10), nil
 }
 
-// EventAccess binds immutable P03 policy to a source snapshot. Cached policy
+// EventAccess binds immutable resource access policy to a source snapshot. Cached policy
 // must match live authority at delivery, never just when an event is queued.
 type EventAccess struct {
 	AccessContext

@@ -17,10 +17,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW22ApplicationWebhookCount(t *testing.T) {
+func TestApplicationWebhookCount(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	client := idgen.New("sw22-client-")
 	second, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "SW22 second", idgen.New("sw22-second-"), "us")
@@ -106,10 +106,10 @@ func TestScaleP21SW22ApplicationWebhookCount(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW22ImportIssuesIdentityDifferential(t *testing.T) {
+func TestImportIssuesIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21_sw22.seed", "", nil, func(data *domain.Bootstrap) error {
 		for index := range 70 {
@@ -208,10 +208,10 @@ func TestScaleP21SW22ImportIssuesIdentityDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW22IssueSequenceMigrationDifferential(t *testing.T) {
+func TestIssueSequenceMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	issues := []domain.Issue{}

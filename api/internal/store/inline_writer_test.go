@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW193Field(t *testing.T, repo *SQLiteStore, workspace, name string) json.RawMessage {
+func inlineWriterField(t *testing.T, repo *SQLiteStore, workspace, name string) json.RawMessage {
 	t.Helper()
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), "SELECT data FROM workspace_states WHERE workspace_key=?", workspace).Scan(&raw); err != nil {
@@ -59,17 +59,17 @@ func scaleP21SW193Field(t *testing.T, repo *SQLiteStore, workspace, name string)
 	return append(json.RawMessage(nil), compact.Bytes()...)
 }
 
-func TestScaleP21SW193PulseInlineSettings(t *testing.T) {
+func TestPulseInlineSettings(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	candidates := scaleP21PulseSummaryCandidates(idgen.New("sw193-pulse-"), 2, true)
+	candidates := scalePulseSummaryCandidates(idgen.New("sw193-pulse-"), 2, true)
 	for _, large := range []bool{false, true} {
 		var expected any
 		for _, mode := range []string{"legacy", "warm", "reloaded"} {
 			t.Run(fmt.Sprintf("%t/%s", large, mode), func(t *testing.T) {
-				f := scaleP09Database(t)
-				scaleP21PulseSummarySeed(t, f, candidates, 2)
+				f := journalScaleDatabase(t)
+				scalePulseSummarySeed(t, f, candidates, 2)
 				workspace := f.data.Workspace.URLKey
 				if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings"), workspace, "scale_p21.sw193_inline_settings", "", nil, func(data *domain.Bootstrap) error {
 					data.Settings["summary-unrelated"] = "retained"
@@ -137,16 +137,16 @@ func TestScaleP21SW193PulseInlineSettings(t *testing.T) {
 				})
 				run := func() error {
 					if mode == "legacy" {
-						return scaleP21PulseSummaryLegacy(ctx, repo, workspace, candidates, scaleP21PulseSummaryPrepare)
+						return scalePulseSummaryLegacy(ctx, repo, workspace, candidates, scalePulseSummaryPrepare)
 					}
-					return repo.CommitPulseSummaries(ctx, workspace, candidates, scaleP21PulseSummaryPrepare)
+					return repo.CommitPulseSummaries(ctx, workspace, candidates, scalePulseSummaryPrepare)
 				}
 				if err := run(); err != nil {
 					t.Fatal(err)
 				}
 				count := len(effects)
 				if peer != nil {
-					if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); err != nil || len(effects) != count {
+					if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); err != nil || len(effects) != count {
 						t.Fatal("stale inline peer duplicated delivery or failed", err, count, len(effects))
 					}
 					if peer.MetadataWorkUsedForTesting() != 0 || peer.WorkspaceMetadataDecodes() != 0 {
@@ -156,7 +156,7 @@ func TestScaleP21SW193PulseInlineSettings(t *testing.T) {
 				if err := run(); err != nil || len(effects) != count {
 					t.Fatal("repeated inline cursor tick changed output", err, count, len(effects))
 				}
-				outcome := []any{scaleP21SW193Field(t, repo, workspace, "settings"), scaleP21PulseSummaryRows(t, f), effects}
+				outcome := []any{inlineWriterField(t, repo, workspace, "settings"), scalePulseSummaryRows(t, f), effects}
 				if mode == "legacy" {
 					expected = outcome
 				} else {
@@ -177,15 +177,15 @@ func TestScaleP21SW193PulseInlineSettings(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW193PulseInlineCancellationAndBudget(t *testing.T) {
+func TestPulseInlineCancellationAndBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, cut := range []int{0, 1, 10} {
 		t.Run(fmt.Sprint(cut), func(t *testing.T) {
-			f := scaleP09Database(t)
-			candidates := scaleP21PulseSummaryCandidates(idgen.New("sw193-cancel-"), 2, true)
-			scaleP21PulseSummarySeed(t, f, candidates, 2)
+			f := journalScaleDatabase(t)
+			candidates := scalePulseSummaryCandidates(idgen.New("sw193-cancel-"), 2, true)
+			scalePulseSummarySeed(t, f, candidates, 2)
 			workspace := f.data.Workspace.URLKey
 			if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings"), workspace, "scale_p21.sw193_cancel_seed", "", nil, func(data *domain.Bootstrap) error {
 				data.Settings[strings.Repeat("k", 192)] = strings.Repeat("legal inline value ", 18000)
@@ -194,8 +194,8 @@ func TestScaleP21SW193PulseInlineCancellationAndBudget(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			before := scaleP21SW193Field(t, f.SQLiteStore, workspace, "settings")
-			rows := scaleP21PulseSummaryRows(t, f)
+			before := inlineWriterField(t, f.SQLiteStore, workspace, "settings")
+			rows := scalePulseSummaryRows(t, f)
 			view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 			if err != nil {
 				t.Fatal(err)
@@ -218,7 +218,7 @@ func TestScaleP21SW193PulseInlineCancellationAndBudget(t *testing.T) {
 					}
 				})
 			}
-			err = view.CommitPulseSummaries(ctx, workspace, candidates, scaleP21PulseSummaryPrepare)
+			err = view.CommitPulseSummaries(ctx, workspace, candidates, scalePulseSummaryPrepare)
 			if cut == 0 {
 				if !errors.Is(err, ErrMetadataWorkBudget) {
 					t.Fatal("inline owner was not independently admitted", err)
@@ -227,22 +227,22 @@ func TestScaleP21SW193PulseInlineCancellationAndBudget(t *testing.T) {
 				t.Fatal("streamed inline cancellation was not propagated", cut, err)
 			}
 			if published != 0 || view.MetadataWorkUsedForTesting() != 0 ||
-				!bytes.Equal(before, scaleP21SW193Field(t, f.SQLiteStore, workspace, "settings")) ||
-				!reflect.DeepEqual(rows, scaleP21PulseSummaryRows(t, f)) {
+				!bytes.Equal(before, inlineWriterField(t, f.SQLiteStore, workspace, "settings")) ||
+				!reflect.DeepEqual(rows, scalePulseSummaryRows(t, f)) {
 				t.Fatal("refused inline Pulse changed state, published, or leaked work")
 			}
 		})
 	}
 }
 
-func TestScaleP21SW193DiscussionInlinePostimage(t *testing.T) {
+func TestDiscussionInlinePostimage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	stamp := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	for _, kind := range []string{"thread-occurrences", "discussion-occurrences", "point", "complete", "split-point", "split-complete"} {
 		for _, large := range []bool{false, true} {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			count := 5
 			if large && !strings.HasPrefix(kind, "split-") {
@@ -290,7 +290,7 @@ func TestScaleP21SW193DiscussionInlinePostimage(t *testing.T) {
 						}); err != nil {
 							t.Fatal(err)
 						}
-						expected = scaleP21SW193Field(t, f.SQLiteStore, workspace, "threadSubscriptions")
+						expected = inlineWriterField(t, f.SQLiteStore, workspace, "threadSubscriptions")
 						return
 					}
 					view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -357,7 +357,7 @@ func TestScaleP21SW193DiscussionInlinePostimage(t *testing.T) {
 					if err := publication.Install(); err != nil {
 						t.Fatal(err)
 					}
-					if actual := scaleP21SW193Field(t, view, workspace, "threadSubscriptions"); !bytes.Equal(actual, expected) {
+					if actual := inlineWriterField(t, view, workspace, "threadSubscriptions"); !bytes.Equal(actual, expected) {
 						t.Fatal("inline discussion field differs from legacy")
 					}
 					current, err := view.retainMetadataLogicalSource(t.Context(), workspace)

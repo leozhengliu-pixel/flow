@@ -9,10 +9,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW0SettingsPropertiesDifferential(t *testing.T) {
+func TestSettingsPropertiesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	original := f.data.WorkspaceSettings
 	value := reflect.ValueOf(&original).Elem()
@@ -88,7 +88,7 @@ func TestScaleP21SW0SettingsPropertiesDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SettingsPropertiesSelection(t *testing.T) {
+func TestSettingsPropertiesSelection(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	stored := domain.Bootstrap{WorkspaceSettings: domain.WorkspaceSettings{
 		InviteLinksEnabled: true, AgentInstructions: "keep", SCIMDefaultRole: "guest",

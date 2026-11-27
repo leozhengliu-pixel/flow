@@ -12,18 +12,18 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-var errSW23HistoryJSON = errors.New("invalid historical settings JSON")
+var errHistoryJSON = errors.New("invalid historical settings JSON")
 
 // Only string-token type and short field names matter to this projection.
 // Validate tokens before shortening them so the existing JSON parser can skip
 // arbitrary ignored bodies without retaining their strings or numeric digits.
-type sw23HistoryTokens struct {
+type historyTokens struct {
 	input   *bufio.Reader
 	pending []byte
 	err     error
 }
 
-func (r *sw23HistoryTokens) Read(output []byte) (int, error) {
+func (r *historyTokens) Read(output []byte) (int, error) {
 	written := 0
 	for written < len(output) {
 		if len(r.pending) > 0 {
@@ -55,15 +55,15 @@ func (r *sw23HistoryTokens) Read(output []byte) (int, error) {
 	return written, nil
 }
 
-func (r *sw23HistoryTokens) tokenByte() (byte, error) {
+func (r *historyTokens) tokenByte() (byte, error) {
 	c, err := r.input.ReadByte()
 	if errors.Is(err, io.EOF) {
-		err = errSW23HistoryJSON
+		err = errHistoryJSON
 	}
 	return c, err
 }
 
-func (r *sw23HistoryTokens) stringToken() ([]byte, error) {
+func (r *historyTokens) stringToken() ([]byte, error) {
 	// Either recognized field name is far shorter than this even when every
 	// character uses a JSON Unicode escape. Longer keys cannot select a flag.
 	raw := make([]byte, 1, 512)
@@ -89,7 +89,7 @@ func (r *sw23HistoryTokens) stringToken() ([]byte, error) {
 			return raw, nil
 		}
 		if c < 0x20 {
-			return nil, errSW23HistoryJSON
+			return nil, errHistoryJSON
 		}
 		if c != '\\' {
 			continue
@@ -109,16 +109,16 @@ func (r *sw23HistoryTokens) stringToken() ([]byte, error) {
 				}
 				appendByte(c)
 				if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
-					return nil, errSW23HistoryJSON
+					return nil, errHistoryJSON
 				}
 			}
 		default:
-			return nil, errSW23HistoryJSON
+			return nil, errHistoryJSON
 		}
 	}
 }
 
-func (r *sw23HistoryTokens) numberToken(first byte) error {
+func (r *historyTokens) numberToken(first byte) error {
 	c := first
 	eof := false
 	next := func() error {
@@ -140,11 +140,11 @@ func (r *sw23HistoryTokens) numberToken(first byte) error {
 			return err
 		}
 		if c >= '0' && c <= '9' {
-			return errSW23HistoryJSON
+			return errHistoryJSON
 		}
 	} else {
 		if c < '1' || c > '9' {
-			return errSW23HistoryJSON
+			return errHistoryJSON
 		}
 		for c >= '0' && c <= '9' {
 			if err := next(); err != nil {
@@ -157,7 +157,7 @@ func (r *sw23HistoryTokens) numberToken(first byte) error {
 			return err
 		}
 		if c < '0' || c > '9' {
-			return errSW23HistoryJSON
+			return errHistoryJSON
 		}
 		for c >= '0' && c <= '9' {
 			if err := next(); err != nil {
@@ -175,7 +175,7 @@ func (r *sw23HistoryTokens) numberToken(first byte) error {
 			}
 		}
 		if c < '0' || c > '9' {
-			return errSW23HistoryJSON
+			return errHistoryJSON
 		}
 		for c >= '0' && c <= '9' {
 			if err := next(); err != nil {
@@ -188,16 +188,16 @@ func (r *sw23HistoryTokens) numberToken(first byte) error {
 		if eof {
 			return nil
 		}
-		return errSW23HistoryJSON
+		return errHistoryJSON
 	case ' ', '\t', '\r', '\n', ',', ']', '}':
 		return r.input.UnreadByte()
 	default:
-		return errSW23HistoryJSON
+		return errHistoryJSON
 	}
 }
 
-func sw23HistoryEnabled(input io.Reader) (bool, error) {
-	tokens := &sw23HistoryTokens{input: bufio.NewReaderSize(input, 4096)}
+func historyEnabled(input io.Reader) (bool, error) {
+	tokens := &historyTokens{input: bufio.NewReaderSize(input, 4096)}
 	iter := jsoniter.Parse(jsoniter.ConfigCompatibleWithStandardLibrary, tokens, 4096)
 	var search, access *bool
 	if iter.WhatIsNext() == jsoniter.ObjectValue {
@@ -226,7 +226,7 @@ func sw23HistoryEnabled(input io.Reader) (bool, error) {
 	}
 	parsed := iter.Error == nil
 	trailing := iter.WhatIsNext()
-	if tokens.err != nil && !errors.Is(tokens.err, io.EOF) && !errors.Is(tokens.err, errSW23HistoryJSON) {
+	if tokens.err != nil && !errors.Is(tokens.err, io.EOF) && !errors.Is(tokens.err, errHistoryJSON) {
 		return false, tokens.err
 	}
 	if !parsed || trailing != jsoniter.InvalidValue || !errors.Is(iter.Error, io.EOF) {
@@ -235,7 +235,7 @@ func sw23HistoryEnabled(input io.Reader) (bool, error) {
 	return search != nil && *search || access != nil && *access, nil
 }
 
-type sw23HistoryPayload struct {
+type historyPayload struct {
 	ctx          context.Context
 	tx           *sqlTx
 	id           string
@@ -243,7 +243,7 @@ type sw23HistoryPayload struct {
 	buffer       []byte
 }
 
-func (r *sw23HistoryPayload) Read(output []byte) (int, error) {
+func (r *historyPayload) Read(output []byte) (int, error) {
 	if len(r.buffer) == 0 {
 		if r.offset >= r.size {
 			return 0, io.EOF
@@ -331,7 +331,7 @@ func (s *SQLiteStore) agentWebSearchFirstEnabledBounded(ctx context.Context) (ti
 			}
 			return time.Time{}, err
 		}
-		enabled, err := sw23HistoryEnabled(&sw23HistoryPayload{ctx: ctx, tx: tx, id: item.ID, size: item.Size})
+		enabled, err := historyEnabled(&historyPayload{ctx: ctx, tx: tx, id: item.ID, size: item.Size})
 		if err != nil {
 			return time.Time{}, err
 		}

@@ -165,8 +165,8 @@ var metadataTables = map[string]bool{"workspace_metadata_records": true, "worksp
 // Audited dynamic-table builders whose callers only supply non-metadata
 // tables. New builders must either be expanded above or audited here.
 var nonMetadataTableBuilders = map[string]bool{
-	// Only the explicit P09 trigger sidecars; canonical writers are
-	// independently enumerated by TestScaleP09WriterCoverage.
+	// Only the explicit record journal trigger sidecars; canonical writers are
+	// independently enumerated by TestCanonicalRecordWriterCoverage.
 	"recordJournalTriggerSpecs":  true,
 	"PurgeChatHistory":           true,
 	"purgeChatThreads":           true,

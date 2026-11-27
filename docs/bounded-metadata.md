@@ -60,15 +60,15 @@ Peer sync needs a locally ready journal for either active mode and falls back
 to `off` when the journal is unavailable. Coordination must be configured to
 start the poller. Bounded startup requires journal mode `on` and rejects
 peer `shadow` because the comparison needs full workspace snapshots.
-`TestScaleP11*` covers mode guards, journal apply and fallback, missed or
+The peer-sync tests cover mode guards, journal apply and fallback, missed or
 reordered Redis events, envelope compatibility and permission changes.
 
 Catalog **complete** is persisted coverage. Startup reuses completed
 checkpoints. Bounded admission checks canonical layout, phase-2
 checkpoints and journal writer coverage. The shadow worker can reset a
 completed checkpoint while revisiting it, so stop it before bounded startup.
-`TestScaleP05*`, `TestBoundedRollout*`, `TestMetadataPrepareCommandReadiesBoundedStart`,
-`TestScaleP21ActivationGuard*` and `TestScaleP21CatalogFirstRecordThenColdWrite`
+The catalog tests, `TestBoundedRollout*`, `TestMetadataPrepareCommandReadiesBoundedStart`,
+`TestScaleActivationGuard*` and `TestScaleCatalogFirstRecordThenColdWrite`
 cover the catalog, preparation and activation guards.
 
 See the [activation runbook](bounded-metadata-activation.md) for the full
@@ -410,7 +410,7 @@ change the table layout: both modes read and write the same canonical record
 tables (`workspace_metadata_records`), record versions and journal. The
 catalog rows and checkpoints the flag-on mode maintains stay in place and are
 ignored by a flag-off replica (flag-off never runs the checkpoint opener).
-`TestScaleP21RollbackRoundTrip` writes a broad set of changes flag-on, reopens
+`TestScaleRollbackRoundTrip` writes a broad set of changes flag-on, reopens
 the database flag-off and compares every table and API response with a run
 that stayed flag-off; it also checks the opposite direction.
 

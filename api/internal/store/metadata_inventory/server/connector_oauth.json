@@ -5,7 +5,7 @@
     "connectorForRequest": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Selected representation gates the unchanged legacy workspaceData call; bounded mode projects workspaceSettings and settings/applicationPolicies with live authority and unchanged server credential filtering. Ownership, shared-admin and connector policy checks retained. TestScaleP21M2ConnectorDifferential compares the full principal/key matrix.",
+      "reason": "Selected representation gates the unchanged legacy workspaceData call; bounded mode projects workspaceSettings and settings/applicationPolicies with live authority and unchanged server credential filtering. Ownership, shared-admin and connector policy checks retained. TestScaleConnectorDifferential compares the full principal/key matrix.",
       "accessors": [
         "Bootstrap",
         "workspaceData"

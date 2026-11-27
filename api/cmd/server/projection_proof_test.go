@@ -10,9 +10,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP12QueuedProofSurvivesBodyWritesAndRejectsGrantChanges(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleQueuedProofSurvivesBodyWritesAndRejectsGrantChanges(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[3]
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, principal.user.ID, nil)
 		if err != nil {
@@ -47,23 +47,23 @@ func TestScaleP12QueuedProofSurvivesBodyWritesAndRejectsGrantChanges(t *testing.
 	}
 }
 
-func TestScaleP12APIDocumentProjectionMatchesLegacy(t *testing.T) {
+func TestScaleAPIDocumentProjectionMatchesLegacy(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		for _, team := range []string{f.data.Teams[0].ID, f.private} {
 			document := authRequest[domain.Document](t, f.admin, http.MethodPost, f.host.URL+"/api/documents", map[string]any{"title": "API-created document", "content": "Body", "teamIds": []string{team}}, f.data.Workspace.URLKey, http.StatusCreated)
 			event := domain.RealtimeEvent{ID: "p12-api-" + document.ID, Type: "document.created", AggregateID: document.ID, Payload: json.RawMessage(`{}`)}
 			for _, principal := range f.principals {
 				t.Run(principal.name+"/"+team, func(t *testing.T) {
-					scaleP12EqualEvent(t, f.service, principal.request(f.data.Workspace.URLKey), event)
+					scaleEqualEvent(t, f.service, principal.request(f.data.Workspace.URLKey), event)
 				})
 			}
 		}
 	}
 }
 
-func TestScaleP12JournalFramesKeepTransactionsAtomicAndQueuesBounded(t *testing.T) {
+func TestScaleJournalFramesKeepTransactionsAtomicAndQueuesBounded(t *testing.T) {
 	transaction := emptySyncTransaction("transaction", "9007199254740993")
 	for range 50 {
 		transaction.Upserts = append(transaction.Upserts, syncV2Upsert{Key: syncV2Key{Kind: "issues", ID: "issue"}, Version: "1", Data: json.RawMessage(`{"id":"issue","title":"` + strings.Repeat("x", 1000) + `"}`), Projection: "summary", DetailStale: true})

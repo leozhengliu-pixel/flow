@@ -19,7 +19,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP15JSONByteDifferential(t *testing.T) {
+func TestScaleJSONByteDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	values := []any{streamTestBootstrap(), domain.Bootstrap{}, struct {
 		Strings []string                   `json:"strings"`
@@ -71,16 +71,16 @@ func TestScaleP15JSONByteDifferential(t *testing.T) {
 	}
 }
 
-type scaleP15CountingWriter struct {
+type scaleCountingWriter struct {
 	header  http.Header
 	bytes   int
 	max     int
 	onWrite func() error
 }
 
-func (w *scaleP15CountingWriter) Header() http.Header { return w.header }
-func (w *scaleP15CountingWriter) WriteHeader(int)     {}
-func (w *scaleP15CountingWriter) Write(p []byte) (int, error) {
+func (w *scaleCountingWriter) Header() http.Header { return w.header }
+func (w *scaleCountingWriter) WriteHeader(int)     {}
+func (w *scaleCountingWriter) Write(p []byte) (int, error) {
 	if w.onWrite != nil {
 		if err := w.onWrite(); err != nil {
 			return 0, err
@@ -91,13 +91,13 @@ func (w *scaleP15CountingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestScaleP15HugeHistoryEncodingIsBounded(t *testing.T) {
+func TestScaleHugeHistoryEncodingIsBounded(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	value := struct {
 		History map[string][]string `json:"history"`
 		Payload json.RawMessage     `json:"payload"`
 	}{map[string][]string{"document": {strings.Repeat("history <>&\n", 1<<18)}}, json.RawMessage(`{"body":"` + strings.Repeat("body", 1<<18) + `"}`)}
-	w := &scaleP15CountingWriter{header: make(http.Header)}
+	w := &scaleCountingWriter{header: make(http.Header)}
 	result := testing.Benchmark(func(b *testing.B) {
 		for range b.N {
 			writeStreamedJSON(context.Background(), w, http.StatusOK, value)
@@ -109,7 +109,7 @@ func TestScaleP15HugeHistoryEncodingIsBounded(t *testing.T) {
 	t.Logf("large history: %d B/op; largest output chunk %d", result.AllocedBytesPerOp(), w.max)
 }
 
-func TestScaleP15SignedURLFileDifferential(t *testing.T) {
+func TestScaleSignedURLFileDifferential(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	key, expires := []byte("p15-test-key"), time.Unix(1900000000, 0)
 	bodies := []string{
@@ -142,7 +142,7 @@ func TestScaleP15SignedURLFileDifferential(t *testing.T) {
 	}
 }
 
-func scaleP15ExpectAbort(t *testing.T, run func()) {
+func scaleExpectAbort(t *testing.T, run func()) {
 	t.Helper()
 	defer func() {
 		if got := recover(); got != http.ErrAbortHandler {
@@ -153,13 +153,13 @@ func scaleP15ExpectAbort(t *testing.T, run func()) {
 	t.Fatal("response was not aborted")
 }
 
-func TestScaleP15DetachedDownloadReleasesProducer(t *testing.T) {
+func TestScaleDetachedDownloadReleasesProducer(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
 	budget := &realtimeBudget{limit: 2 << 20}
 	done := false
-	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+	w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 		if !done {
 			t.Fatal("socket write pinned producer state")
 		}
@@ -183,12 +183,12 @@ func TestScaleP15DetachedDownloadReleasesProducer(t *testing.T) {
 	}
 }
 
-func TestScaleP15DetachedPagedBootstrapReleasesProducer(t *testing.T) {
+func TestScaleDetachedPagedBootstrapReleasesProducer(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir())
 	done := false
 	s := &server{fileSigningAllowAll: true, realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
-	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+	w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 		if !done {
 			t.Fatal("paged bootstrap retained the producer while sending")
 		}
@@ -203,7 +203,7 @@ func TestScaleP15DetachedPagedBootstrapReleasesProducer(t *testing.T) {
 	}
 }
 
-func TestScaleP15DownloadCancellationAndPanicRelease(t *testing.T) {
+func TestScaleDownloadCancellationAndPanicRelease(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
@@ -212,7 +212,7 @@ func TestScaleP15DownloadCancellationAndPanicRelease(t *testing.T) {
 			budget := &realtimeBudget{limit: 2 << 20}
 			ctx, cancel := context.WithCancel(context.WithValue(t.Context(), legacyTransportBudgetKey{}, budget))
 			defer cancel()
-			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+			w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 				if mode == "cancelled-client" {
 					cancel()
 					return nil
@@ -225,7 +225,7 @@ func TestScaleP15DownloadCancellationAndPanicRelease(t *testing.T) {
 				}
 				writeBootstrapJSON(w, domain.Bootstrap{Projects: []domain.Project{{Description: strings.Repeat("x", 1<<20)}}})
 			}))
-			scaleP15ExpectAbort(t, func() { handler.ServeHTTP(w, httptest.NewRequestWithContext(ctx, "GET", "/api/bootstrap", nil)) })
+			scaleExpectAbort(t, func() { handler.ServeHTTP(w, httptest.NewRequestWithContext(ctx, "GET", "/api/bootstrap", nil)) })
 			files, _ := os.ReadDir(dir)
 			if len(files) != 0 || budget.used.Load() != 0 {
 				t.Fatalf("leaked files=%d budget=%d", len(files), budget.used.Load())
@@ -234,7 +234,7 @@ func TestScaleP15DownloadCancellationAndPanicRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP15SigningKeepsNonJSONStreaming(t *testing.T) {
+func TestScaleSigningKeepsNonJSONStreaming(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
 	s := &server{fileSigningAllowAll: true}
@@ -260,16 +260,16 @@ func TestScaleP15SigningKeepsNonJSONStreaming(t *testing.T) {
 	}
 }
 
-func TestScaleP15SigningBeyondLegacyBufferLimit(t *testing.T) {
+func TestScaleSigningBeyondLegacyBufferLimit(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15-fixture-signing-key")
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
 	s := &server{fileSigningAllowAll: true, realtime: &realtimeHub{budget: &realtimeBudget{limit: 2 << 20}}}
 	var prefix bytes.Buffer
-	w := &scaleP15CountingWriter{header: make(http.Header)}
+	w := &scaleCountingWriter{header: make(http.Header)}
 	w.onWrite = func() error { return nil }
-	output := &scaleP15PrefixWriter{scaleP15CountingWriter: w, prefix: &prefix}
+	output := &scalePrefixWriter{scaleCountingWriter: w, prefix: &prefix}
 	r := httptest.NewRequest("GET", "/api/bootstrap", nil)
 	r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
 	s.signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, _ *http.Request) {
@@ -291,23 +291,23 @@ func TestScaleP15SigningBeyondLegacyBufferLimit(t *testing.T) {
 	}
 }
 
-type scaleP15PrefixWriter struct {
-	*scaleP15CountingWriter
+type scalePrefixWriter struct {
+	*scaleCountingWriter
 	prefix *bytes.Buffer
 }
 
-func (w *scaleP15PrefixWriter) Write(p []byte) (int, error) {
+func (w *scalePrefixWriter) Write(p []byte) (int, error) {
 	if w.prefix.Len() < 1024 {
 		_, _ = w.prefix.Write(p[:min(len(p), 1024-w.prefix.Len())])
 	}
-	return w.scaleP15CountingWriter.Write(p)
+	return w.scaleCountingWriter.Write(p)
 }
 
-func TestScaleP15CancelledJSONStopsWithinChunk(t *testing.T) {
+func TestScaleCancelledJSONStopsWithinChunk(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	ctx, cancel := context.WithCancel(t.Context())
-	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error { cancel(); return nil }}
-	scaleP15ExpectAbort(t, func() {
+	w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error { cancel(); return nil }}
+	scaleExpectAbort(t, func() {
 		writeStreamedJSON(ctx, w, http.StatusOK, struct {
 			Body string `json:"body"`
 		}{strings.Repeat("x", 4<<20)})

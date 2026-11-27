@@ -14,17 +14,17 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW167PublicCommentsHTTPDifferential(t *testing.T) {
+func TestPublicCommentsHTTPDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw167-")
 	at := time.Date(2025, 4, 5, 6, 7, 8, 0, time.UTC)
 	editedAt := at.Add(2 * time.Minute)
@@ -117,7 +117,7 @@ func TestScaleP21SW167PublicCommentsHTTPDifferential(t *testing.T) {
 	pairs, legacySQL, boundedSQL := 0, 0, 0
 	compare := func(state string, test requestCase) {
 		t.Helper()
-		serve := func(selected *store.SQLiteStore) (*scaleP21PublicResourceRecordWriter, int) {
+		serve := func(selected *store.SQLiteStore) (*scalePublicResourceRecordWriter, int) {
 			service := &server{store: selected, authDisabled: test.development}
 			r := f.literalRequest(test.user, test.key, nil)
 			r.Method, r.URL.Path, r.URL.RawQuery = http.MethodGet, "/api/comments", test.query
@@ -179,7 +179,7 @@ func TestScaleP21SW167PublicCommentsHTTPDifferential(t *testing.T) {
 				}
 				handOffPagedMetadata(r, workspace, test.user.ID, data)
 			}
-			w := &scaleP21PublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
+			w := &scalePublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
 			service.listCommentsConnection(w, r)
 			return w, sqlCount
 		}

@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW558: the legacy-view lane (the replica's whole-workspace decodes of the
+// The legacy-view lane (the replica's whole-workspace decodes of the
 // legacy accessors) bounds a live request's wait like the COLD slot queue's:
 // while the lane is held, a request's accessor gives up after
 // FLOW_COLD_QUEUE_TIMEOUT (or at once when FLOW_COLD_QUEUE_LIMIT waiters
@@ -28,8 +28,8 @@ import (
 // delayed, never answered "not found". The refusal is attributed to exactly
 // the refused request: another request's genuine error is kept. A success
 // answer is never rewritten, and flag off nothing changes.
-func TestScaleP21SW558LegacyViewLaneBoundedWait(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+func TestLegacyViewLaneBoundedWait(t *testing.T) {
+	f, workspace := routeTemperatureGuardFixture(t)
 	view := f.probe
 	const timeout = 60 * time.Millisecond
 	view.SetLegacyViewQueueForTesting(64, timeout)
@@ -292,11 +292,11 @@ func TestScaleP21SW558LegacyViewLaneBoundedWait(t *testing.T) {
 	}
 }
 
-// scaleP21SW558LegacyViews are the accessors that, with bounded metadata on,
+// legacyViews are the accessors that, with bounded metadata on,
 // decode a whole workspace (or a non-resident field) on the legacy-view lane
 // in any context. PagedWorkspaceMetadata and ColdRequestView use the lane
 // only inside a COLD context, which a HOT route never has.
-var scaleP21SW558LegacyViews = map[string]bool{
+var legacyViews = map[string]bool{
 	"store/SQLiteStore.WorkspaceMetadata":        true,
 	"store/SQLiteStore.WorkspaceMetadataForRead": true,
 	"store/SQLiteStore.WorkspaceMetadataFields":  true,
@@ -305,27 +305,27 @@ var scaleP21SW558LegacyViews = map[string]bool{
 	"store/SQLiteStore.BootstrapForUser":         true,
 }
 
-// scaleP21SW558ResidentFields are the fields the bounded image holds: a
+// residentFields are the fields the bounded image holds: a
 // WorkspaceMetadataFields call naming only these decodes nothing.
-var scaleP21SW558ResidentFields = map[string]bool{
+var residentFields = map[string]bool{
 	"workspace": true, "viewer": true, "viewerRole": true,
 	"teams": true, "teamSettings": true, "workspaceSettings": true, "teamParents": true,
 }
 
-// scaleP21SW558HotLegacyViews names HOT entries (a HOT route's handler or a
+// hotLegacyViews names HOT entries (a HOT route's handler or a
 // middleware every request passes outside the COLD scope) that still reach a
 // legacy view with the flag on, with the reason it is acceptable. Empty: a
 // HOT request never decodes a whole workspace on the lane.
-var scaleP21SW558HotLegacyViews = map[string]string{}
+var hotLegacyViews = map[string]string{}
 
-// TestScaleP21SW558HotEntriesReachNoLegacyView walks the SW286 graph from
+// TestHotEntriesReachNoLegacyView walks the store wrapper graph from
 // every HOT route's handlers and from the request middleware that runs
 // outside the COLD route mux (and for HOT routes inside it), and fails on a
-// flag-on path to a legacy view that scaleP21SW558HotLegacyViews does not
+// flag-on path to a legacy view that hotLegacyViews does not
 // name. Background goroutine roots reaching one are logged: their accessors
 // wait on the lane for as long as their own context allows.
-func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
-	graph := scaleP21SW286Load(t)
+func TestHotEntriesReachNoLegacyView(t *testing.T) {
+	graph := storeWrapperBoundaryLoad(t)
 	out := map[string][]int{}
 	roots := map[string][]string{}
 	for index, ref := range graph.refs {
@@ -334,12 +334,12 @@ func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
 			roots[ref.pattern] = append(roots[ref.pattern], ref.to)
 		}
 	}
-	for pattern, targets := range scaleP21SW550LocalHandlers(t) {
+	for pattern, targets := range localHandlers(t) {
 		if len(roots[pattern]) == 0 {
 			roots[pattern] = targets
 		}
 	}
-	resident := func(ref scaleP21SW286Ref) bool {
+	resident := func(ref storeWrapperBoundaryRef) bool {
 		if ref.to != "store/SQLiteStore.WorkspaceMetadataFields" {
 			return false
 		}
@@ -352,7 +352,7 @@ func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
 			for _, arg := range call.Args[1:] {
 				literal, ok := arg.(*ast.BasicLit)
 				name, err := strconv.Unquote(literalValue(literal, ok))
-				if !ok || err != nil || !scaleP21SW558ResidentFields[name] {
+				if !ok || err != nil || !residentFields[name] {
 					all = false
 				}
 			}
@@ -367,11 +367,11 @@ func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
 			queue = queue[1:]
 			for _, index := range out[current] {
 				ref := graph.refs[index]
-				if ref.offOnly || ref.kind == "route" || ref.byName || scaleP21SW286Cut(ref) || paths[ref.to] != "" {
+				if ref.offOnly || ref.kind == "route" || ref.byName || storeWrapperBoundaryCut(ref) || paths[ref.to] != "" {
 					continue
 				}
 				path := fmt.Sprintf("%s -(%s:%d)-> %s", paths[current], ref.file, ref.line, ref.to)
-				if scaleP21SW558LegacyViews[ref.to] && !resident(ref) {
+				if legacyViews[ref.to] && !resident(ref) {
 					return path
 				}
 				paths[ref.to] = path
@@ -382,7 +382,7 @@ func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
 	}
 	entries := map[string][]string{}
 	for pattern, targets := range roots {
-		if scaleP21RouteHot(pattern) {
+		if scaleRouteHot(pattern) {
 			entries["route "+pattern] = targets
 		}
 	}
@@ -399,14 +399,14 @@ func TestScaleP21SW558HotEntriesReachNoLegacyView(t *testing.T) {
 		for _, target := range targets {
 			if path := walk(target); path != "" {
 				reached[entry] = true
-				if scaleP21SW558HotLegacyViews[entry] == "" {
+				if hotLegacyViews[entry] == "" {
 					t.Errorf("SW558 HOT entry %s decodes a whole workspace on the legacy-view lane:\n  %s", entry, path)
 				}
 				break
 			}
 		}
 	}
-	for entry := range scaleP21SW558HotLegacyViews {
+	for entry := range hotLegacyViews {
 		if !reached[entry] {
 			t.Errorf("SW558 stale HOT legacy-view entry %s", entry)
 		}

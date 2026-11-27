@@ -12,10 +12,10 @@ import (
 
 // A successful bounded replacement must preserve both existing installed
 // dispositions; the persisted rows alone do not identify the old rewrite.
-func TestScaleP21SW26ResourceSlugWarmColdBeforeImage(t *testing.T) {
+func TestResourceSlugWarmColdBeforeImage(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	projectID, initiativeID := idgen.New("project-sw26-slug-"), idgen.New("initiative-sw26-slug-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects", "initiatives"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {

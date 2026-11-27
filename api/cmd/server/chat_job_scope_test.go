@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW44ChatFixture(t *testing.T) (*chatWorkflowFixture, *scaleP04Database, domain.Issue) {
+func chatFixture(t *testing.T) (*chatWorkflowFixture, *scaleDatabase, domain.Issue) {
 	t.Helper()
 	f := newChatWorkflowFixture(t)
-	database := newScaleP04Database(t)
+	database := newScaleDatabase(t)
 	f.s.store = database.repo
 	if err := database.repo.EnsureChatIntegrationsSchema(t.Context()); err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func scaleP21SW44ChatFixture(t *testing.T) (*chatWorkflowFixture, *scaleP04Datab
 	return f, database, data.Issues[0]
 }
 
-func scaleP21SW44Claim(t *testing.T, f *chatWorkflowFixture, issue domain.Issue, attempts int) domain.ChatJob {
+func chatJobScopeClaim(t *testing.T, f *chatWorkflowFixture, issue domain.Issue, attempts int) domain.ChatJob {
 	t.Helper()
 	payload, _ := json.Marshal(chatNotificationJob{
 		BindingID: f.binding.ID, BindingScope: chatBindingFingerprint(f.binding),
@@ -88,16 +88,16 @@ func scaleP21SW44Claim(t *testing.T, f *chatWorkflowFixture, issue domain.Issue,
 	return job
 }
 
-type scaleP21SW44ChatResult struct {
+type chatResult struct {
 	Status, LastError, HealthError string
 	Attempts, Messages             int
 	LeaseReleased, HealthDelivered bool
 	Canceled                       bool
 }
 
-func scaleP21SW44Run(t *testing.T, mode string, bounded bool, jobs int) []scaleP21SW44ChatResult {
+func chatJobScopeRun(t *testing.T, mode string, bounded bool, jobs int) []chatResult {
 	t.Helper()
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	if bounded {
 		view, err := database.repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), database.key)
 		if err != nil {
@@ -112,14 +112,14 @@ func scaleP21SW44Run(t *testing.T, mode string, bounded bool, jobs int) []scaleP
 	if !registerRequestReadClose(outer, func() { outerClosed++ }) {
 		t.Fatal("missing outer control scope")
 	}
-	var results []scaleP21SW44ChatResult
+	var results []chatResult
 	var priorScope *requestResourceReads
 	for index := range jobs {
 		attempts := 1
 		if mode == "exhausted" || mode == "processing-final" {
 			attempts = 8
 		}
-		job := scaleP21SW44Claim(t, f, issue, attempts)
+		job := chatJobScopeClaim(t, f, issue, attempts)
 		ctx, cancel := context.WithCancel(outer)
 		var scope *requestResourceReads
 		closed, finishStatements, healthStatements, posts := 0, 0, 0, 0
@@ -202,7 +202,7 @@ func scaleP21SW44Run(t *testing.T, mode string, bounded bool, jobs int) []scaleP
 			t.Fatal("one job completed the containing worker/request scope")
 		}
 		priorScope = scope
-		result := scaleP21SW44ChatResult{Messages: len(f.sent) - sentBefore, Canceled: errors.Is(err, context.Canceled)}
+		result := chatResult{Messages: len(f.sent) - sentBefore, Canceled: errors.Is(err, context.Canceled)}
 		var runAt, lease int64
 		rows := database.query(t, `SELECT status,attempts,run_at,lease_until,last_error FROM chat_jobs WHERE id=?`, job.ID)
 		if !rows.Next() {
@@ -266,7 +266,7 @@ func scaleP21SW44Run(t *testing.T, mode string, bounded bool, jobs int) []scaleP
 	return results
 }
 
-func TestScaleP21SW44ChatClaimedJobScopeLifecycle(t *testing.T) {
+func TestChatClaimedJobScopeLifecycle(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, mode := range []string{"success", "retry", "platform-final", "processing-final", "exhausted", "cancel"} {
@@ -275,8 +275,8 @@ func TestScaleP21SW44ChatClaimedJobScopeLifecycle(t *testing.T) {
 			if mode == "success" {
 				jobs = 2
 			}
-			literal := scaleP21SW44Run(t, mode, false, jobs)
-			bounded := scaleP21SW44Run(t, mode, true, jobs)
+			literal := chatJobScopeRun(t, mode, false, jobs)
+			bounded := chatJobScopeRun(t, mode, true, jobs)
 			if !reflect.DeepEqual(literal, bounded) {
 				t.Fatal("extracted owned job differs from literal lifecycle", fmt.Sprint(literal), fmt.Sprint(bounded))
 			}

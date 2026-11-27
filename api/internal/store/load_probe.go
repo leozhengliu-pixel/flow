@@ -14,60 +14,60 @@ import (
 	"time"
 )
 
-// ScaleP01Commit is stamped immediately after the driver's successful commit,
+// ScaleCommit is stamped immediately after the driver's successful commit,
 // before sequencing and publication. CreatedAt is not a commit timestamp.
-type ScaleP01Commit struct {
+type ScaleCommit struct {
 	ID, Type, AggregateID string
 	At                    time.Time
 }
 
-type scaleP01RequestKey struct{}
+type scaleRequestKey struct{}
 
-func ScaleP01RequestContext(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, scaleP01RequestKey{}, requestID)
+func ScaleRequestContext(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, scaleRequestKey{}, requestID)
 }
 
-type ScaleP01SQL struct {
+type ScaleSQL struct {
 	Statements, Reads, Writes, Errors, Commits int64
 	ExecuteSeconds                             float64
 	ExecutionBuckets                           [64]int64
 }
 
-// ScaleP01Probe counts driver executions, including prepared statements and
+// ScaleProbe counts driver executions, including prepared statements and
 // transactions. It excludes prepare/BEGIN/COMMIT from Statements. Query timing
 // measures driver execution, not subsequent row iteration or server lock time.
-type ScaleP01Probe struct {
+type ScaleProbe struct {
 	activeWrites atomic.Int64
 	mu           sync.Mutex
-	sql          ScaleP01SQL
-	events       [10000]ScaleP01Commit
+	sql          ScaleSQL
+	events       [10000]ScaleCommit
 	next         int64
 	firstCommit  map[string]time.Time
 	requests     [10000]string
 	requestNext  int
 }
 
-func (p *ScaleP01Probe) BeginLoadWrite()         { p.activeWrites.Add(1) }
-func (p *ScaleP01Probe) EndLoadWrite()           { p.activeWrites.Add(-1) }
-func (p *ScaleP01Probe) ActiveLoadWrites() int64 { return p.activeWrites.Load() }
+func (p *ScaleProbe) BeginLoadWrite()         { p.activeWrites.Add(1) }
+func (p *ScaleProbe) EndLoadWrite()           { p.activeWrites.Add(-1) }
+func (p *ScaleProbe) ActiveLoadWrites() int64 { return p.activeWrites.Load() }
 
-func (p *ScaleP01Probe) Snapshot() (ScaleP01SQL, []ScaleP01Commit, int64) {
+func (p *ScaleProbe) Snapshot() (ScaleSQL, []ScaleCommit, int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	events := make([]ScaleP01Commit, 0, min(p.next, int64(len(p.events))))
+	events := make([]ScaleCommit, 0, min(p.next, int64(len(p.events))))
 	for i := max(int64(0), p.next-int64(len(p.events))); i < p.next; i++ {
 		events = append(events, p.events[i%int64(len(p.events))])
 	}
 	return p.sql, events, max(int64(0), p.next-int64(len(p.events)))
 }
 
-func (p *ScaleP01Probe) SQLSnapshot() ScaleP01SQL {
+func (p *ScaleProbe) SQLSnapshot() ScaleSQL {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.sql
 }
 
-func (p *ScaleP01Probe) executed(query string, began time.Time, err error) {
+func (p *ScaleProbe) executed(query string, began time.Time, err error) {
 	if errors.Is(err, driver.ErrSkip) {
 		return
 	}
@@ -98,11 +98,11 @@ func (p *ScaleP01Probe) executed(query string, began time.Time, err error) {
 	}
 }
 
-func (p *ScaleP01Probe) committed(events []ScaleP01Commit, at time.Time) {
+func (p *ScaleProbe) committed(events []ScaleCommit, at time.Time) {
 	p.committedRequest(events, at, "", false)
 }
 
-func (p *ScaleP01Probe) committedRequest(events []ScaleP01Commit, at time.Time, requestID string, mutated bool) {
+func (p *ScaleProbe) committedRequest(events []ScaleCommit, at time.Time, requestID string, mutated bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sql.Commits++
@@ -126,10 +126,10 @@ func (p *ScaleP01Probe) committedRequest(events []ScaleP01Commit, at time.Time, 
 	}
 }
 
-// EnableScaleP01Probe must be called after opening the store and before using
+// EnableScaleProbe must be called after opening the store and before using
 // it from handlers. The replacement pool uses the same driver, DSN and limits.
 // This entire file is absent from production builds.
-func (s *SQLiteStore) EnableScaleP01Probe(config DatabaseConfig) (*ScaleP01Probe, error) {
+func (s *SQLiteStore) EnableScaleProbe(config DatabaseConfig) (*ScaleProbe, error) {
 	var dsn string
 	switch s.dialect {
 	case "sqlite":
@@ -157,9 +157,9 @@ func (s *SQLiteStore) EnableScaleP01Probe(config DatabaseConfig) (*ScaleP01Probe
 	if dsn == "" {
 		return nil, errors.New("P01 probe requires the test database configuration")
 	}
-	probe := &ScaleP01Probe{}
+	probe := &ScaleProbe{}
 	old := s.db.DB
-	db := sql.OpenDB(&scaleP01Connector{inner: old.Driver(), dsn: dsn, probe: probe})
+	db := sql.OpenDB(&loadProbeScaleConnector{inner: old.Driver(), dsn: dsn, probe: probe})
 	maxOpen := old.Stats().MaxOpenConnections
 	db.SetMaxOpenConns(maxOpen)
 	idle := config.MaxIdleConns
@@ -192,14 +192,14 @@ func (s *SQLiteStore) EnableScaleP01Probe(config DatabaseConfig) (*ScaleP01Probe
 	return probe, nil
 }
 
-type scaleP01Connector struct {
+type loadProbeScaleConnector struct {
 	inner driver.Driver
 	dsn   string
-	probe *ScaleP01Probe
+	probe *ScaleProbe
 }
 
-func (c *scaleP01Connector) Driver() driver.Driver { return c.inner }
-func (c *scaleP01Connector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c *loadProbeScaleConnector) Driver() driver.Driver { return c.inner }
+func (c *loadProbeScaleConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	var conn driver.Conn
 	var err error
 	if d, ok := c.inner.(driver.DriverContext); ok {
@@ -214,22 +214,22 @@ func (c *scaleP01Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &scaleP01Conn{Conn: conn, probe: c.probe}, nil
+	return &loadProbeScaleConn{Conn: conn, probe: c.probe}, nil
 }
 
-type scaleP01Conn struct {
+type loadProbeScaleConn struct {
 	driver.Conn
-	probe     *ScaleP01Probe
-	pending   []ScaleP01Commit
+	probe     *ScaleProbe
+	pending   []ScaleCommit
 	inTx      bool
 	requestID string
 	mutated   bool
 }
 
-func (c *scaleP01Conn) Prepare(query string) (driver.Stmt, error) {
+func (c *loadProbeScaleConn) Prepare(query string) (driver.Stmt, error) {
 	return c.PrepareContext(context.Background(), query)
 }
-func (c *scaleP01Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+func (c *loadProbeScaleConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	var stmt driver.Stmt
 	var err error
 	if conn, ok := c.Conn.(driver.ConnPrepareContext); ok {
@@ -240,12 +240,12 @@ func (c *scaleP01Conn) PrepareContext(ctx context.Context, query string) (driver
 	if err != nil {
 		return nil, err
 	}
-	return &scaleP01Stmt{Stmt: stmt, conn: c, query: query}, nil
+	return &scaleStmt{Stmt: stmt, conn: c, query: query}, nil
 }
-func (c *scaleP01Conn) Begin() (driver.Tx, error) {
+func (c *loadProbeScaleConn) Begin() (driver.Tx, error) {
 	return c.BeginTx(context.Background(), driver.TxOptions{})
 }
-func (c *scaleP01Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+func (c *loadProbeScaleConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	var tx driver.Tx
 	var err error
 	if conn, ok := c.Conn.(driver.ConnBeginTx); ok {
@@ -259,35 +259,35 @@ func (c *scaleP01Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driv
 		return nil, err
 	}
 	c.pending, c.inTx = nil, true
-	c.requestID, _ = ctx.Value(scaleP01RequestKey{}).(string)
+	c.requestID, _ = ctx.Value(scaleRequestKey{}).(string)
 	c.mutated = false
-	return &scaleP01Tx{Tx: tx, conn: c}, nil
+	return &scaleTx{Tx: tx, conn: c}, nil
 }
-func (c *scaleP01Conn) Ping(ctx context.Context) error {
+func (c *loadProbeScaleConn) Ping(ctx context.Context) error {
 	if conn, ok := c.Conn.(driver.Pinger); ok {
 		return conn.Ping(ctx)
 	}
 	return nil
 }
-func (c *scaleP01Conn) CheckNamedValue(v *driver.NamedValue) error {
+func (c *loadProbeScaleConn) CheckNamedValue(v *driver.NamedValue) error {
 	if conn, ok := c.Conn.(driver.NamedValueChecker); ok {
 		return conn.CheckNamedValue(v)
 	}
 	return driver.ErrSkip
 }
-func (c *scaleP01Conn) ResetSession(ctx context.Context) error {
+func (c *loadProbeScaleConn) ResetSession(ctx context.Context) error {
 	if conn, ok := c.Conn.(driver.SessionResetter); ok {
 		return conn.ResetSession(ctx)
 	}
 	return nil
 }
-func (c *scaleP01Conn) IsValid() bool {
+func (c *loadProbeScaleConn) IsValid() bool {
 	if conn, ok := c.Conn.(driver.Validator); ok {
 		return conn.IsValid()
 	}
 	return true
 }
-func (c *scaleP01Conn) record(query string, args []driver.NamedValue, err error) {
+func (c *loadProbeScaleConn) record(query string, args []driver.NamedValue, err error) {
 	if err != nil {
 		return
 	}
@@ -314,14 +314,14 @@ func (c *scaleP01Conn) record(query string, args []driver.NamedValue, err error)
 	if verb != "insert" || tableName != "domain_events" || len(args) < 3 {
 		return
 	}
-	event := ScaleP01Commit{ID: fmt.Sprint(args[0].Value), Type: fmt.Sprint(args[1].Value), AggregateID: fmt.Sprint(args[2].Value)}
+	event := ScaleCommit{ID: fmt.Sprint(args[0].Value), Type: fmt.Sprint(args[1].Value), AggregateID: fmt.Sprint(args[2].Value)}
 	if c.inTx {
 		c.pending = append(c.pending, event)
 	} else {
-		c.probe.committed([]ScaleP01Commit{event}, time.Now())
+		c.probe.committed([]ScaleCommit{event}, time.Now())
 	}
 }
-func (c *scaleP01Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (c *loadProbeScaleConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	conn, ok := c.Conn.(driver.ExecerContext)
 	if !ok {
 		return nil, driver.ErrSkip
@@ -332,7 +332,7 @@ func (c *scaleP01Conn) ExecContext(ctx context.Context, query string, args []dri
 	c.record(query, args, err)
 	return result, err
 }
-func (c *scaleP01Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *loadProbeScaleConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	conn, ok := c.Conn.(driver.QueryerContext)
 	if !ok {
 		return nil, driver.ErrSkip
@@ -343,12 +343,12 @@ func (c *scaleP01Conn) QueryContext(ctx context.Context, query string, args []dr
 	return rows, err
 }
 
-type scaleP01Tx struct {
+type scaleTx struct {
 	driver.Tx
-	conn *scaleP01Conn
+	conn *loadProbeScaleConn
 }
 
-func (tx *scaleP01Tx) Commit() error {
+func (tx *scaleTx) Commit() error {
 	err := tx.Tx.Commit()
 	if err == nil {
 		tx.conn.probe.committedRequest(tx.conn.pending, time.Now(), tx.conn.requestID, tx.conn.mutated)
@@ -356,59 +356,59 @@ func (tx *scaleP01Tx) Commit() error {
 	tx.conn.pending, tx.conn.inTx = nil, false
 	return err
 }
-func (tx *scaleP01Tx) Rollback() error {
+func (tx *scaleTx) Rollback() error {
 	err := tx.Tx.Rollback()
 	tx.conn.pending, tx.conn.inTx = nil, false
 	return err
 }
 
-type scaleP01Stmt struct {
+type scaleStmt struct {
 	driver.Stmt
-	conn  *scaleP01Conn
+	conn  *loadProbeScaleConn
 	query string
 }
 
-func scaleP01Named(values []driver.Value) []driver.NamedValue {
+func scaleNamed(values []driver.Value) []driver.NamedValue {
 	args := make([]driver.NamedValue, len(values))
 	for i, value := range values {
 		args[i] = driver.NamedValue{Ordinal: i + 1, Value: value}
 	}
 	return args
 }
-func scaleP01Values(args []driver.NamedValue) []driver.Value {
+func scaleValues(args []driver.NamedValue) []driver.Value {
 	values := make([]driver.Value, len(args))
 	for i, arg := range args {
 		values[i] = arg.Value
 	}
 	return values
 }
-func (s *scaleP01Stmt) Exec(values []driver.Value) (driver.Result, error) {
-	return s.ExecContext(context.Background(), scaleP01Named(values))
+func (s *scaleStmt) Exec(values []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), scaleNamed(values))
 }
-func (s *scaleP01Stmt) Query(values []driver.Value) (driver.Rows, error) {
-	return s.QueryContext(context.Background(), scaleP01Named(values))
+func (s *scaleStmt) Query(values []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), scaleNamed(values))
 }
-func (s *scaleP01Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+func (s *scaleStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	began := time.Now()
 	var result driver.Result
 	var err error
 	if stmt, ok := s.Stmt.(driver.StmtExecContext); ok {
 		result, err = stmt.ExecContext(ctx, args)
 	} else {
-		result, err = s.Stmt.Exec(scaleP01Values(args))
+		result, err = s.Stmt.Exec(scaleValues(args))
 	}
 	s.conn.probe.executed(s.query, began, err)
 	s.conn.record(s.query, args, err)
 	return result, err
 }
-func (s *scaleP01Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+func (s *scaleStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	began := time.Now()
 	var rows driver.Rows
 	var err error
 	if stmt, ok := s.Stmt.(driver.StmtQueryContext); ok {
 		rows, err = stmt.QueryContext(ctx, args)
 	} else {
-		rows, err = s.Stmt.Query(scaleP01Values(args))
+		rows, err = s.Stmt.Query(scaleValues(args))
 	}
 	s.conn.probe.executed(s.query, began, err)
 	return rows, err

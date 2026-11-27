@@ -13,13 +13,13 @@ import (
 	redisclient "github.com/redis/go-redis/v9"
 )
 
-type scaleP06RedisHook struct{ snapshots atomic.Int64 }
+type scaleRedisHook struct{ snapshots atomic.Int64 }
 
-func (h *scaleP06RedisHook) DialHook(next redisclient.DialHook) redisclient.DialHook { return next }
-func (h *scaleP06RedisHook) ProcessPipelineHook(next redisclient.ProcessPipelineHook) redisclient.ProcessPipelineHook {
+func (h *scaleRedisHook) DialHook(next redisclient.DialHook) redisclient.DialHook { return next }
+func (h *scaleRedisHook) ProcessPipelineHook(next redisclient.ProcessPipelineHook) redisclient.ProcessPipelineHook {
 	return next
 }
-func (h *scaleP06RedisHook) ProcessHook(next redisclient.ProcessHook) redisclient.ProcessHook {
+func (h *scaleRedisHook) ProcessHook(next redisclient.ProcessHook) redisclient.ProcessHook {
 	return func(ctx context.Context, command redisclient.Cmder) error {
 		args := command.Args()
 		if len(args) > 1 && fmt.Sprint(args[1]) == presenceSnapshotScript.Hash() {
@@ -29,10 +29,10 @@ func (h *scaleP06RedisHook) ProcessHook(next redisclient.ProcessHook) redisclien
 	}
 }
 
-func TestScaleP06RedisMinimalHeartbeatDoesNotReadRoster(t *testing.T) {
+func TestScaleRedisMinimalHeartbeatDoesNotReadRoster(t *testing.T) {
 	r := openTestRedis(t, miniredis.RunT(t).Addr())
 	defer r.Close()
-	hook := &scaleP06RedisHook{}
+	hook := &scaleRedisHook{}
 	r.client.AddHook(hook)
 	ctx, now := t.Context(), time.Now().UTC()
 	for i := range 2000 {

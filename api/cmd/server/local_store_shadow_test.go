@@ -24,8 +24,8 @@ func enableLocalStoreShadowTest(t *testing.T) {
 
 func TestLocalStoreShadowAuthority(t *testing.T) {
 	enableLocalStoreShadowTest(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		bounded, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
@@ -60,7 +60,7 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &manifest); w.Code != http.StatusOK || err != nil || manifest.localStoreStamp != stamp || len(manifest.Capabilities) != 1 || manifest.Capabilities[0] != localStoreShadowCapability {
 				t.Fatalf("shadow manifest disagrees: %d %+v %v", w.Code, manifest, err)
 			}
-			for _, denied := range []scaleP12Principal{{user: domain.User{ID: "former-viewer"}}, {user: member.user, key: &domain.APIKey{TeamRestriction: "selected", TeamIDs: []string{f.data.Teams[0].ID}}}} {
+			for _, denied := range []scalePrincipal{{user: domain.User{ID: "former-viewer"}}, {user: member.user, key: &domain.APIKey{TeamRestriction: "selected", TeamIDs: []string{f.data.Teams[0].ID}}}} {
 				r := denied.request(workspace)
 				r.URL.Path = "/api/bootstrap"
 				r.Header.Set(localStoreHeader, localStoreShadowCapability)
@@ -104,9 +104,9 @@ func TestLocalStoreShadowAuthority(t *testing.T) {
 
 func TestLocalStoreShadowChangesDifferential(t *testing.T) {
 	enableLocalStoreShadowTest(t)
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := newScaleP12Fixture(t, repo)
+			f := newScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issues", map[string]string{"teamId": f.data.Teams[0].ID, "title": "Plain issue"}, workspace, http.StatusCreated)
 			member, guest := f.principals[2], f.principals[3]
@@ -118,7 +118,7 @@ func TestLocalStoreShadowChangesDifferential(t *testing.T) {
 			if !ok {
 				t.Fatal("guest did not get an authorized baseline")
 			}
-			read := func(service *server, principal scaleP12Principal, baseline localStoreStamp, shadow bool) syncV2ChangesResponse {
+			read := func(service *server, principal scalePrincipal, baseline localStoreStamp, shadow bool) syncV2ChangesResponse {
 				t.Helper()
 				r := principal.request(workspace)
 				r.URL.Path = "/api/sync/changes"

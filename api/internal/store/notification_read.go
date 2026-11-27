@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW15DueDeliveryWork = 64 << 20
+const dueDeliveryWork = 64 << 20
 
 // DueNotificationDeliveryRead owns the due rows through all scheduling updates.
 // Deliveries and its fields must not survive Close without another charged owner.
@@ -54,7 +54,7 @@ func (s *SQLiteStore) BeginDueNotificationDeliveryRead(ctx context.Context, work
 	if !found {
 		return nil, fmt.Errorf("workspace not found")
 	}
-	work, release, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW15DueDeliveryWork)
+	work, release, err := s.tryAdmitAdditionalMetadataWork(ctx, dueDeliveryWork)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (s *SQLiteStore) BeginDueNotificationDeliveryRead(ctx context.Context, work
 	}()
 	used := 128 << 10
 	charge := func(size int) error {
-		if size < 0 || size > (scaleP21SW15DueDeliveryWork-used)/33 {
+		if size < 0 || size > (dueDeliveryWork-used)/33 {
 			return ErrMetadataWorkBudget
 		}
 		used += 33 * size

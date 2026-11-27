@@ -381,8 +381,8 @@ import { queueDurableIssueEdit, type LocalOutboxView } from '@/lib/local-store-o
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { isConnectivityError, realtimeClientId } from '@/lib/api-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
-import { fetchResourceDocument } from '@/lib/scale-p20-transport'
-import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
+import { fetchResourceDocument } from '@/lib/resource-window-transport'
+import { queryWindowSyncSurface } from '@/lib/query-window-surfaces'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
@@ -406,7 +406,7 @@ import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
 // Realtime metadata reloads: one at a time per workspace, spread across tabs (realtime-bootstrap-coalescer).
 const realtimeMetadataBootstrap = createRealtimeCoalescer((workspaceKey: string) => fetchPagedBootstrap(workspaceKey))
-// P14 is additive and may be rolled out after this adapter.
+// Recipient inbox events are additive and may be rolled out after this adapter.
 const recipientInbox = inboxUnread as typeof inboxUnread & {
   configure?: (options?: { workspaceKey: string; viewerId: string; capabilities: readonly string[]; authzEpoch?: string }) => void;
   receive?: (workspaceKey: string, viewerId: string, event: RealtimeEvent) => boolean;
@@ -789,7 +789,7 @@ function App({ prepared }: { prepared?: { current?: LocalStartup } }) {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : planningBootstrapProjection(route);
-  const syncSurface = resourceSyncSurface(route) ?? scaleP19Surface(route.kind);
+  const syncSurface = resourceSyncSurface(route) ?? queryWindowSyncSurface(route.kind);
   const localIssueRoute = localStoreRoute(route);
   const fetchRouteBootstrap = useCallback(async (workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) => {
     if (localIssueRoute && !projection && !syncSurface) {

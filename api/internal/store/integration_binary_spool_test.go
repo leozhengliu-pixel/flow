@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW348Spool(t *testing.T, raw []byte) *RecordSpool {
+func integrationBinarySpoolSpool(t *testing.T, raw []byte) *RecordSpool {
 	t.Helper()
 	disk := metadataLogicalDiskUsed.Load()
 	spool, err := newMetadataLogicalRecordSpool(t.Context())
@@ -32,13 +32,13 @@ func scaleP21SW348Spool(t *testing.T, raw []byte) *RecordSpool {
 	return spool
 }
 
-type scaleP21SW348CancelContext struct {
+type integrationBinarySpoolCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	checks int
 }
 
-func (c *scaleP21SW348CancelContext) Err() error {
+func (c *integrationBinarySpoolCancelContext) Err() error {
 	c.checks++
 	if c.checks == 3 {
 		c.cancel()
@@ -46,8 +46,8 @@ func (c *scaleP21SW348CancelContext) Err() error {
 	return c.Context.Err()
 }
 
-func TestScaleP21SW348IntegrationBinarySpoolUTF8(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, nil)
+func TestIntegrationBinarySpoolUTF8(t *testing.T) {
+	repo := scaleHotLogoStore(t, nil)
 	type witness struct {
 		name string
 		raw  []byte
@@ -100,7 +100,7 @@ func TestScaleP21SW348IntegrationBinarySpoolUTF8(t *testing.T) {
 					if utf8.Valid(value.raw) == group.handled {
 						t.Fatal("incorrect UTF-8 witness")
 					}
-					spool := scaleP21SW348Spool(t, value.raw)
+					spool := integrationBinarySpoolSpool(t, value.raw)
 					owner := &ResourceRead{store: repo}
 					defer owner.Close()
 					beforeDisk, beforeWork := metadataLogicalDiskUsed.Load(), repo.MetadataWorkUsedForTesting()
@@ -129,7 +129,7 @@ func TestScaleP21SW348IntegrationBinarySpoolUTF8(t *testing.T) {
 	}
 	for _, event := range []string{"", "integration_delivery.other", "workflow.completed"} {
 		t.Run("unselected/"+event, func(t *testing.T) {
-			spool := scaleP21SW348Spool(t, []byte{0xff})
+			spool := integrationBinarySpoolSpool(t, []byte{0xff})
 			owner := &ResourceRead{store: repo}
 			defer owner.Close()
 			got, handled, err := integrationDeliveryBinarySpool(withIntegrationDeliveryStream(t.Context(), event), owner, spool)
@@ -140,13 +140,13 @@ func TestScaleP21SW348IntegrationBinarySpoolUTF8(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW348IntegrationBinarySpoolFailureOwnership(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, nil)
+func TestIntegrationBinarySpoolFailureOwnership(t *testing.T) {
+	repo := scaleHotLogoStore(t, nil)
 	t.Run("cancelled-during-window-scan", func(t *testing.T) {
-		spool := scaleP21SW348Spool(t, bytes.Repeat([]byte("x"), 8*metadataRecordChunkBytes))
+		spool := integrationBinarySpoolSpool(t, bytes.Repeat([]byte("x"), 8*metadataRecordChunkBytes))
 		bound, cancel := context.WithCancel(withIntegrationDeliveryStream(t.Context(), "integration_delivery.claimed"))
 		defer cancel()
-		ctx := &scaleP21SW348CancelContext{Context: bound, cancel: cancel}
+		ctx := &integrationBinarySpoolCancelContext{Context: bound, cancel: cancel}
 		owner := &ResourceRead{store: repo}
 		defer owner.Close()
 		got, _, err := integrationDeliveryBinarySpool(ctx, owner, spool)
@@ -161,7 +161,7 @@ func TestScaleP21SW348IntegrationBinarySpoolFailureOwnership(t *testing.T) {
 				if invalid {
 					raw[len(raw)-1] = 0xff
 				}
-				spool := scaleP21SW348Spool(t, raw)
+				spool := integrationBinarySpoolSpool(t, raw)
 				ctx, cancel := context.WithCancel(withIntegrationDeliveryStream(t.Context(), "integration_delivery.retry"))
 				defer cancel()
 				owner := &ResourceRead{store: repo}
@@ -197,10 +197,10 @@ func TestScaleP21SW348IntegrationBinarySpoolFailureOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW348IntegrationBinarySpoolAdmissionBoundary(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, nil)
+func TestIntegrationBinarySpoolAdmissionBoundary(t *testing.T) {
+	repo := scaleHotLogoStore(t, nil)
 	raw := append(bytes.Repeat([]byte("x"), 2*metadataRecordChunkBytes+17), 0xff)
-	spool := scaleP21SW348Spool(t, raw)
+	spool := integrationBinarySpoolSpool(t, raw)
 	cost := 4*len(raw) + (64 << 10)
 	budget := repo.metadataResidency.work
 	limit := budget.limit

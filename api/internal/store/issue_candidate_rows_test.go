@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
+func TestCandidateRowsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	prefix, workspace := idgen.New("sw192-"), f.data.Workspace.URLKey
 	projectID, labelID, stateID := prefix+"project", prefix+"label", prefix+"state"
 	project := domain.Project{ID: projectID, Name: "Installed project", Description: strings.Repeat("unloaded project body ", 1<<16)}

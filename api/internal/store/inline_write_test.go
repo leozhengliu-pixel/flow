@@ -13,14 +13,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW188FieldImage struct {
+type fieldImage struct {
 	root []byte
 	rows []metadataCacheRow
 }
 
-func scaleP21SW188FieldSQL(t *testing.T, ctx context.Context, tx *sqlTx, workspace, field string) scaleP21SW188FieldImage {
+func fieldSQL(t *testing.T, ctx context.Context, tx *sqlTx, workspace, field string) fieldImage {
 	t.Helper()
-	var result scaleP21SW188FieldImage
+	var result fieldImage
 	if err := tx.QueryRowContext(ctx, "SELECT data FROM workspace_states WHERE workspace_key=?", workspace).Scan(&result.root); err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,8 @@ func scaleP21SW188FieldSQL(t *testing.T, ctx context.Context, tx *sqlTx, workspa
 	return result
 }
 
-func TestScaleP21SW188LargeInlineWriteDifferential(t *testing.T) {
-	f, _, _ := scaleP21SW188InlineProjects(t)
+func TestLargeInlineWriteDifferential(t *testing.T) {
+	f, _, _ := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Fields: []string{"projects"}}
 	for _, reload := range []bool{false, true} {
@@ -102,7 +102,7 @@ func TestScaleP21SW188LargeInlineWriteDifferential(t *testing.T) {
 					tx.Rollback()
 					t.Fatal("literal field delta", err)
 				}
-				wantSQL := scaleP21SW188FieldSQL(t, ctx, tx, workspace, "projects")
+				wantSQL := fieldSQL(t, ctx, tx, workspace, "projects")
 				tx.Rollback()
 				tx, err = f.db.BeginTx(ctx, nil)
 				if err != nil {
@@ -115,7 +115,7 @@ func TestScaleP21SW188LargeInlineWriteDifferential(t *testing.T) {
 					tx.Rollback()
 					t.Fatal("streamed inline delta", err)
 				}
-				gotSQL := scaleP21SW188FieldSQL(t, ctx, tx, workspace, "projects")
+				gotSQL := fieldSQL(t, ctx, tx, workspace, "projects")
 				got, err := actual.Select(ctx, scope, 16<<20)
 				actual.Release()
 				tx.Rollback()
@@ -132,8 +132,8 @@ func TestScaleP21SW188LargeInlineWriteDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188LargeInlineWriteCancellation(t *testing.T) {
-	f, _, original := scaleP21SW188InlineProjects(t)
+func TestLargeInlineWriteCancellation(t *testing.T) {
+	f, _, original := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -197,8 +197,8 @@ func TestScaleP21SW188LargeInlineWriteCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188ScopedInlineDifferential(t *testing.T) {
-	f, _, original := scaleP21SW188InlineProjects(t)
+func TestScopedInlineDifferential(t *testing.T) {
+	f, _, original := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "webhooks"), workspace, "webhook.created", "sw188-hook", nil, func(data *domain.Bootstrap) error {
 		data.Webhooks = append(data.Webhooks, domain.Webhook{ID: "sw188-hook", Enabled: true, URL: "https://example.test/sw188"})
@@ -218,7 +218,7 @@ func TestScaleP21SW188ScopedInlineDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	displayRows := scaleP21SW188FieldSQL(t, t.Context(), tx, workspace, "projectDisplayDefault").rows
+	displayRows := fieldSQL(t, t.Context(), tx, workspace, "projectDisplayDefault").rows
 	tx.Rollback()
 	for _, reload := range []bool{false, true} {
 		for _, mode := range []string{"complete", "point-duplicates", "raw-json"} {
@@ -328,8 +328,8 @@ func TestScaleP21SW188ScopedInlineDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188ScopedInlineCancellation(t *testing.T) {
-	f, _, original := scaleP21SW188InlineProjects(t)
+func TestScopedInlineCancellation(t *testing.T) {
+	f, _, original := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -360,8 +360,8 @@ func TestScaleP21SW188ScopedInlineCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188ScopedInlineReadOnlyOccurrence(t *testing.T) {
-	f, _, original := scaleP21SW188InlineProjects(t)
+func TestScopedInlineReadOnlyOccurrence(t *testing.T) {
+	f, _, original := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -388,8 +388,8 @@ func TestScaleP21SW188ScopedInlineReadOnlyOccurrence(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188InlineRootSQLBound(t *testing.T) {
-	f, view, raw := scaleP21SW188InlineProjects(t)
+func TestInlineRootSQLBound(t *testing.T) {
+	f, view, raw := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	counts := [2]int{}
 	headers := [2]map[string]metadataCollectionRange{}

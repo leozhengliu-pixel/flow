@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-// scaleP21OAuthApplicationByClientID is OAuthApplicationByClientID on a
+// scaleOAuthApplicationByClientID is OAuthApplicationByClientID on a
 // bounded store, whose resident workspaces hold no applications. It reads the
 // one matching record from canonical SQL and decodes it as a load does
 // (encoding/json into the record type), skipping workspaces this store has
@@ -19,7 +19,7 @@ import (
 // map iteration order, which is not deterministic. The secret is never
 // returned. Work is admitted for the record and its decoded value, and
 // released before returning: the result is a fresh, unshared copy.
-func (s *SQLiteStore) scaleP21OAuthApplicationByClientID(clientID string) (domain.OAuthApplication, bool) {
+func (s *SQLiteStore) scaleOAuthApplicationByClientID(clientID string) (domain.OAuthApplication, bool) {
 	if strings.ContainsRune(clientID, '\x00') {
 		// No stored identifier can match one: SQL drivers do not carry NUL
 		// through a text parameter, as in the other client lookups.
@@ -36,8 +36,8 @@ func (s *SQLiteStore) scaleP21OAuthApplicationByClientID(clientID string) (domai
 	}
 	// The record buffer, its decoded strings and the slice headers of its
 	// string lists.
-	cost := "(3*" + length + "+32*(" + s.scaleP21SW17JSONArrayLength("data", "redirectUris") + "+" +
-		s.scaleP21SW17JSONArrayLength("data", "scopes") + "+" + s.scaleP21SW17JSONArrayLength("data", "webhookResourceTypes") + ")+1048576)"
+	cost := "(3*" + length + "+32*(" + s.jsonArrayLength("data", "redirectUris") + "+" +
+		s.jsonArrayLength("data", "scopes") + "+" + s.jsonArrayLength("data", "webhookResourceTypes") + ")+1048576)"
 	query := "SELECT workspace_key,record_key,collection_order," + cost + ",CASE WHEN " + cost + "<=? THEN data ELSE NULL END" +
 		" FROM workspace_metadata_records WHERE field='oauthApplications' AND " + s.metadataRecordKeyEquals("("+client+")", "?")
 	lastWorkspace, lastKey, cursor := "", "", false

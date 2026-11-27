@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW0ResolvedReferenceDifferential(t *testing.T) {
+func TestResolvedReferenceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	projectID, userID := idgen.New("project_resolved_"), idgen.New("usr_resolved_")
 	fresh := domain.User{ID: userID, Name: "Fresh lead", DisplayName: "Fresh lead", Active: true, Email: "resolved@example.test"}
@@ -115,10 +115,10 @@ func TestScaleP21SW0ResolvedReferenceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResolvedRejectsAndDispatch(t *testing.T) {
+func TestResolvedRejectsAndDispatch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	id := idgen.New("project_resolved_guard_")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.resolved_seed", "", nil, func(data *domain.Bootstrap) error {

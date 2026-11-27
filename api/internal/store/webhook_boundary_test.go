@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW102Text(node ast.Node) string {
+func webhookBoundaryText(node ast.Node) string {
 	var text bytes.Buffer
 	if err := format.Node(&text, token.NewFileSet(), node); err != nil {
 		return ""
@@ -22,7 +22,7 @@ func scaleP21SW102Text(node ast.Node) string {
 	return text.String()
 }
 
-func scaleP21SW102References(node ast.Node, names map[string]bool) (map[string][]token.Pos, error) {
+func webhookBoundaryReferences(node ast.Node, names map[string]bool) (map[string][]token.Pos, error) {
 	references := map[string][]token.Pos{}
 	parents := map[ast.Node]ast.Node{}
 	stack := []ast.Node{}
@@ -55,7 +55,7 @@ func scaleP21SW102References(node ast.Node, names map[string]bool) (map[string][
 			return true
 		}
 		selector, method := current.(*ast.SelectorExpr)
-		if !method || scaleP21SW102Text(selector.X) != "s" {
+		if !method || webhookBoundaryText(selector.X) != "s" {
 			failure = fmt.Errorf("%s must retain its reviewed same-store method receiver", name)
 			return true
 		}
@@ -70,13 +70,13 @@ func scaleP21SW102References(node ast.Node, names map[string]bool) (map[string][
 	return references, failure
 }
 
-func scaleP21SW102StableReceiver(function *ast.FuncDecl) error {
+func stableReceiver(function *ast.FuncDecl) error {
 	var changed bool
 	ast.Inspect(function.Body, func(node ast.Node) bool {
 		switch value := node.(type) {
 		case *ast.AssignStmt:
 			for _, target := range value.Lhs {
-				changed = changed || scaleP21SW102Text(target) == "s" || scaleP21SW102Text(target) == "s.metadataResidency"
+				changed = changed || webhookBoundaryText(target) == "s" || webhookBoundaryText(target) == "s.metadataResidency"
 			}
 		case *ast.ValueSpec:
 			for _, name := range value.Names {
@@ -95,26 +95,26 @@ func scaleP21SW102StableReceiver(function *ast.FuncDecl) error {
 	return nil
 }
 
-func scaleP21SW102EarlyResidencyReturn(function *ast.FuncDecl) (*ast.IfStmt, error) {
+func earlyResidencyReturn(function *ast.FuncDecl) (*ast.IfStmt, error) {
 	if function == nil || function.Body == nil || len(function.Body.List) == 0 {
 		return nil, fmt.Errorf("missing early bounded dispatch")
 	}
 	body := function.Body.List
-	if prefix, ok := body[0].(*ast.IfStmt); ok && scaleP21SW102Text(prefix.Cond) == "s.coldParent != nil" {
+	if prefix, ok := body[0].(*ast.IfStmt); ok && webhookBoundaryText(prefix.Cond) == "s.coldParent != nil" {
 		const coldGuard = "if s.coldParent != nil {\n\tif s.coldWrite == nil {\n\t\treturn ErrBoundedMetadataCoverage\n\t}\n\tif err := validateColdMetadataMutation(ctx, eventType, payload); err != nil {\n\t\treturn err\n\t}\n}"
-		if scaleP21SW102Text(prefix) != coldGuard || len(body) < 2 {
+		if webhookBoundaryText(prefix) != coldGuard || len(body) < 2 {
 			return nil, fmt.Errorf("cold facade prefix must only reject unsupported legacy writers")
 		}
 		body = body[1:]
 	}
 	guard, ok := body[0].(*ast.IfStmt)
 	if !ok || guard.Init != nil || guard.Else != nil ||
-		scaleP21SW102Text(guard.Cond) != "s.metadataResidency != nil" || len(guard.Body.List) == 0 {
+		webhookBoundaryText(guard.Cond) != "s.metadataResidency != nil" || len(guard.Body.List) == 0 {
 		return nil, fmt.Errorf("bounded residency dispatch must precede every legacy operation")
 	}
 	last, ok := guard.Body.List[len(guard.Body.List)-1].(*ast.ReturnStmt)
 	if !ok || len(last.Results) != 1 ||
-		scaleP21SW102Text(last.Results[0]) != "s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)" {
+		webhookBoundaryText(last.Results[0]) != "s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)" {
 		return nil, fmt.Errorf("bounded dispatch must return unconditionally through the resident writer")
 	}
 	var escape bool
@@ -130,7 +130,7 @@ func scaleP21SW102EarlyResidencyReturn(function *ast.FuncDecl) (*ast.IfStmt, err
 	return guard, nil
 }
 
-func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
+func TestWebhookNeededLegacyBoundary(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate webhook boundary source")
@@ -180,7 +180,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 				}
 				inspected = function.Body
 			}
-			references, err := scaleP21SW102References(inspected, names)
+			references, err := webhookBoundaryReferences(inspected, names)
 			if err != nil {
 				t.Errorf("%s: %v", site, err)
 			}
@@ -204,17 +204,17 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 		if function == nil || function.Body == nil {
 			t.Fatalf("reviewed boundary disappeared: %s", site)
 		}
-		if err := scaleP21SW102StableReceiver(function); err != nil {
+		if err := stableReceiver(function); err != nil {
 			t.Errorf("%s: %v", site, err)
 		}
 	}
 	enabled := functions["scoped_access.go:BoundedMetadataEnabled"]
 	if enabled == nil || enabled.Body == nil || len(enabled.Body.List) != 1 ||
-		scaleP21SW102Text(enabled.Body.List[0]) != "return s.metadataResidency != nil" {
+		webhookBoundaryText(enabled.Body.List[0]) != "return s.metadataResidency != nil" {
 		t.Fatal("bounded-mode representation no longer matches residency dispatch")
 	}
 	for _, site := range []string{dispatch, "sqlite.go:mutateFull"} {
-		guard, err := scaleP21SW102EarlyResidencyReturn(functions[site])
+		guard, err := earlyResidencyReturn(functions[site])
 		if err != nil {
 			t.Fatalf("%s: %v", site, err)
 		}
@@ -231,8 +231,8 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 		t.Fatal("missing bounded webhook predicate wrapper")
 	}
 	off, ok := wrapper.Body.List[0].(*ast.IfStmt)
-	if !ok || off.Init != nil || off.Else != nil || scaleP21SW102Text(off.Cond) != "!s.BoundedMetadataEnabled()" ||
-		len(off.Body.List) != 1 || scaleP21SW102Text(off.Body.List[0]) != "return s.webhookNeeded(ctx, workspace), nil" {
+	if !ok || off.Init != nil || off.Else != nil || webhookBoundaryText(off.Cond) != "!s.BoundedMetadataEnabled()" ||
+		len(off.Body.List) != 1 || webhookBoundaryText(off.Body.List[0]) != "return s.webhookNeeded(ctx, workspace), nil" {
 		t.Fatal("bounded webhook predicate must keep the literal accessor only in its first off-mode return")
 	}
 	for _, position := range positions["legacy_webhook_needed.go:boundedLegacyWebhookNeeded"]["webhookNeeded"] {
@@ -247,7 +247,7 @@ func TestScaleP21SW102WebhookNeededLegacyBoundary(t *testing.T) {
 	guarded := false
 	ast.Inspect(issue.Body, func(node ast.Node) bool {
 		branch, ok := node.(*ast.IfStmt)
-		if !ok || branch.Init != nil || scaleP21SW102Text(branch.Cond) != "s.BoundedMetadataEnabled()" {
+		if !ok || branch.Init != nil || webhookBoundaryText(branch.Cond) != "s.BoundedMetadataEnabled()" {
 			return true
 		}
 		otherwise, ok := branch.Else.(*ast.BlockStmt)

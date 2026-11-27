@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ResourceRelationListDifferential(t *testing.T) {
+func TestScaleResourceRelationListDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("relation-list-")
 		target, other, hidden := prefix+"target", prefix+"other", prefix+"hidden"
 		at := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
@@ -121,7 +121,7 @@ func TestScaleP21ResourceRelationListDifferential(t *testing.T) {
 				for _, kind := range []string{"projects", "initiatives"} {
 					for _, ref := range []string{target, prefix + "alias", prefix + "missing", ""} {
 						for _, query := range []string{"", "limit=2&cursor=1", "limit=201&cursor=-9", "limit=0&cursor=9999"} {
-							serve := func(selected *store.SQLiteStore) *scaleP21PublicResourceRecordWriter {
+							serve := func(selected *store.SQLiteStore) *scalePublicResourceRecordWriter {
 								service := &server{store: selected, authDisabled: test.dev}
 								r := f.literalRequest(test.user, test.key, nil)
 								r.Method, r.URL.Path, r.URL.RawQuery = http.MethodGet, "/api/"+kind+"/"+ref+"/relations", query
@@ -144,7 +144,7 @@ func TestScaleP21ResourceRelationListDifferential(t *testing.T) {
 								if test.gate {
 									r = r.WithContext(context.WithValue(r.Context(), projectionHoldKey{}, &projectionHold{gate: &metadataReadGate{}, retryAfter: time.Second}))
 								}
-								w := &scaleP21PublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
+								w := &scalePublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
 								if kind == "projects" {
 									service.listProjectRelations(w, r)
 								} else {
@@ -181,18 +181,18 @@ func TestScaleP21ResourceRelationListDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceRelationListBorrowedSQLPoolOne(t *testing.T) {
+func TestScaleResourceRelationListBorrowedSQLPoolOne(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	config.MaxOpenConns = 1
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("relation-http-snapshot-")
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.relation_http_snapshot", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{
@@ -221,7 +221,7 @@ func TestScaleP21ResourceRelationListBorrowedSQLPoolOne(t *testing.T) {
 	}
 	defer release()
 	for _, kind := range []string{"projects", "initiatives"} {
-		serve := func(selected *store.SQLiteStore) *scaleP21PublicResourceRecordWriter {
+		serve := func(selected *store.SQLiteStore) *scalePublicResourceRecordWriter {
 			service := &server{store: selected}
 			r := httptest.NewRequest(http.MethodGet, "/api/"+kind+"/"+prefix+"target/relations", nil)
 			r.Header.Set("X-Workspace-Key", workspace)
@@ -229,7 +229,7 @@ func TestScaleP21ResourceRelationListBorrowedSQLPoolOne(t *testing.T) {
 			r.SetPathValue("workspace", workspace)
 			r.SetPathValue("id", prefix+"target")
 			r = r.WithContext(context.WithValue(snapshot, authUserContextKey{}, f.data.Viewer))
-			w := &scaleP21PublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
+			w := &scalePublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
 			if kind == "projects" {
 				service.listProjectRelations(w, r)
 			} else {

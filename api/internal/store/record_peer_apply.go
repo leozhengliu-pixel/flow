@@ -205,7 +205,7 @@ func (s *SQLiteStore) preparePeerPage(ctx context.Context, workspaceID string, p
 		field, _ := metadataFieldByName(key.Kind)
 		target := root.Field(field.index)
 		// Small record replacement only. A copied container also has a budget;
-		// large collections keep the exact compatibility reload until P21.
+		// large collections keep the exact compatibility reload until bounded metadata.
 		if !rebaseableMetadataField(field, target.Type()) || target.IsNil() || int64(target.Len())*int64(target.Type().Elem().Size()) > 1<<20 {
 			return fail(ErrPeerSnapshotRequired)
 		}

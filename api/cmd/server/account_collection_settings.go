@@ -26,7 +26,7 @@ func (s *server) requestAccountSettings(ctx context.Context, workspace, userID s
 // accountCollections is store.AccountCollections that is exact with bounded
 // metadata on: AccountCollections reads the installed in-memory image, which
 // a bounded store holds without user settings and passkeys, so it answered
-// empty settings (GET /api/account/settings, SW530). Bounded, the reviewed
+// empty settings (GET /api/account/settings, flag-on route sweep). Bounded, the reviewed
 // installed-source reader answers the same values (the workspace's existence,
 // the user's settings and, when asked, their passkeys in source order); its
 // values are copied out before the read closes. A bounded read that fails

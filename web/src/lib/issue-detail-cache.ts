@@ -1,6 +1,6 @@
 import type { BootstrapData, Issue } from '@/types/flow'
 import { mergeAgentSessions } from '@/lib/agent-session-merge'
-import { boundedBrowserCacheEnabled, cacheStringBytes, ISSUE_DETAIL_CACHE_MAX_BYTES } from '@/lib/scale-p08'
+import { boundedBrowserCacheEnabled, cacheStringBytes, ISSUE_DETAIL_CACHE_MAX_BYTES } from '@/lib/realtime-cache-limits'
 
 const detailBytes = new WeakMap<Issue, number>()
 const openDetails = new Map<string, number>()

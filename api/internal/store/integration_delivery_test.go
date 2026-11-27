@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW202Data(data domain.Bootstrap, id, connection string, at time.Time) domain.Bootstrap {
+func integrationDeliveryData(data domain.Bootstrap, id, connection string, at time.Time) domain.Bootstrap {
 	data.IntegrationDeliveries = []domain.IntegrationDelivery{
 		{ID: "sw202-foreign", ConnectionID: "sw202-foreign", Status: "pending"},
 		{ID: id, ConnectionID: connection, Status: "pending", Attempts: 1,
@@ -34,7 +34,7 @@ func scaleP21SW202Data(data domain.Bootstrap, id, connection string, at time.Tim
 	return data
 }
 
-func scaleP21SW202Mutation(id, event string, at time.Time) func(*domain.Bootstrap) error {
+func integrationDeliveryMutation(id, event string, at time.Time) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationDeliveries, func(value domain.IntegrationDelivery) bool { return value.ID == id })
 		if index < 0 {
@@ -59,11 +59,11 @@ func scaleP21SW202Mutation(id, event string, at time.Time) func(*domain.Bootstra
 	}
 }
 
-func TestScaleP21SW202DeliveryProfileOrdinalPostimages(t *testing.T) {
+func TestDeliveryProfileOrdinalPostimages(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	f := journalScaleDatabase(t)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	at := time.Date(2026, 11, 16, 2, 3, 4, 5, time.UTC)
 	base, found := f.WorkspaceMetadata(f.data.Workspace.URLKey)
 	if !found {
@@ -79,7 +79,7 @@ func TestScaleP21SW202DeliveryProfileOrdinalPostimages(t *testing.T) {
 					} else if shape == "overlong" {
 						id, connection = strings.Repeat("delivery-", 40), strings.Repeat("connection-", 40)
 					}
-					data := scaleP21SW202Data(cloneBootstrap(base), id, connection, at)
+					data := integrationDeliveryData(cloneBootstrap(base), id, connection, at)
 					if event == "integration_delivery.retry" {
 						data.IntegrationDeliveries[1].Status = "delivering"
 					}
@@ -100,7 +100,7 @@ func TestScaleP21SW202DeliveryProfileOrdinalPostimages(t *testing.T) {
 					}
 					defer profile.Close()
 					literal := cloneBootstrap(data)
-					mutate := scaleP21SW202Mutation(id, event, at.Add(time.Hour))
+					mutate := integrationDeliveryMutation(id, event, at.Add(time.Hour))
 					if err := mutate(&literal); err != nil {
 						t.Fatal(err)
 					}
@@ -127,13 +127,13 @@ func TestScaleP21SW202DeliveryProfileOrdinalPostimages(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202DeliveryProfileRejectsUndeclaredEdits(t *testing.T) {
+func TestDeliveryProfileRejectsUndeclaredEdits(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	f := journalScaleDatabase(t)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	data, _ := f.WorkspaceMetadata(f.data.Workspace.URLKey)
-	data = scaleP21SW202Data(data, "sw202-target", "sw202-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
+	data = integrationDeliveryData(data, "sw202-target", "sw202-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
 	if err != nil {
 		t.Fatal(err)
@@ -180,14 +180,14 @@ func TestScaleP21SW202DeliveryProfileRejectsUndeclaredEdits(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202DeliveryProfileLargeRawPayload(t *testing.T) {
+func TestDeliveryProfileLargeRawPayload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	f := journalScaleDatabase(t)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	data, _ := f.WorkspaceMetadata(f.data.Workspace.URLKey)
 	at := time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC)
-	data = scaleP21SW202Data(data, "sw202-large", "sw202-large-connection", at)
+	data = integrationDeliveryData(data, "sw202-large", "sw202-large-connection", at)
 	payload, err := json.Marshal(map[string]string{"body": strings.Repeat("large supported payload ", 180000)})
 	if err != nil {
 		t.Fatal(err)
@@ -219,14 +219,14 @@ func TestScaleP21SW202DeliveryProfileLargeRawPayload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
+func TestActualDeliveryWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, reload := range []bool{false, true} {
 		for _, shadow := range []bool{false, true} {
 			t.Run(fmt.Sprintf("reload=%t/shadow=%t", reload, shadow), func(t *testing.T) {
-				f := scaleP09Database(t)
+				f := journalScaleDatabase(t)
 				workspace, id, connection := f.data.Workspace.URLKey, "sw202-actual", "sw202-actual-connection"
 				at := time.Date(2026, 11, 16, 2, 3, 4, 5, time.UTC)
 				type outcome struct {
@@ -239,7 +239,7 @@ func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
 					f.SetWebhookSink(nil)
 					f.SetRealtimeSink(nil)
 					if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw202_actual_seed", "", nil, func(data *domain.Bootstrap) error {
-						*data = scaleP21SW202Data(*data, id, connection, at)
+						*data = integrationDeliveryData(*data, id, connection, at)
 						data.Webhooks = []domain.Webhook{{ID: "sw202-hook", Enabled: true, URL: "https://example.invalid/hook"}}
 						if shadow {
 							data.Documents = []domain.Document{{
@@ -250,8 +250,8 @@ func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
 					}); err != nil {
 						t.Fatal(err)
 					}
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
+					prior := eventIDs(t, repo, workspace)
 					got := outcome{}
 					repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						got.Webhooks = append(got.Webhooks, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})
@@ -273,7 +273,7 @@ func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
 							actor.Via = &domain.ActorBot{ID: "sw202-proxy", Name: "Claim attribution", Type: domain.ActorBotTypeOAuthApplication}
 							ctx = ContextWithActor(ctx, actor)
 						}
-						mutate := scaleP21SW202Mutation(id, event, at.Add(time.Duration(index+1)*time.Hour))
+						mutate := integrationDeliveryMutation(id, event, at.Add(time.Duration(index+1)*time.Hour))
 						callback := func(data *domain.Bootstrap) error {
 							if err := mutate(data); err != nil {
 								return err
@@ -296,14 +296,14 @@ func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
 					repo.SetWebhookSink(nil)
 					repo.SetRealtimeSink(nil)
 					got.State = []json.RawMessage{
-						scaleP21SW193Field(t, repo, workspace, "integrationDeliveries"),
-						scaleP21SW193Field(t, repo, workspace, "integrationConnections"),
+						inlineWriterField(t, repo, workspace, "integrationDeliveries"),
+						inlineWriterField(t, repo, workspace, "integrationConnections"),
 					}
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+					got.Events = newEvents(t, repo, workspace, prior)
 					if len(got.Events) != 2 || len(got.Webhooks) != 2 || len(got.Realtime) != 2 {
 						t.Fatal("delivery event/publication count changed", len(got.Events), len(got.Webhooks), len(got.Realtime))
 					}
-					results = append(results, scaleP21SW63JSON(t, got))
+					results = append(results, discussionWriterJSON(t, got))
 					if bounded && (len(closes) < 2 || repo.MetadataWorkUsedForTesting() == 0) {
 						t.Fatal("delivery callback results escaped their containing output owner")
 					}
@@ -316,20 +316,20 @@ func TestScaleP21SW202ActualDeliveryWriterDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatal("literal/bounded delivery writer differs", scaleP21SW98FirstDiff(results[0], results[1], "delivery"))
+					t.Fatal("literal/bounded delivery writer differs", firstDiff(results[0], results[1], "delivery"))
 				}
 			})
 		}
 	}
 }
 
-func TestScaleP21SW202DeliveryEntrySourceAndPrecedence(t *testing.T) {
+func TestDeliveryEntrySourceAndPrecedence(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	data, _ := f.WorkspaceMetadata(workspace)
-	data = scaleP21SW202Data(data, "sw202-entry", "sw202-entry-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
+	data = integrationDeliveryData(data, "sw202-entry", "sw202-entry-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
 	data.IntegrationConnections[1].Config["irrelevant"] = strings.Repeat("unused connection body ", 180000)
 	data.IntegrationDeliveries[1].Payload = json.RawMessage(`"` + strings.Repeat("unused entry payload ", 180000) + `"`)
 	for _, mode := range []string{"normal", "hipaa", "status", "attempts", "connection-missing"} {
@@ -348,7 +348,7 @@ func TestScaleP21SW202DeliveryEntrySourceAndPrecedence(t *testing.T) {
 			f.mu.Lock()
 			f.setWorkspaceLocked(workspace, current)
 			f.mu.Unlock()
-			view := scaleP21IssuePersistenceView(t, f, true, false)
+			view := scaleIssuePersistenceView(t, f, true, false)
 			view.metadataResidency.work.limit = 2 << 20
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
@@ -379,17 +379,17 @@ func TestScaleP21SW202DeliveryEntrySourceAndPrecedence(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202DeliveryClaimUsesCurrentConnection(t *testing.T) {
+func TestDeliveryClaimUsesCurrentConnection(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	data, _ := f.WorkspaceMetadata(workspace)
-	data = scaleP21SW202Data(data, "sw202-rebound", "sw202-old-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
+	data = integrationDeliveryData(data, "sw202-rebound", "sw202-old-connection", time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
 	f.mu.Lock()
 	f.setWorkspaceLocked(workspace, data)
 	f.mu.Unlock()
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	entry, found, err := view.BeginIntegrationDeliveryRead(t.Context(), workspace, "sw202-rebound")
 	if err != nil || !found || !entry.ConnectionFound {
 		t.Fatal(err)

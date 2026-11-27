@@ -29,9 +29,9 @@ func newAuthServerForStore(t *testing.T, repo *store.SQLiteStore) *httptest.Serv
 	return server
 }
 
-func newOwnedAuthServerForStore(t *testing.T, repo *store.SQLiteStore) (*httptest.Server, *http.Client, *scaleP04Database) {
+func newOwnedAuthServerForStore(t *testing.T, repo *store.SQLiteStore) (*httptest.Server, *http.Client, *scaleDatabase) {
 	t.Helper()
-	database := newScaleP04DatabaseForStore(t, repo, store.DatabaseConfig{}, false)
+	database := newScaleDatabaseForStore(t, repo, store.DatabaseConfig{}, false)
 	host := httptest.NewServer(database.handler(t, false))
 	t.Cleanup(host.Close)
 	return host, database.login(t, host.URL, database.users[0]), database

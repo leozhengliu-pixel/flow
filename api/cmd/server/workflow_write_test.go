@@ -21,7 +21,7 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-func scaleP21SW201EditorProducerIssue(t *testing.T, data domain.Bootstrap, id string) []byte {
+func workflowWriteEditorProducerIssue(t *testing.T, data domain.Bootstrap, id string) []byte {
 	t.Helper()
 	var issue domain.Issue
 	found := false
@@ -79,7 +79,7 @@ func scaleP21SW201EditorProducerIssue(t *testing.T, data domain.Bootstrap, id st
 	return raw
 }
 
-func scaleP21SW201Metadata(t *testing.T, database *scaleP04Database) any {
+func workflowWriteMetadata(t *testing.T, database *scaleDatabase) any {
 	t.Helper()
 	rootRows := database.query(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, database.key)
 	var root json.RawMessage
@@ -108,7 +108,7 @@ func scaleP21SW201Metadata(t *testing.T, database *scaleP04Database) any {
 	return []any{root, records}
 }
 
-func scaleP21SW201Normalize(t *testing.T, value any, runID string, started, finished time.Time) any {
+func workflowWriteNormalize(t *testing.T, value any, runID string, started, finished time.Time) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -158,12 +158,12 @@ func scaleP21SW201Normalize(t *testing.T, value any, runID string, started, fini
 	return walk(result, "")
 }
 
-func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
+func TestWorkflowRunDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	prefix := idgen.New("sw201-")
 	workflowID := prefix + "workflow"
@@ -175,7 +175,7 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlFixture := scaleP21SW10Fixture{reader: database}
+	sqlFixture := notificationsFixture{reader: database}
 	sqlFixture.data.Workspace.URLKey = workspace
 	for _, test := range []string{
 		"success", "partial-action-failure", "detached-issue-pointer", "duplicate-definition",
@@ -187,7 +187,7 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 			var expected any
 			var editorProducerIssue []byte
 			if test == "legal-large-editor-state" {
-				editorProducerIssue = scaleP21SW201EditorProducerIssue(t, baseline, issue.ID)
+				editorProducerIssue = workflowWriteEditorProducerIssue(t, baseline, issue.ID)
 			}
 			future := time.Now().UTC().Add(time.Hour)
 			for _, mode := range []string{"legacy", "warm", "reloaded"} {
@@ -303,11 +303,11 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 							}
 						}
 					}
-					scaleP21SW201Exec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, baseline.NextIssueNumber-1, workspace)
+					metadataReloadSourceExec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, baseline.NextIssueNumber-1, workspace)
 					source := repo
 					if mode != "legacy" {
 						if mode == "reloaded" {
-							scaleP21SW201ReloadSource(t, database, repo)
+							metadataReloadSourceReloadSource(t, database, repo)
 						}
 						source, err = repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 						if err != nil {
@@ -316,11 +316,11 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 						if mode == "reloaded" {
 							// The constructor captures the owner's native
 							// generation. Force the bounded SQL path afterward.
-							scaleP21SW201ReloadSource(t, database, source)
+							metadataReloadSourceReloadSource(t, database, source)
 						}
 					}
 					f.s.store = source
-					before := scaleP21SW59SQL(t, sqlFixture)
+					before := discussionWriteSql(t, sqlFixture)
 					prior, err := repo.Events(t.Context(), workflowID)
 					if err != nil {
 						t.Fatal(err)
@@ -329,12 +329,12 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 					for _, event := range prior {
 						priorIDs[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{Header: make(http.Header)}
+					got := discussionWriteOutcome{Header: make(http.Header)}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 					})
 					captureRealtime := func(_ string, event domain.RealtimeEvent) {
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					}
 					source.SetRealtimeSink(captureRealtime)
 					if source != repo {
@@ -372,7 +372,7 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("workflow run leaked work or hydrated full metadata", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 					}
-					got.Rows = scaleP21SW59SQL(t, sqlFixture)
+					got.Rows = discussionWriteSql(t, sqlFixture)
 					events, err := repo.Events(t.Context(), workflowID)
 					if err != nil {
 						t.Fatal(err)
@@ -382,11 +382,11 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 							got.Events = append(got.Events, event)
 						}
 					}
-					got.Response, err = json.Marshal(map[string]any{"run": run, "error": scaleP21ChatPointError(runErr), "metadata": scaleP21SW201Metadata(t, database)})
+					got.Response, err = json.Marshal(map[string]any{"run": run, "error": scaleChatPointError(runErr), "metadata": workflowWriteMetadata(t, database)})
 					if err != nil {
 						t.Fatal(err)
 					}
-					normalized := scaleP21SW201Normalize(t, scaleP21SW59Normalized(t, got, before, started, finished), run.ID, started, finished)
+					normalized := workflowWriteNormalize(t, discussionWriteNormalized(t, got, before, started, finished), run.ID, started, finished)
 					if mode == "legacy" {
 						expected = normalized
 					} else if !reflect.DeepEqual(expected, normalized) {
@@ -408,7 +408,7 @@ func TestScaleP21SW201WorkflowRunDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowActionClosureGuard(t *testing.T) {
+func TestWorkflowActionClosureGuard(t *testing.T) {
 	file, err := parser.ParseFile(token.NewFileSet(), "automation_intake.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)

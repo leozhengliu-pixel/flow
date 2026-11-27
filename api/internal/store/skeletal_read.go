@@ -17,7 +17,7 @@ import (
 // fails closed instead of answering from the skeleton. COLD facades and the
 // flag-off store hold complete images and are unaffected. Test views keep
 // the skeleton read (the differentials compare it) and report it to an
-// observer (SW530).
+// observer.
 
 var skeletalReadObservers sync.Map // *SQLiteStore -> func(accessor string)
 

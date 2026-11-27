@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW31TimeInputTeamLabelHTTP(t *testing.T) {
+func TestTimeInputTeamLabelHTTP(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("label_time_input_")
 		stamp := time.Date(2026, 11, 13, 1, 2, 3, 4, time.UTC)
 		seed := func() {

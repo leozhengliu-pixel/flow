@@ -17,7 +17,7 @@ import (
 	"unsafe"
 )
 
-func scaleP21SW180Socket(t *testing.T) (*realtimeHub, *realtimeSocketClient) {
+func collaborationHeaderCacheSocket(t *testing.T) (*realtimeHub, *realtimeSocketClient) {
 	t.Helper()
 	hub := newRealtimeHub()
 	hub.budget = &realtimeBudget{limit: 16 << 20}
@@ -29,7 +29,7 @@ func scaleP21SW180Socket(t *testing.T) (*realtimeHub, *realtimeSocketClient) {
 	return hub, client
 }
 
-func scaleP21SW180Header(t *testing.T, hub *realtimeHub, client *realtimeSocketClient, collaborationID, documentID string, edit bool) (string, *documentSocketAccess) {
+func collaborationHeaderCacheHeader(t *testing.T, hub *realtimeHub, client *realtimeSocketClient, collaborationID, documentID string, edit bool) (string, *documentSocketAccess) {
 	t.Helper()
 	before := hub.budget.used.Load()
 	key, err := hub.joinDocumentHeader(t.Context(), client, collaborationID, documentID, edit)
@@ -56,8 +56,8 @@ func scaleP21SW180Header(t *testing.T, hub *realtimeHub, client *realtimeSocketC
 	return key, access
 }
 
-func TestScaleP21SW180CollaborationHeaderOwnershipAndReplacement(t *testing.T) {
-	hub, client := scaleP21SW180Socket(t)
+func TestCollaborationHeaderOwnershipAndReplacement(t *testing.T) {
+	hub, client := collaborationHeaderCacheSocket(t)
 	base := hub.budget.used.Load()
 	// Substrings must not keep the unrelated tail of either caller allocation.
 	keyPrefix := strings.Repeat("collaboration-", 16384)
@@ -66,12 +66,12 @@ func TestScaleP21SW180CollaborationHeaderOwnershipAndReplacement(t *testing.T) {
 	recordBacking := recordPrefix + strings.Repeat("unused-record-tail", 65536)
 	collaborationID := keyBacking[:len(keyPrefix)]
 	documentID := recordBacking[:len(recordPrefix)]
-	_, first := scaleP21SW180Header(t, hub, client, collaborationID, documentID, false)
+	_, first := collaborationHeaderCacheHeader(t, hub, client, collaborationID, documentID, false)
 	if got := hub.budget.used.Load(); got != base+first.ownedBytes {
 		t.Fatalf("long header charge=%d want=%d", got, base+first.ownedBytes)
 	}
 	replacementID := strings.Repeat("replacement-", 8192)
-	nextKey, next := scaleP21SW180Header(t, hub, client, collaborationID, replacementID, true)
+	nextKey, next := collaborationHeaderCacheHeader(t, hub, client, collaborationID, replacementID, true)
 	if first.ownedBytes != 0 || first.documentID != "" {
 		t.Fatal("replacement retained the prior header owner")
 	}
@@ -103,11 +103,11 @@ func TestScaleP21SW180CollaborationHeaderOwnershipAndReplacement(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW180CollaborationHeaderRevocationAndTeardown(t *testing.T) {
-	hub, client := scaleP21SW180Socket(t)
+func TestCollaborationHeaderRevocationAndTeardown(t *testing.T) {
+	hub, client := collaborationHeaderCacheSocket(t)
 	base := hub.budget.used.Load()
-	key, first := scaleP21SW180Header(t, hub, client, "joined-collaboration", "joined-record", true)
-	otherKey, other := scaleP21SW180Header(t, hub, client, "other-collaboration", "other-record", false)
+	key, first := collaborationHeaderCacheHeader(t, hub, client, "joined-collaboration", "joined-record", true)
+	otherKey, other := collaborationHeaderCacheHeader(t, hub, client, "other-collaboration", "other-record", false)
 	hub.revokeDocument(client, key, "")
 	if first.ownedBytes != 0 || first.documentID != "" || client.documentAccess[key] != nil || hub.joinedDocument(client, key) {
 		t.Fatal("document revocation retained the joined header")
@@ -133,7 +133,7 @@ func TestScaleP21SW180CollaborationHeaderRevocationAndTeardown(t *testing.T) {
 	if other.ownedBytes != 0 || hub.budget.used.Load() != base {
 		t.Fatal("unjoined header revocation leaked its reservation")
 	}
-	_, final := scaleP21SW180Header(t, hub, client, "final-collaboration", "final-record", true)
+	_, final := collaborationHeaderCacheHeader(t, hub, client, "final-collaboration", "final-record", true)
 	if !client.enqueue(realtimeSocketMessage{data: []byte("queued before teardown")}, true) {
 		t.Fatal("could not stage queued socket ownership")
 	}
@@ -146,22 +146,22 @@ func TestScaleP21SW180CollaborationHeaderRevocationAndTeardown(t *testing.T) {
 	}
 }
 
-type scaleP21SW180ObservedContext struct {
+type observedContext struct {
 	context.Context
 	once    sync.Once
 	checked chan struct{}
 }
 
-func (ctx *scaleP21SW180ObservedContext) Err() error {
+func (ctx *observedContext) Err() error {
 	err := ctx.Context.Err()
 	ctx.once.Do(func() { close(ctx.checked) })
 	return err
 }
 
-func TestScaleP21SW180CollaborationHeaderRefusals(t *testing.T) {
+func TestCollaborationHeaderRefusals(t *testing.T) {
 	for _, state := range []string{"canceled", "closed", "over-budget", "canceled-hub-wait", "canceled-queue-wait"} {
 		t.Run(state, func(t *testing.T) {
-			hub, client := scaleP21SW180Socket(t)
+			hub, client := collaborationHeaderCacheSocket(t)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			want := errRealtimeBudget
@@ -177,7 +177,7 @@ func TestScaleP21SW180CollaborationHeaderRefusals(t *testing.T) {
 			before := hub.budget.used.Load()
 			var err error
 			if strings.HasSuffix(state, "-wait") {
-				observed := &scaleP21SW180ObservedContext{Context: ctx, checked: make(chan struct{})}
+				observed := &observedContext{Context: ctx, checked: make(chan struct{})}
 				if state == "canceled-hub-wait" {
 					hub.mu.Lock()
 				} else {
@@ -217,9 +217,9 @@ func TestScaleP21SW180CollaborationHeaderRefusals(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW180CollaborationHeaderConcurrentLifetime(t *testing.T) {
-	hub, client := scaleP21SW180Socket(t)
-	scaleP21SW180Header(t, hub, client, "initial-collaboration", "initial-record", true)
+func TestCollaborationHeaderConcurrentLifetime(t *testing.T) {
+	hub, client := collaborationHeaderCacheSocket(t)
+	collaborationHeaderCacheHeader(t, hub, client, "initial-collaboration", "initial-record", true)
 	start := make(chan struct{})
 	retainedHeaders := make(chan struct{})
 	var retainedCount atomic.Int32
@@ -280,7 +280,7 @@ func TestScaleP21SW180CollaborationHeaderConcurrentLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW180CollaborationHeaderConsumerAtomicJoin(t *testing.T) {
+func TestCollaborationHeaderConsumerAtomicJoin(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate collaboration consumer source")
@@ -363,9 +363,9 @@ func TestScaleP21SW180CollaborationHeaderConsumerAtomicJoin(t *testing.T) {
 		t.Fatalf("consumer lost atomic join handoff: header=%d fallback=%d activated=%t", headerCalls, fallbackCalls, activated)
 	}
 
-	hub, client := scaleP21SW180Socket(t)
+	hub, client := collaborationHeaderCacheSocket(t)
 	base := hub.budget.used.Load()
-	key, access := scaleP21SW180Header(t, hub, client, "atomic-collaboration", "atomic-record", true)
+	key, access := collaborationHeaderCacheHeader(t, hub, client, "atomic-collaboration", "atomic-record", true)
 	if got := hub.budget.used.Load(); got != base+access.ownedBytes {
 		t.Fatal("atomic join returned before charging its cache")
 	}

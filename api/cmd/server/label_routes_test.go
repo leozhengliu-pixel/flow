@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW600: the label settings routes migrated from the COLD facade to bounded
+// The label settings routes migrated from the COLD facade to bounded
 // readers and writers, served through the real cookie/Bearer authentication,
 // authorization and route mux on the legacy store, a warm bounded view and a
 // bounded view loaded from SQL:
@@ -40,13 +40,13 @@ import (
 
 // The installed fields compared. Projects and initiatives are compared as
 // rows (their legacy snapshot refreshes display copies a load does not).
-var sw600Fields = []string{"labels", "labelGroups", "savedViews", "favorites", "issueTemplates", "issueSuggestions", "users"}
+var labelRoutesFields = []string{"labels", "labelGroups", "savedViews", "favorites", "issueTemplates", "issueSuggestions", "users"}
 
-// sw600Image is scaleP21SW294Image without the labels' issueCount, which the
+// labelRoutesImage is oauthMetadataImage without the labels' issueCount, which the
 // legacy snapshot derives on every read and a bounded image keeps as stored.
-func sw600Image(t *testing.T, repo *store.SQLiteStore, workspace string, names ...string) map[string]json.RawMessage {
+func labelRoutesImage(t *testing.T, repo *store.SQLiteStore, workspace string, names ...string) map[string]json.RawMessage {
 	t.Helper()
-	image := scaleP21SW294Image(t, repo, workspace, names...)
+	image := oauthMetadataImage(t, repo, workspace, names...)
 	if raw, ok := image["labels"]; ok {
 		var labels []map[string]any
 		if json.Unmarshal(raw, &labels) == nil {
@@ -59,7 +59,7 @@ func sw600Image(t *testing.T, repo *store.SQLiteStore, workspace string, names .
 	return image
 }
 
-func sw600Handler(s *server) http.Handler {
+func labelRoutesHandler(s *server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/labels", s.listWorkspaceLabels)
 	mux.HandleFunc("POST /api/labels", s.createWorkspaceLabel)
@@ -76,7 +76,7 @@ func sw600Handler(s *server) http.Handler {
 	return s.withColdMetadataRouteMux(mux, s.authenticate(mux))
 }
 
-func sw600Do(s *server, method, target, body, workspace string, user domain.User, bearer string) *httptest.ResponseRecorder {
+func labelRoutesDo(s *server, method, target, body, workspace string, user domain.User, bearer string) *httptest.ResponseRecorder {
 	var r *http.Request
 	if body != "" {
 		r = httptest.NewRequest(method, target, strings.NewReader(body))
@@ -90,26 +90,26 @@ func sw600Do(s *server, method, target, body, workspace string, user domain.User
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
 	} else if user.ID != "" {
-		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sw410Session(user)})
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: oAuthClientLookupSession(user)})
 	}
 	w := httptest.NewRecorder()
-	sw600Handler(s).ServeHTTP(w, r)
+	labelRoutesHandler(s).ServeHTTP(w, r)
 	return w
 }
 
-// sw600Run is sw410Run over the label fields, with the issue rows a label
+// labelRoutesRun is oauthClientLookupRun over the label fields, with the issue rows a label
 // deletion rewrites; bounded, the call must not decode the whole workspace.
-func (f scaleP21TeamCreateFixture) sw600Run(t *testing.T, source string, fields []string, call func(*server) string) (sw410Outcome, time.Time) {
+func (f scaleTeamCreateFixture) labelRoutesRun(t *testing.T, source string, fields []string, call func(*server) string) (oauthClientLookupOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.service(t, source)
 	workspace := f.data.Workspace.URLKey
-	got := sw410Outcome{}
+	got := oauthClientLookupOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -117,7 +117,7 @@ func (f scaleP21TeamCreateFixture) sw600Run(t *testing.T, source string, fields 
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -126,7 +126,7 @@ func (f scaleP21TeamCreateFixture) sw600Run(t *testing.T, source string, fields 
 	for _, event := range f.state(t).Events {
 		prior[event[0]] = true
 	}
-	before := sw600Image(t, service.store, workspace, fields...)
+	before := labelRoutesImage(t, service.store, workspace, fields...)
 	decodes := service.store.WorkspaceMetadataDecodes()
 	got.Result = call(service)
 	mu.Lock()
@@ -155,38 +155,38 @@ func (f scaleP21TeamCreateFixture) sw600Run(t *testing.T, source string, fields 
 	if service.store.BoundedMetadataEnabled() && service.store.MetadataWorkUsedForTesting() != 0 {
 		t.Fatalf("%s: retained metadata work %d", source, service.store.MetadataWorkUsedForTesting())
 	}
-	installed := sw600Image(t, service.store, workspace, fields...)
+	installed := labelRoutesImage(t, service.store, workspace, fields...)
 	reloaded, err := store.OpenDatabase(f.reader.config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fresh := sw600Image(t, reloaded, workspace, fields...)
+	fresh := labelRoutesImage(t, reloaded, workspace, fields...)
 	if service.store.BoundedMetadataEnabled() {
 		// The bounded image equals a bounded view loaded from SQL.
 		view, err := reloaded.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
-		loaded := sw600Image(t, view, workspace, fields...)
+		loaded := labelRoutesImage(t, view, workspace, fields...)
 		for _, name := range fields {
-			want, have := scaleP21TriageNormalize(t, loaded[name], started), scaleP21TriageNormalize(t, installed[name], started)
+			want, have := scaleTriageNormalize(t, loaded[name], started), scaleTriageNormalize(t, installed[name], started)
 			if want != have {
 				got.Stale = append(got.Stale, name)
-				t.Errorf("%s: installed %s is not the reloaded one: %s", source, name, scaleP21M2Diff(want, have))
+				t.Errorf("%s: installed %s is not the reloaded one: %s", source, name, policyFirstDifference(want, have))
 			}
 		}
 	}
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
-	got.Installed = sw600Delta(t, fields, before, installed)
+	got.Installed = labelRoutesDelta(t, fields, before, installed)
 	got.Reloaded, _ = json.Marshal(fresh)
 	return got, started
 }
 
-// sw600Delta lists, per field, the installed entries a call added or
+// labelRoutesDelta lists, per field, the installed entries a call added or
 // changed, sorted (the legacy snapshot appends where a load orders).
-func sw600Delta(t *testing.T, fields []string, before, after map[string]json.RawMessage) json.RawMessage {
+func labelRoutesDelta(t *testing.T, fields []string, before, after map[string]json.RawMessage) json.RawMessage {
 	t.Helper()
 	entries := func(raw json.RawMessage) map[string]bool {
 		var value any
@@ -233,50 +233,50 @@ func sw600Delta(t *testing.T, fields []string, before, after map[string]json.Raw
 	return raw
 }
 
-// sw600Differential runs call on the legacy store, a warm bounded view and a
+// labelRoutesDifferential runs call on the legacy store, a warm bounded view and a
 // bounded view loaded from SQL and compares their normalized outcomes.
-func (f scaleP21TeamCreateFixture) sw600Differential(t *testing.T, name string, fields []string, setup func(*testing.T), call func(*server) string) []sw410Outcome {
+func (f scaleTeamCreateFixture) labelRoutesDifferential(t *testing.T, name string, fields []string, setup func(*testing.T), call func(*server) string) []oauthClientLookupOutcome {
 	t.Helper()
-	prepare := f.sw294Prepare(setup)
+	prepare := f.oauthMetadataPrepare(setup)
 	users := []domain.User{}
 	for _, principal := range f.principals {
 		users = append(users, principal.user)
 	}
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		stamp := time.Now().UTC()
 		for _, user := range users {
 			f.exec(t, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
-			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(sw410Session(user)), user.ID,
+			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(oAuthClientLookupSession(user)), user.ID,
 				stamp.Add(24*time.Hour).Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano))
 		}
 		prepare(t)
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
-	var outcomes []sw410Outcome
+	var outcomes []oauthClientLookupOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started := f.sw600Run(t, source, fields, call)
+		got, started := f.labelRoutesRun(t, source, fields, call)
 		// A key's use stamp is written asynchronously; it is not the route's.
 		for _, row := range got.State.Metadata {
 			if fmt.Sprint(row[0]) == "apiKeys" {
 				row[3] = nil
 			}
 		}
-		got.Installed = sw600DropKeyUse(t, got.Installed)
+		got.Installed = dropKeyUse(t, got.Installed)
 		outcomes = append(outcomes, got)
-		text := sw410Normalize(t, got, started)
+		text := oauthClientLookupNormalize(t, got, started)
 		normalized = append(normalized, text)
 		if dir := os.Getenv("FLOW_SW600_DUMP"); dir != "" {
 			_ = os.WriteFile(filepath.Join(dir, name+"-"+source+".json"), []byte(text), 0o600)
 		}
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Errorf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Errorf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func sw600DropKeyUse(t *testing.T, raw json.RawMessage) json.RawMessage {
+func dropKeyUse(t *testing.T, raw json.RawMessage) json.RawMessage {
 	t.Helper()
 	var value map[string]any
 	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
@@ -287,12 +287,12 @@ func sw600DropKeyUse(t *testing.T, raw json.RawMessage) json.RawMessage {
 	return result
 }
 
-// sw600Labels seeds the label fixture through the legacy store: workspace,
+// labelRoutesLabels seeds the label fixture through the legacy store: workspace,
 // team and private-team labels and groups, an archived label, labels on
 // visible, private and archived issues, on live and archived projects and on
 // an initiative, a label suggestion, a view filter and favorites, and API
 // keys (plain and team-restricted).
-func (f scaleP21TeamCreateFixture) sw600Labels(t *testing.T) {
+func (f scaleTeamCreateFixture) labelRoutesLabels(t *testing.T) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	owner, member, inside := f.principals[0].user, f.principals[2].user, f.principals[4].user
@@ -375,11 +375,11 @@ func (f scaleP21TeamCreateFixture) sw600Labels(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW600LabelRoutes(t *testing.T) {
+func TestLabelRoutes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
 	t.Cleanup(func() { webhookDeliverySlots = oldSlots })
@@ -410,13 +410,13 @@ func TestScaleP21SW600LabelRoutes(t *testing.T) {
 			text = string(raw)
 		}
 		return func(s *server, out *trace) {
-			out.lines = append(out.lines, sw410Response(name, sw600Do(s, method, target, text, workspace, user, "")))
+			out.lines = append(out.lines, oauthClientLookupResponse(name, labelRoutesDo(s, method, target, text, workspace, user, "")))
 		}
 	}
 	bearer := func(name, target, secret string) step {
 		return func(s *server, out *trace) {
-			out.lines = append(out.lines, sw410Response(name, sw600Do(s, http.MethodGet, target, "", workspace, domain.User{}, secret)))
-			sw430Quiet(current, s, workspace, secret)
+			out.lines = append(out.lines, oauthClientLookupResponse(name, labelRoutesDo(s, http.MethodGet, target, "", workspace, domain.User{}, secret)))
+			oAuthCOLDQuiet(current, s, workspace, secret)
 		}
 	}
 	list := func(user domain.User, query string) step {
@@ -426,7 +426,7 @@ func TestScaleP21SW600LabelRoutes(t *testing.T) {
 		return do("team-labels "+user.Name+" "+team, http.MethodGet, "/api/teams/"+team+"/labels", nil, user)
 	}
 	lists := []step{list(owner, ""), list(member, ""), list(inside, ""), teamList(owner, f.public), teamList(admin, f.private), teamList(member, f.public)}
-	seed := f.sw600Labels
+	seed := f.labelRoutesLabels
 	cases := []struct {
 		name  string
 		setup func(*testing.T)
@@ -517,7 +517,7 @@ func TestScaleP21SW600LabelRoutes(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			current = t
-			outcomes := f.sw600Differential(t, test.name, sw600Fields, test.setup, test.call)
+			outcomes := f.labelRoutesDifferential(t, test.name, labelRoutesFields, test.setup, test.call)
 			t.Logf("legacy result %s", outcomes[0].Result)
 		})
 	}

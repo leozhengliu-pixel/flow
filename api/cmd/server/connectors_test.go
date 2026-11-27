@@ -13,14 +13,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M1ConnectorDiscoveryDifferential(t *testing.T) {
+func TestScaleConnectorDiscoveryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	var calls atomic.Int32
 	var failing atomic.Bool
 	upstream := fakeRuntimeConnector(t, &calls, &failing)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		public, private, child := idgen.New("m1-public-"), idgen.New("m1-private-"), idgen.New("m1-child-")
 		policies := []applicationPolicy{
@@ -48,7 +48,7 @@ func TestScaleP21M1ConnectorDiscoveryDifferential(t *testing.T) {
 			{"guest-explicit", "guest", []string{public}},
 			{"inherited", "member", []string{private}},
 		} {
-			_, user := scaleP03Join(t, f, spec.name, idgen.New("m1-connector-")+"@example.test", spec.role, spec.teams...)
+			_, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("m1-connector-")+"@example.test", spec.role, spec.teams...)
 			principals = append(principals, user)
 		}
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())

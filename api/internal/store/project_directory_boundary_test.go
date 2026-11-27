@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-const scaleP21SW90QueryBoundary = `package boundary
+const queryBoundary = `package boundary
 func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
 	if s.BoundedMetadataEnabled() {
 		read, err := s.BeginProjectDirectoryQuery(ctx, query)
@@ -30,7 +30,7 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	return s.queryProjectDirectoryAdapter(ctx, query)
 }`
 
-func scaleP21SW90BoundaryBody(function *ast.FuncDecl) (string, error) {
+func boundaryBody(function *ast.FuncDecl) (string, error) {
 	if function == nil || function.Body == nil {
 		return "", fmt.Errorf("missing project directory dispatch")
 	}
@@ -39,16 +39,16 @@ func scaleP21SW90BoundaryBody(function *ast.FuncDecl) (string, error) {
 	return body.String(), err
 }
 
-func scaleP21SW90CheckQueryBoundary(function *ast.FuncDecl) error {
-	expected, err := parser.ParseFile(token.NewFileSet(), "boundary.go", scaleP21SW90QueryBoundary, 0)
+func checkQueryBoundary(function *ast.FuncDecl) error {
+	expected, err := parser.ParseFile(token.NewFileSet(), "boundary.go", queryBoundary, 0)
 	if err != nil {
 		return err
 	}
-	want, err := scaleP21SW90BoundaryBody(expected.Decls[0].(*ast.FuncDecl))
+	want, err := boundaryBody(expected.Decls[0].(*ast.FuncDecl))
 	if err != nil {
 		return err
 	}
-	got, err := scaleP21SW90BoundaryBody(function)
+	got, err := boundaryBody(function)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func scaleP21SW90CheckQueryBoundary(function *ast.FuncDecl) error {
 	return nil
 }
 
-func scaleP21SW90BoundaryReferences(node ast.Node) (map[string]int, error) {
+func boundaryReferences(node ast.Node) (map[string]int, error) {
 	references := map[string]int{}
 	var failure error
 	parents := map[ast.Node]ast.Node{}
@@ -101,7 +101,7 @@ func scaleP21SW90BoundaryReferences(node ast.Node) (map[string]int, error) {
 	return references, failure
 }
 
-func TestScaleP21SW90ProjectDirectoryLegacyBoundary(t *testing.T) {
+func TestProjectDirectoryLegacyBoundary(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate project directory source")
@@ -150,7 +150,7 @@ func TestScaleP21SW90ProjectDirectoryLegacyBoundary(t *testing.T) {
 				}
 				inspected = function.Body
 			}
-			references, err := scaleP21SW90BoundaryReferences(inspected)
+			references, err := boundaryReferences(inspected)
 			if err != nil {
 				t.Errorf("%s: %v", site, err)
 			}
@@ -164,12 +164,12 @@ func TestScaleP21SW90ProjectDirectoryLegacyBoundary(t *testing.T) {
 			t.Errorf("%s callers=%v, want reviewed compatibility callers %v", name, got[name], expected)
 		}
 	}
-	if err := scaleP21SW90CheckQueryBoundary(wrapper); err != nil {
+	if err := checkQueryBoundary(wrapper); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestScaleP21SW90ProjectDirectoryBoundaryRejectsNewEdges(t *testing.T) {
+func TestProjectDirectoryBoundaryRejectsNewEdges(t *testing.T) {
 	for _, fixture := range []struct {
 		name, body string
 		direct     bool
@@ -184,7 +184,7 @@ func TestScaleP21SW90ProjectDirectoryBoundaryRejectsNewEdges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			references, err := scaleP21SW90BoundaryReferences(file.Decls[0].(*ast.FuncDecl).Body)
+			references, err := boundaryReferences(file.Decls[0].(*ast.FuncDecl).Body)
 			if fixture.direct && (err != nil || references["projectSnapshot"] != 1) ||
 				!fixture.direct && err == nil {
 				t.Fatal("legacy reference classification changed", references, err)
@@ -192,18 +192,18 @@ func TestScaleP21SW90ProjectDirectoryBoundaryRejectsNewEdges(t *testing.T) {
 		})
 	}
 	for name, mutation := range map[string]string{
-		"reversed-flag":    strings.Replace(scaleP21SW90QueryBoundary, "if s.BoundedMetadataEnabled()", "if !s.BoundedMetadataEnabled()", 1),
-		"other-store-flag": strings.Replace(scaleP21SW90QueryBoundary, "if s.BoundedMetadataEnabled()", "if other.BoundedMetadataEnabled()", 1),
-		"unowned-output":   strings.Replace(scaleP21SW90QueryBoundary, "registerMetadataOutputClose(ctx, read.Close)", "true", 1),
-		"changed-context":  strings.Replace(scaleP21SW90QueryBoundary, "s.BeginProjectDirectoryQuery(ctx, query)", "s.BeginProjectDirectoryQuery(other, query)", 1),
-		"closed-output":    strings.Replace(scaleP21SW90QueryBoundary, "return read.Page, nil", "read.Close(); return read.Page, nil", 1),
+		"reversed-flag":    strings.Replace(queryBoundary, "if s.BoundedMetadataEnabled()", "if !s.BoundedMetadataEnabled()", 1),
+		"other-store-flag": strings.Replace(queryBoundary, "if s.BoundedMetadataEnabled()", "if other.BoundedMetadataEnabled()", 1),
+		"unowned-output":   strings.Replace(queryBoundary, "registerMetadataOutputClose(ctx, read.Close)", "true", 1),
+		"changed-context":  strings.Replace(queryBoundary, "s.BeginProjectDirectoryQuery(ctx, query)", "s.BeginProjectDirectoryQuery(other, query)", 1),
+		"closed-output":    strings.Replace(queryBoundary, "return read.Page, nil", "read.Close(); return read.Page, nil", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			file, err := parser.ParseFile(token.NewFileSet(), "mutated.go", mutation, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := scaleP21SW90CheckQueryBoundary(file.Decls[0].(*ast.FuncDecl)); err == nil {
+			if err := checkQueryBoundary(file.Decls[0].(*ast.FuncDecl)); err == nil {
 				t.Fatal("unreviewed bounded-to-legacy dispatch passed")
 			}
 		})

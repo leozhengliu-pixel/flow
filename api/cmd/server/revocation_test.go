@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP17QueuedAndReplayedDocumentRevocation(t *testing.T) {
+func TestScaleQueuedAndReplayedDocumentRevocation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
-		member, user := scaleP03Join(t, f, "P17 revoked", idgen.New("p17-revoked-")+"@example.test", "member")
+		member, user := resourceAccessScaleJoin(t, f, "P17 revoked", idgen.New("p17-revoked-")+"@example.test", "member")
 		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = append(data.Documents, domain.Document{ID: "p17-revoked", SlugID: "p17-revoked", Title: "p17-hidden-title", Content: "p17-hidden-body", Creator: data.Viewer, Permissions: []domain.DocumentPermission{{ID: "p17-owner", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner"}, {ID: "p17-grant", SubjectType: "user", SubjectID: user.ID, Role: "editor"}}})
 			return nil

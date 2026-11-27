@@ -20,7 +20,7 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-func scaleP21SW480DeletedMentionState(userID string) string {
+func deletedMentionState(userID string) string {
 	document := ygo.NewDoc()
 	fragment := ygo.NewXmlFragment(document, "prosemirror")
 	transaction := document.WriteTxn()
@@ -34,7 +34,7 @@ func scaleP21SW480DeletedMentionState(userID string) string {
 	return base64.StdEncoding.EncodeToString(ygo.EncodeStateAsUpdate(document))
 }
 
-func scaleP21SW480CanonicalDocument(t *testing.T, reader *scaleP04Database, repo *store.SQLiteStore, workspace, id string) (domain.Document, json.RawMessage) {
+func canonicalDocument(t *testing.T, reader *scaleDatabase, repo *store.SQLiteStore, workspace, id string) (domain.Document, json.RawMessage) {
 	t.Helper()
 	rows := reader.query(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' ORDER BY collection_order,record_key`, workspace)
 	defer rows.Close()
@@ -96,7 +96,7 @@ func scaleP21SW480CanonicalDocument(t *testing.T, reader *scaleP04Database, repo
 	return domain.Document{}, nil
 }
 
-func scaleP21SW480Installed(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]json.RawMessage {
+func documentUpdateInstalled(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]json.RawMessage {
 	t.Helper()
 	names := []string{"documents", "projects", "favorites"}
 	result := map[string]json.RawMessage{}
@@ -133,20 +133,20 @@ func scaleP21SW480Installed(t *testing.T, repo *store.SQLiteStore, workspace str
 	return result
 }
 
-// scaleP21SW480ReloadEqual: the bounded writer's installed fields equal a
+// reloadEqual: the bounded writer's installed fields equal a
 // fresh SQL reload of the same view.
-func scaleP21SW480ReloadEqual(t *testing.T, reader *scaleP04Database, source *store.SQLiteStore, workspace string, installed map[string]json.RawMessage) {
+func reloadEqual(t *testing.T, reader *scaleDatabase, source *store.SQLiteStore, workspace string, installed map[string]json.RawMessage) {
 	t.Helper()
-	scaleP21SW201ReloadSource(t, reader, source)
-	reloaded := scaleP21SW480Installed(t, source, workspace)
+	metadataReloadSourceReloadSource(t, reader, source)
+	reloaded := documentUpdateInstalled(t, source, workspace)
 	for name, raw := range installed {
 		if !bytes.Equal(raw, reloaded[name]) {
-			t.Fatalf("installed %s differs from the SQL reload: %s", name, scaleP21M2Diff(string(raw), string(reloaded[name])))
+			t.Fatalf("installed %s differs from the SQL reload: %s", name, policyFirstDifference(string(raw), string(reloaded[name])))
 		}
 	}
 }
 
-func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawMessage, documentID string, existing map[string]bool, started, finished time.Time) any {
+func documentUpdateNormalize(t *testing.T, value any, fields map[string]json.RawMessage, documentID string, existing map[string]bool, started, finished time.Time) any {
 	t.Helper()
 	ids := map[string]string{}
 	var documents []domain.Document
@@ -175,7 +175,7 @@ func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawM
 			ids[favorite.ID] = fmt.Sprintf("<generated-favorite:%d>", index)
 		}
 	}
-	// SW59 already decoded the outcome into owned JSON values with UseNumber.
+	// discussion write already decoded the outcome into owned JSON values with UseNumber.
 	// Normalize those values in place, including the multi-MiB bodies.
 	var normalize func(any, string) any
 	normalize = func(value any, key string) any {
@@ -203,9 +203,9 @@ func scaleP21SW480Normalize(t *testing.T, value any, fields map[string]json.RawM
 	return normalize(value, "")
 }
 
-// scaleP21SW480Path names the first differing JSON path of two normalized
+// path names the first differing JSON path of two normalized
 // outcomes.
-func scaleP21SW480Path(left, right any, path string) string {
+func documentUpdateDiffPath(left, right any, path string) string {
 	switch a := left.(type) {
 	case map[string]any:
 		b, ok := right.(map[string]any)
@@ -224,7 +224,7 @@ func scaleP21SW480Path(left, right any, path string) string {
 		slices.Sort(keys)
 		for _, key := range keys {
 			if !reflect.DeepEqual(a[key], b[key]) {
-				return scaleP21SW480Path(a[key], b[key], path+"."+key)
+				return documentUpdateDiffPath(a[key], b[key], path+"."+key)
 			}
 		}
 	case []any:
@@ -236,7 +236,7 @@ func scaleP21SW480Path(left, right any, path string) string {
 		}
 		for index := range a {
 			if !reflect.DeepEqual(a[index], b[index]) {
-				return scaleP21SW480Path(a[index], b[index], fmt.Sprintf("%s[%d]", path, index))
+				return documentUpdateDiffPath(a[index], b[index], fmt.Sprintf("%s[%d]", path, index))
 			}
 		}
 	}
@@ -245,61 +245,61 @@ func scaleP21SW480Path(left, right any, path string) string {
 	return fmt.Sprintf("%s: legacy=%.600s bounded=%.600s", path, expected, raw)
 }
 
-func TestScaleP21SW480WeekendDigestTime(t *testing.T) {
+func TestWeekendDigestTime(t *testing.T) {
 	monday := time.Date(2026, time.November, 23, 9, 30, 20, 0, time.UTC)
 	for _, days := range []int{1, 2} {
 		started := monday.AddDate(0, 0, -days).Add(-time.Hour)
 		finished := started.Add(time.Second)
-		if !scaleP21SW59GeneratedDigestTime(monday, started, finished) {
+		if !generatedDigestTime(monday, started, finished) {
 			t.Errorf("digest due on Monday did not match the request %d days earlier", days)
 		}
-		if scaleP21SW59GeneratedDigestTime(monday.Add(time.Minute), started, finished) {
+		if generatedDigestTime(monday.Add(time.Minute), started, finished) {
 			t.Error("normalization accepted a changed digest delay")
 		}
 	}
 }
 
-func TestScaleP21SW480DocumentUpdateDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "updates")
+func TestDocumentUpdateDifferential(t *testing.T) {
+	documentUpdate(t, "updates")
 }
 
-func TestScaleP21SW480DocumentUpdateCollaborationDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "collaboration")
+func TestDocumentUpdateCollaborationDifferential(t *testing.T) {
+	documentUpdate(t, "collaboration")
 }
 
-func TestScaleP21SW480DocumentUpdateHistoryDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "history")
+func TestDocumentUpdateHistoryDifferential(t *testing.T) {
+	documentUpdate(t, "history")
 }
 
-func TestScaleP21SW480DocumentUpdatePeerDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "peer")
+func TestDocumentUpdatePeerDifferential(t *testing.T) {
+	documentUpdate(t, "peer")
 }
 
-func TestScaleP21SW480DocumentUpdateLargePeerMergeDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "peer-large-merge")
+func TestDocumentUpdateLargePeerMergeDifferential(t *testing.T) {
+	documentUpdate(t, "peer-large-merge")
 }
 
-func TestScaleP21SW480DocumentUpdateLargePeerMergeLimitedDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "peer-large-merge-limited")
+func TestDocumentUpdateLargePeerMergeLimitedDifferential(t *testing.T) {
+	documentUpdate(t, "peer-large-merge-limited")
 }
 
-func TestScaleP21SW480DocumentUpdatePermissionDifferential(t *testing.T) {
-	scaleP21SW480DocumentUpdate(t, "permissions")
+func TestDocumentUpdatePermissionDifferential(t *testing.T) {
+	documentUpdate(t, "permissions")
 }
 
-func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
+func documentUpdate(t *testing.T, group string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	var peer *store.SQLiteStore
 	if strings.HasPrefix(group, "peer") {
 		peer, err = store.OpenDatabase(config)
@@ -309,13 +309,13 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 		t.Cleanup(func() { _ = peer.Close() })
 	}
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw480-")
-	reader := &scaleP04Database{config: config, key: workspace, workspaceID: f.data.Workspace.ID}
+	reader := &scaleDatabase{config: config, key: workspace, workspaceID: f.data.Workspace.ID}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
 		}
 	})
-	sqlFixture := scaleP21SW10Fixture{reader: reader}
+	sqlFixture := notificationsFixture{reader: reader}
 	sqlFixture.data.Workspace.URLKey = workspace
 	documentID, oldProject, newProject, reciprocal := prefix+"document", prefix+"old-project", prefix+"new-project", prefix+"reciprocal-project"
 	privateTeam := ""
@@ -328,7 +328,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 	formerState := mentioningCollaborationState(formerID)
 	// Yjs states carry random client IDs: build every fixture state once so
 	// all four modes start from the same bytes.
-	retainedState, deletedState := mentioningCollaborationState(formerID), scaleP21SW480DeletedMentionState(formerID)
+	retainedState, deletedState := mentioningCollaborationState(formerID), deletedMentionState(formerID)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw480_seed", "", nil, func(data *domain.Bootstrap) error {
 		// Keep digest delivery in the comparison with a fixed one-hour delay.
 		// The working-hours schedule depends on the day the suite runs.
@@ -627,8 +627,8 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 			}
 			memberDirectories.Delete(fmt.Sprintf("%p:%s", source, f.data.Workspace.ID))
 			service := &server{store: source, realtime: newRealtimeHub(), uploadPath: t.TempDir()}
-			before := scaleP21SW59SQL(t, sqlFixture)
-			_, beforeCanonical := scaleP21SW480CanonicalDocument(t, reader, repo, workspace, documentID)
+			before := discussionWriteSql(t, sqlFixture)
+			_, beforeCanonical := canonicalDocument(t, reader, repo, workspace, documentID)
 			prior, err := repo.Events(t.Context(), ref)
 			if err != nil {
 				t.Fatal(err)
@@ -645,12 +645,12 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 			for _, audit := range priorAudits {
 				auditIDs[audit.ID] = true
 			}
-			got := scaleP21SW59Outcome{}
+			got := discussionWriteOutcome{}
 			source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-				got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+				got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 			})
 			captureRealtime := func(_ string, event domain.RealtimeEvent) {
-				got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+				got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 			}
 			source.SetRealtimeSink(captureRealtime)
 			if source != repo {
@@ -693,8 +693,8 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 			if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 				t.Fatal("document response leaked work or decoded complete workspace", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 			}
-			fields := scaleP21SW480Installed(t, source, workspace)
-			got.Code, got.Header, got.Rows = response.Code, response.Header(), scaleP21SW59SQL(t, sqlFixture)
+			fields := documentUpdateInstalled(t, source, workspace)
+			got.Code, got.Header, got.Rows = response.Code, response.Header(), discussionWriteSql(t, sqlFixture)
 			after, err := repo.Events(t.Context(), ref)
 			if err != nil {
 				t.Fatal(err)
@@ -715,7 +715,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 					newAudits = append(newAudits, audit)
 				}
 			}
-			canonical, canonicalRaw := scaleP21SW480CanonicalDocument(t, reader, repo, workspace, documentID)
+			canonical, canonicalRaw := canonicalDocument(t, reader, repo, workspace, documentID)
 			updates, err := repo.DocumentCollaborationUpdates(t.Context(), workspace, collaborationID)
 			if err != nil {
 				t.Fatal(err)
@@ -738,7 +738,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			normalized := scaleP21SW480Normalize(t, scaleP21SW59Normalized(t, got, before, started, finished), fields, documentID, existing, started, finished)
+			normalized := documentUpdateNormalize(t, discussionWriteNormalized(t, got, before, started, finished), fields, documentID, existing, started, finished)
 			if strings.HasPrefix(mode, "legacy") {
 				expected = normalized
 			} else if testName == "peer-large-merge-limited" {
@@ -752,7 +752,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 				t.Logf("document case=%s mode=%s SQL=%d status=%d (root gate)", testName, mode, statements, response.Code)
 				continue
 			} else if !reflect.DeepEqual(expected, normalized) {
-				t.Fatalf("document update differs: case=%s mode=%s principal=%s status=%d: %s", testName, mode, principal.ID, response.Code, scaleP21SW480Path(expected, normalized, ""))
+				t.Fatalf("document update differs: case=%s mode=%s principal=%s status=%d: %s", testName, mode, principal.ID, response.Code, documentUpdateDiffPath(expected, normalized, ""))
 			}
 			if testName == "version-conflict" && response.Code != http.StatusConflict {
 				t.Fatal("conflict fixture did not reach captured document output", response.Code, response.Body.String())
@@ -830,7 +830,7 @@ func scaleP21SW480DocumentUpdate(t *testing.T, group string) {
 				if testName == "peer-unrelated-records" && !bytes.Contains(fields["projects"], []byte("Peer renamed unrelated")) {
 					t.Fatal("installed image lost the peer's unrelated record")
 				}
-				scaleP21SW480ReloadEqual(t, reader, source, workspace, fields)
+				reloadEqual(t, reader, source, workspace, fields)
 			}
 			if strings.HasPrefix(testName, "offloaded-history") || testName == "large-current-and-history" {
 				for _, revisionID := range []string{prefix + "older", prefix + "oldest"} {

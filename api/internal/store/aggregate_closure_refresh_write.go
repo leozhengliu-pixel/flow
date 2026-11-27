@@ -333,7 +333,7 @@ func (s *SQLiteStore) persistMetadataLogicalRefreshRecord(ctx context.Context, t
 		return nil
 	}
 	changes := []metadataRecordChange{{field: field, key: key, base: canonical, raw: merged}}
-	return scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes)
+	return scaleWriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes)
 }
 
 type metadataLogicalPairCursor struct {

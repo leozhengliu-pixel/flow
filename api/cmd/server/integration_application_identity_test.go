@@ -18,12 +18,12 @@ import (
 // These tests certify the handlers' direct identity/role inputs. Application
 // storage services and non-coding task resource contexts retain their own
 // inventory entries; this fixture does not certify those downstream paths.
-func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
+func TestApplicationIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		archived := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw20.app_teams", "", nil, func(data *domain.Bootstrap) error {
@@ -57,11 +57,11 @@ func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
 					for _, service := range services {
 						r, w := f.request(user, key, operation.body), httptest.NewRecorder()
 						r.SetPathValue("id", operation.id)
-						scaleP21M3Call(service, w, r, operation.run)
-						outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+						callPointSettingsHandler(service, w, r, operation.run)
+						outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("direct handler inputs changed: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("direct handler inputs changed: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -96,7 +96,7 @@ func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
 					// Supply its exact identity/role result at this boundary.
 					ctx := context.WithValue(r.Context(), oauthWorkspaceAccessKey{}, oauthWorkspaceAccess{workspace: workspace, userID: user.ID, data: domain.Bootstrap{Workspace: f.data.Workspace, Viewer: user, ViewerRole: role}})
 					service.applicationConsentTeams(w, r.WithContext(ctx))
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 					if workspaceAdminRole(role) {
 						var teams []domain.Team
 						if err := json.Unmarshal(w.Body.Bytes(), &teams); err != nil {
@@ -108,7 +108,7 @@ func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("consent teams changed: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("consent teams changed: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		})
@@ -129,14 +129,14 @@ func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
 		}
 		for _, service := range services {
 			w := httptest.NewRecorder()
-			scaleP21M3Call(service, w, queued.Clone(queued.Context()), (*server).listApplicationInstallations)
+			callPointSettingsHandler(service, w, queued.Clone(queued.Context()), (*server).listApplicationInstallations)
 			if w.Code != http.StatusForbidden {
 				t.Fatalf("revoked queued caller: %d %s", w.Code, w.Body.String())
 			}
 			r := f.request(f.data.Viewer, nil, nil)
 			r.Header.Set("X-Workspace-Key", idgen.New("sw20-foreign-"))
 			w = httptest.NewRecorder()
-			scaleP21M3Call(service, w, r, (*server).listApplicationInstallations)
+			callPointSettingsHandler(service, w, r, (*server).listApplicationInstallations)
 			if w.Code != http.StatusForbidden {
 				t.Fatal("cross-workspace boundary changed")
 			}
@@ -154,12 +154,12 @@ func TestScaleP21SW20ApplicationIdentityDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20ApplicationTaskIdentityDifferential(t *testing.T) {
+func TestApplicationTaskIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		tasks := []domain.AgentTask{}
 		for _, anchor := range []string{codingAnchorAgentChat, codingAnchorPullRequest, codingAnchorLoop} {
@@ -190,7 +190,7 @@ func TestScaleP21SW20ApplicationTaskIdentityDifferential(t *testing.T) {
 							outcomes = append(outcomes, []any{result, data.Workspace.URLKey, data.Viewer.ID, data.ViewerRole, message})
 						}
 						if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-							t.Fatalf("task identity/anchor %s binding=%q edit=%v: %s", task.ResourceType, binding, editing, scaleP21M2Diff(outcomes[0], outcomes[1]))
+							t.Fatalf("task identity/anchor %s binding=%q edit=%v: %s", task.ResourceType, binding, editing, policyFirstDifference(outcomes[0], outcomes[1]))
 						}
 					}
 				}
@@ -213,10 +213,10 @@ func TestScaleP21SW20ApplicationTaskIdentityDifferential(t *testing.T) {
 					if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed) != len(tasks) {
 						t.Fatalf("application task-list success: %d %s", w.Code, w.Body.String())
 					}
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("app task list identity binding=%q archived=%v: %s", binding, archived, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("app task list identity binding=%q archived=%v: %s", binding, archived, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		}

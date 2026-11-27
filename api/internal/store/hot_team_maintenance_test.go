@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21TeamMaintenanceProjection(data domain.Bootstrap) domain.Bootstrap {
+func scaleTeamMaintenanceProjection(data domain.Bootstrap) domain.Bootstrap {
 	result := domain.Bootstrap{TeamSettings: map[string]domain.TeamSettings{}}
 	for _, team := range data.Teams {
 		result.Teams = append(result.Teams, domain.Team{ID: team.ID})
@@ -25,7 +25,7 @@ func scaleP21TeamMaintenanceProjection(data domain.Bootstrap) domain.Bootstrap {
 	return result
 }
 
-func TestScaleP21HotTeamMaintenanceInstalledProjection(t *testing.T) {
+func TestScaleHotTeamMaintenanceInstalledProjection(t *testing.T) {
 	values := map[string]domain.Bootstrap{"physical": {
 		Workspace: domain.Workspace{URLKey: "logical"},
 		Teams: []domain.Team{
@@ -47,7 +47,7 @@ func TestScaleP21HotTeamMaintenanceInstalledProjection(t *testing.T) {
 	data.TeamSettings[strings.Repeat("unrelated-key", 200000)] = domain.TeamSettings{AutoArchiveMonths: 7}
 	values["physical"] = data
 	literal := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical"}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = "physical"
 	for _, key := range []string{"physical", ""} {
 		want, found := literal.WorkspaceMetadataFields(key, "teams", "teamSettings")
@@ -55,7 +55,7 @@ func TestScaleP21HotTeamMaintenanceInstalledProjection(t *testing.T) {
 		if err != nil || gotFound != found {
 			t.Fatal("installed/default registry selection changed", key, err)
 		}
-		if !reflect.DeepEqual(scaleP21TeamMaintenanceProjection(read.Data), scaleP21TeamMaintenanceProjection(want)) || read.Data.Projects != nil {
+		if !reflect.DeepEqual(scaleTeamMaintenanceProjection(read.Data), scaleTeamMaintenanceProjection(want)) || read.Data.Projects != nil {
 			t.Fatal("native order/key/scalars changed or projects leaked")
 		}
 		if view.metadataResidency.work.used == 0 {
@@ -95,10 +95,10 @@ func TestScaleP21HotTeamMaintenanceInstalledProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotTeamMaintenanceWarmReloadAndBodyBound(t *testing.T) {
+func TestScaleHotTeamMaintenanceWarmReloadAndBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestScaleP21HotTeamMaintenanceWarmReloadAndBodyBound(t *testing.T) {
 			want, _ := f.WorkspaceMetadataFields(workspace, "teams", "teamSettings")
 			queries := 0
 			read, found, err := view.BeginTeamMaintenanceRead(WithSQLStatementObserver(t.Context(), func(string) { queries++ }), workspace)
-			if err != nil || !found || !reflect.DeepEqual(scaleP21TeamMaintenanceProjection(read.Data), scaleP21TeamMaintenanceProjection(want)) {
+			if err != nil || !found || !reflect.DeepEqual(scaleTeamMaintenanceProjection(read.Data), scaleTeamMaintenanceProjection(want)) {
 				t.Fatal("warm/reloaded installed settings changed", reload, err)
 			}
 			held = view.metadataResidency.work.used

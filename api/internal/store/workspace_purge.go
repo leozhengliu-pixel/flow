@@ -1120,7 +1120,7 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	}
 	// Code host account tokens are sealed under the account's ID.
 	if s.BoundedMetadataEnabled() {
-		if err := s.scaleP21SW17PurgeCodeHostSecrets(ctx, target.Key, add); err != nil {
+		if err := s.purgeCodeHostSecrets(ctx, target.Key, add); err != nil {
 			return err
 		}
 	} else {
@@ -1230,7 +1230,7 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	return nil
 }
 
-func (s *SQLiteStore) scaleP21SW17PurgeCodeHostSecrets(ctx context.Context, workspace string, add func(string, int64)) error {
+func (s *SQLiteStore) purgeCodeHostSecrets(ctx context.Context, workspace string, add func(string, int64)) error {
 	last := ""
 	for {
 		ids, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=? AND id>? ORDER BY id LIMIT 200`, workspace, last)

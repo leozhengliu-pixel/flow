@@ -5,7 +5,7 @@
     "boundedOAuthAppIconAccess": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded icon permission checks visit one pinned installed logical registry generation and select only exact native logo, public flag and lazily needed client ID. The original resolver and authorization bodies remain the flag-off path. TestScaleP21HotOAuthLogoAccessDifferential and OwnedImageBoundary compare the principal/credential matrix, owner preview, public/private apps, duplicate references, native unavailable timestamps and large bodies, physical owner isolation, installation membership, cancellation and signed bypass.",
+      "reason": "Bounded icon permission checks visit one pinned installed logical registry generation and select only exact native logo, public flag and lazily needed client ID. The original resolver and authorization bodies remain the flag-off path. TestScaleHotOAuthLogoAccessDifferential and OwnedImageBoundary compare the principal/credential matrix, owner preview, public/private apps, duplicate references, native unavailable timestamps and large bodies, physical owner isolation, installation membership, cancellation and signed bypass.",
       "accessors": [
         "VisitOAuthApplicationLogos"
       ],
@@ -18,7 +18,7 @@
     "checkOAuthAppLogoInput": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted workspace identity plus current oauthApplications/appID point read; creation selects identity only. File ownership checks and current-logo exception unchanged. TestScaleP21SW12LogoInputDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, owned/foreign/wrong-purpose/no-owner cases, current-logo exception, cross-workspace isolation, cancellation, budgets and unchanged unrelated applications.",
+      "reason": "Trusted workspace identity plus current oauthApplications/appID point read; creation selects identity only. File ownership checks and current-logo exception unchanged. TestLogoInputDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, owned/foreign/wrong-purpose/no-owner cases, current-logo exception, cross-workspace isolation, cancellation, budgets and unchanged unrelated applications.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -26,7 +26,7 @@
     "uploadOAuthApplicationIcon": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted workspace-identity read only retains route authorization, validation, storage, owned-upload write and failure cleanup. TestScaleP21SW12IconUploadDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, actual PNG bytes and owned-upload rows, invalid input, missing workspace, cancellation, cross-workspace/revocation and unchanged canonical application state.",
+      "reason": "Trusted workspace-identity read only retains route authorization, validation, storage, owned-upload write and failure cleanup. TestIconUploadDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, actual PNG bytes and owned-upload rows, invalid input, missing workspace, cancellation, cross-workspace/revocation and unchanged canonical application state.",
       "accessors": [
         "WorkspaceMetadata"
       ]

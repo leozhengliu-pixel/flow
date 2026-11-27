@@ -17,11 +17,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP12EpochContextsReuseAcrossEvents(t *testing.T) {
+func TestScaleEpochContextsReuseAcrossEvents(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[4]
 		request := principal.request(f.data.Workspace.URLKey)
 		event := domain.RealtimeEvent{ID: "p12-epoch-warm", Type: "issue.updated", AggregateID: f.secret.ID, Payload: json.RawMessage(`{}`)}
@@ -65,10 +65,10 @@ func TestScaleP12EpochContextsReuseAcrossEvents(t *testing.T) {
 	}
 }
 
-func TestScaleP12EpochAuthorityMatchesSeparateReads(t *testing.T) {
+func TestScaleEpochAuthorityMatchesSeparateReads(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		check := func() eventAuthority {
 			t.Helper()
@@ -98,15 +98,15 @@ func TestScaleP12EpochAuthorityMatchesSeparateReads(t *testing.T) {
 	}
 }
 
-func TestScaleP12StaleSourceBuildSkipsProjection(t *testing.T) {
+func TestScaleStaleSourceBuildSkipsProjection(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
 	for _, bounded := range []string{"off", "on"} {
 		t.Run(bounded, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", bounded)
-			for _, repo := range scaleP03ServerTestStores(t) {
-				f := scaleP03Fixture(t, repo)
+			for _, repo := range scaleServerTestStores(t) {
+				f := resourceAccessScaleFixture(t, repo)
 				workspace := f.data.Workspace.URLKey
 				issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 					map[string]string{"title": "Before source changed", "teamId": f.data.Teams[0].ID}, workspace, http.StatusCreated)
@@ -126,8 +126,8 @@ func TestScaleP12StaleSourceBuildSkipsProjection(t *testing.T) {
 					t.Fatalf("stale source returned source=%t, err=%v, SQL=%d; want one version check", source != nil, err, statements)
 				}
 
-				request := scaleP12Request(workspace, f.data.Viewer)
-				scaleP12EqualEvent(t, s, request, event)
+				request := scaleRequest(workspace, f.data.Viewer)
+				scaleEqualEvent(t, s, request, event)
 				projected, visible, err := s.pagedRealtimeEvent(request, event)
 				if err != nil || !visible || !strings.Contains(string(projected.Payload), "After source changed") {
 					t.Fatalf("fresh source did not project the updated issue: visible=%v err=%v", visible, err)
@@ -137,10 +137,10 @@ func TestScaleP12StaleSourceBuildSkipsProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP12EpochReadSealsBeforeReadingAuthority(t *testing.T) {
+func TestScaleEpochReadSealsBeforeReadingAuthority(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		entered, release := make(chan struct{}), make(chan struct{})
 		var released sync.Once
@@ -196,11 +196,11 @@ func TestScaleP12EpochReadSealsBeforeReadingAuthority(t *testing.T) {
 	}
 }
 
-func TestScaleP12EpochCacheStillRejectsQueuedTeamMoves(t *testing.T) {
+func TestScaleEpochCacheStillRejectsQueuedTeamMoves(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		request := f.principals[2].request(f.data.Workspace.URLKey)
 		event := domain.RealtimeEvent{ID: "p12-epoch-move", Type: "issue.updated", AggregateID: f.open.ID, Payload: json.RawMessage(`{}`)}
 		frame, _, err := f.service.sharedEventFrame(request, event)
@@ -213,15 +213,15 @@ func TestScaleP12EpochCacheStillRejectsQueuedTeamMoves(t *testing.T) {
 		if frame.WriteSSE(writer, "") || writer.Body.Len() != 0 {
 			t.Fatal("a queued frame survived a team move")
 		}
-		scaleP12EqualEvent(t, f.service, request, event)
+		scaleEqualEvent(t, f.service, request, event)
 	}
 }
 
-func TestScaleP12EpochCacheRetainsKeyExpiry(t *testing.T) {
+func TestScaleEpochCacheRetainsKeyExpiry(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[5]
 		deadline := time.Now().Add(5 * time.Second)
 		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p12.key_expiry", "", nil, func(data *domain.Bootstrap) error {
@@ -262,11 +262,11 @@ func TestScaleP12EpochCacheRetainsKeyExpiry(t *testing.T) {
 	}
 }
 
-func TestScaleP12EpochLiveCohortDoesNotReadAuthorityPerViewer(t *testing.T) {
+func TestScaleEpochLiveCohortDoesNotReadAuthorityPerViewer(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[2]
 		if _, err := f.service.resolveSyncAccess(principal.request(f.data.Workspace.URLKey)); err != nil {
 			t.Fatal(err)
@@ -316,16 +316,16 @@ func TestScaleP12EpochLiveCohortDoesNotReadAuthorityPerViewer(t *testing.T) {
 	}
 }
 
-func TestScaleP12EpochCacheRejectsPeerRevocationWithoutAnInvalidation(t *testing.T) {
+func TestScaleEpochCacheRejectsPeerRevocationWithoutAnInvalidation(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	writer, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = writer.Close() })
-	f := newScaleP12Fixture(t, writer)
+	f := newScaleFixture(t, writer)
 	reader, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -353,11 +353,11 @@ func TestScaleP12EpochCacheRejectsPeerRevocationWithoutAnInvalidation(t *testing
 	}
 }
 
-func TestScaleP12EpochCacheRejectsCredentialScopeEdits(t *testing.T) {
+func TestScaleEpochCacheRejectsCredentialScopeEdits(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[5]
 		event := domain.RealtimeEvent{ID: "p12-epoch-key-scope", Type: "issue.updated", AggregateID: f.open.ID, Payload: json.RawMessage(`{}`)}
 		frame, _, err := f.service.sharedEventFrame(principal.request(f.data.Workspace.URLKey), event)
@@ -387,15 +387,15 @@ func TestScaleP12EpochCacheRejectsCredentialScopeEdits(t *testing.T) {
 			t.Fatal("stale authenticated credential reused its former cache entry")
 		}
 		principal.key = &restricted
-		scaleP12EqualEvent(t, f.service, principal.request(f.data.Workspace.URLKey), event)
+		scaleEqualEvent(t, f.service, principal.request(f.data.Workspace.URLKey), event)
 	}
 }
 
-func TestScaleP12EpochDeliveryIgnoresAnOlderPageSnapshot(t *testing.T) {
+func TestScaleEpochDeliveryIgnoresAnOlderPageSnapshot(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		request := f.principals[4].request(f.data.Workspace.URLKey)
 		ctx, release, err := repo.BeginWorkspaceRead(workspaceFixtureContext(request.Context()), f.data.Workspace.URLKey)
 		if err != nil {

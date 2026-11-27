@@ -1,7 +1,7 @@
 import { supersedingEntityKey } from '@/lib/realtime-entity-sync'
 import type { RealtimeEvent } from '@/types/flow'
 import type { RealtimeAcknowledge } from '@/lib/shared-realtime'
-import { appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
+import { appliedRealtimeCursorEnabled } from '@/lib/realtime-cache-limits'
 
 const maxEvents = 256
 const maxBytes = 4 * 1024 * 1024

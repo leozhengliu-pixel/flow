@@ -88,7 +88,7 @@ func (w *legacyResponseSpool) Write(p []byte) (int, error) {
 		w.bodyStarted = true
 		// json.Encoder and cached JSON handlers hand us an already complete
 		// value. Rewrite that resident source directly, with the same spool
-		// fallback as the structured P15 encoder and no response-sized copy.
+		// fallback as the structured record hydration encoder and no response-sized copy.
 		if w.signing != nil && w.signing.key != nil && !w.signing.encoded && json.Valid(p) {
 			w.signing.encoded = true
 			ctx := context.WithValue(w.ctx, hydratedURLSigningKey{}, (*hydratedURLSigning)(nil))

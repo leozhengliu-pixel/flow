@@ -288,18 +288,18 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		{path: "/api/documents/" + existingDocument},
 		{path: "/api/api-keys"},
 	}
-	snapshot := func(paths []route) []sw530Outcome {
+	snapshot := func(paths []route) []routeSweepOutcome {
 		t.Helper()
-		outcomes := make([]sw530Outcome, 0, len(paths))
+		outcomes := make([]routeSweepOutcome, 0, len(paths))
 		started := time.Now()
 		for _, target := range paths {
 			w := request(http.MethodGet, target, "", "", http.StatusOK)
 			if !json.Valid(w.Body.Bytes()) {
 				t.Fatal("comparison read did not return JSON")
 			}
-			outcomes = append(outcomes, sw530Outcome{
+			outcomes = append(outcomes, routeSweepOutcome{
 				Status: w.Code,
-				Body:   sw530Normalize(sw530CanonicalJSON(w.Body.Bytes()), started),
+				Body:   routeSweepNormalize(canonicalJSON(w.Body.Bytes()), started),
 				Header: map[string]string{
 					"Content-Type":     w.Header().Get("Content-Type"),
 					changeCursorHeader: w.Header().Get(changeCursorHeader),
@@ -308,10 +308,10 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 		}
 		return outcomes
 	}
-	compare := func(want, got []sw530Outcome) {
+	compare := func(want, got []routeSweepOutcome) {
 		t.Helper()
 		for i := range want {
-			if kind, _, _ := sw530Differences(want[i], got[i]); kind != "" {
+			if kind, _, _ := routeSweepDifferences(want[i], got[i]); kind != "" {
 				t.Errorf("read %d changed %s across startup modes", i, kind)
 			}
 		}
@@ -517,7 +517,7 @@ func exerciseRestrictedMySQLMetadataUpgrade(t *testing.T, restricted, privileged
 	)
 	after := snapshot(reads)
 	issueTitle := "Restricted edit"
-	assertWrites := func(outcomes []sw530Outcome) {
+	assertWrites := func(outcomes []routeSweepOutcome) {
 		t.Helper()
 		expected := map[string]string{
 			"/api/issue-records?limit=10&includeTotal=true": `"title":"` + issueTitle + `"`,

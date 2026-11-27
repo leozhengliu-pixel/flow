@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP04OwnedStore(t *testing.T) (*SQLiteStore, DatabaseConfig) {
+func scaleOwnedStore(t *testing.T) (*SQLiteStore, DatabaseConfig) {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -96,8 +96,8 @@ func scaleP04OwnedStore(t *testing.T) (*SQLiteStore, DatabaseConfig) {
 	return repo, config
 }
 
-func TestScaleP04FixturePreservesUnrelatedAccount(t *testing.T) {
-	repo, config := scaleP04OwnedStore(t)
+func TestScaleFixturePreservesUnrelatedAccount(t *testing.T) {
+	repo, config := scaleOwnedStore(t)
 	anchor := repo.Bootstrap()
 	if config.Driver == "sqlite" {
 		t.Setenv("FLOW_TEST_DATABASE_DRIVER", "sqlite")
@@ -105,7 +105,7 @@ func TestScaleP04FixturePreservesUnrelatedAccount(t *testing.T) {
 	}
 	var owned domain.Bootstrap
 	t.Run("second-fixture", func(t *testing.T) {
-		second := scaleP04Store(t)
+		second := mutationInputsScaleStore(t)
 		owned = second.Bootstrap()
 		if owned.Viewer.ID == anchor.Viewer.ID || owned.Workspace.URLKey == anchor.Workspace.URLKey {
 			t.Fatal("fixture reused an unrelated identity or workspace")

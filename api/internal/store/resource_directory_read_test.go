@@ -65,11 +65,11 @@ func resourceDirectoryValue(v *ResourceDirectoryValue, kind string) any {
 	}
 }
 
-func TestScaleP21ResourceDirectorySourcesAndOwnership(t *testing.T) {
+func TestScaleResourceDirectorySourcesAndOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("resource-directory-")
 	at := time.Date(2025, 2, 3, 4, 5, 6, 7, time.FixedZone("native-directory", 3600))
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.resource_directory", "", nil, func(data *domain.Bootstrap) error {
@@ -154,8 +154,8 @@ func TestScaleP21ResourceDirectorySourcesAndOwnership(t *testing.T) {
 						value.Close()
 						return nil
 					})
-					if err != nil || scaleP21DirectoryJSON(t, want) != scaleP21DirectoryJSON(t, got) {
-						t.Fatalf("%s principal=%q state=%s differs: %v\nwant=%s\ngot=%s", kind, principal, state, err, scaleP21DirectoryJSON(t, want), scaleP21DirectoryJSON(t, got))
+					if err != nil || scaleDirectoryJSON(t, want) != scaleDirectoryJSON(t, got) {
+						t.Fatalf("%s principal=%q state=%s differs: %v\nwant=%s\ngot=%s", kind, principal, state, err, scaleDirectoryJSON(t, want), scaleDirectoryJSON(t, got))
 					}
 					if view.MetadataWorkUsedForTesting() != base {
 						t.Fatal("per-record owner did not release")
@@ -170,11 +170,11 @@ func TestScaleP21ResourceDirectorySourcesAndOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryBodyGrowthAndFailure(t *testing.T) {
+func TestScaleResourceDirectoryBodyGrowthAndFailure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	held := 0
 	for _, size := range []int{8 << 10, 80 << 10} {
@@ -237,11 +237,11 @@ func TestScaleP21ResourceDirectoryBodyGrowthAndFailure(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectorySnapshotAuthorityAndAdmission(t *testing.T) {
+func TestScaleResourceDirectorySnapshotAuthorityAndAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("directory-snapshot-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_snapshot", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{{ID: target, Name: "Original", TeamIDs: []string{data.Teams[0].ID}}}
@@ -321,11 +321,11 @@ func TestScaleP21ResourceDirectorySnapshotAuthorityAndAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryFilterActorAndSearchOwnership(t *testing.T) {
+func TestScaleResourceDirectoryFilterActorAndSearchOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_search", "", nil, func(data *domain.Bootstrap) error {
 		actor := data.Viewer
@@ -380,11 +380,11 @@ func TestScaleP21ResourceDirectoryFilterActorAndSearchOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryProjectedHandoff(t *testing.T) {
+func TestScaleResourceDirectoryProjectedHandoff(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_handoff", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{{ID: "handoff-project", Name: "Installed name", TeamIDs: []string{data.Teams[0].ID}}}
@@ -421,11 +421,11 @@ func TestScaleP21ResourceDirectoryProjectedHandoff(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryTrustedSource(t *testing.T) {
+func TestScaleResourceDirectoryTrustedSource(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_trusted", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{{ID: "trusted-project", Name: "Exact installed name"}}
@@ -461,11 +461,11 @@ func TestScaleP21ResourceDirectoryTrustedSource(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryMemoSourcePrecedence(t *testing.T) {
+func TestScaleResourceDirectoryMemoSourcePrecedence(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -524,7 +524,7 @@ func TestScaleP21ResourceDirectoryMemoSourcePrecedence(t *testing.T) {
 				view.mu.Unlock()
 			}()
 			// A bounded image holds only the resident fields, so it is never
-			// certified exact at a revision (copyRevisionLocked, SW559) even
+			// certified exact at a revision (copyRevisionLocked, resident image readers) even
 			// when its copy revision matches: the memo keeps serving the
 			// canonical policy. The installed generation that does take
 			// precedence is the logical source (resourcePolicyMemo.installed).
@@ -552,13 +552,13 @@ func TestScaleP21ResourceDirectoryMemoSourcePrecedence(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceDirectoryMemoAuthorityBoundaries(t *testing.T) {
+func TestScaleResourceDirectoryMemoAuthorityBoundaries(t *testing.T) {
 	for _, changed := range []string{"credential-scope", "credential-revocation", "principal-status", "epoch"} {
 		t.Run(changed, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			key := &domain.APIKey{ID: "memo-credential", CreatorID: f.data.Viewer.ID, TeamRestriction: "selected", TeamIDs: []string{f.data.Teams[0].ID}, Scopes: []string{"read"}}
 			if changed == "credential-revocation" {

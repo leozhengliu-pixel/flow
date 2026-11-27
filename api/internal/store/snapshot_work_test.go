@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestScaleP21SW0SnapshotAdditionalAdmission(t *testing.T) {
+func TestSnapshotAdditionalAdmission(t *testing.T) {
 	s := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	s.metadataResidency.work = newMetadataWorkBudget(10)
 	budget := s.metadataResidency.work
@@ -76,7 +76,7 @@ func TestScaleP21SW0SnapshotAdditionalAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SnapshotAdditionalAdmissionConcurrent(t *testing.T) {
+func TestSnapshotAdditionalAdmissionConcurrent(t *testing.T) {
 	s := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	s.metadataResidency.work = newMetadataWorkBudget(10)
 	budget := s.metadataResidency.work

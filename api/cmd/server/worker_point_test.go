@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
+func TestWorkerDefinitionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, targetID, trustedID := f.data.Workspace.URLKey, idgen.New("sw24-worker-loop-"), idgen.New("sw24-trusted-loop-")
 		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		target := domain.Loop{
@@ -70,7 +70,7 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 		if err != nil || len(canonical.Data.Loops) != 1 || canonical.Data.Loops[0].TrustedSourceKeys != nil {
 			t.Fatal("canonical nil trusted-source witness changed", err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before := pointRecordFingerprint(t, repo, workspace, "loops")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			ctx := f.request(user, key, nil).Context()
 			for _, ref := range []string{
@@ -92,11 +92,11 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 				leftJSON, leftErr := json.Marshal(results[0])
 				rightJSON, rightErr := json.Marshal(results[1])
 				if leftErr != nil || rightErr != nil || !bytes.Equal(leftJSON, rightJSON) {
-					t.Fatalf("owned Loop semantic JSON changed for %q: %s", ref, scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("owned Loop semantic JSON changed for %q: %s", ref, policyFirstDifference(results[0], results[1]))
 				}
 				if results[0] != nil {
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatalf("consumed worker input changed: %s", scaleP21M2Diff(results[0], results[1]))
+						t.Fatalf("consumed worker input changed: %s", policyFirstDifference(results[0], results[1]))
 					}
 					if ref == targetID && (results[0].TrustedSourceKeys == nil || results[1].TrustedSourceKeys == nil) {
 						t.Fatal("installed empty trusted-source representations were not preserved")
@@ -139,7 +139,7 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 				t.Fatalf("foreign workspace resolved owned loop: exists=%v err=%v", exists, err)
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("point input changed canonical bytes or decoded complete metadata")
 		}
 		cancelled, cancel := context.WithCancel(t.Context())
@@ -157,7 +157,7 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before = scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before = pointRecordFingerprint(t, repo, workspace, "loops")
 		if item, _, err := (&server{store: repo}).workerLoopDefinition(t.Context(), workspace, targetID); err != nil || item == nil || len(item.Instructions) < 256<<10 {
 			t.Fatal("legacy selected input was truncated", err)
 		}
@@ -167,18 +167,18 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 		if item, exists, err := (&server{store: probe}).workerLoopDefinition(t.Context(), workspace, targetID+"-missing"); err != nil || !exists || item != nil {
 			t.Fatalf("selected budget leaked work admission: exists=%v err=%v", exists, err)
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("failed point input changed canonical bytes or decoded complete metadata")
 		}
 	}
 }
 
-func TestScaleP21SW24WorkerContextPreconditions(t *testing.T) {
+func TestWorkerContextPreconditions(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, loopID := f.data.Workspace.URLKey, idgen.New("sw24-precondition-loop-")
 		ownerID := idgen.New("sw24-missing-owner-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "loops"), workspace, "scale_p21_sw24.worker_preconditions", "", nil, func(data *domain.Bootstrap) error {
@@ -192,7 +192,7 @@ func TestScaleP21SW24WorkerContextPreconditions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before := pointRecordFingerprint(t, repo, workspace, "loops")
 		for _, spec := range []struct {
 			name, status, replyStatus, want       string
 			missingRun, missingLoop, missingReply bool
@@ -281,7 +281,7 @@ func TestScaleP21SW24WorkerContextPreconditions(t *testing.T) {
 				}
 			})
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("worker preconditions changed canonical loops or decoded complete metadata")
 		}
 	}

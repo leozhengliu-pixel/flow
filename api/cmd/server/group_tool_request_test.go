@@ -17,12 +17,12 @@ import (
 // executeChatGroupRequest reads the typed workflow header contract instead
 // of the generic typed bootstrap. Flag off both are the same literal call;
 // bounded, the header contract owns the read. Compare every durable effect.
-func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
+func TestGroupToolRequestDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	prefix := idgen.New("sw267-")
 	baseline, found := repo.BootstrapFor(workspace)
@@ -41,7 +41,7 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlFixture := scaleP21SW10Fixture{reader: database}
+	sqlFixture := notificationsFixture{reader: database}
 	sqlFixture.data.Workspace.URLKey = workspace
 	platform := f.threadPlatform(t)
 	targetState := issue.State.ID
@@ -79,10 +79,10 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 					for _, table := range []string{"chat_actions", "chat_jobs", "chat_intake_requests", "chat_thread_items", "chat_threads"} {
-						scaleP21SW197Exec(t, database, "DELETE FROM "+table+" WHERE workspace_key=? AND connection_id=?", workspace, f.record.ConnectionID)
+						chatMutationsExec(t, database, "DELETE FROM "+table+" WHERE workspace_key=? AND connection_id=?", workspace, f.record.ConnectionID)
 					}
-					scaleP21SW197Exec(t, database, `DELETE FROM chat_mutation_receipts WHERE workspace_key=?`, workspace)
-					scaleP21SW197Exec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, nextNumber-1, workspace)
+					chatMutationsExec(t, database, `DELETE FROM chat_mutation_receipts WHERE workspace_key=?`, workspace)
+					chatMutationsExec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, nextNumber-1, workspace)
 					f.binding.Requests = &domain.ChatBindingRequests{Enabled: refusal != "requests-disabled", Emoji: "OK"}
 					if err := repo.PutChatBinding(t.Context(), workspace, f.binding); err != nil {
 						t.Fatal(err)
@@ -100,7 +100,7 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 					f.s.store = source
 					f.sent, f.patched, f.responseIDs = nil, nil, map[string]string{}
 					platform.calls = nil
-					before := scaleP21SW59SQL(t, sqlFixture)
+					before := discussionWriteSql(t, sqlFixture)
 					messageID := "om_" + prefix + operation
 					createdID := chatRequestIssueID(f, messageID)
 					aggregateIDs := []string{issue.ID, createdID, "ask_chat_" + chatKey(f.record.ConnectionID, "ask", createdID)[:32]}
@@ -114,12 +114,12 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 							priorEvents[event.ID] = true
 						}
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 					})
 					captureRealtime := func(_ string, event domain.RealtimeEvent) {
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					}
 					source.SetRealtimeSink(captureRealtime)
 					if source != repo {
@@ -151,7 +151,7 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 						for range attempts {
 							result, err := f.s.executeChatGroupRequest(ctx, workspace, baseline.Viewer, domain.AgentToolCall{Name: chatGroupRequestTool, Arguments: arguments})
 							operationErr = err
-							results = append(results, string(result), scaleP21ChatPointError(err))
+							results = append(results, string(result), scaleChatPointError(err))
 						}
 						got.Header = http.Header{"Group-Tool-Result": results}
 					}()
@@ -162,7 +162,7 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("chat adapter leaked work or decoded the full workspace", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 					}
-					got.Rows = scaleP21SW59SQL(t, sqlFixture)
+					got.Rows = discussionWriteSql(t, sqlFixture)
 					for _, id := range aggregateIDs {
 						events, err := repo.Events(t.Context(), id)
 						if err != nil {
@@ -210,13 +210,13 @@ func TestScaleP21SW267GroupToolRequestDifferential(t *testing.T) {
 						calls = append(calls, []any{call.method, call.path, body})
 					}
 					got.Response, err = json.Marshal(map[string]any{
-						"error": scaleP21ChatPointError(operationErr), "requests": requests, "jobs": jobs, "platform": calls,
+						"error": scaleChatPointError(operationErr), "requests": requests, "jobs": jobs, "platform": calls,
 					})
 					if err != nil {
 						t.Fatal(err)
 					}
-					normalized := scaleP21SW59Normalized(t, got, before, started, finished)
-					scaleP21SW197StatusClock(normalized, started, finished)
+					normalized := discussionWriteNormalized(t, got, before, started, finished)
+					statusClock(normalized, started, finished)
 					if source == repo {
 						expected = normalized
 					} else if !reflect.DeepEqual(expected, normalized) {

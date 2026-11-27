@@ -18,7 +18,7 @@ import (
 // A selected-team credential's projection then keeps only key-team resources
 // (filterBootstrapForAPIKey + applyAPIKeyProjection); each kind below applies
 // that rule to the headers it reads when selected is set.
-func (s *server) boundedReferencePredicate(r *http.Request, workspace, userID, kind, id string) scaleP21RecordPredicate {
+func (s *server) boundedReferencePredicate(r *http.Request, workspace, userID, kind, id string) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		key, keyed := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
 		app := keyed && key.Actor == "app"

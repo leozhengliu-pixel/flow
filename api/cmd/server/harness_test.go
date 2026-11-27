@@ -18,51 +18,51 @@ import (
 	"flow/api/internal/store"
 )
 
-// The SW491 harness compares the actual authorization middleware (and the
+// The fallback authorization harness compares the actual authorization middleware (and the
 // bare resourceAllowed decision) literal (flag off) against bounded warm and
 // bounded SQL-reloaded sources: status, body, headers and the selected mux
 // leaf must be byte-identical for every principal and credential.
 
-type scaleP21SW491Principal struct {
+type harnessPrincipal struct {
 	name string
 	user domain.User
 }
 
-type scaleP21SW491Row struct {
+type harnessRow struct {
 	name, method, pattern, path, body string
 }
 
-type scaleP21SW491Control struct {
+type harnessControl struct {
 	key     string
 	allowed bool
 }
 
-type scaleP21SW491Credential struct {
+type harnessCredential struct {
 	name string
 	key  *domain.APIKey
 }
 
-type scaleP21SW491Fixture struct {
-	f                                                 scaleP21SW10Fixture
+type harnessFixture struct {
+	f                                                 notificationsFixture
 	repo                                              *store.SQLiteStore
-	foreign                                           scaleP03PlatformFixture
+	foreign                                           scalePlatformFixture
 	workspace, prefix, public, privateTeam, childTeam string
 	publicKey                                         string
 	archived                                          time.Time
 	ids                                               map[string]string
-	principals                                        []scaleP21SW491Principal
+	principals                                        []harnessPrincipal
 	tokens                                            map[string]string
-	credentials                                       []scaleP21SW491Credential
+	credentials                                       []harnessCredential
 }
 
-func scaleP21SW491Setup(t *testing.T, seed func(*scaleP21SW491Fixture, *domain.Bootstrap)) *scaleP21SW491Fixture {
+func harnessSetup(t *testing.T, seed func(*harnessFixture, *domain.Bootstrap)) *harnessFixture {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
-	fx := &scaleP21SW491Fixture{f: f, repo: f.repository, workspace: f.data.Workspace.URLKey, prefix: idgen.New("sw491-"), public: f.public}
-	fx.foreign = scaleP03Fixture(t, fx.repo)
+	f := notificationsSetup(t)
+	fx := &harnessFixture{f: f, repo: f.repository, workspace: f.data.Workspace.URLKey, prefix: idgen.New("sw491-"), public: f.public}
+	fx.foreign = resourceAccessScaleFixture(t, fx.repo)
 	if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), fx.repo, fx.foreign.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
@@ -136,10 +136,10 @@ func scaleP21SW491Setup(t *testing.T, seed func(*scaleP21SW491Fixture, *domain.B
 	}
 	f.reader.key = fx.workspace
 	for _, item := range f.principals {
-		fx.principals = append(fx.principals, scaleP21SW491Principal{item.name, item.user})
+		fx.principals = append(fx.principals, harnessPrincipal{item.name, item.user})
 	}
-	_, suspended := scaleP03Join(t, f.scaleP03PlatformFixture, "sw491-suspended", idgen.New("sw491-user-")+"@example.test", "member", f.public)
-	fx.principals = append(fx.principals, scaleP21SW491Principal{"suspended", suspended}, scaleP21SW491Principal{"outsider", fx.foreign.data.Viewer})
+	_, suspended := resourceAccessScaleJoin(t, f.scalePlatformFixture, "sw491-suspended", idgen.New("sw491-user-")+"@example.test", "member", f.public)
+	fx.principals = append(fx.principals, harnessPrincipal{"suspended", suspended}, harnessPrincipal{"outsider", fx.foreign.data.Viewer})
 	fx.tokens = map[string]string{}
 	for _, item := range fx.principals {
 		_, token, err := fx.repo.Login(t.Context(), item.user.Email, "p03-fixture-password")
@@ -151,7 +151,7 @@ func scaleP21SW491Setup(t *testing.T, seed func(*scaleP21SW491Fixture, *domain.B
 	if err := fx.repo.SuspendMember(t.Context(), f.data.Workspace.ID, suspended.ID); err != nil {
 		t.Fatal(err)
 	}
-	fx.credentials = []scaleP21SW491Credential{
+	fx.credentials = []harnessCredential{
 		{"session", nil},
 		{"unrestricted", &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"}},
 		{"selected-empty", &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}}},
@@ -160,7 +160,7 @@ func scaleP21SW491Setup(t *testing.T, seed func(*scaleP21SW491Fixture, *domain.B
 	return fx
 }
 
-func (fx *scaleP21SW491Fixture) run(t *testing.T, label string, rows []scaleP21SW491Row, controls []scaleP21SW491Control) {
+func (fx *harnessFixture) run(t *testing.T, label string, rows []harnessRow, controls []harnessControl) {
 	t.Helper()
 	fx.runPart(t, label, rows, controls, 0, 1)
 }
@@ -169,7 +169,7 @@ func (fx *scaleP21SW491Fixture) run(t *testing.T, label string, rows []scaleP21S
 // runs in several top-level tests that the CI shards spread. A row keeps its
 // index in the whole table (and so its FLOW_RECORD_ACCESS mode), and only the
 // controls of the selected rows apply.
-func (fx *scaleP21SW491Fixture) runPart(t *testing.T, label string, rows []scaleP21SW491Row, controls []scaleP21SW491Control, part, parts int) {
+func (fx *harnessFixture) runPart(t *testing.T, label string, rows []harnessRow, controls []harnessControl, part, parts int) {
 	t.Helper()
 	selected, count := map[string]bool{}, 0
 	for index, item := range rows {
@@ -223,7 +223,7 @@ func (fx *scaleP21SW491Fixture) runPart(t *testing.T, label string, rows []scale
 					// phase its own source image, then reuse that preimage
 					// across the principal and credential combinations.
 					if phase == "reloaded" {
-						scaleP21SW201ReloadSource(t, f.reader, repo, f.probe)
+						metadataReloadSourceReloadSource(t, f.reader, repo, f.probe)
 					} else if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 						t.Fatal(err)
 					}

@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW431: ExchangeOAuthGrant's key sweep and the API key use stamp on the
+// ExchangeOAuthGrant's key sweep and the API key use stamp on the
 // legacy store and a bounded view. The sweep deletes expired OAuth keys at
 // the start, middle and end of the collection (revoked or not), keeps live,
 // personal and soon-expiring keys (selected by the margin, unchanged), and
@@ -20,7 +20,7 @@ import (
 // copy must agree across the stores, and the bounded installed image must
 // equal a view loaded afresh from SQL after each step.
 
-func scaleP21SW431Image(t *testing.T, repo *SQLiteStore, workspace string, fields ...string) map[string]string {
+func oauthExchangeImage(t *testing.T, repo *SQLiteStore, workspace string, fields ...string) map[string]string {
 	t.Helper()
 	result := map[string]string{}
 	if !repo.BoundedMetadataEnabled() {
@@ -68,9 +68,9 @@ func scaleP21SW431Image(t *testing.T, repo *SQLiteStore, workspace string, field
 	return result
 }
 
-func TestScaleP21SW431OAuthExchangeSweepDifferential(t *testing.T) {
+func TestOAuthExchangeSweepDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx := ContextWithActor(t.Context(), f.data.Viewer)
 	workspace := f.data.Workspace.URLKey
 	viewer := f.data.Viewer.ID
@@ -159,7 +159,7 @@ func TestScaleP21SW431OAuthExchangeSweepDifferential(t *testing.T) {
 						}
 						result.Close()
 					}
-					installed := scaleP21SW431Image(t, source, workspace, "apiKeys", "oauthAuthorizations")
+					installed := oauthExchangeImage(t, source, workspace, "apiKeys", "oauthAuthorizations")
 					if source.BoundedMetadataEnabled() {
 						// A view captures its owner's copy: reload the owner from
 						// SQL first, so the fresh view is what a reload reads.
@@ -170,7 +170,7 @@ func TestScaleP21SW431OAuthExchangeSweepDifferential(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-						reloaded := scaleP21SW431Image(t, fresh, workspace, "apiKeys", "oauthAuthorizations")
+						reloaded := oauthExchangeImage(t, fresh, workspace, "apiKeys", "oauthAuthorizations")
 						for field := range installed {
 							if installed[field] != reloaded[field] {
 								t.Errorf("%s: installed %s %s, reload %s", step, field, installed[field], reloaded[field])

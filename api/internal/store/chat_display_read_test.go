@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21ChatDisplayProjection(data domain.Bootstrap, request ChatDisplayRequest) domain.Bootstrap {
+func scaleChatDisplayProjection(data domain.Bootstrap, request ChatDisplayRequest) domain.Bootstrap {
 	var result domain.Bootstrap
 	result.WorkspaceSettings.HIPAACompliance = data.WorkspaceSettings.HIPAACompliance
 	if request.Directory && data.Users != nil {
@@ -29,7 +29,7 @@ func scaleP21ChatDisplayProjection(data domain.Bootstrap, request ChatDisplayReq
 		result.Teams = make([]domain.Team, len(data.Teams))
 		result.TeamSettings = map[string]domain.TeamSettings{}
 		for index, team := range data.Teams {
-			result.Teams[index] = domain.Team{ID: team.ID, Private: team.Private, ArchivedAt: scaleP21SW19PresenceTime(team.ArchivedAt), RetiredAt: scaleP21SW19PresenceTime(team.RetiredAt)}
+			result.Teams[index] = domain.Team{ID: team.ID, Private: team.Private, ArchivedAt: presenceTime(team.ArchivedAt), RetiredAt: presenceTime(team.RetiredAt)}
 		}
 		for id, settings := range data.TeamSettings {
 			result.TeamSettings[id] = domain.TeamSettings{ParentTeamID: settings.ParentTeamID, Access: settings.Access, MembershipRestriction: settings.MembershipRestriction}
@@ -52,7 +52,7 @@ func scaleP21ChatDisplayProjection(data domain.Bootstrap, request ChatDisplayReq
 	return result
 }
 
-func TestScaleP21ChatDisplayNativeOwnership(t *testing.T) {
+func TestScaleChatDisplayNativeOwnership(t *testing.T) {
 	large := strings.Repeat("unrelated ", 100000)
 	at := time.Date(2026, 11, 14, 1, 2, 3, 0, time.UTC)
 	data := domain.Bootstrap{
@@ -73,7 +73,7 @@ func TestScaleP21ChatDisplayNativeOwnership(t *testing.T) {
 		Documents: []domain.Document{{ID: "unrelated", Content: large}},
 	}
 	data.WorkspaceSettings.HIPAACompliance = true
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, request := range []ChatDisplayRequest{
 		{Directory: true, UserID: "user\x00id", TeamID: "team\x00id", ReviewRef: "current"},
@@ -86,7 +86,7 @@ func TestScaleP21ChatDisplayNativeOwnership(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			want := scaleP21ChatDisplayProjection(data, request)
+			want := scaleChatDisplayProjection(data, request)
 			if !reflect.DeepEqual(read.Data, want) || sql != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("installed display projection changed", request, sql)
 			}
@@ -154,7 +154,7 @@ func TestScaleP21ChatDisplayNativeOwnership(t *testing.T) {
 		jobs.Go(func() {
 			for range 3 {
 				read, found, err := view.BeginChatDisplayRead(t.Context(), "", ChatDisplayRequest{Directory: true})
-				if err != nil || !found || !reflect.DeepEqual(read.Data, scaleP21ChatDisplayProjection(data, ChatDisplayRequest{Directory: true})) {
+				if err != nil || !found || !reflect.DeepEqual(read.Data, scaleChatDisplayProjection(data, ChatDisplayRequest{Directory: true})) {
 					t.Error("concurrent installed display changed", err)
 					return
 				}
@@ -168,10 +168,10 @@ func TestScaleP21ChatDisplayNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatDisplayComposedGeneration(t *testing.T) {
+func TestScaleChatDisplayComposedGeneration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 14, 1, 2, 3, 0, time.UTC)
 	const projectID, initiativeID, teamID = "composed-project", "composed-initiative", "composed-team"
@@ -232,7 +232,7 @@ func TestScaleP21ChatDisplayComposedGeneration(t *testing.T) {
 		t.Fatal(found, err)
 	}
 	defer policy.Close()
-	if !reflect.DeepEqual(policy.Data, scaleP21ChatDisplayProjection(old, ChatDisplayRequest{Policy: true})) {
+	if !reflect.DeepEqual(policy.Data, scaleChatDisplayProjection(old, ChatDisplayRequest{Policy: true})) {
 		t.Fatal("composed policy switched installed generation")
 	}
 	replace("Later replacement")
@@ -253,13 +253,13 @@ func TestScaleP21ChatDisplayComposedGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.ReviewRef = "composed-slug"
-	if !reflect.DeepEqual(display.Data, scaleP21ChatDisplayProjection(old, request)) {
+	if !reflect.DeepEqual(display.Data, scaleChatDisplayProjection(old, request)) {
 		t.Fatal("composed display switched installed generation")
 	}
-	scaleP21HotPulseWireEqual(t, pulse.Snapshot.Workspace, old.Workspace)
-	scaleP21HotPulseWireEqual(t, pulse.Snapshot.Projects, old.Projects)
-	scaleP21HotPulseWireEqual(t, pulse.Snapshot.Initiatives[0].Name, old.Initiatives[0].Name)
-	scaleP21HotPulseWireEqual(t, pulse.Snapshot.ProjectUpdates[projectID], old.ProjectUpdates[projectID])
+	scaleHotPulseWireEqual(t, pulse.Snapshot.Workspace, old.Workspace)
+	scaleHotPulseWireEqual(t, pulse.Snapshot.Projects, old.Projects)
+	scaleHotPulseWireEqual(t, pulse.Snapshot.Initiatives[0].Name, old.Initiatives[0].Name)
+	scaleHotPulseWireEqual(t, pulse.Snapshot.ProjectUpdates[projectID], old.ProjectUpdates[projectID])
 	display.Close()
 	policy.Close()
 	pulse.Close()
@@ -268,10 +268,10 @@ func TestScaleP21ChatDisplayComposedGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatDisplayPinnedReview(t *testing.T) {
+func TestScaleChatDisplayPinnedReview(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	seed := func(title string) {
 		t.Helper()
@@ -305,10 +305,10 @@ func TestScaleP21ChatDisplayPinnedReview(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatDisplayWarmReloadBodyBound(t *testing.T) {
+func TestScaleChatDisplayWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -341,7 +341,7 @@ func TestScaleP21ChatDisplayWarmReloadBodyBound(t *testing.T) {
 			}
 			data, _ := f.WorkspaceMetadata(workspace)
 			read, found, err := view.BeginChatDisplayRead(t.Context(), workspace, request)
-			if err != nil || !found || !reflect.DeepEqual(read.Data, scaleP21ChatDisplayProjection(data, request)) {
+			if err != nil || !found || !reflect.DeepEqual(read.Data, scaleChatDisplayProjection(data, request)) {
 				t.Fatal("warm/reloaded display changed", size, reload, err)
 			}
 			held := view.metadataResidency.work.used
@@ -353,7 +353,7 @@ func TestScaleP21ChatDisplayWarmReloadBodyBound(t *testing.T) {
 			}
 			policyRequest := ChatDisplayRequest{Policy: true, TeamID: request.TeamID}
 			policy, found, err := view.BeginChatDisplayRead(t.Context(), workspace, policyRequest)
-			if err != nil || !found || !reflect.DeepEqual(policy.Data, scaleP21ChatDisplayProjection(data, policyRequest)) {
+			if err != nil || !found || !reflect.DeepEqual(policy.Data, scaleChatDisplayProjection(data, policyRequest)) {
 				t.Fatal("warm/reloaded policy changed", size, reload, err)
 			}
 			policyHeld := view.metadataResidency.work.used - held

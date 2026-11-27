@@ -2,13 +2,13 @@
   "source": "store/issue_attribute_migration.go",
   "unmigrated": 0,
   "consumers": {
-    "sw17MigrateIssueAttributesBounded": {
+    "migrateIssueAttributesBounded": {
       "owner": "P21",
       "status": "reviewed",
       "accessors": ["resident-state"],
       "reason": "Trusted startup index writer iterates catalog workspace keys, bounded ordered headers and one typed canonical Issue at a time under independent raw/decoded/retained-row work leases; existing sparse-row sync and 250-record atomic checkpoints retained. No application authorization change. Persistent SQLite differentials twice prove typed JSON fidelity, resume/version reset, rollback, cancellation, pool-one, explicit budget failure, unchanged source/outside-workspace state and zero full metadata decodes. SQL/allocations increase; repeatable-read transactions can be stronger than the old PostgreSQL default."
     },
-    "sw17MigrateRecurrenceInstancesBounded": {
+    "migrateRecurrenceInstancesBounded": {
       "owner": "P21",
       "status": "reviewed",
       "accessors": ["resident-state"],

@@ -11,8 +11,8 @@ import (
 )
 
 // The CI database is shared: register an owned account and workspace through
-// P01's isolated fixture, and clean them up without touching existing users.
-func scaleP07ExternalFixture(t *testing.T, driver, databaseURL string) *mcpContractFixture {
+// permission and load baseline's isolated fixture, and clean them up without touching existing users.
+func scaleExternalFixture(t *testing.T, driver, databaseURL string) *mcpContractFixture {
 	t.Helper()
 	config := store.DatabaseConfig{Driver: driver, URL: databaseURL, MaxOpenConns: 4}
 	if driver == "sqlite" {
@@ -23,7 +23,7 @@ func scaleP07ExternalFixture(t *testing.T, driver, databaseURL string) *mcpContr
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	service, host, admin, data, _ := scaleP01OwnedWorkspace(t, repo)
+	service, host, admin, data, _ := databaseScaleOwnedWorkspace(t, repo)
 	team := authRequest[domain.Team](t, admin, http.MethodPost, host.URL+"/api/workspaces/"+data.Workspace.URLKey+"/teams", map[string]any{"name": "P07 public", "key": "P07"}, "", http.StatusCreated)
 	authRequest[domain.Project](t, admin, http.MethodPost, host.URL+"/api/projects", map[string]any{"name": "P07 project", "teamIds": []string{team.ID}}, data.Workspace.URLKey, http.StatusCreated)
 	authRequest[domain.Initiative](t, admin, http.MethodPost, host.URL+"/api/initiatives", map[string]any{"name": "P07 initiative"}, data.Workspace.URLKey, http.StatusCreated)
@@ -35,12 +35,12 @@ func scaleP07ExternalFixture(t *testing.T, driver, databaseURL string) *mcpContr
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Settle asynchronous first-use telemetry before P03 checks the metadata
+	// Settle asynchronous first-use telemetry before resource access checks the metadata
 	// stamp. Authentication still reads the live credential on every request.
 	if err := repo.RecordAPIKeyUse(t.Context(), data.Workspace.URLKey, keyID, ""); err != nil {
 		t.Fatal(err)
 	}
-	scaleP07Wait(t, func() bool {
+	scaleWait(t, func() bool {
 		metadata, ok := repo.WorkspaceMetadataFields(data.Workspace.URLKey, "apiKeys")
 		for _, key := range metadata.APIKeys {
 			if key.ID == keyID && key.LastUsedAt != nil {

@@ -169,7 +169,7 @@ func (s *SQLiteStore) OAuthClient(ctx context.Context, clientID string) (domain.
 
 func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClient, bool) {
 	if s.BoundedMetadataEnabled() {
-		return s.scaleP21SW17OAuthClient(clientID)
+		return s.boundedOAuthApplicationClient(clientID)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -193,7 +193,7 @@ func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClien
 	return domain.OAuthClient{}, false
 }
 
-func (s *SQLiteStore) scaleP21SW17OAuthClient(clientID string) (domain.OAuthClient, bool) {
+func (s *SQLiteStore) boundedOAuthApplicationClient(clientID string) (domain.OAuthClient, bool) {
 	if strings.ContainsRune(clientID, '\x00') {
 		return domain.OAuthClient{}, false
 	}
@@ -224,7 +224,7 @@ func (s *SQLiteStore) scaleP21SW17OAuthClient(clientID string) (domain.OAuthClie
 		lengths = append(lengths, "COALESCE("+length+",0)")
 	}
 	// Charge string headers and slice growth before transferring dense arrays.
-	lengths = append(lengths, "24*("+s.scaleP21SW17JSONArrayLength("data", "scopes")+"+"+s.scaleP21SW17JSONArrayLength("data", "redirectUris")+")")
+	lengths = append(lengths, "24*("+s.jsonArrayLength("data", "scopes")+"+"+s.jsonArrayLength("data", "redirectUris")+")")
 	sizeSQL := "(" + strings.Join(lengths, "+") + ")"
 	query := "SELECT workspace_key,record_key,collection_order," + sizeSQL
 	for _, column := range columns {
@@ -478,7 +478,7 @@ func (s *SQLiteStore) LookupAPIKey(ctx context.Context, secretHash string) (stri
 	}
 	lastWorkspace, lastID, cursor := "", "", false
 	var lastOrder int64
-	workSize := "(LENGTH(record.data)+24*(" + s.scaleP21SW17JSONArrayLength("record.data", "scopes") + "+" + s.scaleP21SW17JSONArrayLength("record.data", "teamIds") + "))"
+	workSize := "(LENGTH(record.data)+24*(" + s.jsonArrayLength("record.data", "scopes") + "+" + s.jsonArrayLength("record.data", "teamIds") + "))"
 	for {
 		limit, advanced := MetadataRecordPageMaxBytes, false
 		for attempt := 0; attempt < 3; attempt++ {
@@ -536,7 +536,7 @@ func (s *SQLiteStore) LookupAPIKey(ctx context.Context, secretHash string) (stri
 	}
 }
 
-func (s *SQLiteStore) scaleP21SW17JSONArrayLength(column, field string) string {
+func (s *SQLiteStore) jsonArrayLength(column, field string) string {
 	switch s.dialect {
 	case "mysql":
 		return "COALESCE(JSON_LENGTH(JSON_EXTRACT(CONVERT(" + column + " USING utf8mb4),'$." + field + "')),0)"

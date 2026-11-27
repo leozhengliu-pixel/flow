@@ -53,7 +53,7 @@ func (s *SQLiteStore) prepareLegacyImportKind(ctx context.Context, workspace str
 	if err := work.reserve(ctx, uint64(len(workspace))*16+1<<20); err != nil {
 		return nil, err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *SQLiteStore) prepareLegacyImportKind(ctx context.Context, workspace str
 
 type legacyImportJobsImage struct {
 	store   *SQLiteStore
-	stage   *sw26MigrationStage
+	stage   *migrationStage
 	frames  *metadataLogicalBuilder
 	base    metadataLogicalNode
 	payload string
@@ -238,7 +238,7 @@ func (s *SQLiteStore) persistLegacyImportInputs(ctx context.Context, tx *sqlTx, 
 	if !matched {
 		return ErrMetadataRecordQuery
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (s *SQLiteStore) persistLegacyImportInputs(ctx context.Context, tx *sqlTx, 
 	return s.pruneLegacyImportInputs(ctx, tx, workspace, stage)
 }
 
-func (s *SQLiteStore) persistLegacyImportInput(ctx context.Context, tx *sqlTx, workspace string, stage *sw26MigrationStage, kind, payload string, job metadataLogicalNode) error {
+func (s *SQLiteStore) persistLegacyImportInput(ctx context.Context, tx *sqlTx, workspace string, stage *migrationStage, kind, payload string, job metadataLogicalNode) error {
 	work := &ResourceRead{store: s}
 	defer work.Close()
 	if err := work.reserve(ctx, 64<<10); err != nil {
@@ -397,7 +397,7 @@ func readLegacyContentBefore(ctx context.Context, tx *sqlTx, workspace, kind, re
 	return raw, version, owner.Close, nil
 }
 
-func (s *SQLiteStore) pruneLegacyImportInputs(ctx context.Context, tx *sqlTx, workspace string, stage *sw26MigrationStage) error {
+func (s *SQLiteStore) pruneLegacyImportInputs(ctx context.Context, tx *sqlTx, workspace string, stage *migrationStage) error {
 	wire := &ResourceRead{store: s}
 	defer wire.Close()
 	length := wire.byteLength("id")

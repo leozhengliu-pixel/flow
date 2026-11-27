@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
+func TestDesktopAcknowledgementRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 				var outcomes []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(t)
-					before := scaleP21SW59SQL(t, f)
+					before := discussionWriteSql(t, f)
 					prior, err := repo.Events(t.Context(), viewer)
 					if err != nil {
 						t.Fatal(err)
@@ -101,7 +101,7 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 					for _, event := range prior {
 						existing[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					checkOwner := func() {
 						t.Helper()
 						if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
@@ -110,11 +110,11 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 					}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						checkOwner()
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 					})
 					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 						checkOwner()
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					})
 					request := f.literalRequest(user, key, map[string]any{"notificationIds": ids})
 					request.Method, request.URL.Path = http.MethodPost, "/api/desktop-notifications/ack"
@@ -125,7 +125,7 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 						service := &server{store: source, authDisabled: authDisabled}
 						mux := http.NewServeMux()
 						mux.HandleFunc("POST /api/desktop-notifications/ack", service.acknowledgeDesktopNotifications)
-						response := &scaleP21SW59ResponseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: true}
+						response := &responseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: true}
 						mux.ServeHTTP(response, request)
 						got.Code, got.Header = response.Code, response.Header().Clone()
 						got.Response = slices.Clone(response.Body.Bytes())
@@ -133,7 +133,7 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 					finished := time.Now().UTC()
 					source.SetWebhookSink(nil)
 					source.SetRealtimeSink(nil)
-					got.Rows = scaleP21SW59SQL(t, f)
+					got.Rows = discussionWriteSql(t, f)
 					events, err := repo.Events(t.Context(), viewer)
 					if err != nil {
 						t.Fatal(err)
@@ -185,10 +185,10 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("desktop route leaked work or hydrated full metadata")
 					}
-					outcomes = append(outcomes, scaleP21SW59Normalized(t, got, before, started, finished))
+					outcomes = append(outcomes, discussionWriteNormalized(t, got, before, started, finished))
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatal("desktop route permission/key differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatal("desktop route permission/key differential", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}
@@ -196,7 +196,7 @@ func TestScaleP21SW135DesktopAcknowledgementRoutesDifferential(t *testing.T) {
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		visit(t, user, key, false)
 	})
-	scaleP21SW10WriteRevocation(t, f, func(service *server, w http.ResponseWriter, r *http.Request) {
+	writeRevocation(t, f, func(service *server, w http.ResponseWriter, r *http.Request) {
 		service.acknowledgeDesktopNotifications(w, r)
 	}, func(user domain.User, key *domain.APIKey) *http.Request {
 		return f.request(user, key, map[string]any{"notificationIds": []string{selected}})

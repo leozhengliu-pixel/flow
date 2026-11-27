@@ -18,31 +18,31 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SlackPost struct {
+type scaleSlackPost struct {
 	method, path, auth string
 	body               map[string]string
 	release, done      chan struct{}
 }
 
-type scaleP21SlackPostBody struct {
+type scaleSlackPostBody struct {
 	io.Reader
 	done chan struct{}
 }
 
-func (body scaleP21SlackPostBody) Close() error {
+func (body scaleSlackPostBody) Close() error {
 	close(body.done)
 	return nil
 }
 
-func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
+func TestScaleTeamSlackNotificationsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{53}, 32)))
 	t.Setenv("FLOW_APP_URL", "https://flow.example.test/")
 	t.Setenv("FLOW_SLACK_API_URL", "https://slack-p21.example.test/api")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +56,7 @@ func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
 		})
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 			map[string]any{"title": "Slack <issue> & title", "teamId": f.public}, workspace, http.StatusCreated)
-		posts := make(chan scaleP21SlackPost, 32)
+		posts := make(chan scaleSlackPost, 32)
 		mockChatTransport(t, func(request *http.Request) (*http.Response, error) {
 			if request.URL.Host != "slack-p21.example.test" {
 				t.Errorf("unexpected Slack platform host %s", request.URL.Host)
@@ -67,7 +67,7 @@ func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
 				t.Error(err)
 				return nil, err
 			}
-			post := scaleP21SlackPost{
+			post := scaleSlackPost{
 				method: request.Method, path: request.URL.Path, auth: request.Header.Get("Authorization"), body: body,
 				release: make(chan struct{}), done: make(chan struct{}),
 			}
@@ -85,7 +85,7 @@ func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
 			if body["channel"] == "C-failure" {
 				result = `{"ok":false,"error":"channel_not_found"}`
 			}
-			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: scaleP21SlackPostBody{strings.NewReader(result), post.done}}, nil
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: scaleSlackPostBody{strings.NewReader(result), post.done}}, nil
 		})
 		cases := []struct {
 			name, event, aggregate, variant, state string
@@ -219,7 +219,7 @@ func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
 					}
 					(&server{store: source}).dispatchTeamSlackEvent(key, domain.DomainEvent{Type: test.event, AggregateID: test.aggregate, PreviousValues: json.RawMessage(test.previous)})
 					var current []output
-					var held []scaleP21SlackPost
+					var held []scaleSlackPost
 					want := test.want
 					if test.variant == "no-slug" && source == f.probe {
 						want = len(results[0])
@@ -297,7 +297,7 @@ func TestScaleP21TeamSlackNotificationsDifferential(t *testing.T) {
 					results = append(results, current)
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatal("Slack platform differential", scaleP21M2Diff(results[0], results[1]))
+					t.Fatal("Slack platform differential", policyFirstDifference(results[0], results[1]))
 				}
 			})
 		}

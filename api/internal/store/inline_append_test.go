@@ -9,17 +9,17 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW541: an append writer (MutateWorkspaceAppending) adding to a collection
+// An append writer (MutateWorkspaceAppending) adding to a collection
 // the stored root keeps inline (repeated or empty IDs, so no per-record rows)
 // persists exactly what the literal writer persists: entries, root, rows and
 // the event. It must not refuse with ErrMetadataFieldInline.
-func TestScaleP21SW541AppendToInlineCollection(t *testing.T) {
+func TestAppendToInlineCollection(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	type outcome struct {
 		Err      string
-		Physical scaleP21IssuePhysicalField
+		Physical scaleIssuePhysicalField
 		Native   any
 		Event    []string
 	}
@@ -27,7 +27,7 @@ func TestScaleP21SW541AppendToInlineCollection(t *testing.T) {
 		t.Run(shape, func(t *testing.T) {
 			var outcomes []outcome
 			for _, bounded := range []bool{false, true} {
-				f := scaleP09Database(t)
+				f := journalScaleDatabase(t)
 				workspace := f.data.Workspace.URLKey
 				labels := []domain.IssueLabel{{ID: "sw541-a", Name: "First"}, {ID: "sw541-b", Name: "Second"}}
 				switch shape {
@@ -48,14 +48,14 @@ func TestScaleP21SW541AppendToInlineCollection(t *testing.T) {
 				if err != nil || inline != (shape != "rows") {
 					t.Fatal("fixture labels shape", inline, err)
 				}
-				repo := scaleP21IssuePersistenceView(t, f, bounded, false)
+				repo := scaleIssuePersistenceView(t, f, bounded, false)
 				created := domain.IssueLabel{ID: "sw541-new", Name: "Appended"}
 				err = repo.MutateWorkspaceAppending(t.Context(), workspace, "label.created", created.ID, map[string]any{"id": created.ID, "name": created.Name},
 					MetadataAppendScope{AppendKinds: []string{"labels"}}, func(data *domain.Bootstrap) error {
 						data.Labels = append(data.Labels, created)
 						return nil
 					})
-				result := outcome{Physical: scaleP21IssuePhysical(t, repo, workspace, "labels"), Native: scaleP21IssueNative(t, repo, workspace, "labels")}
+				result := outcome{Physical: scaleIssuePhysical(t, repo, workspace, "labels"), Native: scaleIssueNative(t, repo, workspace, "labels")}
 				if err != nil {
 					result.Err = err.Error()
 				}

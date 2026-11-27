@@ -17,22 +17,22 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW0AppendRow struct {
+type appendingAppendRow struct {
 	ID    string
 	Order int
 	Raw   []byte
 }
 
-func scaleP21SW0AppendRows(t *testing.T, repo *SQLiteStore, workspace string) []scaleP21SW0AppendRow {
+func appendRows(t *testing.T, repo *SQLiteStore, workspace string) []appendingAppendRow {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='aiConversations' ORDER BY collection_order,record_key`, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	result := []scaleP21SW0AppendRow{}
+	result := []appendingAppendRow{}
 	for rows.Next() {
-		var row scaleP21SW0AppendRow
+		var row appendingAppendRow
 		if err := rows.Scan(&row.ID, &row.Order, &row.Raw); err != nil {
 			t.Fatal(err)
 		}
@@ -44,11 +44,11 @@ func scaleP21SW0AppendRows(t *testing.T, repo *SQLiteStore, workspace string) []
 	return result
 }
 
-func TestScaleP21SW0AppendingDifferential(t *testing.T) {
+func TestAppendingDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	initial := make([]domain.AIConversation, 80)
 	stamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -72,7 +72,7 @@ func TestScaleP21SW0AppendingDifferential(t *testing.T) {
 	first := domain.AIConversation{ID: "z-" + idgen.New("sw0-append-"), UserID: f.data.Viewer.ID, Title: "First", CreatedAt: stamp, UpdatedAt: stamp}
 	second := domain.AIConversation{ID: "a-" + idgen.New("sw0-append-"), UserID: f.data.Viewer.ID, Title: "Second", CreatedAt: stamp, UpdatedAt: stamp}
 	type outcome struct {
-		Rows     []scaleP21SW0AppendRow
+		Rows     []appendingAppendRow
 		Audits   []domain.AuditLogEntry
 		Webhooks []domain.DomainEvent
 		Realtime []domain.RealtimeEvent
@@ -80,7 +80,7 @@ func TestScaleP21SW0AppendingDifferential(t *testing.T) {
 	var results []outcome
 	for _, bounded := range []bool{false, true} {
 		reset()
-		before := scaleP21SW0AppendRows(t, f.SQLiteStore, workspace)
+		before := appendRows(t, f.SQLiteStore, workspace)
 		unrelated := sha256.Sum256(before[len(before)-1].Raw)
 		repo := f.SQLiteStore
 		if bounded {
@@ -111,7 +111,7 @@ func TestScaleP21SW0AppendingDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got.Rows = scaleP21SW0AppendRows(t, repo, workspace)
+		got.Rows = appendRows(t, repo, workspace)
 		if len(got.Rows) != len(initial)+2 || got.Rows[len(initial)].ID != first.ID || got.Rows[len(initial)+1].ID != second.ID {
 			t.Fatal("insertion did not preserve callback order")
 		}
@@ -143,10 +143,10 @@ func TestScaleP21SW0AppendingDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0AppendingRejectsAndRollsBack(t *testing.T) {
+func TestAppendingRejectsAndRollsBack(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	existing := domain.AIConversation{ID: "existing", UserID: f.data.Viewer.ID, Title: "Keep"}
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "aiConversations"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -159,7 +159,7 @@ func TestScaleP21SW0AppendingRejectsAndRollsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := scaleP21SW0AppendRows(t, repo, workspace)
+	before := appendRows(t, repo, workspace)
 	failure := errors.New("owned callback error")
 	for _, spec := range []struct {
 		name  string
@@ -214,7 +214,7 @@ func TestScaleP21SW0AppendingRejectsAndRollsBack(t *testing.T) {
 			if !errors.Is(err, spec.want) {
 				t.Fatalf("error=%v want=%v", err, spec.want)
 			}
-			if !reflect.DeepEqual(before, scaleP21SW0AppendRows(t, repo, workspace)) || published != 0 || repo.metadataResidency.work.used != 0 {
+			if !reflect.DeepEqual(before, appendRows(t, repo, workspace)) || published != 0 || repo.metadataResidency.work.used != 0 {
 				t.Fatal("failed append changed canonical state, published or leaked work")
 			}
 		})
@@ -231,10 +231,10 @@ func TestScaleP21SW0AppendingRejectsAndRollsBack(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0AppendingFirstShapeAndConcurrent(t *testing.T) {
+func TestAppendingFirstShapeAndConcurrent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "aiConversations"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.AIConversations = nil
@@ -270,7 +270,7 @@ func TestScaleP21SW0AppendingFirstShapeAndConcurrent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows := scaleP21SW0AppendRows(t, a, workspace)
+	rows := appendRows(t, a, workspace)
 	if len(rows) != 4 {
 		t.Fatalf("concurrent append lost rows: %d", len(rows))
 	}
@@ -293,10 +293,10 @@ func TestScaleP21SW0AppendingFirstShapeAndConcurrent(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0AppendingLegacyDispatch(t *testing.T) {
+func TestAppendingLegacyDispatch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	called := false
 	err := f.MutateWorkspaceAppending(t.Context(), f.data.Workspace.URLKey, "application_policy.updated", "", nil, MetadataAppendScope{AppendKinds: []string{"invalid"}}, func(data *domain.Bootstrap) error {
 		called = true

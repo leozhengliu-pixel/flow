@@ -18,8 +18,8 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21ApplicationAccessTypedInstallation(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{})
+func TestScaleApplicationAccessTypedInstallation(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{})
 	for _, raw := range []string{
 		`null`,
 		`{}`,
@@ -60,7 +60,7 @@ func TestScaleP21ApplicationAccessTypedInstallation(t *testing.T) {
 	}
 }
 
-func scaleP21ApplicationAccessRow(t *testing.T, f scaleP09Fixture, workspace, raw string) string {
+func scaleApplicationAccessRow(t *testing.T, f scaleFixture, workspace, raw string) string {
 	t.Helper()
 	id, user, client := idgen.New("p21-installation-"), idgen.New("app_p21-"), idgen.New("p21-client-")
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO application_installations(id,workspace_key,client_id,user_id,data,webhook_secret) VALUES(?,?,?,?,?,'')`, id, workspace, client, user, []byte(raw)); err != nil {
@@ -74,10 +74,10 @@ func scaleP21ApplicationAccessRow(t *testing.T, f scaleP09Fixture, workspace, ra
 	return user
 }
 
-func TestScaleP21ApplicationAccessNativeAndOutputOwnership(t *testing.T) {
+func TestScaleApplicationAccessNativeAndOutputOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -112,8 +112,8 @@ func TestScaleP21ApplicationAccessNativeAndOutputOwnership(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	raw := `{"id":"json-installation","workspaceKey":` + string(mustMarshalScaleP21Application(t, workspace)) + `,"userId":"app_json_user","clientId":"flow_client_native","name":"installation name","avatarUrl":"installation logo","scopes":["read","write","read"],"teamIds":["private"],"allPublicTeams":true,"active":true,"builtin":true,"webhookUrl":"https://example.test/hook","installedBy":"owner","createdAt":"2026-11-14T01:02:03Z","updatedAt":"2026-11-14T02:03:04Z"}`
-	lookup := scaleP21ApplicationAccessRow(t, f, workspace, raw)
+	raw := `{"id":"json-installation","workspaceKey":` + string(mustMarshalScaleApplication(t, workspace)) + `,"userId":"app_json_user","clientId":"flow_client_native","name":"installation name","avatarUrl":"installation logo","scopes":["read","write","read"],"teamIds":["private"],"allPublicTeams":true,"active":true,"builtin":true,"webhookUrl":"https://example.test/hook","installedBy":"owner","createdAt":"2026-11-14T01:02:03Z","updatedAt":"2026-11-14T02:03:04Z"}`
+	lookup := scaleApplicationAccessRow(t, f, workspace, raw)
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestScaleP21ApplicationAccessNativeAndOutputOwnership(t *testing.T) {
 	}
 }
 
-func mustMarshalScaleP21Application(t *testing.T, value any) []byte {
+func mustMarshalScaleApplication(t *testing.T, value any) []byte {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -187,10 +187,10 @@ func mustMarshalScaleP21Application(t *testing.T, value any) []byte {
 	return raw
 }
 
-func TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies(t *testing.T) {
+func TestScaleApplicationAccessSnapshotBudgetAndIgnoredBodies(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -200,8 +200,8 @@ func TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies(t *testing.T) {
 	held := 0
 	var lookup string
 	for _, count := range []int{10000, 100000} {
-		raw := `{"workspaceKey":` + string(mustMarshalScaleP21Application(t, workspace)) + `,"userId":"app_json","clientId":"flow_client_missing","name":"application","active":true,"webhookUrl":"` + strings.Repeat("unused ", count) + `","unknown":{"body":"` + strings.Repeat("ignored ", count) + `"}}`
-		lookup = scaleP21ApplicationAccessRow(t, f, workspace, raw)
+		raw := `{"workspaceKey":` + string(mustMarshalScaleApplication(t, workspace)) + `,"userId":"app_json","clientId":"flow_client_missing","name":"application","active":true,"webhookUrl":"` + strings.Repeat("unused ", count) + `","unknown":{"body":"` + strings.Repeat("ignored ", count) + `"}}`
+		lookup = scaleApplicationAccessRow(t, f, workspace, raw)
 		read, err := view.BeginApplicationAccessRead(t.Context(), lookup, "user")
 		if err != nil || read.User.Active || read.User.ID != "app_json" {
 			t.Fatal("missing flow client / JSON identity changed", err)
@@ -256,18 +256,18 @@ func TestScaleP21ApplicationAccessSnapshotBudgetAndIgnoredBodies(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21ApplicationAccessRow(t, f, workspace, `{"scopes":[1]}`)
+	scaleApplicationAccessRow(t, f, workspace, `{"scopes":[1]}`)
 	if list, err := view.BeginApplicationListRead(t.Context(), workspace); err == nil || list != nil || view.metadataResidency.work.used != 0 {
 		t.Fatal("failed typed application list returned partial output or retained children", err)
 	}
 }
 
-func TestScaleP21ApplicationAccessNativeGrantMatrix(t *testing.T) {
+func TestScaleApplicationAccessNativeGrantMatrix(t *testing.T) {
 	now := time.Now()
 	teams := []domain.Team{{ID: ""}, {ID: "public"}, {ID: "private", Private: true}, {ID: "child"}, {ID: "archived", ArchivedAt: &now}, {ID: "retired", RetiredAt: &now}, {ID: "duplicate", Private: true}, {ID: "duplicate"}, {ID: "cycle"}, {ID: "orphan"}}
 	settings := map[string]domain.TeamSettings{"child": {ParentTeamID: "private"}, "cycle": {ParentTeamID: "cycle"}, "orphan": {ParentTeamID: "missing"}}
 	sourceData := domain.Bootstrap{Teams: teams, TeamSettings: settings}
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": sourceData})
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": sourceData})
 	for _, flags := range []domain.ApplicationInstallation{
 		{}, {TeamIDs: []string{"private", "", "duplicate"}}, {AllTeams: true}, {AllPublicTeams: true}, {AllPublicTeams: true, TeamIDs: []string{"child"}}, {AllTeams: true, AllPublicTeams: true},
 	} {
@@ -284,7 +284,7 @@ func TestScaleP21ApplicationAccessNativeGrantMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationAccessGlobalAllMatchesAndBodyBound(t *testing.T) {
+func TestScaleApplicationAccessGlobalAllMatchesAndBodyBound(t *testing.T) {
 	held := 0
 	for _, count := range []int{10000, 100000} {
 		wide := strings.Repeat("unused native registration ", count)
@@ -297,7 +297,7 @@ func TestScaleP21ApplicationAccessGlobalAllMatchesAndBodyBound(t *testing.T) {
 				{ClientID: wide, Name: wide, Scopes: []string{wide}},
 			},
 		}
-		repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 		read := &ApplicationAccessRead{store: repo, Installation: domain.ApplicationInstallation{Scopes: []string{"read", "write", "read"}, AllPublicTeams: true}}
 		source := repo.metadataResidency.logical["physical"]
 		if err := read.teams(t.Context(), source); err != nil {
@@ -319,7 +319,7 @@ func TestScaleP21ApplicationAccessGlobalAllMatchesAndBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationAccessCapturedSourcesAndConcurrentReads(t *testing.T) {
+func TestScaleApplicationAccessCapturedSourcesAndConcurrentReads(t *testing.T) {
 	before := domain.Bootstrap{
 		Teams:             []domain.Team{{ID: "before"}},
 		OAuthApplications: []domain.OAuthApplication{{ClientID: "client", Name: "before", Scopes: []string{"read"}}},
@@ -328,7 +328,7 @@ func TestScaleP21ApplicationAccessCapturedSourcesAndConcurrentReads(t *testing.T
 		Teams:             []domain.Team{{ID: "after"}},
 		OAuthApplications: []domain.OAuthApplication{{ClientID: "client", Name: "after", Scopes: []string{"write"}}},
 	}
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
 	repo.lastWorkspaceKey = "physical"
 	read := &ApplicationAccessRead{store: repo, Installation: domain.ApplicationInstallation{WorkspaceKey: "physical", ClientID: "client", AllTeams: true, Scopes: []string{"read", "write"}}}
 	home, sources, err := read.sources(t.Context())
@@ -398,7 +398,7 @@ func TestScaleP21ApplicationAccessCapturedSourcesAndConcurrentReads(t *testing.T
 	}
 }
 
-func TestScaleP21ApplicationAccessLegacyResolverBoundary(t *testing.T) {
+func TestScaleApplicationAccessLegacyResolverBoundary(t *testing.T) {
 	expected := map[string]int{"ApplicationByUser": 1, "ListApplications": 1}
 	files, err := filepath.Glob("*.go")
 	if err != nil {

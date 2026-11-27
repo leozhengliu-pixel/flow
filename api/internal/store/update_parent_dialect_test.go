@@ -12,8 +12,8 @@ import (
 // A parent with NUL is stored without it on PostgreSQL. The literal delta
 // matches known and wanted rows under that stored key, so the streamed
 // parent-map writer replaces the row too, as on SQLite and MySQL.
-func TestScaleP21SW220ParentNativeNULDifferential(t *testing.T) {
-	f, view, seed := scaleP21SW77Fixture(t)
+func TestParentNativeNULDifferential(t *testing.T) {
+	f, view, seed := legacyDeltaBudgetFixture(t)
 	for _, test := range []struct {
 		name string
 		size int
@@ -25,8 +25,8 @@ func TestScaleP21SW220ParentNativeNULDifferential(t *testing.T) {
 				before.ProjectUpdates = map[string][]domain.ProjectUpdate{parent: {item, item}}
 				target := cloneBootstrap(before)
 				target.ProjectUpdates[parent][0].Missing = true
-				want := scaleP21SW220Run(t, f, view, before, target, parent, "", false)
-				got := scaleP21SW220Run(t, f, view, before, target, parent, "", true)
+				want := updateParentRun(t, f, view, before, target, parent, "", false)
+				got := updateParentRun(t, f, view, before, target, parent, "", true)
 				if !reflect.DeepEqual(want.image, got.image) || !reflect.DeepEqual(want.native, got.native) || want.bill != got.bill {
 					t.Fatal("native NUL parent differs from literal known/wanted key behavior", test.name, want.bill, got.bill)
 				}

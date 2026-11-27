@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW559: with bounded metadata on, a store's installed image
+// With bounded metadata on, a store's installed image
 // (SQLiteStore.workspaces) holds only the resident core and policy fields
 // (metadataResidencyFields "core"/"policy", plus the team directory rebuilt
 // from them). A reader that takes any other Bootstrap field from that image
@@ -30,21 +30,21 @@ import (
 // `if s.metadataResidency == nil`, after `if s.metadataResidency != nil {
 // ...return }`, and the same forms of BoundedMetadataEnabled) are not image
 // reads of a bounded store. Every remaining read must be reviewed in
-// scaleP21SW559Reviewed with the reason it cannot reach a bounded skeleton.
+// reviewed with the reason it cannot reach a bounded skeleton.
 
-type scaleP21SW559Func struct {
+type residentImageFunction struct {
 	key  string
 	decl *ast.FuncDecl
 	obj  *types.Func
 	pkg  string
 }
 
-type scaleP21SW559Analysis struct {
+type residentImageAnalysis struct {
 	fset      *token.FileSet
 	info      *types.Info
 	bootstrap *types.Named
-	funcs     map[*types.Func]*scaleP21SW559Func
-	memo      map[scaleP21SW559Context]*scaleP21SW559Result
+	funcs     map[*types.Func]*residentImageFunction
+	memo      map[residentImageReadersContext]*residentImageReadersResult
 	resident  map[string]bool
 	// refs[callee][caller] is true when caller names callee in code that
 	// may run on a bounded skeleton.
@@ -55,14 +55,14 @@ type scaleP21SW559Analysis struct {
 	noGuards bool
 }
 
-// scaleP21SW559Context is a function analysed with the Bootstrap parameters
+// residentImageReadersContext is a function analysed with the Bootstrap parameters
 // in params (a bit per parameter index) holding an image value.
-type scaleP21SW559Context struct {
+type residentImageReadersContext struct {
 	fn     *types.Func
 	params uint64
 }
 
-type scaleP21SW559Result struct {
+type residentImageReadersResult struct {
 	// fields maps each non-resident field read from the image to the call
 	// path below this function that reads it ("" when read here).
 	fields  map[string]string
@@ -70,12 +70,12 @@ type scaleP21SW559Result struct {
 	done    bool
 }
 
-type scaleP21SW559Importer struct {
+type residentImageImporter struct {
 	domain *types.Package
 	source types.Importer
 }
 
-func (i scaleP21SW559Importer) Import(path string) (*types.Package, error) {
+func (i residentImageImporter) Import(path string) (*types.Package, error) {
 	if path == "flow/api/internal/domain" && i.domain != nil {
 		return i.domain, nil
 	}
@@ -87,7 +87,7 @@ func (i scaleP21SW559Importer) Import(path string) (*types.Package, error) {
 	return fake, nil
 }
 
-func scaleP21SW559Parse(t *testing.T, fset *token.FileSet, dir string) []*ast.File {
+func parseResidentImagePackage(t *testing.T, fset *token.FileSet, dir string) []*ast.File {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
@@ -110,10 +110,10 @@ func scaleP21SW559Parse(t *testing.T, fset *token.FileSet, dir string) []*ast.Fi
 	return files
 }
 
-// scaleP21SW559ResidentFields are the Bootstrap Go fields a bounded image
+// residentFields are the Bootstrap Go fields a bounded image
 // holds: core and policy fields by their JSON names, and the team directory
 // RebuildTeamDirectory derives from them on install.
-func scaleP21SW559ResidentFields() map[string]bool {
+func residentFields() map[string]bool {
 	resident := map[string]bool{"TeamByID": true, "TeamByKey": true, "TeamChildren": true}
 	kind := reflect.TypeFor[domain.Bootstrap]()
 	for i := range kind.NumField() {
@@ -126,7 +126,7 @@ func scaleP21SW559ResidentFields() map[string]bool {
 	return resident
 }
 
-func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
+func residentImageReadersLoad(t *testing.T) *residentImageAnalysis {
 	t.Helper()
 	fset := token.NewFileSet()
 	info := &types.Info{
@@ -134,14 +134,14 @@ func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
 		Selections: map[*ast.SelectorExpr]*types.Selection{}, Types: map[ast.Expr]types.TypeAndValue{},
 	}
 	source := importer.ForCompiler(fset, "source", nil)
-	domainFiles := scaleP21SW559Parse(t, fset, "../domain")
-	domainConfig := types.Config{Importer: scaleP21SW559Importer{source: source}, Error: func(error) {}}
+	domainFiles := parseResidentImagePackage(t, fset, "../domain")
+	domainConfig := types.Config{Importer: residentImageImporter{source: source}, Error: func(error) {}}
 	domainPkg, domainErr := domainConfig.Check("flow/api/internal/domain", fset, domainFiles, info)
 	if domainPkg == nil {
 		t.Fatalf("domain package type-check failed: %v", domainErr)
 	}
-	storeFiles := scaleP21SW559Parse(t, fset, ".")
-	storeConfig := types.Config{Importer: scaleP21SW559Importer{domain: domainPkg, source: source}, Error: func(error) {}}
+	storeFiles := parseResidentImagePackage(t, fset, ".")
+	storeConfig := types.Config{Importer: residentImageImporter{domain: domainPkg, source: source}, Error: func(error) {}}
 	storePkg, storeErr := storeConfig.Check("flow/api/internal/store", fset, storeFiles, info)
 	if storePkg == nil {
 		t.Fatalf("store package type-check failed: %v", storeErr)
@@ -150,9 +150,9 @@ func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
 	if bootstrap == nil {
 		t.Fatal("domain.Bootstrap did not type-check")
 	}
-	a := &scaleP21SW559Analysis{
-		fset: fset, info: info, bootstrap: bootstrap, funcs: map[*types.Func]*scaleP21SW559Func{},
-		memo: map[scaleP21SW559Context]*scaleP21SW559Result{}, resident: scaleP21SW559ResidentFields(),
+	a := &residentImageAnalysis{
+		fset: fset, info: info, bootstrap: bootstrap, funcs: map[*types.Func]*residentImageFunction{},
+		memo: map[residentImageReadersContext]*residentImageReadersResult{}, resident: residentFields(),
 		refs: map[*types.Func]map[*types.Func]bool{}, named: map[*types.Func]bool{},
 	}
 	for pkgName, files := range map[string][]*ast.File{"domain": domainFiles, "store": storeFiles} {
@@ -179,7 +179,7 @@ func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
 						key = pkgName + "/" + ident.Name + "." + fn.Name.Name
 					}
 				}
-				a.funcs[obj] = &scaleP21SW559Func{key: key, decl: fn, obj: obj, pkg: pkgName}
+				a.funcs[obj] = &residentImageFunction{key: key, decl: fn, obj: obj, pkg: pkgName}
 			}
 		}
 	}
@@ -187,7 +187,7 @@ func scaleP21SW559Load(t *testing.T) *scaleP21SW559Analysis {
 	return a
 }
 
-func (a *scaleP21SW559Analysis) isBootstrap(kind types.Type) bool {
+func (a *residentImageAnalysis) isBootstrap(kind types.Type) bool {
 	if kind == nil {
 		return false
 	}
@@ -199,7 +199,7 @@ func (a *scaleP21SW559Analysis) isBootstrap(kind types.Type) bool {
 }
 
 // imageIndex reports whether expr reads the installed image map of a store.
-func (a *scaleP21SW559Analysis) imageMap(expr ast.Expr) bool {
+func (a *residentImageAnalysis) imageMap(expr ast.Expr) bool {
 	selector, ok := ast.Unparen(expr).(*ast.SelectorExpr)
 	if !ok || selector.Sel.Name != "workspaces" {
 		return false
@@ -216,10 +216,10 @@ func (a *scaleP21SW559Analysis) imageMap(expr ast.Expr) bool {
 	return ok && named.Obj().Name() == "SQLiteStore"
 }
 
-type scaleP21SW559Walk struct {
-	a       *scaleP21SW559Analysis
-	fn      *scaleP21SW559Func
-	result  *scaleP21SW559Result
+type residentImageReadersWalk struct {
+	a       *residentImageAnalysis
+	fn      *residentImageFunction
+	result  *residentImageReadersResult
 	tainted map[types.Object]bool
 	changed bool
 	// legacy > 0 while walking code that runs only on a complete image.
@@ -238,19 +238,19 @@ type scaleP21SW559Walk struct {
 
 // analyze answers what fn reads from the image when the parameters in params
 // hold image values, and whether it may return an image value.
-func (a *scaleP21SW559Analysis) analyze(fn *types.Func, params uint64) *scaleP21SW559Result {
-	key := scaleP21SW559Context{fn, params}
+func (a *residentImageAnalysis) analyze(fn *types.Func, params uint64) *residentImageReadersResult {
+	key := residentImageReadersContext{fn, params}
 	if result := a.memo[key]; result != nil {
 		return result
 	}
-	result := &scaleP21SW559Result{fields: map[string]string{}}
+	result := &residentImageReadersResult{fields: map[string]string{}}
 	a.memo[key] = result
 	decl := a.funcs[fn]
 	if decl == nil {
 		result.done = true
 		return result
 	}
-	w := &scaleP21SW559Walk{a: a, fn: decl, result: result, tainted: map[types.Object]bool{}}
+	w := &residentImageReadersWalk{a: a, fn: decl, result: result, tainted: map[types.Object]bool{}}
 	signature := fn.Type().(*types.Signature)
 	for index := range signature.Params().Len() {
 		if params&(1<<index) != 0 {
@@ -268,7 +268,7 @@ func (a *scaleP21SW559Analysis) analyze(fn *types.Func, params uint64) *scaleP21
 	return result
 }
 
-func (w *scaleP21SW559Walk) taintedExpr(expr ast.Expr) bool {
+func (w *residentImageReadersWalk) taintedExpr(expr ast.Expr) bool {
 	switch e := ast.Unparen(expr).(type) {
 	case *ast.IndexExpr:
 		return w.image(e.X)
@@ -299,7 +299,7 @@ func (w *scaleP21SW559Walk) taintedExpr(expr ast.Expr) bool {
 }
 
 // mask is the set of callee Bootstrap parameters an image value reaches.
-func (w *scaleP21SW559Walk) mask(callee *types.Func, call *ast.CallExpr) uint64 {
+func (w *residentImageReadersWalk) mask(callee *types.Func, call *ast.CallExpr) uint64 {
 	signature := callee.Type().(*types.Signature)
 	mask := uint64(0)
 	for i, arg := range call.Args {
@@ -314,7 +314,7 @@ func (w *scaleP21SW559Walk) mask(callee *types.Func, call *ast.CallExpr) uint64 
 	return mask
 }
 
-func (a *scaleP21SW559Analysis) callee(call *ast.CallExpr) *types.Func {
+func (a *residentImageAnalysis) callee(call *ast.CallExpr) *types.Func {
 	var ident *ast.Ident
 	switch fun := ast.Unparen(call.Fun).(type) {
 	case *ast.Ident:
@@ -338,14 +338,14 @@ func (a *scaleP21SW559Analysis) callee(call *ast.CallExpr) *types.Func {
 	return fn.Origin()
 }
 
-func (w *scaleP21SW559Walk) taint(obj types.Object) {
+func (w *residentImageReadersWalk) taint(obj types.Object) {
 	if obj != nil && !w.tainted[obj] {
 		w.tainted[obj] = true
 		w.changed = true
 	}
 }
 
-func (w *scaleP21SW559Walk) objectOf(expr ast.Expr) types.Object {
+func (w *residentImageReadersWalk) objectOf(expr ast.Expr) types.Object {
 	ident, ok := ast.Unparen(expr).(*ast.Ident)
 	if !ok {
 		return nil
@@ -359,7 +359,7 @@ func (w *scaleP21SW559Walk) objectOf(expr ast.Expr) types.Object {
 // guard classifies a condition: +1 when it holds only on a complete image
 // (bounded metadata off, or a COLD facade), -1 when it holds whenever the
 // image may be a bounded skeleton, 0 otherwise.
-func (w *scaleP21SW559Walk) guard(cond ast.Expr) int {
+func (w *residentImageReadersWalk) guard(cond ast.Expr) int {
 	if w.a.noGuards {
 		return 0
 	}
@@ -416,7 +416,7 @@ func (w *scaleP21SW559Walk) guard(cond ast.Expr) int {
 			case "BoundedMetadataEnabled":
 				return -1
 			case "skeletalRead", "skeletalFields":
-				// A production bounded store refuses the read (SW531).
+				// A production bounded store refuses the read.
 				return -1
 			}
 		}
@@ -428,7 +428,7 @@ func (w *scaleP21SW559Walk) guard(cond ast.Expr) int {
 // of copyRevisionLocked/copyRevisionOf (true only on a complete image), a
 // conjunction of one, and the handled result of coldAccessorView (true
 // whenever a bounded store served the read from a legacy view).
-func (w *scaleP21SW559Walk) flag(s *ast.AssignStmt) {
+func (w *residentImageReadersWalk) flag(s *ast.AssignStmt) {
 	if w.flags == nil {
 		w.flags = map[types.Object]int{}
 	}
@@ -474,7 +474,7 @@ func (w *scaleP21SW559Walk) flag(s *ast.AssignStmt) {
 
 // image reports whether expr is the installed image map of a store that may
 // be bounded (not a COLD facade or legacy view).
-func (w *scaleP21SW559Walk) image(expr ast.Expr) bool {
+func (w *residentImageReadersWalk) image(expr ast.Expr) bool {
 	if !w.a.imageMap(expr) {
 		return false
 	}
@@ -485,10 +485,10 @@ func (w *scaleP21SW559Walk) image(expr ast.Expr) bool {
 
 // funcLit walks a function literal; its *SQLiteStore parameters are COLD
 // facades (every such callback in the package receives one).
-func (w *scaleP21SW559Walk) funcLit(lit *ast.FuncLit) {
+func (w *residentImageReadersWalk) funcLit(lit *ast.FuncLit) {
 	for _, field := range lit.Type.Params.List {
 		for _, name := range field.Names {
-			if obj := w.a.info.Defs[name]; obj != nil && scaleP21SW559StoreType(obj.Type()) {
+			if obj := w.a.info.Defs[name]; obj != nil && storeType(obj.Type()) {
 				w.markComplete(obj)
 			}
 		}
@@ -496,14 +496,14 @@ func (w *scaleP21SW559Walk) funcLit(lit *ast.FuncLit) {
 	w.block(lit.Body.List)
 }
 
-func (w *scaleP21SW559Walk) markComplete(obj types.Object) {
+func (w *residentImageReadersWalk) markComplete(obj types.Object) {
 	if w.complete == nil {
 		w.complete = map[types.Object]bool{}
 	}
 	w.complete[obj] = true
 }
 
-func scaleP21SW559StoreType(kind types.Type) bool {
+func storeType(kind types.Type) bool {
 	pointer, ok := kind.(*types.Pointer)
 	if !ok {
 		return false
@@ -512,7 +512,7 @@ func scaleP21SW559StoreType(kind types.Type) bool {
 	return ok && named.Obj().Name() == "SQLiteStore"
 }
 
-func scaleP21SW559Terminates(block *ast.BlockStmt) bool {
+func terminates(block *ast.BlockStmt) bool {
 	if block == nil || len(block.List) == 0 {
 		return false
 	}
@@ -531,11 +531,11 @@ func scaleP21SW559Terminates(block *ast.BlockStmt) bool {
 	return false
 }
 
-func (w *scaleP21SW559Walk) block(list []ast.Stmt) {
+func (w *residentImageReadersWalk) block(list []ast.Stmt) {
 	depth := w.legacy
 	for _, stmt := range list {
 		w.stmt(stmt)
-		if ifStmt, ok := stmt.(*ast.IfStmt); ok && ifStmt.Else == nil && w.guard(ifStmt.Cond) < 0 && scaleP21SW559Terminates(ifStmt.Body) {
+		if ifStmt, ok := stmt.(*ast.IfStmt); ok && ifStmt.Else == nil && w.guard(ifStmt.Cond) < 0 && terminates(ifStmt.Body) {
 			// After `if bounded { ... return }` the rest runs on a complete image.
 			w.legacy++
 		}
@@ -543,7 +543,7 @@ func (w *scaleP21SW559Walk) block(list []ast.Stmt) {
 	w.legacy = depth
 }
 
-func (w *scaleP21SW559Walk) stmt(stmt ast.Stmt) {
+func (w *residentImageReadersWalk) stmt(stmt ast.Stmt) {
 	switch s := stmt.(type) {
 	case *ast.IfStmt:
 		if s.Init != nil {
@@ -663,7 +663,7 @@ func (w *scaleP21SW559Walk) stmt(stmt ast.Stmt) {
 	})
 }
 
-func (w *scaleP21SW559Walk) expr(expr ast.Expr) {
+func (w *residentImageReadersWalk) expr(expr ast.Expr) {
 	ast.Inspect(expr, func(node ast.Node) bool {
 		if w.collect {
 			switch n := node.(type) {
@@ -742,8 +742,8 @@ func (w *scaleP21SW559Walk) expr(expr ast.Expr) {
 	})
 }
 
-func (a *scaleP21SW559Analysis) sorted() []*scaleP21SW559Func {
-	funcs := make([]*scaleP21SW559Func, 0, len(a.funcs))
+func (a *residentImageAnalysis) sorted() []*residentImageFunction {
+	funcs := make([]*residentImageFunction, 0, len(a.funcs))
 	for _, fn := range a.funcs {
 		funcs = append(funcs, fn)
 	}
@@ -753,7 +753,7 @@ func (a *scaleP21SW559Analysis) sorted() []*scaleP21SW559Func {
 	return funcs
 }
 
-func (w *scaleP21SW559Walk) read(field, via string) {
+func (w *residentImageReadersWalk) read(field, via string) {
 	if w.a.resident[field] {
 		return
 	}
@@ -767,9 +767,9 @@ func (w *scaleP21SW559Walk) read(field, via string) {
 // skeleton: exported ones, ones never named in the package (interface
 // dispatch, tests), and those any reachable function names outside a
 // complete-image-only branch.
-func (a *scaleP21SW559Analysis) reachable() map[*types.Func]bool {
+func (a *residentImageAnalysis) reachable() map[*types.Func]bool {
 	for _, fn := range a.sorted() {
-		w := &scaleP21SW559Walk{a: a, fn: fn, result: &scaleP21SW559Result{fields: map[string]string{}}, tainted: map[types.Object]bool{}, collect: true}
+		w := &residentImageReadersWalk{a: a, fn: fn, result: &residentImageReadersResult{fields: map[string]string{}}, tainted: map[types.Object]bool{}, collect: true}
 		w.block(fn.decl.Body.List)
 	}
 	reached := map[*types.Func]bool{}
@@ -799,20 +799,20 @@ func (a *scaleP21SW559Analysis) reachable() map[*types.Func]bool {
 	return reached
 }
 
-// scaleP21SW559OpenStage is the review of the startup data migrations.
-const scaleP21SW559OpenStage = "OpenDatabase stage or versioned data migration on context.Background() before the store serves (SW557 review): " +
+// openStage is the review of the startup data migrations.
+const openStage = "OpenDatabase stage or versioned data migration on context.Background() before the store serves (bounded startup review): " +
 	"a bounded open loads the resident image (loadResidentWorkspaces), which refuses a database whose split records or catalog are incomplete, " +
-	"so every legacy layout the pass migrates was migrated by the flag-off open that split it; TestScaleP21SW557BoundedStartupMatchesLegacy " +
+	"so every legacy layout the pass migrates was migrated by the flag-off open that split it; TestBoundedStartupMatchesLegacy " +
 	"finds identical rows after both opens."
 
-// scaleP21SW559Reviewed is every store function that, with bounded metadata
+// reviewed is every store function that, with bounded metadata
 // possibly on, reads a Bootstrap field the bounded image does not hold (or
 // hands the image whole to code the walk cannot follow, "whole"), with the
 // exact field set and why the read cannot answer from the skeleton. A new
 // such read, or a changed field set, fails until it is reviewed; the fix is
 // to read the field from the installed logical source (a legacy view,
 // coldAccessorView, or the installed field decode), as the fixed readers do.
-var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
+var residentImageReadersReviewed = map[string]struct{ fields, reason string }{
 	"store/SQLiteStore.AccountCollections": {"Passkeys UserSettings",
 		"Flag-off legacy accessor: every server call is flag-off-only (server SW559 test); bounded callers use BeginAccountCollectionRead (server accountCollections)."},
 	"store/SQLiteStore.MetadataRecord": {"whole",
@@ -825,9 +825,9 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 		"IssueCount is len(Issues) of the workspace copy: with record hydration (which bounded requires) every image holds Issues nil " +
 			"(migrateIssueCollections), so it is 0 both ways."},
 	"store/SQLiteStore.PulseFeed": {"InitiativeRelations InitiativeUpdates Initiatives ProjectStatuses ProjectUpdates Projects SavedViews Settings Subscriptions UserSettings Users",
-		"Flag-off legacy accessor: every call dispatches to BeginPulseRead when bounded (chat cards: pulse != nil, their callers' bounded branches); pinned by TestScaleP21PulseLegacyFeedBoundary."},
+		"Flag-off legacy accessor: every call dispatches to BeginPulseRead when bounded (chat cards: pulse != nil, their callers' bounded branches); pinned by TestScalePulseLegacyFeedBoundary."},
 	"store/SQLiteStore.PulseSources": {"InitiativeRelations InitiativeUpdates Initiatives ProjectStatuses ProjectUpdates Projects SavedViews Settings Subscriptions UserSettings Users",
-		"Flag-off legacy accessor: its three dispatches are off-only (beginPulseRead and the realtime sources); pinned by TestScaleP21PulseLegacySourcesBoundary."},
+		"Flag-off legacy accessor: its three dispatches are off-only (beginPulseRead and the realtime sources); pinned by TestScalePulseLegacySourcesBoundary."},
 	"store/SQLiteStore.BeginProjectTemplatesRead": {"Activities Comments Issues NotificationDeliveries Notifications ProjectTemplates",
 		"ProjectTemplates sizes the admission only; bounded, the templates are decoded from the installed source (installedProjectTemplates). " +
 			"The issue/content fields are nil-checks that are nil in both images (record hydration keeps them out of every image)."},
@@ -847,18 +847,18 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 		"RebuildTeamDirectory derives LabelIndex from Labels alongside the resident team directory the membership change reads; LabelIndex is unused."},
 	"store/SQLiteStore.installedOAuthApplications": {"whole",
 		"Bounded, the applications come from the legacy view (coldAccessorView); visit receives the image only for its workspace record (BackfillUploadOwners)."},
-	"store/SQLiteStore.migrateDocumentAccessBatch":          {"Documents ImportJobs MigrationJobs Trash Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateDocumentScopeBatch":           {"Documents ImportJobs MigrationJobs Projects Trash Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateIssueCollections":             {"Activities Comments ImportJobs Issues LabelIndex Labels MigrationJobs NotificationDeliveries Notifications Projects States Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateLoopRunRecords":               {"Activities Comments ImportJobs Issues LabelIndex Labels LoopRuns MigrationJobs NotificationDeliveries Notifications Projects States Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceCycleCapacity":       {"CycleSettings Cycles ImportJobs MigrationJobs Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceDocumentAccess":      {"Documents Trash", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceDocumentOwnerGrants": {"Documents Trash", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateDocumentOwnerGrantBatch":      {"Documents ImportJobs MigrationJobs Trash Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceDocumentScope":       {"Documents Issues Projects Trash", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceMetadataRecords":     {"Activities Comments ImportJobs Issues LabelIndex Labels MigrationJobs NotificationDeliveries Notifications Projects States Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.migrateWorkspaceResourceSlugs":       {"ImportJobs Initiatives MigrationJobs Projects Users whole", scaleP21SW559OpenStage},
-	"store/SQLiteStore.p19SnapshotAt": {"NextIssueNumber",
+	"store/SQLiteStore.migrateDocumentAccessBatch":          {"Documents ImportJobs MigrationJobs Trash Users whole", openStage},
+	"store/SQLiteStore.migrateDocumentScopeBatch":           {"Documents ImportJobs MigrationJobs Projects Trash Users whole", openStage},
+	"store/SQLiteStore.migrateIssueCollections":             {"Activities Comments ImportJobs Issues LabelIndex Labels MigrationJobs NotificationDeliveries Notifications Projects States Users whole", openStage},
+	"store/SQLiteStore.migrateLoopRunRecords":               {"Activities Comments ImportJobs Issues LabelIndex Labels LoopRuns MigrationJobs NotificationDeliveries Notifications Projects States Users whole", openStage},
+	"store/SQLiteStore.migrateWorkspaceCycleCapacity":       {"CycleSettings Cycles ImportJobs MigrationJobs Users whole", openStage},
+	"store/SQLiteStore.migrateWorkspaceDocumentAccess":      {"Documents Trash", openStage},
+	"store/SQLiteStore.migrateWorkspaceDocumentOwnerGrants": {"Documents Trash", openStage},
+	"store/SQLiteStore.migrateDocumentOwnerGrantBatch":      {"Documents ImportJobs MigrationJobs Trash Users whole", openStage},
+	"store/SQLiteStore.migrateWorkspaceDocumentScope":       {"Documents Issues Projects Trash", openStage},
+	"store/SQLiteStore.migrateWorkspaceMetadataRecords":     {"Activities Comments ImportJobs Issues LabelIndex Labels MigrationJobs NotificationDeliveries Notifications Projects States Users whole", openStage},
+	"store/SQLiteStore.migrateWorkspaceResourceSlugs":       {"ImportJobs Initiatives MigrationJobs Projects Users whole", openStage},
+	"store/SQLiteStore.snapshotAt": {"NextIssueNumber",
 		"NextIssueNumber is json:\"-\": the snapshot's wire output never carries it; the projection reads the installed logical source."},
 	"store/SQLiteStore.projectDirectoryInstalledSource": {"Projects",
 		"Projects == nil detects a policy-only recovery only together with a missing logical source (the documented SQL fallback); otherwise the installed source is read."},
@@ -868,8 +868,8 @@ var scaleP21SW559Reviewed = map[string]struct{ fields, reason string }{
 		"The skeleton never matches the cached-copy fast path, so the record is normalized from SQL as one written after the copy is (bounded readers pass their owned read first)."},
 }
 
-func TestScaleP21SW559ResidentImageReaders(t *testing.T) {
-	a := scaleP21SW559Load(t)
+func TestResidentImageReaders(t *testing.T) {
+	a := residentImageReadersLoad(t)
 	reached := a.reachable()
 	found := map[string]map[string]string{}
 	for _, fn := range a.sorted() {
@@ -899,7 +899,7 @@ func TestScaleP21SW559ResidentImageReaders(t *testing.T) {
 		}
 		slices.Sort(fields)
 		slices.Sort(paths)
-		review, ok := scaleP21SW559Reviewed[key]
+		review, ok := residentImageReadersReviewed[key]
 		if !ok {
 			t.Errorf("SW559: %s reads %s from the installed image, which a bounded store holds without them (paths: %s); read them from the installed logical source or review the read",
 				key, strings.Join(fields, " "), strings.Join(paths, "; "))
@@ -912,18 +912,18 @@ func TestScaleP21SW559ResidentImageReaders(t *testing.T) {
 			t.Errorf("SW559: %s has no review reason", key)
 		}
 	}
-	for key := range scaleP21SW559Reviewed {
+	for key := range residentImageReadersReviewed {
 		if found[key] == nil {
 			t.Errorf("SW559: stale review %s: it no longer reads a non-resident field from the installed image", key)
 		}
 	}
 }
 
-// TestScaleP21SW559ResidentImageReadersDetect proves the walk finds the bug
+// TestResidentImageReadersDetect proves the walk finds the bug
 // class: with the residency guards ignored, each reader this change fixed
 // reads its record field from the image (the reads its legacy branch keeps),
 // and with them it reads none.
-func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
+func TestResidentImageReadersDetect(t *testing.T) {
 	want := map[string]string{
 		"store/SQLiteStore.BeginGitLabConnectionConfigsRead": "IntegrationConnections",
 		"store/SQLiteStore.CycleForCalendar":                 "Cycles",
@@ -933,7 +933,7 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 		"store/SQLiteStore.syncMemberDirectory":              "Users",
 		"store/SQLiteStore.legacyAuditLogPending":            "AuditLog",
 	}
-	analysis := scaleP21SW559Load(t)
+	analysis := residentImageReadersLoad(t)
 	reached := analysis.reachable()
 	seen := map[string]bool{}
 	for _, fn := range analysis.sorted() {
@@ -950,7 +950,7 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 	}
 	// Reuse the parsed/type-checked graph so the detector does not retain two
 	// full store analyses at once.
-	analysis.memo = map[scaleP21SW559Context]*scaleP21SW559Result{}
+	analysis.memo = map[residentImageReadersContext]*residentImageReadersResult{}
 	analysis.noGuards = true
 	for _, fn := range analysis.sorted() {
 		if field, ok := want[fn.key]; ok && fn.pkg == "store" {

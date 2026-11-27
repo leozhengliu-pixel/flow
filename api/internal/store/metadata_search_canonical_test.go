@@ -16,10 +16,10 @@ import (
 // every start. It now writes the application's text byte for byte: after a
 // start repairs a stale and a missing document, the next start (flag off and
 // bounded) rewrites none.
-func TestScaleP21SW470MetadataSearchRepairKeepsApplicationText(t *testing.T) {
+func TestMetadataSearchRepairKeepsApplicationText(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "mysql" {
 		t.Skip("SQLite and PostgreSQL repairs keep their database text")
 	}

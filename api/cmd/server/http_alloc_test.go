@@ -14,7 +14,7 @@ import (
 
 // Keep both modes on one warmed writer without peer reads between requests;
 // the original Lwrite includes asynchronous peer reload allocations.
-func TestScaleP04HTTPAllocations(t *testing.T) {
+func TestScaleHTTPAllocations(t *testing.T) {
 	peers, _, client, team, issue := writeLoadFixture(t)
 	peers.stopListening(1)
 	writes := loadEnvInt("FLOW_LOAD_WRITES", 20)

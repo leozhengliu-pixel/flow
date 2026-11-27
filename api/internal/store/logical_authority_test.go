@@ -8,8 +8,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW33OwnedAuthorityRecreatedKey(t *testing.T) {
-	f, warm, original := scaleP21SW27WarmLogicalFixture(t)
+func TestOwnedAuthorityRecreatedKey(t *testing.T) {
+	f, warm, original := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -73,11 +73,11 @@ func TestScaleP21SW33OwnedAuthorityRecreatedKey(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW33OwnedAuthorityPostgresNativeIdentity(t *testing.T) {
+func TestOwnedAuthorityPostgresNativeIdentity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "postgres" {
 		t.Skip("Postgres removes NUL in SQL text arguments; SQLite retains it")
 	}

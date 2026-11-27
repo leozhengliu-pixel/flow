@@ -5,7 +5,7 @@
     "BeginApplicationWebhookReconcileRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Reuses the reviewed WebhookDeliveryRead owner (routing=false, workspace ID/URLKey). Selects every ManagedBy=application hook whole in collection order, live grant headers (RevokedAt nil, ClientID non-empty: ClientID/UserID only, in order) and reachable team IDs (not Private, ArchivedAt and RetiredAt nil, in order); revoked/client-less grants and other teams are visited, never retained. Exactly the inputs reconcileApplicationWebhooksWith reads. Admission is per retained value; refusal returns ErrMetadataWorkBudget. TestScaleP21SW295ApplicationWebhookReconcileDifferential (persistent SQLite x2, race).",
+      "reason": "Reuses the reviewed WebhookDeliveryRead owner (routing=false, workspace ID/URLKey). Selects every ManagedBy=application hook whole in collection order, live grant headers (RevokedAt nil, ClientID non-empty: ClientID/UserID only, in order) and reachable team IDs (not Private, ArchivedAt and RetiredAt nil, in order); revoked/client-less grants and other teams are visited, never retained. Exactly the inputs reconcileApplicationWebhooksWith reads. Admission is per retained value; refusal returns ErrMetadataWorkBudget. TestApplicationWebhookReconcileDifferential (persistent SQLite x2, race).",
       "accessors": [
         "BeginWebhookDeliveryRead"
       ],
@@ -18,7 +18,7 @@
     "BeginApplicationWebhookClientsRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Indexes, in WorkspaceKeys order and collection order, each installed workspace's OAuth applications through the reviewed WebhookDeliveryRead owner, projecting ID/ClientID/Name/WebhookEnabled/WebhookURL/WebhookResourceTypes; later entries replace earlier ones as the original map does. Each workspace read closes before the next; the retained index holds its own admission until Close. TestScaleP21SW295ApplicationWebhookClients and the reconcile differential (persistent SQLite x2, race).",
+      "reason": "Indexes, in WorkspaceKeys order and collection order, each installed workspace's OAuth applications through the reviewed WebhookDeliveryRead owner, projecting ID/ClientID/Name/WebhookEnabled/WebhookURL/WebhookResourceTypes; later entries replace earlier ones as the original map does. Each workspace read closes before the next; the retained index holds its own admission until Close. TestApplicationWebhookClients and the reconcile differential (persistent SQLite x2, race).",
       "accessors": [
         "BeginWebhookDeliveryRead"
       ],

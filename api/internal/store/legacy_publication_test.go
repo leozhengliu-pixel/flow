@@ -12,8 +12,8 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW95Fixture struct {
-	f         scaleP09Fixture
+type legacyPublicationFixture struct {
+	f         scaleFixture
 	view      *SQLiteStore
 	prior     *metadataLogicalSource
 	native    domain.Bootstrap
@@ -22,9 +22,9 @@ type scaleP21SW95Fixture struct {
 	other     string
 }
 
-func scaleP21SW95Setup(t *testing.T, reload bool) scaleP21SW95Fixture {
+func legacyPublicationSetup(t *testing.T, reload bool) legacyPublicationFixture {
 	t.Helper()
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+	f, _, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "users"), workspace, "scale_p21.sw95_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Viewer.Name = "SW95 resident preimage"
@@ -69,11 +69,11 @@ func scaleP21SW95Setup(t *testing.T, reload bool) scaleP21SW95Fixture {
 	view.lastWorkspaceKey = other.Workspace.URLKey
 	view.mu.Unlock()
 	f.db.SetMaxOpenConns(1)
-	return scaleP21SW95Fixture{f, view, prior, native, base, workspace, other.Workspace.URLKey}
+	return legacyPublicationFixture{f, view, prior, native, base, workspace, other.Workspace.URLKey}
 }
 
-func scaleP21SW95Actor(f scaleP21SW95Fixture) domain.User {
-	actor := scaleP21SW69OwnedActor(f.native.Viewer)
+func legacyPublicationActor(f legacyPublicationFixture) domain.User {
+	actor := ownedActor(f.native.Viewer)
 	actor.Name = "SW95 native\x00actor"
 	actor.AppScopes, actor.AppTeamIDs = []string{}, nil
 	at := time.Date(2026, 11, 13, 12, 34, 56, 789, time.UTC)
@@ -82,10 +82,10 @@ func scaleP21SW95Actor(f scaleP21SW95Fixture) domain.User {
 	return actor
 }
 
-func scaleP21SW95Candidate(t *testing.T, f scaleP21SW95Fixture) (*metadataLogicalSource, domain.Bootstrap) {
+func legacyPublicationCandidate(t *testing.T, f legacyPublicationFixture) (*metadataLogicalSource, domain.Bootstrap) {
 	t.Helper()
-	actor := scaleP21SW95Actor(f)
-	next := scaleP21SW69LiteralActorStep(cloneBootstrap(f.native), &actor)
+	actor := legacyPublicationActor(f)
+	next := literalActorStep(cloneBootstrap(f.native), &actor)
 	image, err := f.view.prepareLegacyActorImage(t.Context(), f.prior, &actor)
 	if err != nil {
 		t.Fatal(err)
@@ -99,9 +99,9 @@ func scaleP21SW95Candidate(t *testing.T, f scaleP21SW95Fixture) (*metadataLogica
 	return candidate, next
 }
 
-func scaleP21SW95Unchanged(t *testing.T, f scaleP21SW95Fixture, policy domain.Bootstrap, costs map[string]int, stamp copyStamp) {
+func legacyPublicationUnchanged(t *testing.T, f legacyPublicationFixture, policy domain.Bootstrap, costs map[string]int, stamp copyStamp) {
 	t.Helper()
-	scaleP21SW58AssertInstalled(t, f.view, f.workspace, f.prior, true).Release()
+	assertInstalled(t, f.view, f.workspace, f.prior, true).Release()
 	current, found := f.view.storedWorkspace(f.workspace)
 	if !found || !reflect.DeepEqual(current, policy) {
 		t.Fatal("publication changed resident policy before successful Install")
@@ -118,7 +118,7 @@ func scaleP21SW95Unchanged(t *testing.T, f scaleP21SW95Fixture, policy domain.Bo
 	}
 }
 
-func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
+func TestLegacyResidentPublication(t *testing.T) {
 	for _, test := range []struct {
 		name                string
 		reload, exact, last bool
@@ -129,7 +129,7 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 		{"reload-unknown-keep-default", true, false, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f := scaleP21SW95Setup(t, test.reload)
+			f := legacyPublicationSetup(t, test.reload)
 			policy, _ := f.view.storedWorkspace(f.workspace)
 			policy = cloneBootstrap(policy)
 			domain.RebuildTeamDirectory(&policy)
@@ -148,8 +148,8 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 			}
 			oldStamp := f.view.metadataResidency.stamps[f.workspace]
 			f.view.metadataResidency.mu.Unlock()
-			actor := scaleP21SW95Actor(f)
-			candidate, expected := scaleP21SW95Candidate(t, f)
+			actor := legacyPublicationActor(f)
+			candidate, expected := legacyPublicationCandidate(t, f)
 			owned := true
 			defer func() {
 				if owned {
@@ -162,13 +162,13 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 			}
 			f.view.writeMu.Lock()
 			defer f.view.writeMu.Unlock()
-			tx := scaleP21SW76Begin(t, f.f)
+			tx := legacyActorWriteBegin(t, f.f)
 			image, err := f.view.persistLegacyActorImage(t.Context(), tx, f.workspace, f.prior, &actor)
 			if err != nil {
 				t.Fatal(err)
 			}
 			image.Close()
-			scaleP21SW58StageDiscussionRows(t, f.f, tx)
+			stageDiscussionRows(t, f.f, tx)
 			publication, err := f.view.prepareLegacyResidentPublication(t.Context(), tx, f.workspace, candidate, f.base, test.exact, test.last)
 			if err != nil || publication == nil {
 				t.Fatal("native resident publication preparation failed", err)
@@ -185,8 +185,8 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 			if err := publication.Install(); !errors.Is(err, ErrBoundedMetadataCoverage) {
 				t.Fatal("uncommitted publication installed", err)
 			}
-			scaleP21SW95Unchanged(t, f, policy, costs, oldStamp)
-			scaleP21SW58AssertDiscussionRows(t, tx, f.workspace, true)
+			legacyPublicationUnchanged(t, f, policy, costs, oldStamp)
+			assertDiscussionRows(t, tx, f.workspace, true)
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
@@ -197,7 +197,7 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 			if final.workspaceID != f.base.workspaceID || final.revision <= f.base.revision {
 				t.Fatal("publication fixture did not capture the actual advanced commit stamp", f.base, final)
 			}
-			scaleP21SW95Unchanged(t, f, policy, costs, oldStamp)
+			legacyPublicationUnchanged(t, f, policy, costs, oldStamp)
 			if err := publication.Install(); err != nil {
 				t.Fatal(err)
 			}
@@ -279,7 +279,7 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 				t.Fatal("publication replaced another workspace's native policy/source")
 			}
 			otherInstalled.Release()
-			scaleP21SW58AssertDiscussionRows(t, f.f.db, f.workspace, true)
+			assertDiscussionRows(t, f.f.db, f.workspace, true)
 			before, err := f.prior.Select(t.Context(), MetadataRecordScope{Fields: []string{"users", "settings"}}, 2<<20)
 			if err != nil || !reflect.DeepEqual(before.Viewer, f.native.Viewer) || !reflect.DeepEqual(before.Users, f.native.Users) {
 				t.Fatal("Install mutated retained native preimage", err)
@@ -291,8 +291,8 @@ func TestScaleP21SW95LegacyResidentPublication(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW95LegacyResidentPublicationFailures(t *testing.T) {
-	f := scaleP21SW95Setup(t, false)
+func TestLegacyResidentPublicationFailures(t *testing.T) {
+	f := legacyPublicationSetup(t, false)
 	policy, _ := f.view.storedWorkspace(f.workspace)
 	policy = cloneBootstrap(policy)
 	domain.RebuildTeamDirectory(&policy)
@@ -310,7 +310,7 @@ func TestScaleP21SW95LegacyResidentPublicationFailures(t *testing.T) {
 	} {
 		t.Run(mode, func(t *testing.T) {
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			candidate, expected := scaleP21SW95Candidate(t, f)
+			candidate, expected := legacyPublicationCandidate(t, f)
 			if mode == "foreign-candidate" || mode == "foreign-root" {
 				beforeRoot := domain.Bootstrap{Workspace: expected.Workspace}
 				expected.Workspace.ID = "sw95-foreign-workspace"
@@ -345,9 +345,9 @@ func TestScaleP21SW95LegacyResidentPublicationFailures(t *testing.T) {
 			}
 			f.view.writeMu.Lock()
 			defer f.view.writeMu.Unlock()
-			tx := scaleP21SW76Begin(t, f.f)
-			scaleP21SW58StageDiscussionRows(t, f.f, tx)
-			imageBefore := scaleP21SW76MetadataImage(t, tx, f.workspace)
+			tx := legacyActorWriteBegin(t, f.f)
+			stageDiscussionRows(t, f.f, tx)
+			imageBefore := metadataImage(t, tx, f.workspace)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			want := error(ErrMetadataRecordQuery)
@@ -433,18 +433,18 @@ func TestScaleP21SW95LegacyResidentPublicationFailures(t *testing.T) {
 				}
 				publication.Close()
 			}
-			scaleP21SW95Unchanged(t, f, policy, costs, stamp)
+			legacyPublicationUnchanged(t, f, policy, costs, stamp)
 			if !prepared {
-				if got := scaleP21SW76MetadataImage(t, tx, f.workspace); !reflect.DeepEqual(got, imageBefore) {
+				if got := metadataImage(t, tx, f.workspace); !reflect.DeepEqual(got, imageBefore) {
 					t.Fatal("preparation changed caller transaction metadata")
 				}
-				scaleP21SW58AssertDiscussionRows(t, tx, f.workspace, true)
-				scaleP21SW70Usable(t, tx)
+				assertDiscussionRows(t, tx, f.workspace, true)
+				legacyIssueScanUsable(t, tx)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal("preparation consumed caller transaction", err)
 				}
 			}
-			scaleP21SW58AssertDiscussionRows(t, f.f.db, f.workspace, false)
+			assertDiscussionRows(t, f.f.db, f.workspace, false)
 			if f.view.lastWorkspaceKey != f.other || f.view.MetadataWorkUsedForTesting() != 0 || f.view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("failed publication changed default namespace or leaked/hydrated metadata")
 			}

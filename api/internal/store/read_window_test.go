@@ -14,8 +14,8 @@ import (
 // size, returned when the scope ends, and a write in the transaction
 // invalidates it. Outside a scope, and for readers with explicit pages, the
 // reads keep their pages.
-func TestScaleP21SW560ScopedReadWindows(t *testing.T) {
-	f, view, _ := scaleP21SW188InlineProjects(t)
+func TestScopedReadWindows(t *testing.T) {
+	f, view, _ := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	for _, size := range []int{metadataReadWindowMinRow - 64, metadataReadWindowMinRow + 1, 6 << 20, 12 << 20} {
 		root := []byte(`{"settings":{"body":"` + strings.Repeat("r", size) + `"}}`)
@@ -109,8 +109,8 @@ func TestScaleP21SW560ScopedReadWindows(t *testing.T) {
 
 // A public collection read releases its window when it returns, and a work
 // budget that cannot admit a window keeps the fixed pages with equal bytes.
-func TestScaleP21SW560CollectionReadReleasesWindows(t *testing.T) {
-	f, view, raw := scaleP21SW188InlineProjects(t)
+func TestCollectionReadReleasesWindows(t *testing.T) {
+	f, view, raw := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	pages := (len(raw) + metadataRecordChunkBytes - 1) / metadataRecordChunkBytes
 	for _, admitted := range []bool{true, false} {

@@ -89,7 +89,7 @@ func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Boot
 	}
 	commentActionRead := false
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		_, commentActionRead = scaleP21EscapedRouteParts(r, "/api/issue-records/{id}/comment-actions")
+		_, commentActionRead = scaleEscapedRouteParts(r, "/api/issue-records/{id}/comment-actions")
 	}
 	scoped := false
 	if !s.authDisabled {

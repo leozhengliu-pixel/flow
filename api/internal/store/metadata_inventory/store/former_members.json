@@ -5,16 +5,16 @@
     "BeginFormerMembersRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Off mode delegates the exact original FormerMembers accessor and preserves nonnil partial/error maps. Bounded mode uses the original membership/departure UNION and active-rejoin precedence in one snapshot; length/count preflight and byte-gated 64-row pages bound driver transfer and the owned map. SQL/parser lifetime ends before return while adaptive output admission stays with FormerMembersRead until idempotent Close. SW16 covers output charge, pool-one detach, failures, off errors and the permission/revocation matrix. SW211 retains the installed logical source and workspace identity before membership SQL and proves warm/actual-reloaded provenance, native suspended status, cancellation and source ownership.",
+      "reason": "Off mode delegates the exact original FormerMembers accessor and preserves nonnil partial/error maps. Bounded mode uses the original membership/departure UNION and active-rejoin precedence in one snapshot; length/count preflight and byte-gated 64-row pages bound driver transfer and the owned map. SQL/parser lifetime ends before return while adaptive output admission stays with FormerMembersRead until idempotent Close. attachment, template and metadata migrations covers output charge, pool-one detach, failures, off errors and the permission/revocation matrix. former member logical retains the installed logical source and workspace identity before membership SQL and proves warm/actual-reloaded provenance, native suspended status, cancellation and source ownership.",
       "accessors": [
         "FormerMembers",
         "resident-state"
       ]
     },
-    "scaleP21SW16FallbackFormerMembers": {
+    "fallbackFormerMembers": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The no-membership fallback retains the installed logical source and workspace identity before membership-authority SQL. It streams exact native suspended status and decodes only selected User.ID values under the existing owned map/work limits; unrelated names and bodies remain framed. Membership/departure SQL and active-rejoin precedence stay unchanged. SW211 proves supported Members-delta and UpdateWorkspace warm/actual-reloaded provenance, duplicate/empty/overlong IDs, large names, borrowed snapshots, generation replacement during membership SQL, cancellation and idempotent release. Normal, persistent SQLite twice and race proofs pass; existing SW16 permission/revocation coverage is retained. Off mode uses literal FormerMembers.",
+      "reason": "The no-membership fallback retains the installed logical source and workspace identity before membership-authority SQL. It streams exact native suspended status and decodes only selected User.ID values under the existing owned map/work limits; unrelated names and bodies remain framed. Membership/departure SQL and active-rejoin precedence stay unchanged. former member logical proves supported Members-delta and UpdateWorkspace warm/actual-reloaded provenance, duplicate/empty/overlong IDs, large names, borrowed snapshots, generation replacement during membership SQL, cancellation and idempotent release. Normal, persistent SQLite twice and race proofs pass; existing attachment, template and metadata migrations permission/revocation coverage is retained. Off mode uses literal FormerMembers.",
       "accessors": [
         "MetadataCollectionsInSnapshot"
       ],

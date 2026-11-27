@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW82Header(project domain.Project) domain.Project {
+func projectVisibilityHeader(project domain.Project) domain.Project {
 	return domain.Project{ID: project.ID, TeamIDs: slices.Clone(project.TeamIDs)}
 }
 
-func scaleP21SW82Compare(t *testing.T, legacy, view *SQLiteStore, workspace, id string) int {
+func projectVisibilityCompare(t *testing.T, legacy, view *SQLiteStore, workspace, id string) int {
 	t.Helper()
 	original, exists := legacy.ProjectByID(workspace, id)
 	queries := 0
@@ -29,7 +29,7 @@ func scaleP21SW82Compare(t *testing.T, legacy, view *SQLiteStore, workspace, id 
 		t.Fatal("project visibility existence differs", id)
 	}
 	if exists {
-		if len(read.Data.Projects) != 1 || !reflect.DeepEqual(read.Data.Projects[0], scaleP21SW82Header(original)) {
+		if len(read.Data.Projects) != 1 || !reflect.DeepEqual(read.Data.Projects[0], projectVisibilityHeader(original)) {
 			t.Fatalf("first exact project header differs for %q: %#v / %#v", id, read.Data.Projects, original)
 		}
 	}
@@ -49,7 +49,7 @@ func scaleP21SW82Compare(t *testing.T, legacy, view *SQLiteStore, workspace, id 
 	return held
 }
 
-func TestScaleP21SW82ProjectVisibilityLiteral(t *testing.T) {
+func TestProjectVisibilityLiteral(t *testing.T) {
 	longID := strings.Repeat("exact-long-id-", 30)
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "organization", URLKey: "logical"},
@@ -69,12 +69,12 @@ func TestScaleP21SW82ProjectVisibilityLiteral(t *testing.T) {
 	}
 	values := map[string]domain.Bootstrap{"physical\x00": data}
 	legacy := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical\x00"}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = "physical\x00"
 	for _, workspace := range []string{"physical\x00", ""} {
 		for _, id := range []string{"target", "slug-collision", "old-target", "", " spaced ", "spaced", "nul\x00id", longID, "\xff-native", "nil", "empty", "missing", "TARGET"} {
 			t.Run(fmt.Sprintf("%q/%q", workspace, id), func(t *testing.T) {
-				scaleP21SW82Compare(t, legacy, view, workspace, id)
+				projectVisibilityCompare(t, legacy, view, workspace, id)
 			})
 		}
 	}
@@ -86,7 +86,7 @@ func TestScaleP21SW82ProjectVisibilityLiteral(t *testing.T) {
 		}
 	}
 	off, found, err := legacy.BeginProjectVisibilityRead(t.Context(), "", "target")
-	if err != nil || !found || !off.Allowed || !reflect.DeepEqual(off.Data.Projects[0], scaleP21SW82Header(data.Projects[1])) {
+	if err != nil || !found || !off.Allowed || !reflect.DeepEqual(off.Data.Projects[0], projectVisibilityHeader(data.Projects[1])) {
 		t.Fatal("off reader changed literal first exact header", found, err)
 	}
 	off.Data.Projects[0].TeamIDs[0] = "caller-owned"
@@ -95,7 +95,7 @@ func TestScaleP21SW82ProjectVisibilityLiteral(t *testing.T) {
 	}
 	off.Close()
 	for _, shape := range [][]domain.Project{nil, {}} {
-		emptyView := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"empty": {Projects: shape}})
+		emptyView := scaleHotLogoStore(t, map[string]domain.Bootstrap{"empty": {Projects: shape}})
 		read, found, err := emptyView.BeginProjectVisibilityRead(t.Context(), "empty", "")
 		if err != nil || !found || read.Allowed || len(read.Data.Projects) != 0 {
 			t.Fatal("empty project collection became an empty-ID match", found, err)
@@ -104,11 +104,11 @@ func TestScaleP21SW82ProjectVisibilityLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW82ProjectVisibilityHandoff(t *testing.T) {
+func TestProjectVisibilityHandoff(t *testing.T) {
 	before := domain.Bootstrap{Projects: []domain.Project{{ID: "target", TeamIDs: []string{"before"}}}}
 	after := domain.Bootstrap{Projects: []domain.Project{{ID: "target", TeamIDs: []string{"after"}}}}
 	foreign := domain.Bootstrap{Projects: []domain.Project{{ID: "target", TeamIDs: []string{"foreign"}}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "foreign": foreign})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "foreign": foreign})
 	view.lastWorkspaceKey = "physical"
 	legacy := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": after, "foreign": foreign}, lastWorkspaceKey: "physical"}
 	parent, found, err := view.BeginInstalledMetadataRead(t.Context(), "")
@@ -130,7 +130,7 @@ func TestScaleP21SW82ProjectVisibilityHandoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	read, found, err := view.BeginProjectVisibilityRead(ctx, "", "target")
 	want, exists := legacy.ProjectByID("", "target")
-	if err != nil || !found || !exists || !read.Allowed || !reflect.DeepEqual(read.Data.Projects[0], scaleP21SW82Header(want)) {
+	if err != nil || !found || !exists || !read.Allowed || !reflect.DeepEqual(read.Data.Projects[0], projectVisibilityHeader(want)) {
 		t.Fatal("stale request pin replaced the current literal project generation", found, err)
 	}
 	parent.Close()
@@ -160,7 +160,7 @@ func TestScaleP21SW82ProjectVisibilityHandoff(t *testing.T) {
 	for _, workspace := range []string{"physical", ""} {
 		read, found, err := view.BeginProjectVisibilityRead(foreignContext, workspace, "target")
 		want, exists := legacy.ProjectByID(workspace, "target")
-		if err != nil || !found || !exists || !read.Allowed || !reflect.DeepEqual(read.Data.Projects[0], scaleP21SW82Header(want)) {
+		if err != nil || !found || !exists || !read.Allowed || !reflect.DeepEqual(read.Data.Projects[0], projectVisibilityHeader(want)) {
 			foreignParent.Close()
 			t.Fatal("foreign request pin changed current/default project lookup", workspace, found, err)
 		}
@@ -197,21 +197,21 @@ func TestScaleP21SW82ProjectVisibilityHandoff(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW82ProjectVisibilityLargeHeader(t *testing.T) {
+func TestProjectVisibilityLargeHeader(t *testing.T) {
 	team := strings.Repeat("complete-large-team-id.", 20000)
 	data := domain.Bootstrap{Projects: []domain.Project{
 		{ID: "target", TeamIDs: []string{team, "second", team}, Description: strings.Repeat("Ignored body. ", 100000)},
 	}}
 	legacy := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}}
-	view := scaleP21HotLogoStore(t, legacy.workspaces)
-	scaleP21SW82Compare(t, legacy, view, "physical", "target")
+	view := scaleHotLogoStore(t, legacy.workspaces)
+	projectVisibilityCompare(t, legacy, view, "physical", "target")
 }
 
-func TestScaleP21SW82ProjectVisibilityWarmReloadBound(t *testing.T) {
+func TestProjectVisibilityWarmReloadBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -248,7 +248,7 @@ func TestScaleP21SW82ProjectVisibilityWarmReloadBound(t *testing.T) {
 				if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 					t.Fatal(err)
 				}
-				current := scaleP21SW82Compare(t, f.SQLiteStore, view, workspace, "target")
+				current := projectVisibilityCompare(t, f.SQLiteStore, view, workspace, "target")
 				if held[reload] == 0 {
 					held[reload] = current
 				}

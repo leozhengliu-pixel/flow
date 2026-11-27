@@ -17,30 +17,30 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP12Principal struct {
+type scalePrincipal struct {
 	name string
 	user domain.User
 	key  *domain.APIKey
 }
 
-func (p scaleP12Principal) request(workspace string) *http.Request {
-	r := scaleP12Request(workspace, p.user)
+func (p scalePrincipal) request(workspace string) *http.Request {
+	r := scaleRequest(workspace, p.user)
 	if p.key != nil {
 		r = r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *p.key))
 	}
 	return r
 }
 
-type scaleP12Fixture struct {
-	scaleP03PlatformFixture
+type eventSourceScaleFixture struct {
+	scalePlatformFixture
 	private, child           string
 	open, secret, descendant domain.Issue
-	principals               []scaleP12Principal
+	principals               []scalePrincipal
 }
 
-func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
+func newScaleFixture(t *testing.T, repo *store.SQLiteStore) eventSourceScaleFixture {
 	t.Helper()
-	f := scaleP12Fixture{scaleP03PlatformFixture: scaleP03Fixture(t, repo), private: idgen.New("p12-private-"), child: idgen.New("p12-child-")}
+	f := eventSourceScaleFixture{scalePlatformFixture: resourceAccessScaleFixture(t, repo), private: idgen.New("p12-private-"), child: idgen.New("p12-child-")}
 	workspace := f.data.Workspace.URLKey
 	if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p12.seeded", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: f.private, Key: "P12", Private: true}, domain.Team{ID: f.child, Key: "P12C"})
@@ -58,10 +58,10 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 		t.Fatal(err)
 	}
 	join := func(name, role string, teams ...string) domain.User {
-		_, user := scaleP03Join(t, f.scaleP03PlatformFixture, name, idgen.New("p12-person-")+"@example.test", role, teams...)
+		_, user := resourceAccessScaleJoin(t, f.scalePlatformFixture, name, idgen.New("p12-person-")+"@example.test", role, teams...)
 		return user
 	}
-	f.principals = []scaleP12Principal{{name: "admin", user: f.data.Viewer}, {name: "admin-private-outsider", user: join("P12 outside admin", "admin", f.data.Teams[0].ID)}, {name: "member-private-outsider", user: join("P12 member", "member", f.data.Teams[0].ID)}, {name: "guest-explicit-grant", user: join("P12 guest", "guest", f.data.Teams[0].ID)}, {name: "subteam-inheritance", user: join("P12 inherited", "member", f.private)}}
+	f.principals = []scalePrincipal{{name: "admin", user: f.data.Viewer}, {name: "admin-private-outsider", user: join("P12 outside admin", "admin", f.data.Teams[0].ID)}, {name: "member-private-outsider", user: join("P12 member", "member", f.data.Teams[0].ID)}, {name: "guest-explicit-grant", user: join("P12 guest", "guest", f.data.Teams[0].ID)}, {name: "subteam-inheritance", user: join("P12 inherited", "member", f.private)}}
 	create := func(title, team, parent string) domain.Issue {
 		input := map[string]any{"title": title, "teamId": team}
 		if parent != "" {
@@ -99,7 +99,7 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 			}
 			data.APIKeys = append(data.APIKeys, key)
 			copy := key
-			f.principals = append(f.principals, scaleP12Principal{name: "key-" + scope, user: f.data.Viewer, key: &copy})
+			f.principals = append(f.principals, scalePrincipal{name: "key-" + scope, user: f.data.Viewer, key: &copy})
 		}
 		return nil
 	}); err != nil {
@@ -111,7 +111,7 @@ func newScaleP12Fixture(t *testing.T, repo *store.SQLiteStore) scaleP12Fixture {
 	return f
 }
 
-func scaleP12EqualEvent(t *testing.T, s *server, r *http.Request, event domain.RealtimeEvent) {
+func scaleEqualEvent(t *testing.T, s *server, r *http.Request, event domain.RealtimeEvent) {
 	t.Helper()
 	old, oldVisible, oldErr := s.legacyPagedRealtimeEvent(r, event)
 	got, visible, err := s.pagedRealtimeEvent(r, event)
@@ -133,11 +133,11 @@ func scaleP12EqualEvent(t *testing.T, s *server, r *http.Request, event domain.R
 	}
 }
 
-func TestScaleP12PermissionDifferential(t *testing.T) {
+func TestScalePermissionDifferentialEventSource(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := newScaleP12Fixture(t, repo)
+			f := newScaleFixture(t, repo)
 			deletion, _ := json.Marshal(map[string]any{"issueAccess": []deletedIssueAccess{{ID: f.secret.ID, TeamID: f.private, Grants: []deletedIssueSubject{{Type: "user", ID: f.principals[3].user.ID}}}, {ID: f.open.ID, TeamID: f.data.Teams[0].ID}}})
 			for _, principal := range f.principals {
 				t.Run(principal.name, func(t *testing.T) {
@@ -166,7 +166,7 @@ func TestScaleP12PermissionDifferential(t *testing.T) {
 						event.ActorID = f.data.Viewer.ID
 						event.Seq = int64(i + 1)
 						event.CreatedAt = time.Unix(1, 0).UTC()
-						scaleP12EqualEvent(t, f.service, request, event)
+						scaleEqualEvent(t, f.service, request, event)
 					}
 				})
 			}
@@ -175,15 +175,15 @@ func TestScaleP12PermissionDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.resources.workspaces = append(f.resources.workspaces, other.Workspace.URLKey)
-			scaleP12EqualEvent(t, f.service, f.principals[2].request(other.Workspace.URLKey), domain.RealtimeEvent{ID: "foreign", Type: "issue.updated", AggregateID: f.open.ID})
+			scaleEqualEvent(t, f.service, f.principals[2].request(other.Workspace.URLKey), domain.RealtimeEvent{ID: "foreign", Type: "issue.updated", AggregateID: f.open.ID})
 		})
 	}
 }
 
-func TestScaleP12SourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
+func TestScaleSourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		member := f.principals[4]
 		request := member.request(f.data.Workspace.URLKey)
 		event := domain.RealtimeEvent{ID: "p12-queued", Type: "issue.updated", AggregateID: f.secret.ID, Payload: json.RawMessage(`{}`)}
@@ -221,7 +221,7 @@ func TestScaleP12SourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
 		if err := frame.Validate(t.Context()); err == nil {
 			t.Fatal("retained frame survived revocation")
 		}
-		scaleP12EqualEvent(t, f.service, request, <-queue)
+		scaleEqualEvent(t, f.service, request, <-queue)
 		if _, visible, err := f.service.pagedRealtimeEvent(request, event); err != nil || visible {
 			t.Fatalf("same stream after revoke visible=%v err=%v", visible, err)
 		}
@@ -241,9 +241,9 @@ func TestScaleP12SourceFramesAreImmutableAndRevocationIsFresh(t *testing.T) {
 	}
 }
 
-func TestScaleP12TwoThousandUniqueACLsHaveBoundedFramesAndSourceSQL(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+func TestScaleTwoThousandUniqueACLsHaveBoundedFramesAndSourceSQL(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "P12 ACL fanout", "teamId": f.data.Teams[0].ID}, f.data.Workspace.URLKey, http.StatusCreated)
 		teams := make([]string, 11)
 		for i := range teams {
@@ -307,9 +307,9 @@ func TestScaleP12TwoThousandUniqueACLsHaveBoundedFramesAndSourceSQL(t *testing.T
 	}
 }
 
-func TestScaleP12ConcurrentProjection(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleConcurrentProjection(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -338,7 +338,7 @@ func TestScaleP12ConcurrentProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP12FlagsAndFallback(t *testing.T) {
+func TestScaleFlagsAndFallback(t *testing.T) {
 	s := &server{}
 	// Unset follows the database default, which is on for every driver (a nil store is SQLite).
 	for value, want := range map[string]bool{"": true, "off": false, "shadow": false, "invalid": false, "on": true, "true": true, "1": true} {
@@ -348,7 +348,7 @@ func TestScaleP12FlagsAndFallback(t *testing.T) {
 		}
 	}
 	t.Setenv("FLOW_SYNC_V2", "off")
-	r := scaleP12Request("workspace", domain.User{})
+	r := scaleRequest("workspace", domain.User{})
 	r.Header.Set("X-Flow-Sync", "summary")
 	if s.negotiatedSummaryRequest(r) {
 		t.Fatal("summary negotiation bypassed rollback")

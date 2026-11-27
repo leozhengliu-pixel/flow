@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW183Installed struct {
+type publicationAdmissionInstalled struct {
 	policy domain.Bootstrap
 	costs  map[string]int
 	stamp  copyStamp
 }
 
-func scaleP21SW183Before(t *testing.T, f scaleP21SW95Fixture) scaleP21SW183Installed {
+func publicationAdmissionBefore(t *testing.T, f legacyPublicationFixture) publicationAdmissionInstalled {
 	t.Helper()
 	policy, found := f.view.storedWorkspace(f.workspace)
 	if !found {
@@ -26,7 +26,7 @@ func scaleP21SW183Before(t *testing.T, f scaleP21SW95Fixture) scaleP21SW183Insta
 	}
 	policy = cloneBootstrap(policy)
 	domain.RebuildTeamDirectory(&policy)
-	before := scaleP21SW183Installed{policy: policy, costs: map[string]int{}}
+	before := publicationAdmissionInstalled{policy: policy, costs: map[string]int{}}
 	f.view.metadataResidency.mu.Lock()
 	for key, cost := range f.view.metadataResidency.policy {
 		before.costs[key] = cost
@@ -36,32 +36,32 @@ func scaleP21SW183Before(t *testing.T, f scaleP21SW95Fixture) scaleP21SW183Insta
 	return before
 }
 
-func scaleP21SW183Stage(t *testing.T, f scaleP21SW95Fixture, tx *sqlTx) {
+func publicationAdmissionStage(t *testing.T, f legacyPublicationFixture, tx *sqlTx) {
 	t.Helper()
-	actor := scaleP21SW95Actor(f)
+	actor := legacyPublicationActor(f)
 	image, err := f.view.persistLegacyActorImage(t.Context(), tx, f.workspace, f.prior, &actor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	image.Close()
-	scaleP21SW58StageDiscussionRows(t, f.f, tx)
+	stageDiscussionRows(t, f.f, tx)
 }
 
-func scaleP21SW183PolicyTransfer(query string) bool {
+func policyTransfer(query string) bool {
 	return strings.Contains(query, "THEN data ELSE NULL END") &&
 		(strings.Contains(query, "FROM workspace_states") || strings.Contains(query, "FROM workspace_metadata_records"))
 }
 
-func TestScaleP21SW183PublicationActualAdmission(t *testing.T) {
+func TestPublicationActualAdmission(t *testing.T) {
 	for _, reload := range []bool{false, true} {
 		name := "warm"
 		if reload {
 			name = "reloaded"
 		}
 		t.Run(name, func(t *testing.T) {
-			f := scaleP21SW95Setup(t, reload)
-			before := scaleP21SW183Before(t, f)
-			candidate, _ := scaleP21SW95Candidate(t, f)
+			f := legacyPublicationSetup(t, reload)
+			before := publicationAdmissionBefore(t, f)
+			candidate, _ := legacyPublicationCandidate(t, f)
 			owned := true
 			defer func() {
 				if owned {
@@ -74,8 +74,8 @@ func TestScaleP21SW183PublicationActualAdmission(t *testing.T) {
 			}
 			f.view.writeMu.Lock()
 			defer f.view.writeMu.Unlock()
-			tx := scaleP21SW76Begin(t, f.f)
-			scaleP21SW183Stage(t, f, tx)
+			tx := legacyActorWriteBegin(t, f.f)
+			publicationAdmissionStage(t, f, tx)
 			probe := &SQLiteStore{db: f.view.db, dialect: f.view.dialect, metadataResidency: newMetadataResidency()}
 			probe.metadataResidency.requireCoverage = false
 			canonical, canonicalStamp, canonicalCost, err := probe.readResidentWorkspace(t.Context(), tx, f.workspace)
@@ -101,7 +101,7 @@ func TestScaleP21SW183PublicationActualAdmission(t *testing.T) {
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 				used := f.view.MetadataWorkUsedForTesting() - held
 				peak = max(peak, used)
-				if !scaleP21SW183PolicyTransfer(query) {
+				if !policyTransfer(query) {
 					return
 				}
 				if used <= 0 {
@@ -127,7 +127,7 @@ func TestScaleP21SW183PublicationActualAdmission(t *testing.T) {
 			if retained < nativeCost || publication.cost != nativeCost || !reflect.DeepEqual(publication.policy, native) {
 				t.Fatal("retained native policy lost its own admission or canonical/native distinction", retained, nativeCost)
 			}
-			scaleP21SW95Unchanged(t, f, before.policy, before.costs, before.stamp)
+			legacyPublicationUnchanged(t, f, before.policy, before.costs, before.stamp)
 			if err := publication.Install(); !errors.Is(err, ErrBoundedMetadataCoverage) {
 				t.Fatal("uncommitted publication installed", err)
 			}
@@ -158,13 +158,13 @@ func TestScaleP21SW183PublicationActualAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
+func TestPublicationAdmissionFailureOwnership(t *testing.T) {
 	for _, mode := range []string{"work-limit", "cancel-before", "cancel-during-probe", "rollback", "cancel-after-prepare-rollback"} {
 		t.Run(mode, func(t *testing.T) {
-			f := scaleP21SW95Setup(t, false)
-			before := scaleP21SW183Before(t, f)
+			f := legacyPublicationSetup(t, false)
+			before := publicationAdmissionBefore(t, f)
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			candidate, expected := scaleP21SW95Candidate(t, f)
+			candidate, expected := legacyPublicationCandidate(t, f)
 			owned := true
 			defer func() {
 				if owned {
@@ -176,9 +176,9 @@ func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
 			}()
 			f.view.writeMu.Lock()
 			defer f.view.writeMu.Unlock()
-			tx := scaleP21SW76Begin(t, f.f)
-			scaleP21SW183Stage(t, f, tx)
-			staged := scaleP21SW76MetadataImage(t, tx, f.workspace)
+			tx := legacyActorWriteBegin(t, f.f)
+			publicationAdmissionStage(t, f, tx)
+			staged := metadataImage(t, tx, f.workspace)
 			held := 100 << 20
 			if mode == "work-limit" {
 				held = 0
@@ -198,7 +198,7 @@ func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
 			defer cancel()
 			transfers := 0
 			ctx = WithSQLStatementObserver(ctx, func(query string) {
-				if scaleP21SW183PolicyTransfer(query) {
+				if policyTransfer(query) {
 					transfers++
 					if mode == "cancel-during-probe" {
 						if f.view.MetadataWorkUsedForTesting() <= held {
@@ -260,11 +260,11 @@ func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
 				if mode == "work-limit" && transfers != 0 {
 					t.Fatal("work rejection occurred after canonical data transfer")
 				}
-				if got := scaleP21SW76MetadataImage(t, tx, f.workspace); !reflect.DeepEqual(got, staged) {
+				if got := metadataImage(t, tx, f.workspace); !reflect.DeepEqual(got, staged) {
 					t.Fatal("failed preparation changed caller transaction metadata")
 				}
-				scaleP21SW58AssertDiscussionRows(t, tx, f.workspace, true)
-				scaleP21SW70Usable(t, tx)
+				assertDiscussionRows(t, tx, f.workspace, true)
+				legacyIssueScanUsable(t, tx)
 				data, selectErr := candidate.Select(t.Context(), MetadataRecordScope{Fields: []string{"users"}}, 2<<20)
 				if selectErr != nil || !reflect.DeepEqual(data.Viewer, expected.Viewer) {
 					t.Fatal("failed preparation consumed caller candidate", selectErr)
@@ -273,8 +273,8 @@ func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			scaleP21SW95Unchanged(t, f, before.policy, before.costs, before.stamp)
-			scaleP21SW58AssertDiscussionRows(t, f.f.db, f.workspace, false)
+			legacyPublicationUnchanged(t, f, before.policy, before.costs, before.stamp)
+			assertDiscussionRows(t, f.f.db, f.workspace, false)
 			if used := f.view.MetadataWorkUsedForTesting(); used != held {
 				t.Fatal("publication failure leaked work or released its competitor", used, held)
 			}
@@ -286,13 +286,13 @@ func TestScaleP21SW183PublicationAdmissionFailureOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW183PublicationPredecodeAdmission(t *testing.T) {
-	f := scaleP21SW95Setup(t, false)
-	candidate, _ := scaleP21SW95Candidate(t, f)
+func TestPublicationPredecodeAdmission(t *testing.T) {
+	f := legacyPublicationSetup(t, false)
+	candidate, _ := legacyPublicationCandidate(t, f)
 	defer candidate.Release()
 	f.view.writeMu.Lock()
 	defer f.view.writeMu.Unlock()
-	tx := scaleP21SW76Begin(t, f.f)
+	tx := legacyActorWriteBegin(t, f.f)
 	var raw []byte
 	if err := tx.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, f.workspace).Scan(&raw); err != nil {
 		t.Fatal(err)
@@ -352,8 +352,8 @@ func TestScaleP21SW183PublicationPredecodeAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW183PublicationInvalidUTF8DirectoryAdmission(t *testing.T) {
-	f := scaleP21SW95Setup(t, false)
+func TestPublicationInvalidUTF8DirectoryAdmission(t *testing.T) {
+	f := legacyPublicationSetup(t, false)
 	key := strings.Repeat("A\xff", 2048)
 	if err := f.f.MutateWorkspace(WithMetadataFields(t.Context(), "teams"), f.workspace, "scale_p21.sw183_team_key", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams[0].Key = key
@@ -379,7 +379,7 @@ func TestScaleP21SW183PublicationInvalidUTF8DirectoryAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.prior.Release()
-	candidate, _ := scaleP21SW95Candidate(t, f)
+	candidate, _ := legacyPublicationCandidate(t, f)
 	defer candidate.Release()
 	owner := &ResourceRead{store: f.view}
 	defer owner.Close()
@@ -415,10 +415,10 @@ func TestScaleP21SW183PublicationInvalidUTF8DirectoryAdmission(t *testing.T) {
 	t.Logf("native_key_bytes=%d mapped_key_bytes=%d directory_work=%d ascii_directory_work=%d", len(key), len(mapped), admissions[1], asciiCost)
 }
 
-func TestScaleP21SW183PublicationLegacyInlineTeams(t *testing.T) {
+func TestPublicationLegacyInlineTeams(t *testing.T) {
 	for _, shape := range []string{"duplicate-id", "empty-id", "long-id"} {
 		t.Run(shape, func(t *testing.T) {
-			f := scaleP21SW95Setup(t, false)
+			f := legacyPublicationSetup(t, false)
 			if err := f.f.MutateWorkspace(WithMetadataFields(t.Context(), "teams"), f.workspace, "scale_p21.sw183_inline_teams", "", nil, func(data *domain.Bootstrap) error {
 				team := domain.Team{Key: "SW183INLINE", Name: "Legal legacy inline team"}
 				switch shape {
@@ -450,8 +450,8 @@ func TestScaleP21SW183PublicationLegacyInlineTeams(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer f.prior.Release()
-			before := scaleP21SW183Before(t, f)
-			candidate, _ := scaleP21SW95Candidate(t, f)
+			before := publicationAdmissionBefore(t, f)
+			candidate, _ := legacyPublicationCandidate(t, f)
 			owned := true
 			defer func() {
 				if owned {
@@ -464,8 +464,8 @@ func TestScaleP21SW183PublicationLegacyInlineTeams(t *testing.T) {
 			}
 			f.view.writeMu.Lock()
 			defer f.view.writeMu.Unlock()
-			tx := scaleP21SW76Begin(t, f.f)
-			scaleP21SW183Stage(t, f, tx)
+			tx := legacyActorWriteBegin(t, f.f)
+			publicationAdmissionStage(t, f, tx)
 			var raw []byte
 			if err := tx.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, f.workspace).Scan(&raw); err != nil {
 				t.Fatal(err)
@@ -502,7 +502,7 @@ func TestScaleP21SW183PublicationLegacyInlineTeams(t *testing.T) {
 			if !errors.Is(err, ErrMetadataWorkBudget) || f.view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("inline publication quota refusal leaked admission", err)
 			}
-			scaleP21SW95Unchanged(t, f, before.policy, before.costs, before.stamp)
+			legacyPublicationUnchanged(t, f, before.policy, before.costs, before.stamp)
 			const held = 100 << 20
 			_, releaseHeld, err := f.view.metadataResidency.work.acquire(t.Context(), held)
 			if err != nil {

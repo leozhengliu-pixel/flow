@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21IssueEditorRead(t *testing.T, ctx context.Context, repo *SQLiteStore, workspace, workspaceID string, target domain.Issue) (*issueEditorLookups, *sqlTx) {
+func scaleIssueEditorRead(t *testing.T, ctx context.Context, repo *SQLiteStore, workspace, workspaceID string, target domain.Issue) (*issueEditorLookups, *sqlTx) {
 	t.Helper()
 	source, err := repo.retainMetadataLogicalSource(ctx, workspace)
 	if err != nil {
@@ -42,7 +42,7 @@ func scaleP21IssueEditorRead(t *testing.T, ctx context.Context, repo *SQLiteStor
 	return read, tx
 }
 
-func scaleP21IssueEditorMembers(t *testing.T, f scaleP09Fixture, count int) []string {
+func scaleIssueEditorMembers(t *testing.T, f scaleFixture, count int) []string {
 	t.Helper()
 	prefix := idgen.New("p21-editor-")
 	var ids []string
@@ -85,13 +85,13 @@ func scaleP21IssueEditorMembers(t *testing.T, f scaleP09Fixture, count int) []st
 	return ids
 }
 
-func TestScaleP21IssueEditorFormerSQL(t *testing.T) {
+func TestScaleIssueEditorFormerSQL(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprint("reload=", reload), func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
-			ids := scaleP21IssueEditorMembers(t, f, 84)
+			f, issue := scaleIssuePersistenceFixture(t, nil, nil)
+			ids := scaleIssueEditorMembers(t, f, 84)
 			workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 			if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.editor_sql_authority", "", nil, func(data *domain.Bootstrap) error {
 				data.Members = append(data.Members, domain.WorkspaceMember{User: domain.User{ID: "stale-native-former"}, Status: "suspended"})
@@ -102,10 +102,10 @@ func TestScaleP21IssueEditorFormerSQL(t *testing.T) {
 			if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, ids[0]); err != nil {
 				t.Fatal(err)
 			}
-			view := scaleP21IssuePersistenceView(t, f, true, reload)
+			view := scaleIssuePersistenceView(t, f, true, reload)
 			queries := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
-			read, tx := scaleP21IssueEditorRead(t, ctx, view, workspace, workspaceID, issue)
+			read, tx := scaleIssueEditorRead(t, ctx, view, workspace, workspaceID, issue)
 			if queries != 0 {
 				t.Fatal("lazy service performed SQL before callback", queries)
 			}
@@ -129,14 +129,14 @@ func TestScaleP21IssueEditorFormerSQL(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueEditorFormerNative(t *testing.T) {
+func TestScaleIssueEditorFormerNative(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprint("reload=", reload), func(t *testing.T) {
 			var held int
 			for _, bodyCopies := range []int{1, 10} {
-				f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+				f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 				workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 				if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=?`, workspaceID); err != nil {
 					t.Fatal(err)
@@ -158,8 +158,8 @@ func TestScaleP21IssueEditorFormerNative(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				view := scaleP21IssuePersistenceView(t, f, true, reload)
-				read, tx := scaleP21IssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
+				view := scaleIssuePersistenceView(t, f, true, reload)
+				read, tx := scaleIssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
 				data, _ := f.storedWorkspace(workspace)
 				want, err := readFormerMembers(t.Context(), tx, workspaceID, data.Members)
 				got := read.formerMembers()
@@ -184,10 +184,10 @@ func TestScaleP21IssueEditorFormerNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueEditorNativeBodyFraming(t *testing.T) {
+func TestScaleIssueEditorNativeBodyFraming(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=?`, workspaceID); err != nil {
 		t.Fatal(err)
@@ -201,9 +201,9 @@ func TestScaleP21IssueEditorNativeBodyFraming(t *testing.T) {
 				{User: domain.User{ID: "active", AvatarURL: strings.Repeat("active ", copies*100000)}, Status: "active"},
 			},
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{workspace: data})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{workspace: data})
 		view.db, view.dialect = f.db, f.dialect
-		read, tx := scaleP21IssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
+		read, tx := scaleIssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
 		if got := read.formerMembers(); read.err != nil || !maps.Equal(got, map[string]bool{"former": true}) {
 			t.Fatal("large native bodies prevented ID-only fallback", got, read.err)
 		}
@@ -220,10 +220,10 @@ func TestScaleP21IssueEditorNativeBodyFraming(t *testing.T) {
 	t.Logf("native_body_bytes=1400000..14000000 held_work=%d", held)
 }
 
-func TestScaleP21IssueEditorNativeDynamicAdmission(t *testing.T) {
+func TestScaleIssueEditorNativeDynamicAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=?`, workspaceID); err != nil {
 		t.Fatal(err)
@@ -231,9 +231,9 @@ func TestScaleP21IssueEditorNativeDynamicAdmission(t *testing.T) {
 	id := strings.Repeat("large-native-identity-", 200000)
 	data := domain.Bootstrap{Workspace: f.data.Workspace, Members: []domain.WorkspaceMember{{User: domain.User{ID: id}, Status: "suspended"}}}
 	for _, quota := range []bool{false, true} {
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{workspace: data})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{workspace: data})
 		view.db, view.dialect = f.db, f.dialect
-		read, tx := scaleP21IssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
+		read, tx := scaleIssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
 		limit := view.metadataResidency.work.limit
 		if quota {
 			view.metadataResidency.work.limit = view.metadataResidency.work.used + 128<<10
@@ -252,12 +252,12 @@ func TestScaleP21IssueEditorNativeDynamicAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueEditorCollaboration(t *testing.T) {
+func TestScaleIssueEditorCollaboration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, explicit := range []bool{false, true} {
 		t.Run(fmt.Sprint("explicit=", explicit), func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+			f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 			documentID := "document_content_" + issue.ID
 			if explicit {
 				documentID = "explicit-generation"
@@ -278,10 +278,10 @@ func TestScaleP21IssueEditorCollaboration(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			view := scaleP21IssuePersistenceView(t, f, true, true)
+			view := scaleIssuePersistenceView(t, f, true, true)
 			queries := []string{}
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) { queries = append(queries, query) })
-			read, tx := scaleP21IssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
+			read, tx := scaleIssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, f.data.Workspace.ID, issue)
 			if len(queries) != 0 {
 				t.Fatal("collaboration queried eagerly")
 			}
@@ -309,13 +309,13 @@ func TestScaleP21IssueEditorCollaboration(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueEditorDefaultsAndFailure(t *testing.T) {
+func TestScaleIssueEditorDefaultsAndFailure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, mode := range []string{"empty-workspace", "no-updates", "foreign-document", "sql-failure", "former-quota", "updates-quota", "former-cancel", "updates-cancel"} {
 		t.Run(mode, func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
-			view := scaleP21IssuePersistenceView(t, f, true, false)
+			f, issue := scaleIssuePersistenceFixture(t, nil, nil)
+			view := scaleIssuePersistenceView(t, f, true, false)
 			workspaceID := f.data.Workspace.ID
 			if mode == "empty-workspace" {
 				workspaceID = ""
@@ -324,7 +324,7 @@ func TestScaleP21IssueEditorDefaultsAndFailure(t *testing.T) {
 			defer cancel()
 			queries := []string{}
 			ctx = WithSQLStatementObserver(ctx, func(query string) { queries = append(queries, query) })
-			read, tx := scaleP21IssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, workspaceID, issue)
+			read, tx := scaleIssueEditorRead(t, ctx, view, f.data.Workspace.URLKey, workspaceID, issue)
 			limit := view.metadataResidency.work.limit
 			t.Cleanup(func() { view.metadataResidency.work.limit = limit })
 			switch mode {
@@ -378,19 +378,19 @@ func TestScaleP21IssueEditorDefaultsAndFailure(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueEditorVerifierOwnedLookups(t *testing.T) {
+func TestScaleIssueEditorVerifierOwnedLookups(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
-	ids := scaleP21IssueEditorMembers(t, f, 3)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
+	ids := scaleIssueEditorMembers(t, f, 3)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	if _, err := f.AppendDocumentCollaborationUpdate(t.Context(), workspace, DocumentCollaborationUpdate{
 		ID: idgen.New("p21-editor-update"), DocumentID: "document_content_" + issue.ID, Data: []byte("same"), CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21IssuePersistenceView(t, f, true, false)
-	read, tx := scaleP21IssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
+	view := scaleIssuePersistenceView(t, f, true, false)
+	read, tx := scaleIssueEditorRead(t, t.Context(), view, workspace, workspaceID, issue)
 	ctx := withMutationCallbackLookups(t.Context(), view, tx, read.formerMembers, read.collaborationUpdates)
 	stored := domain.Bootstrap{Workspace: f.data.Workspace, Issues: []domain.Issue{issue}}
 	data := cloneBootstrap(stored)

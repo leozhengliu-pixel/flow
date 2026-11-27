@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW0CollectionLexerMatchesJSONValidity(t *testing.T) {
+func TestCollectionLexerMatchesJSONValidity(t *testing.T) {
 	fixtures := []string{
 		`null`, `true`, `false`, `0`, `-0`, `1.0e-9`, `[]`, `{}`,
 		`{"":{"a":[null,false,-1,1E+9,"\ud800","\uffff"]}}`,
@@ -49,10 +49,10 @@ func TestScaleP21SW0CollectionLexerMatchesJSONValidity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionInlineArrayDifferential(t *testing.T) {
+func TestCollectionInlineArrayDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&saved); err != nil {
@@ -128,7 +128,7 @@ func TestScaleP21SW0CollectionInlineArrayDifferential(t *testing.T) {
 					if err := read.Visit(callback); !errors.Is(err, ErrMetadataArrayMerge) {
 						t.Fatalf("ordinary visit accepted typed-merge input: %v", err)
 					}
-					actual, err = scaleP21SW15MergeUserOccurrences(read)
+					actual, err = mergeUserOccurrences(read)
 				} else {
 					err = read.Visit(callback)
 				}
@@ -146,7 +146,7 @@ func TestScaleP21SW0CollectionInlineArrayDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW15MergeUserOccurrences(read *MetadataArrayRead) ([]domain.User, error) {
+func mergeUserOccurrences(read *MetadataArrayRead) ([]domain.User, error) {
 	var users []domain.User
 	err := read.VisitOccurrences(func(_ context.Context, event MetadataArrayOccurrence) error {
 		if event.Begin {
@@ -180,10 +180,10 @@ func scaleP21SW15MergeUserOccurrences(read *MetadataArrayRead) ([]domain.User, e
 	return users, err
 }
 
-func TestScaleP21SW0CollectionSplitSnapshotAndMapOccurrences(t *testing.T) {
+func TestCollectionSplitSnapshotAndMapOccurrences(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&saved); err != nil {
@@ -298,10 +298,10 @@ func TestScaleP21SW0CollectionSplitSnapshotAndMapOccurrences(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionSpoolFailureMissingAndCancellation(t *testing.T) {
+func TestCollectionSpoolFailureMissingAndCancellation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	before := recordSpoolBytes.Load()
 	missing, err := f.BeginMetadataArrayRead(t.Context(), f.data.Workspace.URLKey+"-missing", "users")
 	if err != nil {
@@ -342,9 +342,9 @@ func TestScaleP21SW0CollectionSpoolFailureMissingAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionRejectsOversizedCanonicalIndexKey(t *testing.T) {
+func TestCollectionRejectsOversizedCanonicalIndexKey(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("external schemas enforce the canonical key length at insertion")
 	}
@@ -376,7 +376,7 @@ func TestScaleP21SW0CollectionRejectsOversizedCanonicalIndexKey(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionCanonicalGrammar(t *testing.T) {
+func TestCollectionCanonicalGrammar(t *testing.T) {
 	// Catalog triggers reject malformed JSON on ordinary writes. Exercise
 	// the same detached-row validator directly for historical/corrupt bytes.
 	if err := validateMetadataCollectionJSON(t.Context(), strings.NewReader(" \n{\"id\":\"valid\"}\t ")); err != nil {
@@ -389,9 +389,9 @@ func TestScaleP21SW0CollectionCanonicalGrammar(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionRejectsEarlierWrongRootShape(t *testing.T) {
+func TestCollectionRejectsEarlierWrongRootShape(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&saved); err != nil {
@@ -445,12 +445,12 @@ func TestScaleP21SW0CollectionRejectsEarlierWrongRootShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	if _, err := scaleP21SW15MergeUserOccurrences(read); err == nil {
+	if _, err := mergeUserOccurrences(read); err == nil {
 		t.Fatal("typed occurrence merging ignored the discarded first type error")
 	}
 }
 
-func TestScaleP21SW0CollectionLexerAllocationDoesNotFollowIgnoredString(t *testing.T) {
+func TestCollectionLexerAllocationDoesNotFollowIgnoredString(t *testing.T) {
 	// Both inputs are allocated before measurement. The parser retains only
 	// its fixed buffered reader while validating the ignored giant token.
 	small := []byte(`{"unknown":"short","users":[]}`)
@@ -471,10 +471,10 @@ func TestScaleP21SW0CollectionLexerAllocationDoesNotFollowIgnoredString(t *testi
 	}
 }
 
-func TestScaleP21SW0CollectionAdaptiveAdmission(t *testing.T) {
+func TestCollectionAdaptiveAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

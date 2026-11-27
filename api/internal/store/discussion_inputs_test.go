@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW61SQLInput(actorID string) domain.Bootstrap {
+func discussionInputsSqlInput(actorID string) domain.Bootstrap {
 	stale := func(id string) domain.User { return domain.User{ID: id, Name: "SQL reference", JobTitle: "SQL body"} }
 	assignee, delegate := stale("duplicate"), stale("delegate")
 	return domain.Bootstrap{
@@ -39,17 +39,17 @@ func scaleP21SW61SQLInput(actorID string) domain.Bootstrap {
 	}
 }
 
-func scaleP21SW61Preference(value domain.NotificationPreferences) domain.NotificationPreferences {
+func discussionInputsPreference(value domain.NotificationPreferences) domain.NotificationPreferences {
 	return domain.NotificationPreferences{
 		UserID: value.UserID, Inbox: value.Inbox, Email: value.Email, Desktop: value.Desktop, Chat: value.Chat,
 		EmailFormat: value.EmailFormat, ImmediateUrgent: value.ImmediateUrgent, DelayLowPriority: value.DelayLowPriority,
 	}
 }
 
-func TestScaleP21SW61DiscussionInputsLiteralReferences(t *testing.T) {
+func TestDiscussionInputsLiteralReferences(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, actorID := f.data.Workspace.URLKey, f.data.Viewer.ID
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestScaleP21SW61DiscussionInputsLiteralReferences(t *testing.T) {
 		for _, narrow := range []bool{true, false} {
 			t.Run(fmt.Sprintf("reload=%t/narrow=%t", reload, narrow), func(t *testing.T) {
 				t.Setenv("FLOW_NARROW_MUTATION_INPUTS", map[bool]string{true: "on", false: "off"}[narrow])
-				sqlInput := scaleP21SW61SQLInput(actorID)
+				sqlInput := discussionInputsSqlInput(actorID)
 				actual := cloneBootstrap(sqlInput)
 				actual.Viewer = mutationInputActor(sqlInput.Viewer)
 				actual.NextIssueNumber = sqlInput.NextIssueNumber
@@ -203,7 +203,7 @@ func TestScaleP21SW61DiscussionInputsLiteralReferences(t *testing.T) {
 				}
 				for _, key := range recipients {
 					if preference, found := stored.NotificationPreferences[key]; found {
-						wantPreferences[key] = scaleP21SW61Preference(preference)
+						wantPreferences[key] = discussionInputsPreference(preference)
 					}
 				}
 				settings := stored.TeamSettings["selected-team"]
@@ -231,7 +231,7 @@ func TestScaleP21SW61DiscussionInputsLiteralReferences(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW61DiscussionInputsDirectoryBound(t *testing.T) {
+func TestDiscussionInputsDirectoryBound(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	held := 0
 	for _, bodySize := range []int{32, 320} {
@@ -245,7 +245,7 @@ func TestScaleP21SW61DiscussionInputsDirectoryBound(t *testing.T) {
 			id := fmt.Sprintf("directory-%04d", index)
 			stored.Users = append(stored.Users, domain.User{ID: id, Name: id, Email: id + "@example.test", DisplayName: id, JobTitle: body})
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
 		data := domain.Bootstrap{Viewer: domain.User{ID: "actor"}}
 		view.writeMu.Lock()
 		read, err := view.loadIssueDiscussionInputs(t.Context(), "physical", &data)
@@ -278,9 +278,9 @@ func TestScaleP21SW61DiscussionInputsDirectoryBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW61DiscussionInputsOwnership(t *testing.T) {
+func TestDiscussionInputsOwnership(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {Users: []domain.User{{ID: "actor", Name: "First generation"}}}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {Users: []domain.User{{ID: "actor", Name: "First generation"}}}})
 	view.writeMu.Lock()
 	defer view.writeMu.Unlock()
 	data := domain.Bootstrap{Viewer: domain.User{ID: "actor"}, Issues: []domain.Issue{{ID: "caller-owned"}}}

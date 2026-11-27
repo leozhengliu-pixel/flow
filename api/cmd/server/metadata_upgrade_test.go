@@ -60,8 +60,8 @@ func testMetadataUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := old.Bootstrap()
-	sweep := &sw530Sweep{workspace: fixture.Workspace.URLKey}
-	owner := &sw530Principal{name: "owner", token: token}
+	sweep := &routeSweepSweep{workspace: fixture.Workspace.URLKey}
+	owner := &routeSweepPrincipal{name: "owner", token: token}
 	handler := func(repo *store.SQLiteStore) http.Handler {
 		return newHandler(metadataUpgradeServer(t, repo))
 	}
@@ -122,7 +122,7 @@ func testMetadataUpgrade(t *testing.T) {
 		"/api/documents", "/api/documents/" + document, "/api/documents/" + document + "/permissions", "/api/documents/" + document + "/comments",
 		"/api/teams/" + team + "/resources", "/api/reviews",
 	}
-	read := func(h http.Handler, index int, path string) sw530Outcome {
+	read := func(h http.Handler, index int, path string) routeSweepOutcome {
 		t.Helper()
 		started := time.Now()
 		w, timedOut := sweep.call(h, http.MethodGet, path, "", owner, false)
@@ -133,13 +133,13 @@ func testMetadataUpgrade(t *testing.T) {
 		if !json.Valid(body) {
 			t.Fatal("upgrade read did not return JSON")
 		}
-		return sw530Outcome{
+		return routeSweepOutcome{
 			Status: w.Code,
-			Body:   sw530Normalize(sw530CanonicalJSON(body), started),
+			Body:   routeSweepNormalize(canonicalJSON(body), started),
 			Header: map[string]string{"Content-Type": w.Header().Get("Content-Type")},
 		}
 	}
-	want := make([]sw530Outcome, len(paths))
+	want := make([]routeSweepOutcome, len(paths))
 	for i, path := range paths {
 		want[i] = read(before, i, path)
 		switch path {
@@ -215,7 +215,7 @@ func testMetadataUpgrade(t *testing.T) {
 		after := handler(repo)
 		for i, path := range paths {
 			got := read(after, i, path)
-			if kind, _, _ := sw530Differences(want[i], got); kind != "" {
+			if kind, _, _ := routeSweepDifferences(want[i], got); kind != "" {
 				// Paths contain record IDs. Report the stable fixture ordinal.
 				t.Errorf("legacy read %d changed %s after upgrade", i, kind)
 			}
@@ -292,7 +292,7 @@ func testMetadataUpgrade(t *testing.T) {
 		if err := json.Unmarshal([]byte(got.Body), &body); err != nil || body[edit.field] != edit.value {
 			t.Errorf("upgraded write %d was not visible to the second replica", index)
 		}
-		if kind, _, _ := sw530Differences(want, got); kind != "" {
+		if kind, _, _ := routeSweepDifferences(want, got); kind != "" {
 			t.Errorf("upgraded read %d changed %s across replicas", index, kind)
 		}
 	}

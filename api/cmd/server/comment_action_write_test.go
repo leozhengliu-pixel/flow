@@ -28,7 +28,7 @@ import (
 // actions and comments, a turned-off setting and a creation failure that
 // rolls the whole resolution back).
 
-type scaleP21CommentActionProvider struct {
+type scaleCommentActionProvider struct {
 	mu       sync.Mutex
 	calls    []map[string]any
 	requests []json.RawMessage
@@ -36,7 +36,7 @@ type scaleP21CommentActionProvider struct {
 	server   *httptest.Server
 }
 
-func scaleP21CommentActionSSE(calls []map[string]any) string {
+func scaleCommentActionSSE(calls []map[string]any) string {
 	toolCalls := []any{}
 	for index, call := range calls {
 		raw, _ := json.Marshal(call)
@@ -46,8 +46,8 @@ func scaleP21CommentActionSSE(calls []map[string]any) string {
 	return "data: " + string(chunk) + "\n\ndata: [DONE]\n\n"
 }
 
-func newScaleP21CommentActionProvider(t *testing.T) *scaleP21CommentActionProvider {
-	p := &scaleP21CommentActionProvider{}
+func newScaleCommentActionProvider(t *testing.T) *scaleCommentActionProvider {
+	p := &scaleCommentActionProvider{}
 	p.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		p.mu.Lock()
@@ -58,19 +58,19 @@ func newScaleP21CommentActionProvider(t *testing.T) *scaleP21CommentActionProvid
 			before()
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte(scaleP21CommentActionSSE(calls)))
+		_, _ = w.Write([]byte(scaleCommentActionSSE(calls)))
 	}))
 	t.Cleanup(p.server.Close)
 	return p
 }
 
-func (p *scaleP21CommentActionProvider) configure(service *server) {
+func (p *scaleCommentActionProvider) configure(service *server) {
 	service.agent = appconfig.AgentConfig{Enabled: true, ToolsEnabled: true, WriteTools: true, BaseURL: p.server.URL, Model: "scripted", MaxOutputTokens: 256}
 	service.agentClient = p.server.Client()
 }
 
-type scaleP21CommentActionSetup struct {
-	f                    scaleP21IssueUpdateFixture
+type scaleCommentActionSetup struct {
+	f                    scaleIssueUpdateFixture
 	owner, member, guest domain.User
 	issue, parent, other string
 	stateA, stateB       string
@@ -78,9 +78,9 @@ type scaleP21CommentActionSetup struct {
 	at                   time.Time
 }
 
-func scaleP21CommentActionFixture(t *testing.T) scaleP21CommentActionSetup {
+func scaleCommentActionFixture(t *testing.T) scaleCommentActionSetup {
 	t.Helper()
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func scaleP21CommentActionFixture(t *testing.T) scaleP21CommentActionSetup {
 	if !ok {
 		t.Fatal("fixture workspace missing")
 	}
-	setup := scaleP21CommentActionSetup{f: f, owner: f.principals[0].user, member: f.principals[2].user, guest: f.principals[3].user,
+	setup := scaleCommentActionSetup{f: f, owner: f.principals[0].user, member: f.principals[2].user, guest: f.principals[3].user,
 		issue: f.triage.ID, parent: f.visible.ID, at: time.Date(2026, 4, 5, 6, 7, 8, 0, time.UTC)}
 	for _, state := range statesForTeam(&full, f.public) {
 		if state.ID != f.triage.State.ID && setup.stateB == "" {
@@ -105,7 +105,7 @@ func scaleP21CommentActionFixture(t *testing.T) scaleP21CommentActionSetup {
 
 // seed makes the triage issue a child of the visible issue, adds the
 // member's comment and enables suggestions for the actors.
-func (c scaleP21CommentActionSetup) seed(t *testing.T, change func(*domain.Bootstrap)) {
+func (c scaleCommentActionSetup) seed(t *testing.T, change func(*domain.Bootstrap)) {
 	t.Helper()
 	c.f.exec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, c.f.sequence, c.f.data.Workspace.URLKey)
 	c.f.seedWriter(t, func(data *domain.Bootstrap) {
@@ -149,7 +149,7 @@ func (c scaleP21CommentActionSetup) seed(t *testing.T, change func(*domain.Boots
 // race changes the workspace while the model request is in flight: through
 // the literal full writer (never holding a store lock), then a bounded
 // source reloads that committed state from SQL.
-func (c scaleP21CommentActionSetup) race(t *testing.T, service *server, change func(*domain.Bootstrap)) {
+func (c scaleCommentActionSetup) race(t *testing.T, service *server, change func(*domain.Bootstrap)) {
 	restore := store.ForceFullMutationsForTesting(true)
 	err := c.f.repository.MutateWorkspace(context.Background(), c.f.data.Workspace.URLKey, "scale_p21.comment_action_race", "", nil, func(data *domain.Bootstrap) error {
 		change(data)
@@ -166,22 +166,22 @@ func (c scaleP21CommentActionSetup) race(t *testing.T, service *server, change f
 	}
 }
 
-func TestScaleP21CommentActionGenerationDifferential(t *testing.T) {
+func TestScaleCommentActionGenerationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, narrow := range []string{"off", "on"} {
 		t.Run("narrow-"+narrow, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", narrow)
-			scaleP21CommentActionGeneration(t)
+			scaleCommentActionGeneration(t)
 		})
 	}
 }
 
-func scaleP21CommentActionGeneration(t *testing.T) {
-	c := scaleP21CommentActionFixture(t)
+func scaleCommentActionGeneration(t *testing.T) {
+	c := scaleCommentActionFixture(t)
 	f, workspace := c.f, c.f.data.Workspace.URLKey
-	provider := newScaleP21CommentActionProvider(t)
+	provider := newScaleCommentActionProvider(t)
 	labels := []string{"triage-l-public"}
 	priority, zero := 1, 0
 	owner := c.owner.ID
@@ -272,8 +272,8 @@ func scaleP21CommentActionGeneration(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) { c.seed(t, test.change) }
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = func(t *testing.T) { c.seed(t, test.change) }
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.writerDifferential(t, test.name, func(service *server) (*httptest.ResponseRecorder, any) {
 				provider.configure(service)
 				provider.mu.Lock()
@@ -304,18 +304,18 @@ func scaleP21CommentActionGeneration(t *testing.T) {
 
 // The claim callback's own races: a comment stamped or rewritten between the
 // generation read and the claim transaction.
-func TestScaleP21CommentActionClaimRaceDifferential(t *testing.T) {
+func TestScaleCommentActionClaimRaceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, narrow := range []string{"off", "on"} {
 		t.Run("narrow-"+narrow, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", narrow)
-			c := scaleP21CommentActionFixture(t)
+			c := scaleCommentActionFixture(t)
 			f, workspace := c.f, c.f.data.Workspace.URLKey
 			for _, shape := range []string{"claims", "stamped", "body-changed", "missing-comment", "not-allowed"} {
 				t.Run(shape, func(t *testing.T) {
-					f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+					f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 						c.seed(t, func(data *domain.Bootstrap) {
 							for index := range data.Comments[c.issue] {
 								comment := &data.Comments[c.issue][index]
@@ -339,7 +339,7 @@ func TestScaleP21CommentActionClaimRaceDifferential(t *testing.T) {
 							}
 						})
 					}
-					defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+					defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 					outcomes := f.writerDifferential(t, shape, func(service *server) (*httptest.ResponseRecorder, any) {
 						service.agent = appconfig.AgentConfig{Enabled: true, ToolsEnabled: true, WriteTools: true}
 						ctx, closeOutput := beginIndependentMetadataOutputReads(store.ContextWithActor(t.Context(), c.member))
@@ -366,7 +366,7 @@ func TestScaleP21CommentActionClaimRaceDifferential(t *testing.T) {
 							}
 							return store.ErrNoMutation
 						})
-						return nil, map[string]any{"claimed": claimed, "error": scaleP21ChatPointError(err)}
+						return nil, map[string]any{"claimed": claimed, "error": scaleChatPointError(err)}
 					})
 					legacy := outcomes[0].Extra.(map[string]any)
 					if (shape == "claims") != (legacy["claimed"] == true) {
@@ -378,7 +378,7 @@ func TestScaleP21CommentActionClaimRaceDifferential(t *testing.T) {
 	}
 }
 
-func (c scaleP21CommentActionSetup) resolveRequest(service *server, user domain.User, issueID, actionID, status string) *httptest.ResponseRecorder {
+func (c scaleCommentActionSetup) resolveRequest(service *server, user domain.User, issueID, actionID, status string) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(map[string]string{"status": status})
 	r := httptest.NewRequest(http.MethodPost, "/api/issues/"+issueID+"/comment-actions/"+actionID, bytes.NewReader(raw))
 	r.Header.Set("Content-Type", "application/json")
@@ -398,20 +398,20 @@ func (c scaleP21CommentActionSetup) resolveRequest(service *server, user domain.
 	return w
 }
 
-func TestScaleP21CommentActionResolutionDifferential(t *testing.T) {
+func TestScaleCommentActionResolutionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, narrow := range []string{"off", "on"} {
 		t.Run("narrow-"+narrow, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", narrow)
-			scaleP21CommentActionResolution(t)
+			scaleCommentActionResolution(t)
 		})
 	}
 }
 
-func scaleP21CommentActionResolution(t *testing.T) {
-	c := scaleP21CommentActionFixture(t)
+func scaleCommentActionResolution(t *testing.T) {
+	c := scaleCommentActionFixture(t)
 	f := c.f
 	priority, same := 1, 3
 	labels := []string{"triage-l-public"}
@@ -483,7 +483,7 @@ func scaleP21CommentActionResolution(t *testing.T) {
 			if user.ID == "" {
 				user = c.member
 			}
-			f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+			f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 				c.seed(t, func(data *domain.Bootstrap) {
 					data.CommentActions = append(append(data.CommentActions, shadow), actions...)
 					if test.fresh {
@@ -494,7 +494,7 @@ func scaleP21CommentActionResolution(t *testing.T) {
 					}
 				})
 			}
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.writerDifferential(t, test.name, func(service *server) (*httptest.ResponseRecorder, any) {
 				service.agent = appconfig.AgentConfig{Enabled: true, ToolsEnabled: true, WriteTools: true}
 				return c.resolveRequest(service, user, c.issue, test.action, test.status), nil

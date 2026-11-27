@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW16FormerResult(repo *SQLiteStore, ctx context.Context, workspace string) (map[string]bool, error) {
+func formerResult(repo *SQLiteStore, ctx context.Context, workspace string) (map[string]bool, error) {
 	read, err := repo.BeginFormerMembersRead(ctx, workspace)
 	if read == nil {
 		return nil, err
@@ -27,7 +27,7 @@ func scaleP21SW16FormerResult(repo *SQLiteStore, ctx context.Context, workspace 
 }
 
 // Exercise the canonical decoder independently of the installed logical source.
-func scaleP21SW16CanonicalFormerResult(repo *SQLiteStore, ctx context.Context, workspace string) (map[string]bool, error) {
+func canonicalFormerResult(repo *SQLiteStore, ctx context.Context, workspace string) (map[string]bool, error) {
 	ctx, release, err := repo.tryAdmitAdditionalMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func scaleP21SW16CanonicalFormerResult(repo *SQLiteStore, ctx context.Context, w
 	defer tx.Rollback()
 	read := &FormerMembersRead{members: map[string]bool{}}
 	defer read.Close()
-	remaining := scaleP21SW16FormerMapBytes
+	remaining := formerMapBytes
 	add := func(id string) error {
 		if read.members[id] {
 			return nil
@@ -53,15 +53,15 @@ func scaleP21SW16CanonicalFormerResult(repo *SQLiteStore, ctx context.Context, w
 		read.members[id] = true
 		return nil
 	}
-	_, err = repo.scaleP21SW16FallbackFormerMembers(ctx, tx, workspace, read, add, true)
+	_, err = repo.fallbackFormerMembers(ctx, tx, workspace, read, add, true)
 	return maps.Clone(read.Members()), err
 }
 
-func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
+func TestFormerMembersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -121,9 +121,9 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 			var bounded map[string]bool
 			var err error
 			if canonicalFallback {
-				bounded, err = scaleP21SW16CanonicalFormerResult(probe, ctx, workspace)
+				bounded, err = canonicalFormerResult(probe, ctx, workspace)
 			} else {
-				bounded, err = scaleP21SW16FormerResult(probe, ctx, workspace)
+				bounded, err = formerResult(probe, ctx, workspace)
 			}
 			if err != nil || oldErr != nil || !reflect.DeepEqual(old, bounded) {
 				t.Fatalf("%s actor=%s differs: old=%v bounded=%v errors=%v/%v", label, actor.ID, old, bounded, oldErr, err)
@@ -189,9 +189,9 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 		var result map[string]bool
 		var err error
 		if source.BoundedMetadataEnabled() {
-			result, err = scaleP21SW16CanonicalFormerResult(source, t.Context(), workspace)
+			result, err = canonicalFormerResult(source, t.Context(), workspace)
 		} else {
-			result, err = scaleP21SW16FormerResult(source, t.Context(), workspace)
+			result, err = formerResult(source, t.Context(), workspace)
 		}
 		runtime.ReadMemStats(&after)
 		if err != nil || len(result) != 81 {
@@ -210,28 +210,28 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantLogical, wantLogicalErr := f.FormerMembers(t.Context(), workspace)
-	if got, err := scaleP21SW16FormerResult(probe, t.Context(), workspace); err != nil || wantLogicalErr != nil || !reflect.DeepEqual(got, wantLogical) {
+	if got, err := formerResult(probe, t.Context(), workspace); err != nil || wantLogicalErr != nil || !reflect.DeepEqual(got, wantLogical) {
 		t.Fatal("production fallback lost the installed logical source", got, wantLogical, err, wantLogicalErr)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := scaleP21SW16FormerResult(probe, ctx, workspace); !errors.Is(err, context.Canceled) {
+	if _, err := formerResult(probe, ctx, workspace); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled former-member read changed", err)
 	}
 	for _, key := range []string{workspace + "-missing", workspace + "\x00", strings.ToUpper(workspace)} {
 		for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
-			got, err := scaleP21SW16FormerResult(source, t.Context(), key)
+			got, err := formerResult(source, t.Context(), key)
 			if err != nil || len(got) != 0 || got == nil {
 				t.Fatal("missing/cross-workspace lookup changed", key, err)
 			}
 		}
 	}
-	probe.metadataResidency.work.limit = scaleP21SW16FormerWorkBytes - 1
-	if _, err := scaleP21SW16CanonicalFormerResult(probe, t.Context(), workspace); !errors.Is(err, ErrMetadataWorkBudget) {
+	probe.metadataResidency.work.limit = formerWorkBytes - 1
+	if _, err := canonicalFormerResult(probe, t.Context(), workspace); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("result allowance bypassed the process budget", err)
 	}
 	probe.metadataResidency.work.limit = metadataWorkBytes()
-	if _, err := scaleP21SW16CanonicalFormerResult(probe, t.Context(), workspace); err != nil || probe.metadataResidency.work.used != 0 || probe.metadataResidency.work.waiting != 0 || probe.WorkspaceMetadataDecodes() != 0 {
+	if _, err := canonicalFormerResult(probe, t.Context(), workspace); err != nil || probe.metadataResidency.work.used != 0 || probe.metadataResidency.work.waiting != 0 || probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("former-member read failed recovery or leaked work/full decode", err)
 	}
 	// Callback SQL must reuse the caller's sole connection.
@@ -247,7 +247,7 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 	}
 	defer tx.Rollback()
 	ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
-	if got, err := scaleP21SW16FormerResult(probe, ctx, workspace); err != nil || !reflect.DeepEqual(got, wantLogical) {
+	if got, err := formerResult(probe, ctx, workspace); err != nil || !reflect.DeepEqual(got, wantLogical) {
 		t.Fatal("caller snapshot was not reused for the logical source check", got, wantLogical, err)
 	}
 	if _, err := tx.ExecContext(ctx, `SELECT 1`); err != nil {
@@ -257,7 +257,7 @@ func TestScaleP21SW16FormerMembersDifferential(t *testing.T) {
 	f.db.SetMaxOpenConns(4)
 }
 
-func TestScaleP21SW16FormerMemberDecodeAccounting(t *testing.T) {
+func TestFormerMemberDecodeAccounting(t *testing.T) {
 	for _, raw := range []string{
 		`null`,
 		`{"user":{"id":"chosen"},"status":"suspended","unknown":{"large":"ignored"}}`,
@@ -271,20 +271,20 @@ func TestScaleP21SW16FormerMemberDecodeAccounting(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := MetadataArrayRecord{EncodedBytes: int64(len(raw)), Reader: strings.NewReader(raw)}
-		cost, err := scaleP21SW16MemberDecodeCost(record)
+		cost, err := memberDecodeCost(record)
 		if err != nil || cost < len(raw)*8 {
 			t.Fatal("record decode was not conservatively counted", err)
 		}
-		if err := scaleP21SW16DecodeMember(t.Context(), record, &got); err != nil || !reflect.DeepEqual(got, want) {
+		if err := decodeMember(t.Context(), record, &got); err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatal("typed member duplicate/null behavior changed", err)
 		}
 	}
 }
 
-func TestScaleP21SW16FormerMembersRepeatedRoot(t *testing.T) {
+func TestFormerMembersRepeatedRoot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -322,7 +322,7 @@ func TestScaleP21SW16FormerMembersRepeatedRoot(t *testing.T) {
 			}
 			reloadFromRows(t, f.SQLiteStore, workspace)
 			old, oldErr := f.FormerMembers(t.Context(), workspace)
-			bounded, err := scaleP21SW16CanonicalFormerResult(probe, t.Context(), workspace)
+			bounded, err := canonicalFormerResult(probe, t.Context(), workspace)
 			if oldErr != nil || err != nil || !reflect.DeepEqual(old, spec.want) || !reflect.DeepEqual(bounded, old) {
 				t.Fatalf("typed backing merge differs: old=%v bounded=%v want=%v errors=%v/%v", old, bounded, spec.want, oldErr, err)
 			}
@@ -333,10 +333,10 @@ func TestScaleP21SW16FormerMembersRepeatedRoot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16FormerMembersHandleLifetime(t *testing.T) {
+func TestFormerMembersHandleLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

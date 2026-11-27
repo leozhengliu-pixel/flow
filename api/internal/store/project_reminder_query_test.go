@@ -9,7 +9,7 @@ import (
 )
 
 func TestProjectReminderFlagsBatch(t *testing.T) {
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	now := time.Now().UTC()
 	for index, row := range []struct {

@@ -13,7 +13,7 @@ import (
 
 var generatedSavedViewSlugSuffix = regexp.MustCompile(`-view-[0-9]{19}-[0123456789abcdefghjkmnpqrstvwxyz]{10}`)
 
-func normalizeSavedViewCreate(out sw530Outcome) sw530Outcome {
+func normalizeSavedViewCreate(out routeSweepOutcome) routeSweepOutcome {
 	normalize := func(value string) string {
 		return generatedSavedViewSlugSuffix.ReplaceAllString(value, "-view-<stamp>")
 	}
@@ -29,7 +29,7 @@ func normalizeSavedViewCreate(out sw530Outcome) sw530Outcome {
 func TestBoundedSavedViewDifferential(t *testing.T) {
 	t.Setenv("FLOW_API_RATE_LIMIT", "off")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
-	x := sw530Setup(t)
+	x := routeSweepSetup(t)
 	owner, member, guest, child := x.principals[0], x.principals[2], x.principals[3], x.principals[4]
 	fx := x.fx
 	const editable = "p3-editable"
@@ -95,9 +95,9 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 	}
 	x.probeStale = true
 
-	check := func(t *testing.T, request sw530Request, status int) {
+	check := func(t *testing.T, request routeSweepRequest, status int) {
 		t.Helper()
-		if !scaleP21RouteHot(request.pattern) {
+		if !scaleRouteHot(request.pattern) {
 			t.Fatal("saved-view route is COLD")
 		}
 		views, slots := x.totalViews, x.totalSlots
@@ -113,7 +113,7 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 		for _, mode := range []string{"warm", "reloaded"} {
 			if outcomes[mode].TimedOut {
 				t.Errorf("%s timed out", mode)
-			} else if diff, _, _ := sw530Differences(outcomes["legacy"], outcomes[mode]); diff != "" {
+			} else if diff, _, _ := routeSweepDifferences(outcomes["legacy"], outcomes[mode]); diff != "" {
 				t.Errorf("%s differed in %s (status %d)", mode, diff, outcomes[mode].Status)
 			}
 		}
@@ -124,7 +124,7 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 
 	type testCase struct {
 		name, method, ref, body string
-		principal               *sw530Principal
+		principal               *routeSweepPrincipal
 		key                     bool
 		want                    int
 	}
@@ -169,7 +169,7 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 				pattern = "GET /api/shared/views/{token}"
 				path = "/api/shared/views/" + url.PathEscape(tc.ref) + "?workspace=" + url.QueryEscape(x.workspace)
 			}
-			request := sw530Request{pattern, tc.method, path, tc.body, tc.principal, tc.key}
+			request := routeSweepRequest{pattern, tc.method, path, tc.body, tc.principal, tc.key}
 			check(t, request, tc.want)
 		})
 	}
@@ -178,7 +178,7 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 		body := x.body(pattern, method)
 		for _, principal := range x.principals {
 			for _, bearer := range []bool{false, true} {
-				request := sw530Request{pattern, method, path, body, principal, bearer}
+				request := routeSweepRequest{pattern, method, path, body, principal, bearer}
 				t.Run("roster/"+request.label(), func(t *testing.T) { check(t, request, 0) })
 			}
 		}

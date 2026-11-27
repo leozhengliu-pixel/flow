@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW16WorkerDraftLoopDifferential(t *testing.T) {
+func TestWorkerDraftLoopDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw16-runtime-")
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		draftID, publishedID := prefix+"draft", prefix+"published"
@@ -47,8 +47,8 @@ func TestScaleP21SW16WorkerDraftLoopDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		beforeSessions := scaleP21M3Fingerprint(t, repo, workspace, "agentSessions")
-		beforeLoops := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		beforeSessions := pointRecordFingerprint(t, repo, workspace, "agentSessions")
+		beforeLoops := pointRecordFingerprint(t, repo, workspace, "loops")
 		makeRun := func(user domain.User, key *domain.APIKey, sessionID string, question bool) store.AgentRun {
 			t.Helper()
 			principal := agentRunPrincipal{Mode: agentRunModeUser, UserID: user.ID}
@@ -136,8 +136,8 @@ func TestScaleP21SW16WorkerDraftLoopDifferential(t *testing.T) {
 			runtime.ReadMemStats(&after)
 			t.Logf("bounded=%t draft-loop predicate bytes/op=%d allocs/op=%d", service.store.BoundedMetadataEnabled(), (after.TotalAlloc-before.TotalAlloc)/5, (after.Mallocs-before.Mallocs)/5)
 		}
-		if scaleP21M3Fingerprint(t, repo, workspace, "agentSessions") != beforeSessions ||
-			scaleP21M3Fingerprint(t, repo, workspace, "loops") != beforeLoops || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if pointRecordFingerprint(t, repo, workspace, "agentSessions") != beforeSessions ||
+			pointRecordFingerprint(t, repo, workspace, "loops") != beforeLoops || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("draft-loop predicate rewrote rows or decoded metadata")
 		}
 		member := f.principals[2].user

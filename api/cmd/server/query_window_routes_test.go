@@ -16,28 +16,28 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW115Writer struct {
+type queryWindowRoutesWriter struct {
 	*httptest.ResponseRecorder
 	store *store.SQLiteStore
 	work  int
 }
 
-func (w *scaleP21SW115Writer) Write(body []byte) (int, error) {
+func (w *queryWindowRoutesWriter) Write(body []byte) (int, error) {
 	w.work = max(w.work, w.store.MetadataWorkUsedForTesting())
 	return w.ResponseRecorder.Write(body)
 }
 
-func scaleP21SW115Key(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
-	value := scaleP21SW104StoredKey(prefix, user, key)
+func queryWindowRoutesKey(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
+	value := storedKey(prefix, user, key)
 	if value != nil {
 		value.SecretHash = secretHash("sw115-" + value.ID)
 	}
 	return value
 }
 
-func scaleP21SW115Fixture(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
+func queryWindowRoutesFixture(t *testing.T, repo *store.SQLiteStore) policyDifferentialFixture {
 	t.Helper()
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	prefix := idgen.New("sw115-policy-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw115_policy", "", nil, func(data *domain.Bootstrap) error {
@@ -49,7 +49,7 @@ func scaleP21SW115Fixture(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixtu
 	}); err != nil {
 		t.Fatal(err)
 	}
-	principals := []scaleP21M2Principal{{"admin-private-outsider", f.data.Viewer}}
+	principals := []policyFixturePrincipal{{"admin-private-outsider", f.data.Viewer}}
 	var privateAdmin *http.Client
 	for _, spec := range []struct {
 		name, role string
@@ -60,11 +60,11 @@ func scaleP21SW115Fixture(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixtu
 		{"guest-explicit", "guest", []string{public}},
 		{"sub-team-inheritance", "member", []string{private}},
 	} {
-		client, user := scaleP03Join(t, f, spec.name, idgen.New("sw115-person-")+"@example.test", spec.role, spec.teams...)
+		client, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("sw115-person-")+"@example.test", spec.role, spec.teams...)
 		if spec.name == "admin" {
 			privateAdmin = client
 		}
-		principals = append(principals, scaleP21M2Principal{spec.name, user})
+		principals = append(principals, policyFixturePrincipal{spec.name, user})
 	}
 	issue := authRequest[domain.Issue](t, privateAdmin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "P19 explicit guest grant", "teamId": private}, f.data.Workspace.URLKey, http.StatusCreated)
 	authRequest[[]domain.IssuePermission](t, privateAdmin, http.MethodPut, f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": principals[3].user.ID, "role": "viewer"}}}, f.data.Workspace.URLKey, http.StatusOK)
@@ -72,15 +72,15 @@ func scaleP21SW115Fixture(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixtu
 	if err != nil {
 		t.Fatal(err)
 	}
-	return scaleP21M2Fixture{scaleP03PlatformFixture: f, probe: probe, principals: principals, public: public, testingT: t}
+	return policyDifferentialFixture{scalePlatformFixture: f, probe: probe, principals: principals, public: public, testingT: t}
 }
 
-func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
-	scaleP19Options(t)
+func TestRoutesDifferential(t *testing.T) {
+	scaleOptions(t)
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW115Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := queryWindowRoutesFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw115-p19-")
 		at := time.Date(2026, 11, 15, 12, 0, 0, 123, time.UTC)
 		project, hidden, childProject := prefix+"project", prefix+"hidden", prefix+"child-project"
@@ -140,7 +140,7 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}},
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}},
 				} {
-					data.APIKeys = append(data.APIKeys, *scaleP21SW115Key(prefix, principal.user, &key))
+					data.APIKeys = append(data.APIKeys, *queryWindowRoutesKey(prefix, principal.user, &key))
 				}
 				data.Favorites = append(data.Favorites,
 					domain.Favorite{ID: prefix + principal.user.ID + "-public", UserID: principal.user.ID, ResourceType: "project", ResourceID: project, CreatedAt: at},
@@ -169,7 +169,7 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 			handlers[i] = http.NewServeMux()
 			service.registerSyncRoutes(handlers[i])
 		}
-		query := scaleP19ProjectQuery()
+		query := scaleProjectQuery()
 		grouped := query
 		grouped.Display.Grouping, grouped.Display.SubGrouping = "Priority", "Status"
 		grouped.Display.ShowEmptyGroups = true
@@ -182,18 +182,18 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 		routes := []struct{ name, path string }{
 			{"manifest-projects", "/api/sync/manifest?surface=projects-page"},
 			{"manifest-initiatives", "/api/sync/manifest?surface=initiatives-page"},
-			{"projects", scaleP19Path("projects", query, "", 100)},
-			{"projects-grouped", scaleP19Path("projects", grouped, "", 100)},
-			{"projects-exact-id", scaleP19Path("projects", byID, "", 100)},
-			{"projects-current-slug-filter", scaleP19Path("projects", byCurrent, "", 100)},
-			{"projects-old-slug-filter", scaleP19Path("projects", byOld, "", 100)},
-			{"initiatives-hierarchy", scaleP19Path("initiatives", query, "", 100)},
-			{"initiatives-collapsed", scaleP19Path("initiatives", collapsed, "", 100)},
+			{"projects", scalePath("projects", query, "", 100)},
+			{"projects-grouped", scalePath("projects", grouped, "", 100)},
+			{"projects-exact-id", scalePath("projects", byID, "", 100)},
+			{"projects-current-slug-filter", scalePath("projects", byCurrent, "", 100)},
+			{"projects-old-slug-filter", scalePath("projects", byOld, "", 100)},
+			{"initiatives-hierarchy", scalePath("initiatives", query, "", 100)},
+			{"initiatives-collapsed", scalePath("initiatives", collapsed, "", 100)},
 		}
 		// Exercise the registered sync dispatch with authenticated fixture
 		// identities and real stored credentials. Authentication is already
-		// covered by P03; avoiding usage telemetry keeps paired revisions exact.
-		call := func(t *testing.T, i int, user domain.User, key *domain.APIKey, targetWorkspace, path string, outer bool) *scaleP21SW115Writer {
+		// covered by resource access; avoiding usage telemetry keeps paired revisions exact.
+		call := func(t *testing.T, i int, user domain.User, key *domain.APIKey, targetWorkspace, path string, outer bool) *queryWindowRoutesWriter {
 			t.Helper()
 			request := f.literalRequest(user, key, nil)
 			request.Method = http.MethodGet
@@ -213,7 +213,7 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 				request, closeOutput = beginRequestResourceReads(request)
 			}
 			defer closeOutput()
-			writer := &scaleP21SW115Writer{ResponseRecorder: httptest.NewRecorder(), store: services[i].store}
+			writer := &queryWindowRoutesWriter{ResponseRecorder: httptest.NewRecorder(), store: services[i].store}
 			handlers[i].ServeHTTP(writer, request)
 			if i == 1 && writer.Code == http.StatusOK &&
 				(writer.work == 0 || f.probe.MetadataWorkUsedForTesting() == 0) {
@@ -226,7 +226,7 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 			return writer
 		}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-			key = scaleP21SW115Key(prefix, user, key)
+			key = queryWindowRoutesKey(prefix, user, key)
 			if key != nil {
 				auth, err := repo.AuthenticateAPIKeyRecord(t.Context(), workspace, key.SecretHash, nil)
 				if err != nil || auth.User.ID != user.ID || auth.Key.ID != key.ID {
@@ -263,7 +263,7 @@ func TestScaleP21SW115P19RoutesDifferential(t *testing.T) {
 		})
 		member := f.principals[2].user
 		for _, outer := range []bool{false, true} {
-			path := scaleP19Path("projects", query, "", 100)
+			path := scalePath("projects", query, "", 100)
 			want := call(t, 0, member, nil, other.Workspace.URLKey, path, outer)
 			got := call(t, 1, member, nil, other.Workspace.URLKey, path, outer)
 			if want.Code != http.StatusForbidden || got.Code != want.Code || !reflect.DeepEqual(want.Body.Bytes(), got.Body.Bytes()) {

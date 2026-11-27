@@ -24,28 +24,28 @@ import (
 )
 
 // TestLoadExternalUsers preserves the invocation specified by the scale plan.
-// The actual P01 entry point also has the package's required test prefix.
+// The actual permission and load baseline entry point also has the package's required test prefix.
 func TestLoadExternalUsers(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_BASE_URLS") == "" {
 		t.Skip("set FLOW_LOAD_BASE_URLS and FLOW_LOAD_FIXTURE")
 	}
-	scaleP01External(t)
+	scaleExternal(t)
 }
 
-func TestScaleP01ExternalUsers(t *testing.T) {
+func TestScaleExternalUsers(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_BASE_URLS") == "" {
 		t.Skip("opt-in external load generator")
 	}
-	scaleP01External(t)
+	scaleExternal(t)
 }
 
-func scaleP01External(t *testing.T) {
-	bases := scaleP01URLs(t, "FLOW_LOAD_BASE_URLS", true)
-	fixture := scaleP01ReadFixture(t, os.Getenv("FLOW_LOAD_FIXTURE"))
+func scaleExternal(t *testing.T) {
+	bases := scaleURLs(t, "FLOW_LOAD_BASE_URLS", true)
+	fixture := scaleReadFixture(t, os.Getenv("FLOW_LOAD_FIXTURE"))
 	transport := &http.Transport{MaxIdleConnsPerHost: 4}
 	defer transport.CloseIdleConnections()
-	for _, identity := range append(append([]scaleP01Identity{}, fixture.Identities...), fixture.Admin) {
-		client := scaleP01Client(identity, bases, transport, 10*time.Second)
+	for _, identity := range append(append([]scaleIdentity{}, fixture.Identities...), fixture.Admin) {
+		client := scaleClient(identity, bases, transport, 10*time.Second)
 		for _, base := range bases {
 			request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/api/auth/session", nil)
 			response, err := client.Do(request)
@@ -60,17 +60,17 @@ func scaleP01External(t *testing.T) {
 			}
 		}
 	}
-	sources := []scaleP01MetricSource{}
-	for _, endpoint := range scaleP01URLs(t, "FLOW_LOAD_METRICS_URLS", false) {
-		sources = append(sources, scaleP01HTTPMetrics(endpoint))
+	sources := []scaleMetricSource{}
+	for _, endpoint := range scaleURLs(t, "FLOW_LOAD_METRICS_URLS", false) {
+		sources = append(sources, scaleHTTPMetrics(endpoint))
 	}
-	scaleP01Run(t, bases, fixture, sources, true)
+	scaleRun(t, bases, fixture, sources, true)
 }
 
-func scaleP01HTTPMetrics(endpoint string) scaleP01MetricSource {
+func scaleHTTPMetrics(endpoint string) scaleMetricSource {
 	client := &http.Client{Timeout: 5 * time.Second}
-	return func(ctx context.Context) (scaleP01Metrics, error) {
-		var metrics scaleP01Metrics
+	return func(ctx context.Context) (scaleMetrics, error) {
+		var metrics scaleMetrics
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		if err != nil {
 			return metrics, err
@@ -88,7 +88,7 @@ func scaleP01HTTPMetrics(endpoint string) scaleP01MetricSource {
 	}
 }
 
-func TestScaleP01ReplicaProcess(t *testing.T) {
+func TestScaleReplicaProcess(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P01_CHILD") != "1" {
 		t.Skip("P01 replica subprocess")
 	}
@@ -103,7 +103,7 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	probe, err := repo.EnableScaleP01Probe(config)
+	probe, err := repo.EnableScaleProbe(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,10 +119,10 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 	// Metrics are on this test process's loopback server, never a production route.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_scale-p01/metrics", func(w http.ResponseWriter, r *http.Request) {
-		value, _ := scaleP01LocalMetricSource(probe)(r.Context())
+		value, _ := scaleLocalMetricSource(probe)(r.Context())
 		writeJSON(w, http.StatusOK, value)
 	})
-	mux.Handle("/", scaleP01Handler(newTestHandler(t, srv), probe))
+	mux.Handle("/", scaleHandler(newTestHandler(t, srv), probe))
 	host := httptest.NewServer(mux)
 	t.Cleanup(host.Close)
 	if err := os.WriteFile(filepath.Join(dir, "url"), []byte(host.URL), 0o600); err != nil {
@@ -133,18 +133,18 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 
 // This opt-in integration test launches two API OS processes. The generator
 // and Redis fixture stay in the parent; API allocations/CPU are separate.
-func TestScaleP01TwoProcessLoad(t *testing.T) {
+func TestScaleTwoProcessLoad(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_TWO_PROCESS") != "1" {
 		t.Skip("set FLOW_LOAD_TWO_PROCESS=1")
 	}
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	root := t.TempDir()
 	config := store.DatabaseConfig{Driver: "sqlite", Path: filepath.Join(root, "external.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
-	config = scaleP01TestDatabaseConfig(t, config, 20)
+	config = scaleTestDatabaseConfig(t, config, 20)
 	redisServer := miniredis.RunT(t)
 	// Close the seeding handlers and their stores before starting the processes.
-	var fixture scaleP01Fixture
-	t.Run("seed", func(t *testing.T) { fixture = scaleP01SeedFixture(t, scaleP01Peers(t, config, redisServer.Addr())) })
+	var fixture fixtureScaleFixture
+	t.Run("seed", func(t *testing.T) { fixture = scaleSeedFixture(t, scalePeers(t, config, redisServer.Addr())) })
 	if t.Failed() {
 		return
 	}
@@ -153,7 +153,7 @@ func TestScaleP01TwoProcessLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixturePath := filepath.Join(root, "fixture.json")
-	if err := scaleP01WriteCredentials(fixturePath, fixtureRaw); err != nil {
+	if err := scaleWriteCredentials(fixturePath, fixtureRaw); err != nil {
 		t.Fatal(err)
 	}
 	var bases []string
@@ -170,7 +170,7 @@ func TestScaleP01TwoProcessLoad(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := exec.Command(os.Args[0], "-test.run=^TestScaleP01ReplicaProcess$", "-test.timeout=45m")
+		cmd := exec.Command(os.Args[0], "-test.run=^TestScaleReplicaProcess$", "-test.timeout=45m")
 		cmd.Env = append(os.Environ(), "FLOW_SCALE_P01_CHILD=1", "FLOW_SCALE_P01_CHILD_DIR="+dir, "FLOW_SCALE_P01_REDIS="+redisServer.Addr())
 		cmd.Stdout, cmd.Stderr = log, log
 		if err := cmd.Start(); err != nil {
@@ -208,25 +208,25 @@ func TestScaleP01TwoProcessLoad(t *testing.T) {
 			if time.Now().After(deadline) {
 				t.Fatalf("replica %d startup timed out", index)
 			}
-			if !scaleP01Pause(t.Context(), 20*time.Millisecond) {
+			if !scalePause(t.Context(), 20*time.Millisecond) {
 				t.Fatal("startup canceled")
 			}
 		}
 	}
-	a, _ := scaleP01HTTPMetrics(bases[0] + "/_scale-p01/metrics")(t.Context())
-	b, _ := scaleP01HTTPMetrics(bases[1] + "/_scale-p01/metrics")(t.Context())
+	a, _ := scaleHTTPMetrics(bases[0] + "/_scale-p01/metrics")(t.Context())
+	b, _ := scaleHTTPMetrics(bases[1] + "/_scale-p01/metrics")(t.Context())
 	if a.PID == 0 || b.PID == 0 || a.PID == b.PID || a.PID == os.Getpid() || b.PID == os.Getpid() {
 		t.Fatal("API processes must be distinct from each other and generator")
 	}
 	t.Setenv("FLOW_LOAD_BASE_URLS", strings.Join(bases, ","))
 	t.Setenv("FLOW_LOAD_METRICS_URLS", bases[0]+"/_scale-p01/metrics,"+bases[1]+"/_scale-p01/metrics")
 	t.Setenv("FLOW_LOAD_FIXTURE", fixturePath)
-	scaleP01External(t)
+	scaleExternal(t)
 }
 
 // Prepare a credential fixture for APIs started separately by the operator.
 // The opt-in test uses only the explicit throwaway test database configuration.
-func TestScaleP01PrepareExternalFixture(t *testing.T) {
+func TestScalePrepareExternalFixture(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_PREPARE") != "1" {
 		t.Skip("set FLOW_LOAD_PREPARE=1 and FLOW_LOAD_FIXTURE")
 	}
@@ -234,12 +234,12 @@ func TestScaleP01PrepareExternalFixture(t *testing.T) {
 	if path == "" || os.Getenv("FLOW_TEST_DATABASE_DRIVER") == "" || os.Getenv("FLOW_TEST_DATABASE_URL") == "" {
 		t.Fatal("requires an explicit throwaway test database and fixture path")
 	}
-	fixture := scaleP01SeedFixture(t, scaleP01NewPeers(t))
+	fixture := scaleSeedFixture(t, scaleNewPeers(t))
 	raw, err := json.Marshal(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := scaleP01WriteCredentials(path, raw); err != nil {
+	if err := scaleWriteCredentials(path, raw); err != nil {
 		t.Fatal(err)
 	}
 }

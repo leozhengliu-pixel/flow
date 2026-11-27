@@ -16,15 +16,15 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW551: the per-replica COLD limit holds under concurrent COLD requests, COLD
+// The per-replica COLD limit holds under concurrent COLD requests, COLD
 // requests are served fairly and refused with 503 + Retry-After when the wait
 // is too long, a long COLD request does not hold the COLD slot between its
 // operations, and a COLD request never blocks a HOT one.
-func TestScaleP21SW551ColdLimitAndHotIsolation(t *testing.T) {
-	f, workspace := scaleP21SW550Fixture(t)
+func TestColdLimitAndHotIsolation(t *testing.T) {
+	f, workspace := routeTemperatureGuardFixture(t)
 	const coldPattern, hotPattern = "GET /api/workflow-runs", "GET /api/issue-records"
-	if scaleP21RouteHot(coldPattern) || !scaleP21RouteHot(hotPattern) {
-		t.Fatalf("SW551 fixture routes changed temperature: %s=%q %s=%q", coldPattern, scaleP21RouteTemperature[coldPattern], hotPattern, scaleP21RouteTemperature[hotPattern])
+	if scaleRouteHot(coldPattern) || !scaleRouteHot(hotPattern) {
+		t.Fatalf("SW551 fixture routes changed temperature: %s=%q %s=%q", coldPattern, scaleRouteTemperature[coldPattern], hotPattern, scaleRouteTemperature[hotPattern])
 	}
 	newServer := func(coldGate *metadataReadGate) *server {
 		return &server{store: f.probe, projectionGate: newMetadataReadGate(1, 64, 30*time.Second, 0), coldProjectionGate: coldGate}

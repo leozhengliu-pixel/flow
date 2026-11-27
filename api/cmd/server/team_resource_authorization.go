@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW307TeamResourceAuthorizationRequest(r *http.Request) (string, bool) {
+func teamResourceAuthorizationRequest(r *http.Request) (string, bool) {
 	var patterns []string
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
@@ -21,7 +21,7 @@ func scaleP21SW307TeamResourceAuthorizationRequest(r *http.Request) (string, boo
 		patterns = []string{"/api/teams/{id}/resources/{resourceId}", "/api/teams/{id}/resource-sections/{sectionId}"}
 	}
 	for _, pattern := range patterns {
-		if parts, selected := scaleP21EscapedRouteParts(r, pattern); selected && len(parts) >= 3 {
+		if parts, selected := scaleEscapedRouteParts(r, pattern); selected && len(parts) >= 3 {
 			return parts[2], true
 		}
 	}
@@ -32,7 +32,7 @@ func (s *server) boundedTeamResourceAuthorization(r *http.Request, workspace, us
 	if !s.store.BoundedMetadataEnabled() {
 		return false, false
 	}
-	ref, selected := scaleP21SW307TeamResourceAuthorizationRequest(r)
+	ref, selected := teamResourceAuthorizationRequest(r)
 	if !selected {
 		return false, false
 	}

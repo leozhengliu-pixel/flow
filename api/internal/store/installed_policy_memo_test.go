@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW137Queries struct {
+type installedPolicyMemoQueries struct {
 	total, policy, principal int
 }
 
-func (q *scaleP21SW137Queries) observe(query string) {
+func (q *installedPolicyMemoQueries) observe(query string) {
 	q.total++
 	if strings.Contains(query, "workspace_metadata_records") && (strings.Contains(query, "teams") || strings.Contains(query, "teamSettings")) {
 		q.policy++
@@ -29,7 +29,7 @@ func (q *scaleP21SW137Queries) observe(query string) {
 	}
 }
 
-func scaleP21SW137Snapshot(t *testing.T, view *SQLiteStore, workspace string) (context.Context, *ResourceRead, *sqlTx, func()) {
+func installedPolicyMemoSnapshot(t *testing.T, view *SQLiteStore, workspace string) (context.Context, *ResourceRead, *sqlTx, func()) {
 	t.Helper()
 	tx, err := view.db.BeginTx(t.Context(), metadataReadOptions(view.dialect))
 	if err != nil {
@@ -51,7 +51,7 @@ func scaleP21SW137Snapshot(t *testing.T, view *SQLiteStore, workspace string) (c
 	}
 }
 
-func scaleP21SW137Install(t *testing.T, view *SQLiteStore, workspace string, data domain.Bootstrap, stamp copyStamp) {
+func installedPolicyMemoInstall(t *testing.T, view *SQLiteStore, workspace string, data domain.Bootstrap, stamp copyStamp) {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), data, stamp)
 	if err != nil {
@@ -60,7 +60,7 @@ func scaleP21SW137Install(t *testing.T, view *SQLiteStore, workspace string, dat
 	view.installMetadataLogicalSource(workspace, source)
 }
 
-func scaleP21SW137Compare(t *testing.T, old, bounded AccessContext, source domain.Bootstrap, key *domain.APIKey) {
+func installedPolicyMemoCompare(t *testing.T, old, bounded AccessContext, source domain.Bootstrap, key *domain.APIKey) {
 	t.Helper()
 	if old.WorkspaceID != bounded.WorkspaceID || old.PrincipalID != bounded.PrincipalID ||
 		old.CredentialScope != bounded.CredentialScope || old.AuthzEpoch != bounded.AuthzEpoch ||
@@ -100,11 +100,11 @@ func scaleP21SW137Compare(t *testing.T, old, bounded AccessContext, source domai
 	}
 }
 
-func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
+func TestInstalledPolicyMemoPermissionMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID, prefix := f.data.Workspace.URLKey, f.data.Workspace.ID, idgen.New("sw137-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw137_teams", "", nil, func(data *domain.Bootstrap) error {
@@ -197,7 +197,7 @@ func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
 			defer view.releaseMetadataLogicalSources()
 			if state == "unknown" {
 				data, _ := f.WorkspaceMetadata(workspace)
-				scaleP21SW137Install(t, view, workspace, data, copyStamp{workspaceID: workspaceID, revision: -1})
+				installedPolicyMemoInstall(t, view, workspace, data, copyStamp{workspaceID: workspaceID, revision: -1})
 			}
 			if state == "sql-drift" {
 				if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw137_changed", "", nil, func(data *domain.Bootstrap) error {
@@ -215,9 +215,9 @@ func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
 				}
 			}
 			data, _ := f.WorkspaceMetadata(workspace)
-			ctx, owner, _, close := scaleP21SW137Snapshot(t, view, workspace)
+			ctx, owner, _, close := installedPolicyMemoSnapshot(t, view, workspace)
 			defer close()
-			oldQueries, newQueries := &scaleP21SW137Queries{}, &scaleP21SW137Queries{}
+			oldQueries, newQueries := &installedPolicyMemoQueries{}, &installedPolicyMemoQueries{}
 			oldCtx, newCtx := WithSQLStatementObserver(ctx, oldQueries.observe), WithSQLStatementObserver(ctx, newQueries.observe)
 			held, pairs, firstPolicy, firstSQL := 0, 0, 0, 0
 			matching := false
@@ -239,7 +239,7 @@ func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
 					} else if newQueries.policy != firstPolicy || newQueries.total != firstSQL+pairs*2 {
 						t.Fatal("memo repeated policy recovery or skipped live stamp/principal checks", state, newQueries, firstPolicy, firstSQL, pairs)
 					}
-					scaleP21SW137Compare(t, want, got, data, key)
+					installedPolicyMemoCompare(t, want, got, data, key)
 					if held == 0 {
 						held = view.MetadataWorkUsedForTesting()
 					}
@@ -276,7 +276,7 @@ func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
-	ctx, _, tx, close := scaleP21SW137Snapshot(t, view, workspace)
+	ctx, _, tx, close := installedPolicyMemoSnapshot(t, view, workspace)
 	defer close()
 	oldAccess, err := f.ResolveAccess(ctx, workspace, inherited.ID, nil)
 	if err != nil {
@@ -304,11 +304,11 @@ func TestScaleP21SW137InstalledPolicyMemoPermissionMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
+func TestInstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, principal := f.data.Workspace.URLKey, f.data.Viewer.ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw137_canonical", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams[0].Key = "CANONICAL"
@@ -334,7 +334,7 @@ func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 	f.workspaces[workspace] = cloneBootstrap(native)
 	f.setCopyRevisionLocked(workspace, stamp)
 	f.mu.Unlock()
-	scaleP21SW137Install(t, view, workspace, native, stamp)
+	installedPolicyMemoInstall(t, view, workspace, native, stamp)
 	for _, state := range []string{"matching", "unknown", "stale", "newer", "wrong-workspace"} {
 		t.Run(state, func(t *testing.T) {
 			selected := stamp
@@ -348,10 +348,10 @@ func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 			case "wrong-workspace":
 				selected.workspaceID += "-other"
 			}
-			scaleP21SW137Install(t, view, workspace, native, selected)
-			ctx, _, _, close := scaleP21SW137Snapshot(t, view, workspace)
+			installedPolicyMemoInstall(t, view, workspace, native, selected)
+			ctx, _, _, close := installedPolicyMemoSnapshot(t, view, workspace)
 			defer close()
-			queries := &scaleP21SW137Queries{}
+			queries := &installedPolicyMemoQueries{}
 			got, err := view.ResolveAccess(WithSQLStatementObserver(ctx, queries.observe), workspace, principal, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -369,8 +369,8 @@ func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 			}
 		})
 	}
-	scaleP21SW137Install(t, view, workspace, native, stamp)
-	ctx, owner, tx, close := scaleP21SW137Snapshot(t, view, workspace)
+	installedPolicyMemoInstall(t, view, workspace, native, stamp)
+	ctx, owner, tx, close := installedPolicyMemoSnapshot(t, view, workspace)
 	defer close()
 	got, err := view.ResolveAccess(ctx, workspace, principal, nil)
 	if err != nil || got.policy.metadata.Teams[0].Key != "CALLBACK" {
@@ -378,7 +378,7 @@ func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 	}
 	memo := resourcePolicyMemoFor(ctx, view, workspace)
 	memo.close()
-	queries := &scaleP21SW137Queries{}
+	queries := &installedPolicyMemoQueries{}
 	got, err = view.ResolveAccess(WithSQLStatementObserver(ctx, queries.observe), workspace, principal, nil)
 	if err != nil || queries.policy == 0 || got.policy.metadata.Teams[0].Key == "CALLBACK" {
 		t.Fatal("closed memo introduced an error or reused native policy", queries, err)
@@ -402,7 +402,7 @@ func TestScaleP21SW137InstalledPolicyMemoSourcesAndSnapshots(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW137InstalledPolicyMemoLargeAndQuota(t *testing.T) {
+func TestInstalledPolicyMemoLargeAndQuota(t *testing.T) {
 	stamp := copyStamp{workspaceID: "sw137-native", revision: 9}
 	held := 0
 	for _, size := range []int{1000, 10000} {
@@ -413,8 +413,8 @@ func TestScaleP21SW137InstalledPolicyMemoLargeAndQuota(t *testing.T) {
 			data.TeamSettings[id] = domain.TeamSettings{TeamID: id, Access: "public", SettingsPermission: "teamMembers",
 				LabelPermission: "teamMembers", MemberPermission: "teamMembers", AgentGuidance: strings.Repeat("g", size)}
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": data})
-		scaleP21SW137Install(t, view, "workspace", data, stamp)
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": data})
+		installedPolicyMemoInstall(t, view, "workspace", data, stamp)
 		view.db = &sqlDatabase{}
 		view.db.journalReady.Store(true)
 		tx := &sqlTx{database: view.db}

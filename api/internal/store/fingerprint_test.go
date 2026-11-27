@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW209FingerprintDecision(t *testing.T) {
+func TestFingerprintDecision(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -110,12 +110,12 @@ func TestScaleP21SW209FingerprintDecision(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW209FingerprintCancellationAndRelease(t *testing.T) {
+func TestFingerprintCancellationAndRelease(t *testing.T) {
 	if advancedScheduleFingerprintJSONError(io.EOF) || advancedScheduleFingerprintJSONError(io.ErrUnexpectedEOF) {
 		t.Fatal("backing IO failure was classified as a literal JSON marshal failure")
 	}
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -154,9 +154,9 @@ func TestScaleP21SW209FingerprintCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW209CallbackRecipientAdmission(t *testing.T) {
+func TestCallbackRecipientAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -223,9 +223,9 @@ func TestScaleP21SW209CallbackRecipientAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW209CallbackRuleMultiplicityAdmission(t *testing.T) {
+func TestCallbackRuleMultiplicityAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

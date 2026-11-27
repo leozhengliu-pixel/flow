@@ -17,13 +17,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW173LinkedChatPreviewHeadersDifferential(t *testing.T) {
+func TestLinkedChatPreviewHeadersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		prefix, workspace := idgen.New("sw173-"), f.data.Workspace.URLKey
 		other, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "Linked preview space", prefix+"space", "us")
 		if err != nil {
@@ -193,7 +193,7 @@ func TestScaleP21SW173LinkedChatPreviewHeadersDifferential(t *testing.T) {
 				}
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("linked preview %s changed:\n%s", fixture.name, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("linked preview %s changed:\n%s", fixture.name, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 			raw, err := json.Marshal(outcomes[0])
 			if err != nil || len(outcomes[0].Sent) == 0 || fixture.witness != "" && !bytes.Contains(raw, []byte(fixture.witness)) {

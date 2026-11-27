@@ -22,7 +22,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-func TestScaleP06ReplayAndDequeuedBatchStayBudgeted(t *testing.T) {
+func TestScaleReplayAndDequeuedBatchStayBudgeted(t *testing.T) {
 	h := newRealtimeHub()
 	h.publish("w", domain.RealtimeEvent{ID: "cursor"})
 	payload := json.RawMessage(`{"body":"` + strings.Repeat("a", 200<<10) + `"}`)
@@ -56,7 +56,7 @@ func TestScaleP06ReplayAndDequeuedBatchStayBudgeted(t *testing.T) {
 	}
 }
 
-func TestScaleP06SharedCollaborationAndInFlightAccounting(t *testing.T) {
+func TestScaleSharedCollaborationAndInFlightAccounting(t *testing.T) {
 	h := newRealtimeHub()
 	first := h.addSocket("w", "first", func() {})
 	second := h.addSocket("w", "second", func() {})
@@ -85,7 +85,7 @@ func TestScaleP06SharedCollaborationAndInFlightAccounting(t *testing.T) {
 	}
 }
 
-func TestScaleP06TwoThousandSlowConnectionsBounded(t *testing.T) {
+func TestScaleTwoThousandSlowConnectionsBounded(t *testing.T) {
 	h := newRealtimeHub()
 	stops := make([]func(), 0, 2000)
 	for i := range 1000 {
@@ -119,7 +119,7 @@ func TestScaleP06TwoThousandSlowConnectionsBounded(t *testing.T) {
 	}
 }
 
-func TestScaleP06QueuedCollaborationRevocationFailsClosed(t *testing.T) {
+func TestScaleQueuedCollaborationRevocationFailsClosed(t *testing.T) {
 	for _, scenario := range []string{"removed", "credential", "permission error", "still allowed"} {
 		t.Run(scenario, func(t *testing.T) {
 			s := &server{realtime: newRealtimeHub()}
@@ -146,18 +146,18 @@ func TestScaleP06QueuedCollaborationRevocationFailsClosed(t *testing.T) {
 	}
 }
 
-type scaleP06DeadlineWriter struct {
+type scaleDeadlineWriter struct {
 	*httptest.ResponseRecorder
 	deadline time.Time
 	flushed  bool
 }
 
-func (w *scaleP06DeadlineWriter) SetWriteDeadline(deadline time.Time) error {
+func (w *scaleDeadlineWriter) SetWriteDeadline(deadline time.Time) error {
 	w.deadline = deadline
 	return nil
 }
 
-func (w *scaleP06DeadlineWriter) FlushError() error {
+func (w *scaleDeadlineWriter) FlushError() error {
 	w.flushed = true
 	if w.deadline.IsZero() {
 		return errors.New("unbounded flush")
@@ -165,8 +165,8 @@ func (w *scaleP06DeadlineWriter) FlushError() error {
 	return context.DeadlineExceeded
 }
 
-func TestScaleP06WriteAndFlushDeadline(t *testing.T) {
-	w := &scaleP06DeadlineWriter{ResponseRecorder: httptest.NewRecorder()}
+func TestScaleWriteAndFlushDeadline(t *testing.T) {
+	w := &scaleDeadlineWriter{ResponseRecorder: httptest.NewRecorder()}
 	if !writeSSE(w, domain.RealtimeEvent{ID: "event", Payload: json.RawMessage(`{"x":1}`)}, "") {
 		t.Fatal("frame write failed")
 	}
@@ -178,7 +178,7 @@ func TestScaleP06WriteAndFlushDeadline(t *testing.T) {
 	}
 }
 
-func scaleP06Repository(t *testing.T) *store.SQLiteStore {
+func scaleRepository(t *testing.T) *store.SQLiteStore {
 	t.Helper()
 	var repo *store.SQLiteStore
 	var err error
@@ -194,8 +194,8 @@ func scaleP06Repository(t *testing.T) *store.SQLiteStore {
 	return repo
 }
 
-func TestScaleP06LargestLegalCollaborationUpdateReconnect(t *testing.T) {
-	repo := scaleP06Repository(t)
+func TestScaleLargestLegalCollaborationUpdateReconnect(t *testing.T) {
+	repo := scaleRepository(t)
 	srv := &server{store: repo, uploadPath: t.TempDir(), authDisabled: true}
 	handler := newHandler(srv)
 	host := httptest.NewServer(handler)
@@ -292,7 +292,7 @@ func TestScaleP06LargestLegalCollaborationUpdateReconnect(t *testing.T) {
 	}
 }
 
-func TestScaleP06BudgetConcurrentCancelAndRollback(t *testing.T) {
+func TestScaleBudgetConcurrentCancelAndRollback(t *testing.T) {
 	t.Setenv("FLOW_REALTIME_BUDGET_BYTES", "0")
 	if newRealtimeBudget().limit != realtimeTransportBytes {
 		t.Fatal("zero must not disable the memory bound")
@@ -323,7 +323,7 @@ func TestScaleP06BudgetConcurrentCancelAndRollback(t *testing.T) {
 	}
 }
 
-func TestScaleP06WorkReservationsReleaseOnPanic(t *testing.T) {
+func TestScaleWorkReservationsReleaseOnPanic(t *testing.T) {
 	s := &server{realtime: newRealtimeHub()}
 	r := httptest.NewRequest("GET", "/api/realtime/events?workspace=missing", nil)
 	assertPanicReleases := func(run func()) {
@@ -343,7 +343,7 @@ func TestScaleP06WorkReservationsReleaseOnPanic(t *testing.T) {
 	})
 }
 
-func TestScaleP06ReorderingUsesTransportBudget(t *testing.T) {
+func TestScaleReorderingUsesTransportBudget(t *testing.T) {
 	h := newTestRealtimeHub(t)
 	h.ordered = true
 	h.publish("w", domain.RealtimeEvent{ID: "first", Seq: 1})
@@ -360,7 +360,7 @@ func TestScaleP06ReorderingUsesTransportBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP06GenerationConflictNoticeStillReachesOldEditors(t *testing.T) {
+func TestScaleGenerationConflictNoticeStillReachesOldEditors(t *testing.T) {
 	s := &server{realtime: newRealtimeHub()}
 	client := s.realtime.addSocket("w", "editor", func() {})
 	defer s.realtime.removeSocket(client)

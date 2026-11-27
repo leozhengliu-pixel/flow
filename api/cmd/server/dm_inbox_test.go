@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW56DMInboxDifferential(t *testing.T) {
+func TestDMInboxDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := newChatWorkflowFixture(t)

@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
+func TestProjectTemplateListDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "sw16-template-signing")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 123, time.FixedZone("source-zone", 7*3600+123))
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "sw16.template_list_seed", "", nil, func(data *domain.Bootstrap) error {
 			data.ProjectTemplates = []domain.ProjectTemplate{
@@ -36,7 +36,7 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M2UnrelatedHash(t, t.Context(), repo, f.data.Workspace.URLKey)
+		before := unrelatedPolicyRowsHash(t, t.Context(), repo, f.data.Workspace.URLKey)
 		legacy := func(source *store.SQLiteStore, w http.ResponseWriter, r *http.Request) {
 			data, found := source.BootstrapFor(workspaceKey(r))
 			if !found {
@@ -63,7 +63,7 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 						t.Fatalf("bounded legacy view differs from the flag-off list: %.120s/%.120s", own.Body.Bytes(), want.Body.Bytes())
 					}
 				}
-				(&server{store: source}).scaleP21SW16ListProjectTemplates(got, request)
+				(&server{store: source}).listBoundedProjectTemplates(got, request)
 				if want.Code != got.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 					t.Fatalf("same actual source output differs: %d/%d %.120s/%.120s", want.Code, got.Code, want.Body.Bytes(), got.Body.Bytes())
 				}
@@ -86,7 +86,7 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 			service := &server{store: repo, fileSigningAllowAll: true}
 			signingStarted := time.Now()
 			service.signedFileURLs(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { legacy(repo, w, r) })).ServeHTTP(want, request)
-			service.signedFileURLs(http.HandlerFunc(service.scaleP21SW16ListProjectTemplates)).ServeHTTP(got, request)
+			service.signedFileURLs(http.HandlerFunc(service.listBoundedProjectTemplates)).ServeHTTP(got, request)
 			oldBody, newBody := want.Body.Bytes(), got.Body.Bytes()
 			if signed {
 				normalizeClock := func(raw []byte) []byte {
@@ -130,7 +130,7 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 		cancel()
 		want, got := httptest.NewRecorder(), httptest.NewRecorder()
 		legacy(repo, want, request.WithContext(ctx))
-		(&server{store: repo}).scaleP21SW16ListProjectTemplates(got, request.WithContext(ctx))
+		(&server{store: repo}).listBoundedProjectTemplates(got, request.WithContext(ctx))
 		if got.Code != want.Code || !bytes.Equal(got.Body.Bytes(), want.Body.Bytes()) {
 			t.Fatal("context-insensitive legacy template read changed")
 		}
@@ -139,22 +139,22 @@ func TestScaleP21SW16ProjectTemplateListDifferential(t *testing.T) {
 		request.Header.Set("X-Workspace-Key", "sw16-missing-workspace")
 		want, got = httptest.NewRecorder(), httptest.NewRecorder()
 		legacy(repo, want, request)
-		(&server{store: repo}).scaleP21SW16ListProjectTemplates(got, request)
+		(&server{store: repo}).listBoundedProjectTemplates(got, request)
 		if got.Code != http.StatusNotFound || got.Code != want.Code || !bytes.Equal(got.Body.Bytes(), want.Body.Bytes()) {
 			t.Fatal("missing workspace response differs")
 		}
-		if scaleP21M2UnrelatedHash(t, t.Context(), repo, f.data.Workspace.URLKey) != before || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if unrelatedPolicyRowsHash(t, t.Context(), repo, f.data.Workspace.URLKey) != before || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("list changed unrelated rows or decoded complete workspace")
 		}
 	}
 }
 
-func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
+func TestProjectTemplateLegacyLargeBaseline(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "sw16-template-signing")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		body := strings.Repeat("x", 2<<20) + " /uploads/sw16-description.png"
 		r, w := f.literalRequest(f.data.Viewer, nil, map[string]any{"name": "Large template", "description": body}), httptest.NewRecorder()
 		(&server{store: repo}).createProjectTemplate(w, r)
@@ -203,7 +203,7 @@ func TestScaleP21SW16ProjectTemplateLegacyLargeBaseline(t *testing.T) {
 				r, w := f.literalRequest(f.data.Viewer, nil, nil), httptest.NewRecorder()
 				r = r.WithContext(store.WithSQLStatementObserver(r.Context(), func(string) { sql++ }))
 				if candidate {
-					(&server{store: repo}).scaleP21SW16ListProjectTemplates(w, r)
+					(&server{store: repo}).listBoundedProjectTemplates(w, r)
 				} else {
 					(&server{store: repo}).listProjectTemplates(w, r)
 				}

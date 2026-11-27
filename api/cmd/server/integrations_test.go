@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M2IntegrationDifferential(t *testing.T) {
+func TestScaleIntegrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, operation := range []string{"error", "success", "gitlab", "probe", "display", "credential-audit"} {
@@ -75,18 +75,18 @@ func TestScaleP21M2IntegrationDifferential(t *testing.T) {
 								}
 								audit := entries[0]
 								audit.ID, audit.CreatedAt, audit.Seq, audit.Hash = "", time.Time{}, 0, ""
-								audits = append(audits, scaleP21M2JSON(t, audit, false))
+								audits = append(audits, normalizePolicyJSON(t, audit, false))
 							}
 						}
-						responses = append(responses, []any{w.Code, scaleP21M2Response(t, w, false)})
+						responses = append(responses, []any{w.Code, policyDifferentialResponse(t, w, false)})
 						if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 							t.Fatal(err)
 						}
 						data, _ := repo.WorkspaceMetadata(workspace)
-						effects = append(effects, scaleP21M2JSON(t, []any{scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "integrationConnections", ID: "m2-connection"}, store.RecordKey{Kind: "integrationConnections", ID: "m2-other"}), data.ProjectDisplayDefault, event.Type, event.AggregateID, event.Payload, event.PreviousValues, realtime.Payload}, false))
+						effects = append(effects, normalizePolicyJSON(t, []any{policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "integrationConnections", ID: "m2-connection"}, store.RecordKey{Kind: "integrationConnections", ID: "m2-other"}), data.ProjectDisplayDefault, event.Type, event.AggregateID, event.Payload, event.PreviousValues, realtime.Payload}, false))
 					}
 					if !reflect.DeepEqual(effects[0], effects[1]) || !reflect.DeepEqual(responses[0], responses[1]) || len(audits) == 2 && !reflect.DeepEqual(audits[0], audits[1]) {
-						t.Fatalf("responses: %s; effects: %s; audit entries=%d", scaleP21M2Diff(responses[0], responses[1]), scaleP21M2Diff(effects[0], effects[1]), len(audits))
+						t.Fatalf("responses: %s; effects: %s; audit entries=%d", policyFirstDifference(responses[0], responses[1]), policyFirstDifference(effects[0], effects[1]), len(audits))
 					}
 				})
 			}
@@ -97,7 +97,7 @@ func TestScaleP21M2IntegrationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21M2ConnectorDifferential(t *testing.T) {
+func TestScaleConnectorDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -106,8 +106,8 @@ func TestScaleP21M2ConnectorDifferential(t *testing.T) {
 	tools.Store(2)
 	host := fakeCodeMCP(t, &calls, &tools)
 	defer host.Close()
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		policy := applicationPolicy{ID: "m2-connector", Kind: "mcp", URL: host.URL, Name: connectorHostName(host.URL), OwnerID: f.data.Viewer.ID, Shared: true, Status: "approved"}
 		reset := func() {
@@ -150,7 +150,7 @@ func TestScaleP21M2ConnectorDifferential(t *testing.T) {
 				t.Fatalf("connect failed: %s (%v)", w.Body.String(), err)
 			}
 			result.Policy.ConnectedAt = nil
-			connected = append(connected, scaleP21M2JSON(t, result, false))
+			connected = append(connected, normalizePolicyJSON(t, result, false))
 			s.agent = appconfig.AgentConfig{WriteTools: true, ToolsEnabled: true}
 			tool := connectorTool{Policy: policy, RemoteName: "search_code", Definition: agentProviderTool{Name: "m2-offered", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`)}}
 			ctx := context.WithValue(r.Context(), connectorToolsKey{}, []connectorTool{tool})
@@ -169,12 +169,12 @@ func TestScaleP21M2ConnectorDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21M2AgentWebhookScanDifferential(t *testing.T) {
+func TestScaleAgentWebhookScanDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_m2.hooks", "", nil, func(data *domain.Bootstrap) error {
 			for i := 0; i < 121; i++ {

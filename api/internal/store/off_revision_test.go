@@ -2,9 +2,9 @@ package store
 
 import "testing"
 
-func TestScaleP09OffPreservesNoopCacheRevision(t *testing.T) {
+func TestScaleOffPreservesNoopCacheRevision(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	before, err := readMetadataStamp(t.Context(), f.db, workspace)
 	if err != nil {

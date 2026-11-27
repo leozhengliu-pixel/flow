@@ -18,8 +18,8 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW15Labels struct {
-	scaleP21M2Fixture
+type labelsLabels struct {
+	policyDifferentialFixture
 	labels  []domain.IssueLabel
 	groups  []domain.LabelGroup
 	ids     []string
@@ -28,9 +28,9 @@ type scaleP21SW15Labels struct {
 	child   string
 }
 
-func scaleP21SW15LabelSetup(t *testing.T, repo *store.SQLiteStore) scaleP21SW15Labels {
+func labelSetup(t *testing.T, repo *store.SQLiteStore) labelsLabels {
 	t.Helper()
-	f := scaleP21SW15Labels{scaleP21M2Fixture: scaleP21M2Setup(t, repo), groupID: idgen.New("sw15-group-")}
+	f := labelsLabels{policyDifferentialFixture: setupPolicyDifferential(t, repo), groupID: idgen.New("sw15-group-")}
 	data, ok := repo.WorkspaceMetadata(f.data.Workspace.URLKey)
 	if !ok {
 		t.Fatal("missing label fixture workspace")
@@ -59,7 +59,7 @@ func scaleP21SW15LabelSetup(t *testing.T, repo *store.SQLiteStore) scaleP21SW15L
 	return f
 }
 
-func (f scaleP21SW15Labels) reset(t *testing.T, group *domain.LabelGroup) {
+func (f labelsLabels) reset(t *testing.T, group *domain.LabelGroup) {
 	t.Helper()
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	repo.SetWebhookSink(nil)
@@ -81,7 +81,7 @@ func (f scaleP21SW15Labels) reset(t *testing.T, group *domain.LabelGroup) {
 	}
 }
 
-func scaleP21SW15Canonical(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
+func labelsCanonical(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
 	t.Helper()
 	batch, err := repo.ReadCanonicalRecords(t.Context(), workspace, keys, "detail")
 	if err != nil {
@@ -97,12 +97,12 @@ func scaleP21SW15Canonical(t *testing.T, repo *store.SQLiteStore, workspace stri
 	return rows
 }
 
-func TestScaleP21SW15LabelCreationMeasurement(t *testing.T) {
+func TestLabelCreationMeasurement(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW15LabelSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := labelSetup(t, repo)
 		sources := []*store.SQLiteStore{repo, f.probe}
 		if os.Getenv("FLOW_SCALE_P21_SW15_BASELINE") == "1" {
 			sources = sources[:1]
@@ -129,16 +129,16 @@ func TestScaleP21SW15LabelCreationMeasurement(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW15TeamLabelCreationDifferential(t *testing.T) {
+func TestTeamLabelCreationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW15LabelSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := labelSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
-		_, baseline := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
-		otherGroup := scaleP21SW6RecordHash(t, repo, workspace, "labelGroups", f.groups[0].ID)
-		otherProject := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+		_, baseline := creationState(t, repo, workspace, "labels", f.ids)
+		otherGroup := recordHash(t, repo, workspace, "labelGroups", f.groups[0].ID)
+		otherProject := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 		group := domain.LabelGroup{ID: f.groupID, Name: "Target", Scope: f.public, ResourceType: "issue", CreatedAt: f.groups[0].CreatedAt}
 		type scenario struct {
 			name, team, resource, groupID string
@@ -212,7 +212,7 @@ func TestScaleP21SW15TeamLabelCreationDifferential(t *testing.T) {
 						if w.Code != spec.status {
 							t.Fatalf("status=%d want=%d body=%s", w.Code, spec.status, w.Body.String())
 						}
-						ids, fingerprint := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+						ids, fingerprint := creationState(t, repo, workspace, "labels", f.ids)
 						if fingerprint != baseline || !slices.Equal(ids[:len(f.ids)], f.ids) {
 							t.Fatal("creation changed existing label bytes/order")
 						}
@@ -231,7 +231,7 @@ func TestScaleP21SW15TeamLabelCreationDifferential(t *testing.T) {
 								t.Fatal("created label fields or order changed")
 							}
 							generated[created.ID], generated[created.CreatedAt.Format(time.RFC3339Nano)] = "<created-id>", "<created-clock>"
-							canonical = scaleP21SW15Canonical(t, repo, workspace, store.RecordKey{Kind: "labels", ID: created.ID})
+							canonical = labelsCanonical(t, repo, workspace, store.RecordKey{Kind: "labels", ID: created.ID})
 						} else if len(ids) != len(f.ids) || len(events) != 0 || len(realtime) != 0 {
 							t.Fatal("failed creation changed canonical rows or published")
 						}
@@ -242,30 +242,30 @@ func TestScaleP21SW15TeamLabelCreationDifferential(t *testing.T) {
 						for _, event := range realtime {
 							effects = append(effects, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
 						}
-						outcomes = append(outcomes, scaleP21SW6GeneratedJSON(t, []any{
-							w.Code, scaleP21M3JSON(t, w.Body.Bytes()), canonical, ids, effects,
-							scaleP21SW15Canonical(t, repo, workspace, store.RecordKey{Kind: "users", ID: user.ID}),
+						outcomes = append(outcomes, generatedJSON(t, []any{
+							w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes()), canonical, ids, effects,
+							labelsCanonical(t, repo, workspace, store.RecordKey{Kind: "users", ID: user.ID}),
 						}, generated))
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("label creator differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("label creator differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
 		})
-		if scaleP21SW6RecordHash(t, repo, workspace, "labelGroups", f.groups[0].ID) != otherGroup ||
-			scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != otherProject || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if recordHash(t, repo, workspace, "labelGroups", f.groups[0].ID) != otherGroup ||
+			recordHash(t, repo, workspace, "projects", "m2-unrelated") != otherProject || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("label creation touched unrelated bodies or decoded complete metadata")
 		}
 	}
 }
 
-func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
+func TestTeamLabelCreationBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW15LabelSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := labelSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
 		group := domain.LabelGroup{ID: f.groupID, Name: "Target", Scope: f.public, ResourceType: "issue", CreatedAt: f.groups[0].CreatedAt}
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW15 other workspace", idgen.New("sw15-other-workspace-"), "us")
@@ -284,11 +284,11 @@ func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
 		for _, spec := range []struct{ team, group string }{{foreignTeam, ""}, {f.public, foreignGroup}} {
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				f.reset(t, &group)
-				before, _ := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+				before, _ := creationState(t, repo, workspace, "labels", f.ids)
 				r, w := f.request(f.data.Viewer, nil, map[string]string{"name": "Foreign", "groupId": spec.group}), httptest.NewRecorder()
 				r.SetPathValue("id", spec.team)
 				(&server{store: source}).createTeamLabel(w, r)
-				after, _ := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+				after, _ := creationState(t, repo, workspace, "labels", f.ids)
 				if w.Code != http.StatusNotFound || !slices.Equal(before, after) {
 					t.Fatal("label creation accepted foreign-workspace inputs", w.Code, w.Body.String())
 				}
@@ -296,7 +296,7 @@ func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
 		}
 		member := f.principals[2].user
 		queued := []*http.Request{}
-		for _, credential := range scaleP21M3Credentials() {
+		for _, credential := range pointSettingsCredentialCases() {
 			r := f.request(member, credential.key, map[string]string{"name": "Queued"})
 			r.SetPathValue("id", f.public)
 			queued = append(queued, r)
@@ -310,8 +310,8 @@ func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
 					f.reset(t, &group)
 					r := request.Clone(request.Context())
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).createTeamLabel)
-					ids, _ := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).createTeamLabel)
+					ids, _ := creationState(t, repo, workspace, "labels", f.ids)
 					if w.Code != http.StatusForbidden || len(ids) != len(f.ids) {
 						t.Fatalf("%s creation crossed revoked membership: %d %s", phase, w.Code, w.Body.String())
 					}
@@ -334,7 +334,7 @@ func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
 		} {
 			t.Run(spec.name, func(t *testing.T) {
 				f.reset(t, &spec.group)
-				before, fingerprint := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+				before, fingerprint := creationState(t, repo, workspace, "labels", f.ids)
 				publications := 0
 				f.probe.SetWebhookSink(func(string, domain.DomainEvent) { publications++ })
 				f.probe.SetRealtimeSink(func(string, domain.RealtimeEvent) { publications++ })
@@ -342,7 +342,7 @@ func TestScaleP21SW15TeamLabelCreationBoundaries(t *testing.T) {
 					r, w := f.request(f.data.Viewer, nil, map[string]string{"name": "Budget", "groupId": group.ID, "description": spec.description}), httptest.NewRecorder()
 					r.SetPathValue("id", f.public)
 					(&server{store: f.probe}).createTeamLabel(w, r)
-					after, afterFingerprint := scaleP21SW6CreationState(t, repo, workspace, "labels", f.ids)
+					after, afterFingerprint := creationState(t, repo, workspace, "labels", f.ids)
 					if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
 						!slices.Equal(before, after) || fingerprint != afterFingerprint || publications != 0 {
 						t.Fatal("budget failure mutated or published label state", w.Code, w.Body.String())

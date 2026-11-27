@@ -5,7 +5,7 @@
     "agentRunOwnedBy": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Native scalar owner/deleted predicate avoids fetching session bodies and preserves exact legacy off branch. TestScaleP21SW11AgentSessionOwnedBy and TestScaleP21SW11AgentRunOwnerDifferential compare large owned/foreign/deleted sessions, case-sensitive/malformed/missing/exact IDs, cross-workspace and full principal/key matrix, ownership transfer during queued/replayed work, cancellation/recovery, unchanged canonical state and zero full decodes.",
+      "reason": "Native scalar owner/deleted predicate avoids fetching session bodies and preserves exact legacy off branch. TestAgentSessionOwnedBy and TestAgentRunOwnerDifferential compare large owned/foreign/deleted sessions, case-sensitive/malformed/missing/exact IDs, cross-workspace and full principal/key matrix, ownership transfer during queued/replayed work, cancellation/recovery, unchanged canonical state and zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

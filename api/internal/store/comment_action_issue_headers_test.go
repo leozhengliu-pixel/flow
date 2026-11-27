@@ -12,8 +12,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW154Headers(issues []domain.Issue, request IssueWriteAuthorizationRequest) []domain.Issue {
-	headers := scaleP21SW114FullHeaders(issues, request.FullPermissions)
+func commentActionIssueHeadersHeaders(issues []domain.Issue, request IssueWriteAuthorizationRequest) []domain.Issue {
+	headers := fullHeaders(issues, request.FullPermissions)
 	if request.CommentActionValidation {
 		for index, issue := range issues {
 			headers[index].Priority = issue.Priority
@@ -28,7 +28,7 @@ func scaleP21SW154Headers(issues []domain.Issue, request IssueWriteAuthorization
 	return headers
 }
 
-func scaleP21SW154Put(t *testing.T, f scaleP09Fixture, issue domain.Issue, suffix string) {
+func commentActionIssueHeadersPut(t *testing.T, f scaleFixture, issue domain.Issue, suffix string) {
 	t.Helper()
 	raw, err := json.Marshal(issue)
 	if err != nil {
@@ -48,9 +48,9 @@ func scaleP21SW154Put(t *testing.T, f scaleP09Fixture, issue domain.Issue, suffi
 	}
 }
 
-func scaleP21SW154Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userID string, key *domain.APIKey, request IssueWriteAuthorizationRequest) *IssueWriteAuthorizationRead {
+func commentActionIssueHeadersRead(t *testing.T, view *SQLiteStore, f scaleFixture, userID string, key *domain.APIKey, request IssueWriteAuthorizationRequest) *IssueWriteAuthorizationRead {
 	t.Helper()
-	want, err := scaleP21IssueAuthorizationLegacy(t, f, userID, request)
+	want, err := scaleIssueAuthorizationLegacy(t, f, userID, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func scaleP21SW154Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userI
 		t.Fatal(err)
 	}
 	t.Cleanup(read.Close)
-	if before, after := scaleP21SW154Headers(want.Issues, request), scaleP21SW154Headers(read.Data.Issues, IssueWriteAuthorizationRequest{
+	if before, after := commentActionIssueHeadersHeaders(want.Issues, request), commentActionIssueHeadersHeaders(read.Data.Issues, IssueWriteAuthorizationRequest{
 		FullPermissions: true, CommentActionValidation: true,
 	}); !reflect.DeepEqual(before, after) {
 		if len(before) != len(after) {
@@ -90,14 +90,14 @@ func scaleP21SW154Read(t *testing.T, view *SQLiteStore, f scaleP09Fixture, userI
 	return read
 }
 
-func TestScaleP21SW154CommentActionIssueHeaderMatrix(t *testing.T) {
+func TestCommentActionIssueHeaderMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	member := scaleP21SW114Member(t, f)
+	f := scaleIssueAuthorizationSeed(t)
+	member := issuePermissionValueMember(t, f)
 	workspace := f.data.Workspace.URLKey
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: workspace}, IDs: []string{f.child, f.sibling}}
-	existing, err := scaleP21IssueAuthorizationLegacy(t, f.scaleP09Fixture, f.data.Viewer.ID, request)
+	existing, err := scaleIssueAuthorizationLegacy(t, f.scaleFixture, f.data.Viewer.ID, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +109,11 @@ func TestScaleP21SW154CommentActionIssueHeaderMatrix(t *testing.T) {
 			{URL: ""},
 			{URL: "https://example.test/link?x=1&x=2"},
 		}
-		issue.Permissions = scaleP21SW114Permissions(issue.ID, f.guest.ID)
-		scaleP21SW154Put(t, f.scaleP09Fixture, issue, "")
+		issue.Permissions = issuePermissionValuePermissions(issue.ID, f.guest.ID)
+		commentActionIssueHeadersPut(t, f.scaleFixture, issue, "")
 	}
 	for _, reload := range []bool{false, true} {
-		view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, reload)
+		view := scaleIssueAuthorizationView(t, f.scaleFixture, reload)
 		for _, principal := range []struct{ name, userID string }{
 			{"admin-private-outsider", f.data.Viewer.ID}, {"member-private-outsider", member.ID},
 			{"guest-explicit-grant", f.guest.ID}, {"development", ""},
@@ -147,7 +147,7 @@ func TestScaleP21SW154CommentActionIssueHeaderMatrix(t *testing.T) {
 					// accidental mutation of a shared field map is observable.
 					for _, flags := range [][2]bool{{true, true}, {true, false}, {false, true}, {false, false}} {
 						request.CommentActionValidation, request.FullPermissions = flags[0], flags[1]
-						read := scaleP21SW154Read(t, view, f.scaleP09Fixture, principal.userID, credential.key, request)
+						read := commentActionIssueHeadersRead(t, view, f.scaleFixture, principal.userID, credential.key, request)
 						read.Close()
 						if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 							t.Fatal("optional header matrix leaked output or decoded whole metadata")
@@ -159,10 +159,10 @@ func TestScaleP21SW154CommentActionIssueHeaderMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW154CommentActionIssueHeaderCodecAndBounds(t *testing.T) {
+func TestCommentActionIssueHeaderCodecAndBounds(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	workspace := f.data.Workspace.URLKey
 	base, err := f.IssueRecord(t.Context(), workspace, f.child)
 	if err != nil {
@@ -176,17 +176,17 @@ func TestScaleP21SW154CommentActionIssueHeaderCodecAndBounds(t *testing.T) {
 		`,"PRIORITY":3,"ATTACHMENTS":[null,{"url":"first","URL":"decoded\u0000url","metadata":{"large":"ignored"}},{"URL":null},{}]}`,
 		`,"priority":1,"PRIORITY":null,"attachments":[{"url":"discarded"}],"ATTACHMENTS":null,"attachments":[{"URL":"https://example.test/a?x=\u003c\u0026"}]}`,
 	} {
-		scaleP21SW154Put(t, f.scaleP09Fixture, base, suffix)
+		commentActionIssueHeadersPut(t, f.scaleFixture, base, suffix)
 		for _, reload := range []bool{false, true} {
-			view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, reload)
-			read := scaleP21SW154Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+			view := scaleIssueAuthorizationView(t, f.scaleFixture, reload)
+			read := commentActionIssueHeadersRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 			read.Close()
 			if view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("codec differential retained optional headers")
 			}
 		}
 	}
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	var held int
 	for _, copies := range []int{1, 10} {
 		issue := base
@@ -194,11 +194,11 @@ func TestScaleP21SW154CommentActionIssueHeaderCodecAndBounds(t *testing.T) {
 		issue.Title, issue.Description = strings.Repeat("ignored title ", copies*10000), strings.Repeat("ignored body ", copies*10000)
 		issue.Attachments = []domain.Attachment{{URL: "https://example.test/fixed", Title: issue.Title,
 			Metadata: map[string]any{"unrelated": issue.Description}, Creator: domain.User{AvatarURL: issue.Description}}}
-		scaleP21SW154Put(t, f.scaleP09Fixture, issue, "")
+		commentActionIssueHeadersPut(t, f.scaleFixture, issue, "")
 		unrelated := issue
 		unrelated.ID, unrelated.ParentID = f.sibling, nil
-		scaleP21SW154Put(t, f.scaleP09Fixture, unrelated, "")
-		read := scaleP21SW154Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+		commentActionIssueHeadersPut(t, f.scaleFixture, unrelated, "")
+		read := commentActionIssueHeadersRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 		work := view.MetadataWorkUsedForTesting()
 		if held != 0 && work != held {
 			t.Fatal("10x unrelated issue/body/attachment metadata changed admission", held, work)
@@ -214,8 +214,8 @@ func TestScaleP21SW154CommentActionIssueHeaderCodecAndBounds(t *testing.T) {
 		for index := range issue.Attachments {
 			issue.Attachments[index].URL = fmt.Sprintf("https://example.test/selected/%04d", index)
 		}
-		scaleP21SW154Put(t, f.scaleP09Fixture, issue, "")
-		read := scaleP21SW154Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+		commentActionIssueHeadersPut(t, f.scaleFixture, issue, "")
+		read := commentActionIssueHeadersRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 		if len(read.Data.Issues) != 1 || len(read.Data.Issues[0].Attachments) != count {
 			t.Fatal("legal selected attachment URLs were truncated", count)
 		}
@@ -232,11 +232,11 @@ func TestScaleP21SW154CommentActionIssueHeaderCodecAndBounds(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW154CommentActionIssueHeaderOwnership(t *testing.T) {
+func TestCommentActionIssueHeaderOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	f := scaleIssueAuthorizationSeed(t)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	workspace := f.data.Workspace.URLKey
 	base, err := f.IssueRecord(t.Context(), workspace, f.child)
 	if err != nil {
@@ -244,16 +244,16 @@ func TestScaleP21SW154CommentActionIssueHeaderOwnership(t *testing.T) {
 	}
 	base.ParentID, base.Priority = nil, 4
 	base.Attachments = []domain.Attachment{{URL: "https://example.test/canonical"}}
-	base.Permissions = scaleP21SW114Permissions(f.child, f.guest.ID)
-	scaleP21SW154Put(t, f.scaleP09Fixture, base, "")
+	base.Permissions = issuePermissionValuePermissions(f.child, f.guest.ID)
+	commentActionIssueHeadersPut(t, f.scaleFixture, base, "")
 	request := IssueWriteAuthorizationRequest{Query: IssueRecordQuery{Workspace: workspace}, IDs: []string{f.child}, CommentActionValidation: true, FullPermissions: true}
-	first := scaleP21SW154Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+	first := commentActionIssueHeadersRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 	pinned, err := first.Context(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	held := view.MetadataWorkUsedForTesting()
-	second := scaleP21SW154Read(t, view, f.scaleP09Fixture, f.data.Viewer.ID, nil, request)
+	second := commentActionIssueHeadersRead(t, view, f.scaleFixture, f.data.Viewer.ID, nil, request)
 	first.Data.Issues[0].Attachments[0].URL = "caller mutation"
 	first.Data.Issues[0].Priority = -1
 	if second.Data.Issues[0].Attachments[0].URL != base.Attachments[0].URL || second.Data.Issues[0].Priority != 4 {

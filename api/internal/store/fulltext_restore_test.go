@@ -18,11 +18,11 @@ import (
 // repair rewrites them. Startup rebuilds both search indexes once
 // (issueSearchRestoreMigrationVersion, metadataSearchRestoreMigrationVersion)
 // and every document is found again; a later startup rebuilds nothing.
-func TestScaleP21SW469StartupRestoresLostFullTextEntries(t *testing.T) {
+func TestStartupRestoresLostFullTextEntries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "mysql" {
 		t.Skip("the restore rebuilds MySQL FULLTEXT indexes only")
 	}

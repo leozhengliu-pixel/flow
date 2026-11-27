@@ -11,10 +11,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP20CanonicalDirectoryAndCursorBindings(t *testing.T) {
+func TestScaleCanonicalDirectoryAndCursorBindings(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
-	for driver, repo := range scaleP03Stores(t) {
+	for driver, repo := range resourceAccessScaleStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			workspace, principal := repo.data.Workspace.URLKey, repo.data.Viewer.ID
 			if err := repo.MutateWorkspace(WithColdWork(ContextWithActor(t.Context(), repo.data.Viewer), "workspace fixture"), workspace, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -33,7 +33,7 @@ func TestScaleP20CanonicalDirectoryAndCursorBindings(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, kind := range []string{"users", "documents", "trash"} {
-				installed, revision, err := repo.ResourceWindowMetadata(scaleP21ResourceOutputContext(t), workspace, principal, nil, kind)
+				installed, revision, err := repo.ResourceWindowMetadata(scaleResourceOutputContext(t), workspace, principal, nil, kind)
 				if err != nil {
 					t.Fatal(kind, err)
 				}

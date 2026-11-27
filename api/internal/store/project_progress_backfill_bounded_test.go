@@ -123,7 +123,7 @@ func testProjectProgressStartupBackfill(t *testing.T, inline bool) {
 		t.Fatal(err)
 	}
 	// A bounded store starts once the metadata catalog covers every record.
-	if err := scaleP21SW557CompleteCatalog(ctx, repo); err != nil {
+	if err := completeCatalog(ctx, repo); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Close(); err != nil {
@@ -188,7 +188,7 @@ func testProjectProgressStartupBackfill(t *testing.T, inline bool) {
 	dumps := map[bool]string{}
 	for _, bounded := range []bool{false, true} {
 		path := filepath.Join(dir, fmt.Sprintf("copy-%v.db", bounded))
-		scaleP21SW557CopyDatabase(t, seed, path)
+		copyDatabase(t, seed, path)
 		beforeViews := ColdAccessorReadsForTesting()
 		beforeFacades, _, _ := ColdHydrationForTesting()
 		repo := open(path, bounded)
@@ -225,7 +225,7 @@ func testProjectProgressStartupBackfill(t *testing.T, inline bool) {
 			t.Errorf("bounded=%v open applied the first occurrence's progress to the duplicate ID", bounded)
 		}
 		// Journal transaction ids are random (lines sorted once masked).
-		lines := strings.Split(projectProgressJournalIDs.ReplaceAllString(scaleP21SW557Dump(t, path), "rj<id>"), "\n")
+		lines := strings.Split(projectProgressJournalIDs.ReplaceAllString(boundedStartupDump(t, path), "rj<id>"), "\n")
 		slices.Sort(lines)
 		dumps[bounded] = strings.Join(lines, "\n")
 	}

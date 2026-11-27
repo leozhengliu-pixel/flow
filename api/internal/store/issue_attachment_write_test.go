@@ -15,19 +15,19 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW149Case struct {
+type issueAttachmentWriteCase struct {
 	name, event, operation, mode string
 	scoped                       bool
 }
 
-type scaleP21SW149Outcome struct {
-	Business                   scaleP21SW63Business
-	Metadata                   scaleP21SW76Metadata
+type issueAttachmentWriteOutcome struct {
+	Business                   discussionWriterBusiness
+	Metadata                   legacyActorWriteMetadata
 	Indexes                    map[string][][]any
 	Installed                  domain.Bootstrap
 	InstalledVia               *domain.ActorBot
 	Events, Webhooks, Realtime []any
-	Callback                   []scaleP21SW116Capture
+	Callback                   []issueReactionWriteCapture
 	Saved                      domain.Attachment
 	AccountKey, LastWorkspace  string
 	AccountViewer              json.RawMessage
@@ -35,7 +35,7 @@ type scaleP21SW149Outcome struct {
 	Calls                      int
 }
 
-func scaleP21SW149Setup(t *testing.T) {
+func issueAttachmentWriteSetup(t *testing.T) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -46,7 +46,7 @@ func scaleP21SW149Setup(t *testing.T) {
 	}
 }
 
-func scaleP21SW149Issue(issue domain.Issue, at time.Time, mode string) domain.Issue {
+func issueAttachmentWriteIssue(issue domain.Issue, at time.Time, mode string) domain.Issue {
 	issue.Description, issue.DescriptionState = "Before markdown\n", "old-rich-text"
 	issue.DocumentContent = &domain.DocumentContent{
 		ID: "sw149-before-generation", Version: 7, Content: "Before markdown\n",
@@ -75,7 +75,7 @@ func scaleP21SW149Issue(issue domain.Issue, at time.Time, mode string) domain.Is
 	return issue
 }
 
-func scaleP21SW149Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time, mode string) {
+func issueAttachmentWriteSeed(t *testing.T, f scaleFixture, issue domain.Issue, at time.Time, mode string) {
 	t.Helper()
 	seedMode := "nil-map"
 	switch mode {
@@ -89,7 +89,7 @@ func scaleP21SW149Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 			t.Fatal(err)
 		}
 	}
-	scaleP21SW116Seed(t, f, issue, at, seedMode)
+	issueReactionWriteSeed(t, f, issue, at, seedMode)
 	if mode != "physical-activity" {
 		return
 	}
@@ -114,7 +114,7 @@ func scaleP21SW149Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 	f.mu.Unlock()
 }
 
-func scaleP21SW149Mutate(data *domain.Bootstrap, issueID string, test scaleP21SW149Case, at time.Time) (domain.Attachment, error) {
+func issueAttachmentWriteMutate(data *domain.Bootstrap, issueID string, test issueAttachmentWriteCase, at time.Time) (domain.Attachment, error) {
 	index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
 	if index < 0 {
 		return domain.Attachment{}, ErrIssueQuery
@@ -188,9 +188,9 @@ func scaleP21SW149Mutate(data *domain.Bootstrap, issueID string, test scaleP21SW
 	return attachment, nil
 }
 
-func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
-	scaleP21SW149Setup(t)
-	cases := []scaleP21SW149Case{
+func TestIssueAttachmentWriterDifferential(t *testing.T) {
+	issueAttachmentWriteSetup(t)
+	cases := []issueAttachmentWriteCase{
 		{"file-nil", "attachment.created", "file", "nil-attachments", true},
 		{"file-empty", "attachment.created", "file", "empty-attachments", true},
 		{"embed", "attachment.created", "embed", "", true},
@@ -210,7 +210,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 			if scoped {
 				event, operation = "attachment.created", "file"
 			}
-			cases = append(cases, scaleP21SW149Case{fmt.Sprint(scoped, "/", mode), event, operation, mode, scoped})
+			cases = append(cases, issueAttachmentWriteCase{fmt.Sprint(scoped, "/", mode), event, operation, mode, scoped})
 		}
 	}
 	for _, reload := range []bool{false, true} {
@@ -219,10 +219,10 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 				continue
 			}
 			t.Run(fmt.Sprint("reload=", reload, "/", test.name), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Attachment progress"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Attachment progress"}}, nil)
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-				issue = scaleP21SW149Issue(issue, at, test.mode)
+				issue = issueAttachmentWriteIssue(issue, at, test.mode)
 				metadata, found := f.WorkspaceMetadata(workspace)
 				if !found {
 					t.Fatal("attachment reset metadata missing")
@@ -238,7 +238,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 					settings.UpdatedAt, preference.UpdatedAt = at, at
 					metadata.UserSettings[user.ID], metadata.NotificationPreferences[user.ID] = settings, preference
 				}
-				actor := scaleP21SW69OwnedActor(f.data.Viewer)
+				actor := ownedActor(f.data.Viewer)
 				actor.Name = "Attachment request actor"
 				actor.Via = &domain.ActorBot{ID: "sw149-request-app", Name: "Attachment attribution", Type: domain.ActorBotTypeOAuthApplication}
 				if test.mode == "foreign-actor" {
@@ -249,16 +249,16 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 				var queries []int64
 				for _, bounded := range []bool{false, true} {
 					writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadata))
-					scaleP21SW149Seed(t, f, issue, at, test.mode)
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+					issueAttachmentWriteSeed(t, f, issue, at, test.mode)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
 					repo.mu.Lock()
 					repo.lastWorkspaceKey = ""
 					repo.mu.Unlock()
-					before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					beforeContent = append(beforeContent, scaleP21SW149ContentKeys(before.Content))
-					beforeMetadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-					beforeIndexes := scaleP21SW98Indexes(t, repo, workspace)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					before := businessRows(t, repo, workspace, issue.ID)
+					beforeContent = append(beforeContent, contentKeys(before.Content))
+					beforeMetadata := metadataImage(t, repo.db, workspace)
+					beforeIndexes := legacyDiscussionWriteIndexes(t, repo, workspace)
+					prior := eventIDs(t, repo, workspace)
 					ctx := t.Context()
 					if test.mode != "no-actor" {
 						ctx = ContextWithActor(ctx, actor)
@@ -290,7 +290,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 					if test.mode == "cancel-before" {
 						cancel()
 					}
-					got := scaleP21SW149Outcome{}
+					got := issueAttachmentWriteOutcome{}
 					var captured []*domain.Bootstrap
 					checkOwner := func() {
 						if bounded && repo.MetadataWorkUsedForTesting() <= outerWork {
@@ -329,12 +329,12 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 							return ErrNoMutation
 						}
 						var err error
-						got.Saved, err = scaleP21SW149Mutate(data, issue.ID, test, at)
+						got.Saved, err = issueAttachmentWriteMutate(data, issue.ID, test, at)
 						if err != nil {
 							return err
 						}
 						index := slices.IndexFunc(data.Issues, func(value domain.Issue) bool { return value.ID == issue.ID })
-						got.Callback = append(got.Callback, scaleP21SW116Capture{
+						got.Callback = append(got.Callback, issueReactionWriteCapture{
 							Viewer: data.Viewer, Via: data.Viewer.Via, Role: data.ViewerRole,
 							Saved: data.Issues[index], BeforeLabels: slices.Clone(data.Issues[index].Labels),
 						})
@@ -367,13 +367,13 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 					if test.mode == "cancel-persist" && !persistCanceled {
 						t.Fatal("cancellation did not reach event persistence")
 					}
-					got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					afterContent = append(afterContent, scaleP21SW149ContentKeys(got.Business.Content))
-					got.Metadata = scaleP21SW76MetadataImage(t, repo.db, workspace)
-					got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
-					got.Installed = scaleP21SW98Installed(t, repo, workspace)
+					got.Business = businessRows(t, repo, workspace, issue.ID)
+					afterContent = append(afterContent, contentKeys(got.Business.Content))
+					got.Metadata = metadataImage(t, repo.db, workspace)
+					got.Indexes = legacyDiscussionWriteIndexes(t, repo, workspace)
+					got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
 					got.InstalledVia = got.Installed.Viewer.Via
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+					got.Events = newEvents(t, repo, workspace, prior)
 					if err := repo.db.QueryRowContext(t.Context(), `SELECT last_workspace_key,viewer FROM account_state WHERE id=1`).Scan(&got.AccountKey, &got.AccountViewer); err != nil {
 						t.Fatal(err)
 					}
@@ -412,7 +412,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					outcomes = append(outcomes, scaleP21SW63JSON(t, got))
+					outcomes = append(outcomes, discussionWriterJSON(t, got))
 					if bounded {
 						owner.Close()
 						owner.Close()
@@ -428,7 +428,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 					t.Logf("content keys before legacy=%q bounded=%q; after legacy=%q bounded=%q", beforeContent[0], beforeContent[1], afterContent[0], afterContent[1])
-					t.Fatal("literal/bounded attachment differs", scaleP21SW98FirstDiff(outcomes[0], outcomes[1], "attachment"))
+					t.Fatal("literal/bounded attachment differs", firstDiff(outcomes[0], outcomes[1], "attachment"))
 				}
 				t.Logf("scoped=%t reload=%t operation=%s mode=%s legacy_SQL=%d bounded_SQL=%d", test.scoped, reload, test.operation, test.mode, queries[0], queries[1])
 			})
@@ -436,7 +436,7 @@ func TestScaleP21SW149IssueAttachmentWriterDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW149ContentKeys(rows []any) []string {
+func contentKeys(rows []any) []string {
 	result := make([]string, 0, len(rows))
 	for _, value := range rows {
 		row := value.([]any)
@@ -445,8 +445,8 @@ func scaleP21SW149ContentKeys(rows []any) []string {
 	return result
 }
 
-func TestScaleP21SW149IssueAttachmentQuotaAndProfile(t *testing.T) {
-	scaleP21SW149Setup(t)
+func TestIssueAttachmentQuotaAndProfile(t *testing.T) {
+	issueAttachmentWriteSetup(t)
 	for _, scoped := range []bool{false, true} {
 		for _, mode := range []string{"quota", "unowned", "title", "reactions", "notifications", "comments", "version",
 			"updated-description", "updated-document-content", "updated-activity", "unscoped-description", "unscoped-document-content",
@@ -455,13 +455,13 @@ func TestScaleP21SW149IssueAttachmentQuotaAndProfile(t *testing.T) {
 				continue
 			}
 			t.Run(fmt.Sprint(scoped, "/", mode), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Attachment profile"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Attachment profile"}}, nil)
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-				scaleP21SW149Seed(t, f, scaleP21SW149Issue(issue, at, ""), at, "")
-				repo := scaleP21IssuePersistenceView(t, f, true, false)
-				before, metadata, indexes := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID),
-					scaleP21SW76MetadataImage(t, repo.db, workspace), scaleP21SW98Indexes(t, repo, workspace)
+				issueAttachmentWriteSeed(t, f, issueAttachmentWriteIssue(issue, at, ""), at, "")
+				repo := scaleIssuePersistenceView(t, f, true, false)
+				before, metadata, indexes := businessRows(t, repo, workspace, issue.ID),
+					metadataImage(t, repo.db, workspace), legacyDiscussionWriteIndexes(t, repo, workspace)
 				ctx := ContextWithIssueAttachmentMutation(ContextWithActor(t.Context(), f.data.Viewer))
 				if strings.HasPrefix(mode, "upsert-") {
 					ctx = ContextWithIssueAttachmentUpsertMutation(ContextWithActor(t.Context(), f.data.Viewer))
@@ -519,9 +519,9 @@ func TestScaleP21SW149IssueAttachmentQuotaAndProfile(t *testing.T) {
 				if !errors.Is(err, expected) || (mode == "quota" || mode == "unowned") && calls != 0 {
 					t.Fatal("attachment quota/profile boundary changed", calls, err)
 				}
-				if !reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) ||
-					!reflect.DeepEqual(metadata, scaleP21SW76MetadataImage(t, repo.db, workspace)) ||
-					!reflect.DeepEqual(indexes, scaleP21SW98Indexes(t, repo, workspace)) {
+				if !reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) ||
+					!reflect.DeepEqual(metadata, metadataImage(t, repo.db, workspace)) ||
+					!reflect.DeepEqual(indexes, legacyDiscussionWriteIndexes(t, repo, workspace)) {
 					t.Fatal("rejected attachment callback persisted effects")
 				}
 				if owner != nil {

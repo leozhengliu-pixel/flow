@@ -11,9 +11,9 @@ import (
 // A 10 MiB staged metadata row through both writers: the bytes reach the
 // row exactly, the staging tables end empty, and the elapsed time is logged
 // (each dialect's cost of the staged appends and the final assembly).
-func TestScaleP21StagedWriteLargeRow(t *testing.T) {
+func TestScaleStagedWriteLargeRow(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := fixture.data.Workspace.URLKey
 	view, err := fixture.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW210RelationProfileValidation(t *testing.T) {
+func TestRelationProfileValidation(t *testing.T) {
 	before := domain.Bootstrap{
 		Issues:   []domain.Issue{{ID: "source"}, {ID: "target"}},
 		Comments: map[string][]domain.Comment{}, Activities: map[string][]domain.ActivityEvent{},
@@ -53,13 +53,13 @@ func TestScaleP21SW210RelationProfileValidation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW210RelationAdmissionRollbackAndRelease(t *testing.T) {
+func TestRelationAdmissionRollbackAndRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, mode := range []string{"unowned", "quota", "callback-error", "cancel-after-callback", "title"} {
 		t.Run(mode, func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Relation admission"}}, nil)
+			f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Relation admission"}}, nil)
 			workspace := f.data.Workspace.URLKey
 			target := issue
 			target.ID, target.Identifier, target.Title = issue.ID+"-target", issue.Identifier+"-target", "Relation target"
@@ -69,11 +69,11 @@ func TestScaleP21SW210RelationAdmissionRollbackAndRelease(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			repo := scaleP21IssuePersistenceView(t, f, true, false)
-			before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-			targetBefore := scaleP21SW63BusinessRows(t, repo, workspace, target.ID)
-			metadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-			indexes := scaleP21SW98Indexes(t, repo, workspace)
+			repo := scaleIssuePersistenceView(t, f, true, false)
+			before := businessRows(t, repo, workspace, issue.ID)
+			targetBefore := businessRows(t, repo, workspace, target.ID)
+			metadata := metadataImage(t, repo.db, workspace)
+			indexes := legacyDiscussionWriteIndexes(t, repo, workspace)
 			ctx, cancel := context.WithCancel(ContextWithActor(t.Context(), f.data.Viewer))
 			defer cancel()
 			ctx = ContextWithIssueRelationMutation(WithIssueRecordMutations(ctx, issue.ID))
@@ -131,10 +131,10 @@ func TestScaleP21SW210RelationAdmissionRollbackAndRelease(t *testing.T) {
 			if (mode == "quota" || mode == "unowned") && calls != 0 {
 				t.Fatal("unadmitted relation ran its callback")
 			}
-			if !reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) ||
-				!reflect.DeepEqual(targetBefore, scaleP21SW63BusinessRows(t, repo, workspace, target.ID)) ||
-				!reflect.DeepEqual(metadata, scaleP21SW76MetadataImage(t, repo.db, workspace)) ||
-				!reflect.DeepEqual(indexes, scaleP21SW98Indexes(t, repo, workspace)) {
+			if !reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) ||
+				!reflect.DeepEqual(targetBefore, businessRows(t, repo, workspace, target.ID)) ||
+				!reflect.DeepEqual(metadata, metadataImage(t, repo.db, workspace)) ||
+				!reflect.DeepEqual(indexes, legacyDiscussionWriteIndexes(t, repo, workspace)) {
 				t.Fatal("refused relation changed business rows")
 			}
 			if owner != nil {

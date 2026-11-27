@@ -10,12 +10,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW602: every generation derived from a source shares its spool group, so a
+// Every generation derived from a source shares its spool group, so a
 // workspace holds one descriptor charge however many generations and
 // storages are alive (forks, transforms, abandoned forks); settled in-memory
 // spools stay within the group's allowance and the rest go to files; the
 // charge returns when the last generation is released.
-func TestScaleP21SW602SpoolGroupHoldsOneCharge(t *testing.T) {
+func TestSpoolGroupHoldsOneCharge(t *testing.T) {
 	ctx := t.Context()
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	labels := func(round int) []domain.IssueLabel {
@@ -74,7 +74,7 @@ func TestScaleP21SW602SpoolGroupHoldsOneCharge(t *testing.T) {
 		}
 		charged(fmt.Sprintf("fork %d", round))
 		// An abandoned fork (cancelled while it writes) returns what it took.
-		_, err = previous.Fork(&scaleP21SW27CancelAfterChecks{Context: ctx, limit: 6}, before, next, scope, previous.Stamp())
+		_, err = previous.Fork(&cancelAfterChecks{Context: ctx, limit: 6}, before, next, scope, previous.Stamp())
 		if err == nil {
 			t.Fatalf("round %d: the cancelled fork succeeded", round)
 		}
@@ -120,12 +120,12 @@ func TestScaleP21SW602SpoolGroupHoldsOneCharge(t *testing.T) {
 	}
 }
 
-// SW602: the group's storages share one block cache. Blocks of different
+// The group's storages share one block cache. Blocks of different
 // storages at the same offsets stay apart; two concurrent misses never take
 // one slot (the first read's block was lost and read again); the cache keeps
 // at most one buffer per slot, reusing evicted buffers instead of allocating
 // per miss; the group's last release drops every buffer.
-func TestScaleP21SW602SharedBlockCache(t *testing.T) {
+func TestSharedBlockCache(t *testing.T) {
 	ctx := t.Context()
 	descriptors := metadataLogicalDescriptorsUsed.Load()
 	first, err := newMetadataLogicalStorage(ctx, nil)

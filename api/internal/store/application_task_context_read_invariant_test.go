@@ -10,7 +10,7 @@ import (
 
 // Task contexts omit unrelated discussion/delivery/import bodies. Their normal
 // producers serialize typed values; raw SQL corruption is not a write API.
-func TestScaleP21ApplicationTaskContextReadContentProducerGuard(t *testing.T) {
+func TestScaleApplicationTaskContextReadContentProducerGuard(t *testing.T) {
 	for _, fixture := range []struct {
 		file, function string
 	}{

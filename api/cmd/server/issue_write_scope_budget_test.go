@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type sw244Route struct {
+type issueWriteScopeBudgetRoute struct {
 	name, method, tail, body string
 	status                   int
 	// scoped: neither authorization nor the handler copies an unrelated
@@ -24,8 +24,8 @@ type sw244Route struct {
 	scoped bool
 }
 
-func sw244Routes(stateID, assigneeID string) []sw244Route {
-	return []sw244Route{
+func issueWriteScopeBudgetRoutes(stateID, assigneeID string) []issueWriteScopeBudgetRoute {
+	return []issueWriteScopeBudgetRoute{
 		{"comment", "POST", "/comments", `{"body":"A plain comment"}`, 201, true},
 		{"priority", "PATCH", "", `{"priority":2}`, 200, false},
 		{"state", "PATCH", "", fmt.Sprintf(`{"stateId":%q}`, stateID), 200, false},
@@ -57,7 +57,7 @@ func sw244Routes(stateID, assigneeID string) []sw244Route {
 	}
 }
 
-func sw244Send(handler http.Handler, workspace string, cookies []*http.Cookie, bearer string, route sw244Route, id string) *httptest.ResponseRecorder {
+func issueWriteScopeBudgetSend(handler http.Handler, workspace string, cookies []*http.Cookie, bearer string, route issueWriteScopeBudgetRoute, id string) *httptest.ResponseRecorder {
 	tail := strings.ReplaceAll(route.tail, "@comment", id+"-comment")
 	r := httptest.NewRequest(route.method, "/api/issues/"+id+tail, strings.NewReader(route.body))
 	r.Header.Set("X-Workspace-Key", workspace)
@@ -75,7 +75,7 @@ func sw244Send(handler http.Handler, workspace string, cookies []*http.Cookie, b
 	return w
 }
 
-func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
+func TestIssueWriteAllocations(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -88,7 +88,7 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, owner, team := f.data.Workspace.URLKey, f.data.Viewer, f.data.Teams[0]
 	base, err := url.Parse(f.host.URL)
 	if err != nil {
@@ -126,7 +126,7 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 					}
 				}
 			}
-			for route := range sw244Routes(stateID, owner.ID) {
+			for route := range issueWriteScopeBudgetRoutes(stateID, owner.ID) {
 				for sample := range samples {
 					id := fmt.Sprintf("sw244-%d-%d-%d", phaseIndex, route, sample)
 					stamp := time.Now().UTC()
@@ -147,7 +147,7 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 		}
 		// One authenticated HTTP request on a fresh issue per sample. Seeding
 		// and garbage collection are outside the samples; bytes, not time.
-		for index, route := range sw244Routes(stateID, owner.ID) {
+		for index, route := range issueWriteScopeBudgetRoutes(stateID, owner.ID) {
 			var bytes [samples]uint64
 			admitted := f.service.projectionGate.served.Load()
 			for sample := range samples {
@@ -162,7 +162,7 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 				runtime.GC()
 				runtime.GC()
 				runtime.ReadMemStats(&from)
-				response := sw244Send(handler, workspace, cookies, "", route, id)
+				response := issueWriteScopeBudgetSend(handler, workspace, cookies, "", route, id)
 				runtime.ReadMemStats(&to)
 				bytes[sample] = to.TotalAlloc - from.TotalAlloc
 				if response.Code != route.status {
@@ -181,7 +181,7 @@ func TestScaleP21SW244IssueWriteAllocations(t *testing.T) {
 	// A copy of the histories is 28 MiB here; the slack absorbs allocator
 	// and map growth noise between phases.
 	const slack, historySlack = 64 << 10, 256 << 10
-	for _, route := range sw244Routes("", "") {
+	for _, route := range issueWriteScopeBudgetRoutes("", "") {
 		empty, projects, histories := measured[route.name][0], measured[route.name][1], measured[route.name][2]
 		// No route copies the unrelated progress histories.
 		if histories > projects+historySlack {

@@ -187,8 +187,8 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 		}
 		var root []byte
 		var rootBytes int64
-		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN `+owned.store.scaleP21SW22VisibilityLength("data")+`<=? THEN data ELSE NULL END,`+
-			owned.store.scaleP21SW22VisibilityLength("data")+` FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&root, &rootBytes); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN `+owned.store.visibilityLength("data")+`<=? THEN data ELSE NULL END,`+
+			owned.store.visibilityLength("data")+` FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&root, &rootBytes); err != nil {
 			return err
 		}
 		if root == nil {
@@ -300,7 +300,7 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 				return err
 			}
 		}
-		changes, _, err := scaleP16RecordChanges(before, next)
+		changes, _, err := scaleRecordChanges(before, next)
 		if err != nil {
 			return err
 		}
@@ -344,7 +344,7 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 			return err
 		}
 		if !inlineSettings {
-			if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
+			if err := scaleWriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
 				return err
 			}
 			value, present := next.Settings["pulseDeliveryCursors"]
@@ -478,7 +478,7 @@ func (w *pulseSummaryWork) cursor(source *metadataLogicalSource) (before domain.
 }
 
 func (w *pulseSummaryWork) canonicalCursor(tx *sqlTx, workspace, lock string) ([]byte, bool, error) {
-	length := w.store.scaleP21SW22VisibilityLength("data")
+	length := w.store.visibilityLength("data")
 	var size uint64
 	err := tx.QueryRowContext(w.ctx, `SELECT `+length+` FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`+lock, workspace).Scan(&size)
 	if errors.Is(err, sql.ErrNoRows) {

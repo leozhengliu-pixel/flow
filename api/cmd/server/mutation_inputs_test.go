@@ -19,13 +19,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP04MutationSideEffectsDifferential(t *testing.T) {
+func TestScaleMutationSideEffectsDifferentialMutationInputs(t *testing.T) {
 	for _, script := range []struct {
 		name string
 		run  func(*testing.T) mutationScriptResult
 	}{
-		{"hotWrites", func(t *testing.T) mutationScriptResult { return scaleP04HotWriteScript(t, false) }},
-		{"hotWritesFresh", func(t *testing.T) mutationScriptResult { return scaleP04HotWriteScript(t, true) }},
+		{"hotWrites", func(t *testing.T) mutationScriptResult { return scaleHotWriteScript(t, false) }},
+		{"hotWritesFresh", func(t *testing.T) mutationScriptResult { return scaleHotWriteScript(t, true) }},
 		{"scopedWrites", func(t *testing.T) mutationScriptResult { return runMutationScript(t, false) }},
 		{"teamAdministration", func(t *testing.T) mutationScriptResult { return runTeamAdministrationScript(t, true, false) }},
 	} {
@@ -52,9 +52,9 @@ func TestScaleP04MutationSideEffectsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP04HotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
+func scaleHotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
 	t.Helper()
-	database := newScaleP04Database(t)
+	database := newScaleDatabase(t)
 	repo := database.repo
 	handler := database.handler(t, true)
 	result := mutationScriptResult{state: map[string]string{}}
@@ -76,7 +76,7 @@ func scaleP04HotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
 		substitutions = append(substitutions, user.ID, fmt.Sprintf("fixture_user_%d", i), user.Email, fmt.Sprintf("fixture-user-%d@example.test", i))
 	}
 	fixtureIDs := strings.NewReplacer(substitutions...)
-	normalizeIdentity := func(raw []byte) string { return scaleP04Normalize([]byte(fixtureIDs.Replace(string(raw)))) }
+	normalizeIdentity := func(raw []byte) string { return scaleNormalize([]byte(fixtureIDs.Replace(string(raw)))) }
 	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		result.events = append(result.events, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+normalizeIdentity(event.Payload))
 	})
@@ -129,7 +129,7 @@ func scaleP04HotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
 				raw = bytes.ReplaceAll(raw, []byte(document.SlugID), []byte("<slug:"+document.ID+">"))
 			}
 		}
-		return scaleP04Normalize([]byte(fixtureIDs.Replace(string(raw))))
+		return scaleNormalize([]byte(fixtureIDs.Replace(string(raw))))
 	}
 	if !slices.ContainsFunc(data.Notifications, func(n domain.Notification) bool {
 		return n.IssueID == parent.ID && n.Category == "mentions" && n.RecipientID == recipient.ID
@@ -196,7 +196,7 @@ func scaleP04HotWriteScript(t *testing.T, fresh bool) mutationScriptResult {
 
 // Preserve counts, histories, nil/empty shapes and previous values. Only
 // clocks and generated identifiers may differ between independent fixtures.
-func scaleP04Normalize(raw []byte) string {
+func scaleNormalize(raw []byte) string {
 	if len(raw) == 0 {
 		return ""
 	}
@@ -239,7 +239,7 @@ func scaleP04Normalize(raw []byte) string {
 	return string(encoded)
 }
 
-func TestScaleP04PermissionMatrix(t *testing.T) {
+func TestScalePermissionMatrixMutationInputs(t *testing.T) {
 	for _, mode := range []string{"off", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
@@ -249,7 +249,7 @@ func TestScaleP04PermissionMatrix(t *testing.T) {
 			}{
 				{"adminPrivateOutsiderAndMember", TestPrivateTeamAccessSplitsAdminSettingsFromContent},
 				{"explicitGrant", TestPrivateIssueExplicitShareAndTeamOwnerInheritance},
-				{"guestWriteAndRevoke", scaleP04GuestWriteAndRevoke},
+				{"guestWriteAndRevoke", scaleGuestWriteAndRevoke},
 				{"apiKeysAndHiddenReferences", TestIssueDetailHTTPHistoryAndVisibilityHonorSharesAndAPIKeyScopes},
 				{"apiKeyEmptyAndSelected", TestAPIKeyScopesAndTeamProjection},
 				{"inheritance", TestSubTeamInheritsSettingsLabelsAndCycles},
@@ -265,7 +265,7 @@ func TestScaleP04PermissionMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP04RequestAttribution(t *testing.T) {
+func TestScaleRequestAttribution(t *testing.T) {
 	for _, mode := range []string{"off", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
@@ -278,10 +278,10 @@ func TestScaleP04RequestAttribution(t *testing.T) {
 	}
 }
 
-func scaleP04GuestWriteAndRevoke(t *testing.T) {
+func scaleGuestWriteAndRevoke(t *testing.T) {
 	t.Helper()
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	database := newScaleP04Database(t)
+	database := newScaleDatabase(t)
 	repo := database.repo
 	host := httptest.NewServer(database.handler(t, false))
 	defer host.Close()

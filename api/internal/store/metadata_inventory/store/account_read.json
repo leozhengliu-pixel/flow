@@ -5,7 +5,7 @@
     "BeginAccountRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Stages the literal pre-lock SQL count stream on bounded disk, preserving query/scan failure and terminal-prefix behavior, then admits only installed native account headers and encoding under a 128 MiB output ceiling. Holds native ownership through Close/TransferOutput; off calls literal Account. SW123 proves native warm/reloaded values, orphan count growth, guarded transfer, cancellation/release, persistent SQLite twice and race; SW125 proves both actual account routes and the complete off-only Account callset.",
+      "reason": "Stages the literal pre-lock SQL count stream on bounded disk, preserving query/scan failure and terminal-prefix behavior, then admits only installed native account headers and encoding under a 128 MiB output ceiling. Holds native ownership through Close/TransferOutput; off calls literal Account. account read proves native warm/reloaded values, orphan count growth, guarded transfer, cancellation/release, persistent SQLite twice and race; account routes proves both actual account routes and the complete off-only Account callset.",
       "accessors": ["resident-state"],
       "temperature": "hot",
       "temperatureReason": "Owned account bootstrap and development session output.",
@@ -14,7 +14,7 @@
     "accountReadWork": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Preflights the installed account catalog under the same read lock before membership allocation; includes complete native Workspace fields, borrowed viewer slice capacity, Via and output encoding. Never retains SQL orphan count rows in a map. SW123 covers output-cap rejection, zero/64/4096 orphans, native aliases and concurrent catalog replacement.",
+      "reason": "Preflights the installed account catalog under the same read lock before membership allocation; includes complete native Workspace fields, borrowed viewer slice capacity, Via and output encoding. Never retains SQL orphan count rows in a map. account read covers output-cap rejection, zero/64/4096 orphans, native aliases and concurrent catalog replacement.",
       "accessors": ["resident-state"],
       "temperature": "hot",
       "temperatureReason": "Shared admission for owned account responses.",

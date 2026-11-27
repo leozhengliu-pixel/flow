@@ -19,12 +19,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotChatSourcesQueueDifferential(t *testing.T) {
+func TestScaleHotChatSourcesQueueDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		initiativeID := idgen.New("chat-source-")
 		at := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
@@ -117,7 +117,7 @@ func TestScaleP21HotChatSourcesQueueDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("exact queued job changed", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("exact queued job changed", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}
@@ -127,13 +127,13 @@ func TestScaleP21HotChatSourcesQueueDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotChatSourcesRenderingDifferential(t *testing.T) {
+func TestScaleHotChatSourcesRenderingDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		projectID, initiativeID := idgen.New("chat-project-"), idgen.New("chat-initiative-")
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Chat personal source", "teamId": f.public}, workspace, http.StatusCreated)
@@ -321,7 +321,7 @@ func TestScaleP21HotChatSourcesRenderingDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("exact rendered output changed", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("exact rendered output changed", policyFirstDifference(outputs[0], outputs[1]))
 				}
 				if test.variant == "created" && test.kind == "project" && !strings.Contains(fmt.Sprint(outputs[1].Messages), "Current directory name") {
 					t.Fatal("fixture did not exercise installed directory rendering")

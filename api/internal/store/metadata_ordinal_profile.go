@@ -182,7 +182,7 @@ func (s *SQLiteStore) applyMetadataOrdinalProfile(
 		return result, err
 	}
 	traceMark(ctx, "ordinal-imports")
-	// This closed kernel adds only the two SW202 collections to the proven
+	// This closed kernel adds only the two delivery worker collections to the proven
 	// metadata-image writer; the profile rejects all other callback edits.
 	writeCtx := context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, []string{"integrationDeliveries", "integrationConnections"})
 	result.candidate, err = s.persistLegacyMetadataImage(writeCtx, tx, workspace, stored, patched)

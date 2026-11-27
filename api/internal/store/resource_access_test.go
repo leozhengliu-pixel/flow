@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP03StoreFixture struct {
+type scaleStoreFixture struct {
 	*SQLiteStore
 	data domain.Bootstrap
 }
 
-func scaleP03Stores(t *testing.T) map[string]scaleP03StoreFixture {
+func resourceAccessScaleStores(t *testing.T) map[string]scaleStoreFixture {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -34,7 +34,7 @@ func scaleP03Stores(t *testing.T) map[string]scaleP03StoreFixture {
 	} else if driver == "sqlite" {
 		config.Path = databaseURL
 	}
-	stores := map[string]scaleP03StoreFixture{}
+	stores := map[string]scaleStoreFixture{}
 	for name, config := range map[string]DatabaseConfig{config.Driver: config} {
 		repo, err := OpenDatabase(config)
 		if err != nil {
@@ -67,15 +67,15 @@ func scaleP03Stores(t *testing.T) map[string]scaleP03StoreFixture {
 			t.Fatal(err)
 		}
 		workspace = data.Workspace.URLKey
-		stores[name] = scaleP03StoreFixture{repo, data}
+		stores[name] = scaleStoreFixture{repo, data}
 	}
 	return stores
 }
 
-func TestScaleP03AccessContextRevocationAndOwnership(t *testing.T) {
-	for name, repo := range scaleP03Stores(t) {
+func TestScaleAccessContextRevocationAndOwnership(t *testing.T) {
+	for name, repo := range resourceAccessScaleStores(t) {
 		t.Run(name, func(t *testing.T) {
-			ctx := scaleP21ResourceOutputContext(t)
+			ctx := scaleResourceOutputContext(t)
 			base := repo.data
 			workspace, principal := base.Workspace.URLKey, base.Viewer.ID
 			err := repo.MutateWorkspace(WithColdWork(ctx, "workspace fixture"), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -170,8 +170,8 @@ func TestScaleP03AccessContextRevocationAndOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP03PolicyDoesNotRetainUnrelatedMetadata(t *testing.T) {
-	for name, repo := range scaleP03Stores(t) {
+func TestScalePolicyDoesNotRetainUnrelatedMetadata(t *testing.T) {
+	for name, repo := range resourceAccessScaleStores(t) {
 		t.Run(name, func(t *testing.T) {
 			base := repo.data
 			workspace, principal := base.Workspace.URLKey, base.Viewer.ID

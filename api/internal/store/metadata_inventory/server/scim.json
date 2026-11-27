@@ -5,7 +5,7 @@
     "authenticateSCIMRequest": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted scoped workspace identity and complete workspaceSettings; bearer token workspace binding and SCIM-enabled checks retained, read errors propagated. TestScaleP21M2PolicyDifferential covers valid/cross-workspace tokens and zero full decodes.",
+      "reason": "Trusted scoped workspace identity and complete workspaceSettings; bearer token workspace binding and SCIM-enabled checks retained, read errors propagated. TestScalePolicyDifferential covers valid/cross-workspace tokens and zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -13,7 +13,7 @@
     "createSCIMToken": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Identity-only projected read plus complete workspaceSettings mutation; existing admin boundary, token issuance order and transactional audit staging retained. TestScaleP21M2CredentialsAndUploadDifferential compares issuance/rotation/revocation and TestScaleP21M2PolicyDifferential covers admin permission matrix.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Identity-only projected read plus complete workspaceSettings mutation; existing admin boundary, token issuance order and transactional audit staging retained. TestScaleCredentialsAndUploadDifferential compares issuance/rotation/revocation and TestScalePolicyDifferential covers admin permission matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -28,7 +28,7 @@
     "listSCIMTokens": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Only workspace identity is loaded; existing live admin role check and SQL token listing retained. TestScaleP21M2PolicyDifferential crosses five principal classes with session and all three key restrictions, without loading hidden project bodies.",
+      "reason": "Only workspace identity is loaded; existing live admin role check and SQL token listing retained. TestScalePolicyDifferential crosses five principal classes with session and all three key restrictions, without loading hidden project bodies.",
       "accessors": [
         "workspaceData"
       ]
@@ -36,7 +36,7 @@
     "requireWorkspaceAdmin": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Identity-only workspace projection followed by unchanged WorkspaceRole/admin check; auth-disabled shortcut retained. TestScaleP21M2PolicyDifferential compares principal/key matrix, queued/replayed access revocation and zero full decodes.",
+      "reason": "Identity-only workspace projection followed by unchanged WorkspaceRole/admin check; auth-disabled shortcut retained. TestScalePolicyDifferential compares principal/key matrix, queued/replayed access revocation and zero full decodes.",
       "accessors": [
         "workspaceData"
       ]
@@ -44,7 +44,7 @@
     "revokeSCIMToken": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and empty metadata audit scope; SQL credential revocation, admin check, audit staging and failure logging retain their order. TestScaleP21M2CredentialsAndUploadDifferential covers create/rotate/revoke and TestScaleP21M2SCIMProfileAndAudit compares staged audits.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and empty metadata audit scope; SQL credential revocation, admin check, audit staging and failure logging retain their order. TestScaleCredentialsAndUploadDifferential covers create/rotate/revoke and TestScaleSCIMProfileAndAudit compares staged audits.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -59,7 +59,7 @@
     "scimGroupOrTeam": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Existing SQL SCIM-group lookup retains precedence. Team fallback reads only teams/id and, only for linking, workspaceSettings/scimRoleGroups; exact original WorkspaceMetadata dispatch remains off mode. TestScaleP21SW19SCIMGroupOrTeamDifferential compares full principal/key matrix, team fields and existing SQL groups, persisted link role/name, SCIM HTTP/ETag shape, token revocation during queued/replayed requests, exact/missing/case/long/NUL/key references, cross-workspace binding, ownership, explicit selected budgets/cancellation and recovery, byte-identical unrelated team rows, and zero full decodes.",
+      "reason": "Existing SQL SCIM-group lookup retains precedence. Team fallback reads only teams/id and, only for linking, workspaceSettings/scimRoleGroups; exact original WorkspaceMetadata dispatch remains off mode. TestSCIMGroupOrTeamDifferential compares full principal/key matrix, team fields and existing SQL groups, persisted link role/name, SCIM HTTP/ETag shape, token revocation during queued/replayed requests, exact/missing/case/long/NUL/key references, cross-workspace binding, ownership, explicit selected budgets/cancellation and recovery, byte-identical unrelated team rows, and zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -67,7 +67,7 @@
     "scimRole": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Selected representation gates the exact legacy WorkspaceMetadata call; bounded mode uses the resident, process-capped WorkspaceSettingsMetadata policy reader only. Role mapping/default behavior retained. TestScaleP21M2IdentityDifferential compares mappings for all principal/key forms with zero full decodes.",
+      "reason": "Selected representation gates the exact legacy WorkspaceMetadata call; bounded mode uses the resident, process-capped WorkspaceSettingsMetadata policy reader only. Role mapping/default behavior retained. TestScaleIdentityDifferential compares mappings for all principal/key forms with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -75,7 +75,7 @@
     "scimTeamForGroup": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded mode uses one trusted repeatable-read SCIMTeamRead: only the explicit scimTeamGroupMapping property and ordered team ID/key scalars enter selection, preserving explicit-map precedence, exact existence checks, Go EqualFold Unicode behavior, first canonical match and no implicit display-name matching. Off mode retains exact WorkspaceMetadata dispatch. TestScaleP21SW19NativeSCIMTeamRead and SCIMNativeDirectoryDifferential compare full principal/key matrix, duplicate keys, mapping fallbacks, missing/cross-workspace/default keys, legal large unrelated bodies, cancellation/recovery and work admission; actual SCIM HTTP shape and queued/replayed token revocation remain equivalent. Request-context link/apply callers propagate native errors. No whole metadata decode or unrelated team bodies are loaded.",
+      "reason": "Bounded mode uses one trusted repeatable-read SCIMTeamRead: only the explicit scimTeamGroupMapping property and ordered team ID/key scalars enter selection, preserving explicit-map precedence, exact existence checks, Go EqualFold Unicode behavior, first canonical match and no implicit display-name matching. Off mode retains exact WorkspaceMetadata dispatch. TestNativeSCIMTeamRead and SCIMNativeDirectoryDifferential compare full principal/key matrix, duplicate keys, mapping fallbacks, missing/cross-workspace/default keys, legal large unrelated bodies, cancellation/recovery and work admission; actual SCIM HTTP shape and queued/replayed token revocation remain equivalent. Request-context link/apply callers propagate native errors. No whole metadata decode or unrelated team bodies are loaded.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -83,7 +83,7 @@
     "scimWorkspaceSettings": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Selected representation gates the exact legacy accessor; bounded mode clones only resident workspace settings through WorkspaceSettingsMetadata. Existing missing-workspace zero settings behavior retained. TestScaleP21M2IdentityDifferential compares complete settings and role defaults.",
+      "reason": "Selected representation gates the exact legacy accessor; bounded mode clones only resident workspace settings through WorkspaceSettingsMetadata. Existing missing-workspace zero settings behavior retained. TestScaleIdentityDifferential compares complete settings and role defaults.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -91,7 +91,7 @@
     "unlinkedSCIMTeams": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded mode resolves all linked IDs in one canonical SQL snapshot, scans fixed-size ordered headers and decodes only unlinked typed Team rows. An adaptive whole-result allowance, capped at 64 MiB including selector storage, remains held during typed result and list resource construction; raw future-schema fields never reach the wire. Exact legacy accessor/order/nil behavior remains off mode. TestScaleP21SW19NativeSCIMTeamRead and SCIMNativeDirectoryDifferential cover over 125 teams, linked exclusion, legal oversized names, schema exclusion, canonical byte preservation, explicit output-budget failure and recovery, return ownership, cancellation, full principal/key matrix and actual SCIM filter/member/count/sort/page/projection responses, workspace binding and token revocation. Existing SQL group/member output collections remain the list caller's independent contract. Both tests passed twice on persistent SQLite with zero full decodes.",
+      "reason": "Bounded mode resolves all linked IDs in one canonical SQL snapshot, scans fixed-size ordered headers and decodes only unlinked typed Team rows. An adaptive whole-result allowance, capped at 64 MiB including selector storage, remains held during typed result and list resource construction; raw future-schema fields never reach the wire. Exact legacy accessor/order/nil behavior remains off mode. TestNativeSCIMTeamRead and SCIMNativeDirectoryDifferential cover over 125 teams, linked exclusion, legal oversized names, schema exclusion, canonical byte preservation, explicit output-budget failure and recovery, return ownership, cancellation, full principal/key matrix and actual SCIM filter/member/count/sort/page/projection responses, workspace binding and token revocation. Existing SQL group/member output collections remain the list caller's independent contract. Both tests passed twice on persistent SQLite with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]

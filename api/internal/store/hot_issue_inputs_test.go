@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21HotIssueInputsNativeClosure(t *testing.T) {
+func TestScaleHotIssueInputsNativeClosure(t *testing.T) {
 	at := time.Date(2026, 11, 14, 9, 13, 0, 0, time.UTC)
 	actor := domain.User{ID: "actor", Name: "Actor"}
 	assignee := domain.User{ID: "assignee", Name: "First", OutOfOfficeUntil: &at}
@@ -75,7 +75,7 @@ func TestScaleP21HotIssueInputsNativeClosure(t *testing.T) {
 			},
 			Members: []domain.WorkspaceMember{{User: assignee, Status: "suspended"}, {User: domain.User{ID: "unrelated", AvatarURL: strings.Repeat("unrelated member ", count*100)}}},
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": stored})
 		data := domain.Bootstrap{Viewer: actor, Issues: []domain.Issue{target}}
 		read, err := view.loadIssueHotInputs(t.Context(), "physical", &data, target, input)
 		if err != nil {
@@ -120,8 +120,8 @@ func TestScaleP21HotIssueInputsNativeClosure(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotIssueInputsBudgetAndBlockers(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {Users: []domain.User{{ID: "user", AvatarURL: strings.Repeat("large selected user ", 100000)}}}})
+func TestScaleHotIssueInputsBudgetAndBlockers(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {Users: []domain.User{{ID: "user", AvatarURL: strings.Repeat("large selected user ", 100000)}}}})
 	target := domain.Issue{ID: "target"}
 	data := domain.Bootstrap{Issues: []domain.Issue{target}}
 	input := domain.IssueUpdateInput{AssigneeID: new("user")}
@@ -153,7 +153,7 @@ func TestScaleP21HotIssueInputsBudgetAndBlockers(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotIssueInputsManyRelevantPeople(t *testing.T) {
+func TestScaleHotIssueInputsManyRelevantPeople(t *testing.T) {
 	var people []domain.User
 	var subscribers []string
 	for i := 0; i < 60; i++ {
@@ -161,7 +161,7 @@ func TestScaleP21HotIssueInputsManyRelevantPeople(t *testing.T) {
 		people = append(people, domain.User{ID: id, Name: id})
 		subscribers = append(subscribers, id)
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {Users: people}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {Users: people}})
 	target := domain.Issue{ID: "target"}
 	data := domain.Bootstrap{Issues: []domain.Issue{target}}
 	read, err := view.loadIssueHotInputs(t.Context(), "workspace", &data, target, domain.IssueUpdateInput{SubscriberIDs: &subscribers})
@@ -174,10 +174,10 @@ func TestScaleP21HotIssueInputsManyRelevantPeople(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotIssueInputsEmptyAndLiteralMentionSemantics(t *testing.T) {
+func TestScaleHotIssueInputsEmptyAndLiteralMentionSemantics(t *testing.T) {
 	text := "An @unknown mention"
 	user := domain.User{ID: "empty-names"}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {
 		Users:         []domain.User{user},
 		UserSettings:  map[string]domain.UserSettings{"": {AssignStarted: true}},
 		CycleSettings: map[string]domain.CycleSettings{"": {Enabled: true}},
@@ -197,11 +197,11 @@ func TestScaleP21HotIssueInputsEmptyAndLiteralMentionSemantics(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotIssueInputsUpdateDifferential(t *testing.T) {
+func TestScaleHotIssueInputsUpdateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	actor := f.data.Viewer
 	person := domain.User{ID: "p21-input-person", Name: "Person", Active: true}

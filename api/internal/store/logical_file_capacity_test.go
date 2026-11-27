@@ -300,7 +300,7 @@ func TestBoundedMetadataStartupLogicalFileCapacity(t *testing.T) {
 			}
 		}
 		path := filepath.Join(dir, name+".db")
-		scaleP21SW557CopyDatabase(t, seedPath, path)
+		copyDatabase(t, seedPath, path)
 		return func() *SQLiteStore {
 			repo, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path})
 			if err != nil {

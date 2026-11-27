@@ -28,7 +28,7 @@ func TestSyncChangesPulsePagesDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestSyncChangesPulsePagesDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = peer.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	visible, renamed, hidden, removed := idgen.New("sync-pulse-visible-"), idgen.New("sync-pulse-renamed-"), idgen.New("sync-pulse-hidden-"), idgen.New("sync-pulse-removed-")
 	// linked has no teams and no projects of its own: only the hidden project
@@ -137,7 +137,7 @@ func TestSyncChangesPulsePagesDifferential(t *testing.T) {
 	})
 	// Every principal's session, and the owner through an API key restricted
 	// to the public team.
-	scaleP03Key(t, f.scaleP03PlatformFixture, []string{"read"}, []string{f.public})
+	scaleKey(t, f.scalePlatformFixture, []string{"read"}, []string{f.public})
 	data, ok := repo.BootstrapFor(workspace)
 	if !ok || len(data.APIKeys) == 0 {
 		t.Fatal("restricted key is missing")
@@ -266,8 +266,8 @@ func TestSyncChangesReprojectsAPageRacedByAWrite(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 		project := idgen.New("sync-race-project-")
 		rename := func(name string) {
@@ -307,7 +307,7 @@ func TestSyncChangesReprojectsAPageRacedByAWrite(t *testing.T) {
 			read := func(cursor string, during func(call, transactions int)) (int, []int, string) {
 				t.Helper()
 				var limits []int
-				journal := scaleP12JournalFunc(func(ctx context.Context, id, after string, limit, maxBytes int) (store.CommittedPage, error) {
+				journal := scaleJournalFunc(func(ctx context.Context, id, after string, limit, maxBytes int) (store.CommittedPage, error) {
 					if id != workspaceID || after != cursor || maxBytes != syncV2DeltaBytes {
 						t.Fatalf("journal scope changed on retry: workspace %q, after %q, maxBytes %d", id, after, maxBytes)
 					}

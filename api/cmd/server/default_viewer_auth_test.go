@@ -15,21 +15,21 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW120Output struct {
+type defaultViewerAuthOutput struct {
 	Viewer domain.User
 	OAuth  domain.User
 	Via    *domain.ActorBot
 	Audit  store.AuditRequest
 }
 
-type scaleP21SW120Result struct {
+type defaultViewerAuthResult struct {
 	Code   int
 	Header http.Header
 	Body   []byte
 	Called bool
 }
 
-func scaleP21SW120NativeUser(user domain.User, suffix string) domain.User {
+func nativeUser(user domain.User, suffix string) domain.User {
 	stamp := time.Date(2026, time.November, 15, 1, 2, 3, 456789123, time.FixedZone("sw120", 20700))
 	user.Active, user.Deleted, user.App, user.BuiltinAgent = false, true, true, true
 	user.UserID, user.OAuthClientID = idgen.New("sw120-native-user-"), idgen.New("sw120-client-")
@@ -46,7 +46,7 @@ func scaleP21SW120NativeUser(user domain.User, suffix string) domain.User {
 	return user
 }
 
-func scaleP21SW120AssertUser(t *testing.T, got, want domain.User) {
+func assertUser(t *testing.T, got, want domain.User) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) || got.Via != want.Via || got.OutOfOfficeUntil != want.OutOfOfficeUntil {
 		t.Fatalf("request viewer differs from its literal source: got=%#v want=%#v", got, want)
@@ -58,7 +58,7 @@ func scaleP21SW120AssertUser(t *testing.T, got, want domain.User) {
 	}
 }
 
-func scaleP21SW120Authenticate(t *testing.T, source *store.SQLiteStore, want, decoy domain.User, path, workspace, authorization string, canceled bool) scaleP21SW120Result {
+func defaultViewerAuthAuthenticate(t *testing.T, source *store.SQLiteStore, want, decoy domain.User, path, workspace, authorization string, canceled bool) defaultViewerAuthResult {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.RemoteAddr = "198.51.100.42:1234"
@@ -74,7 +74,7 @@ func scaleP21SW120Authenticate(t *testing.T, source *store.SQLiteStore, want, de
 	}
 	statements, countStatements := 0, 0
 	// Account count reads use Background; this observes request SQL only.
-	// SW118 separately proves the scalar getter's native/no-SQL contract.
+	// default viewer separately proves the scalar getter's native/no-SQL contract.
 	request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(query string) {
 		statements++
 		if bytes.Contains([]byte(query), []byte("issue_collection_counts")) {
@@ -85,14 +85,14 @@ func scaleP21SW120Authenticate(t *testing.T, source *store.SQLiteStore, want, de
 	beforeWork := source.MetadataWorkUsedForTesting()
 	service := &server{store: source, authDisabled: true}
 	w := httptest.NewRecorder()
-	result := scaleP21SW120Result{}
+	result := defaultViewerAuthResult{}
 	var scope *requestResourceReads
 	service.authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		result.Called = true
 		viewer := authUser(r)
-		scaleP21SW120AssertUser(t, viewer, want)
+		assertUser(t, viewer, want)
 		oauth := service.oauthRequestUser(r)
-		scaleP21SW120AssertUser(t, oauth, want)
+		assertUser(t, oauth, want)
 		audit, ok := store.AuditRequestFrom(r.Context())
 		if !ok || audit.UserID != want.ID || audit.ActorID != want.ID || audit.ActorType != store.AuditActorUser || audit.IP != "198.51.100.0" {
 			t.Fatalf("development viewer lost audit context: %+v", audit)
@@ -101,7 +101,7 @@ func scaleP21SW120Authenticate(t *testing.T, source *store.SQLiteStore, want, de
 		if source.BoundedMetadataEnabled() && (scope == nil || scope.closed) {
 			t.Fatal("bounded authentication did not retain an open request output scope")
 		}
-		writeJSON(w, http.StatusOK, scaleP21SW120Output{Viewer: viewer, OAuth: oauth, Via: viewer.Via, Audit: audit})
+		writeJSON(w, http.StatusOK, defaultViewerAuthOutput{Viewer: viewer, OAuth: oauth, Via: viewer.Via, Audit: audit})
 	})).ServeHTTP(w, request)
 	if source.BoundedMetadataEnabled() {
 		if source.WorkspaceMetadataDecodes() != beforeDecodes || source.MetadataWorkUsedForTesting() != beforeWork {
@@ -120,11 +120,11 @@ func scaleP21SW120Authenticate(t *testing.T, source *store.SQLiteStore, want, de
 	return result
 }
 
-func TestScaleP21SW120DefaultViewerAuthenticationDifferential(t *testing.T) {
+func TestDefaultViewerAuthenticationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		// Each source's literal Account viewer is the oracle; no default identity
 		// is assumed or changed. All new workspace/identity resources are owned.
 		literal := repo.Account().Viewer
@@ -136,7 +136,7 @@ func TestScaleP21SW120DefaultViewerAuthenticationDifferential(t *testing.T) {
 		if !reflect.DeepEqual(literal, boundedLiteral) {
 			t.Fatal("paired default viewer oracles differ")
 		}
-		decoy := scaleP21SW120NativeUser(f.data.Viewer, "decoy")
+		decoy := nativeUser(f.data.Viewer, "decoy")
 		for _, test := range []struct {
 			name, path, workspace, authorization string
 			canceled                             bool
@@ -151,8 +151,8 @@ func TestScaleP21SW120DefaultViewerAuthenticationDifferential(t *testing.T) {
 			{"canceled-viewer-only", "/api/sw120-viewer", "", "", true, http.StatusServiceUnavailable, false},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				old := scaleP21SW120Authenticate(t, repo, literal, decoy, test.path, test.workspace, test.authorization, test.canceled)
-				bounded := scaleP21SW120Authenticate(t, view, boundedLiteral, decoy, test.path, test.workspace, test.authorization, test.canceled)
+				old := defaultViewerAuthAuthenticate(t, repo, literal, decoy, test.path, test.workspace, test.authorization, test.canceled)
+				bounded := defaultViewerAuthAuthenticate(t, view, boundedLiteral, decoy, test.path, test.workspace, test.authorization, test.canceled)
 				if !reflect.DeepEqual(old, bounded) {
 					t.Fatalf("actual development authentication/context/output differs: literal=%+v bounded=%+v", old, bounded)
 				}
@@ -164,16 +164,16 @@ func TestScaleP21SW120DefaultViewerAuthenticationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW120OAuthRequestUserLiteralDifferential(t *testing.T) {
+func TestOAuthRequestUserLiteralDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
 		}
-		native := scaleP21SW120NativeUser(f.data.Viewer, "oauth")
+		native := nativeUser(f.data.Viewer, "oauth")
 		for _, source := range []*store.SQLiteStore{repo, view} {
 			wantDefault := source.Account().Viewer
 			for _, development := range []bool{false, true} {
@@ -189,7 +189,7 @@ func TestScaleP21SW120OAuthRequestUserLiteralDifferential(t *testing.T) {
 					want = wantDefault
 				}
 				got := service.oauthRequestUser(request)
-				scaleP21SW120AssertUser(t, got, want)
+				assertUser(t, got, want)
 				if statements != 0 || source.WorkspaceMetadataDecodes() != beforeDecodes || source.MetadataWorkUsedForTesting() != beforeWork {
 					t.Fatal("OAuth viewer helper observed request SQL, decoded full metadata, or retained work")
 				}

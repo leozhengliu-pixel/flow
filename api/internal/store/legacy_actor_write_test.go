@@ -13,20 +13,20 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW76Metadata struct {
+type legacyActorWriteMetadata struct {
 	WorkspaceID string
 	Root        string
-	Rows        []scaleP21SW23MetadataRow
+	Rows        []metadataRow
 }
 
-type scaleP21SW76MetadataReader interface {
+type legacyActorMetadataReader interface {
 	metadataReader
 	metadataRowReader
 }
 
-func scaleP21SW76MetadataImage(t *testing.T, reader scaleP21SW76MetadataReader, workspace string) scaleP21SW76Metadata {
+func metadataImage(t *testing.T, reader legacyActorMetadataReader, workspace string) legacyActorWriteMetadata {
 	t.Helper()
-	result := scaleP21SW76Metadata{Rows: []scaleP21SW23MetadataRow{}}
+	result := legacyActorWriteMetadata{Rows: []metadataRow{}}
 	var raw []byte
 	if err := reader.QueryRowContext(t.Context(), `SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&result.WorkspaceID, &raw); err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func scaleP21SW76MetadataImage(t *testing.T, reader scaleP21SW76MetadataReader, 
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var row scaleP21SW23MetadataRow
+		var row metadataRow
 		if err := rows.Scan(&row.Field, &row.Key, &row.Order, &row.Data); err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +50,7 @@ func scaleP21SW76MetadataImage(t *testing.T, reader scaleP21SW76MetadataReader, 
 	return result
 }
 
-func scaleP21SW76Begin(t *testing.T, f scaleP09Fixture) *sqlTx {
+func legacyActorWriteBegin(t *testing.T, f scaleFixture) *sqlTx {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -60,7 +60,7 @@ func scaleP21SW76Begin(t *testing.T, f scaleP09Fixture) *sqlTx {
 	return tx
 }
 
-func scaleP21SW76StagePeer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap, actor *domain.User) {
+func stagePeer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap, actor *domain.User) {
 	t.Helper()
 	if mode == "" {
 		return
@@ -106,12 +106,12 @@ func scaleP21SW76StagePeer(t *testing.T, tx *sqlTx, workspace, mode string, befo
 		}
 		return
 	}
-	user := scaleP21SW69OwnedActor(*actor)
+	user := ownedActor(*actor)
 	if mode != "actor-already-added" {
 		found := false
 		for _, candidate := range before.Users {
 			if candidate.ID == actor.ID {
-				user, found = scaleP21SW69OwnedActor(candidate), true
+				user, found = ownedActor(candidate), true
 				break
 			}
 		}
@@ -149,32 +149,32 @@ func scaleP21SW76StagePeer(t *testing.T, tx *sqlTx, workspace, mode string, befo
 	}
 }
 
-func scaleP21SW76Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, source *metadataLogicalSource, actor *domain.User, peer string, releaseInput func()) (int, int) {
+func legacyActorWriteCompare(t *testing.T, f scaleFixture, view *SQLiteStore, source *metadataLogicalSource, actor *domain.User, peer string, releaseInput func()) (int, int) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	before, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var originalActor *domain.User
 	if actor != nil {
-		value := scaleP21SW69OwnedActor(*actor)
+		value := ownedActor(*actor)
 		originalActor = &value
 	}
-	want := scaleP21SW69LiteralActorStep(before, actor)
-	tx := scaleP21SW76Begin(t, f)
-	scaleP21SW76StagePeer(t, tx, workspace, peer, before, actor)
-	preimage := scaleP21SW76MetadataImage(t, tx, workspace)
+	want := literalActorStep(before, actor)
+	tx := legacyActorWriteBegin(t, f)
+	stagePeer(t, tx, workspace, peer, before, actor)
+	preimage := metadataImage(t, tx, workspace)
 	_, wantErr := f.writeWorkspaceMetadataDelta(t.Context(), tx, workspace, before, &want)
-	wantSQL := scaleP21SW76MetadataImage(t, tx, workspace)
-	scaleP21SW70Usable(t, tx)
+	wantSQL := metadataImage(t, tx, workspace)
+	legacyIssueScanUsable(t, tx)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	tx = scaleP21SW76Begin(t, f)
-	scaleP21SW76StagePeer(t, tx, workspace, peer, before, actor)
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
+	tx = legacyActorWriteBegin(t, f)
+	stagePeer(t, tx, workspace, peer, before, actor)
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
 		t.Fatal("literal and bounded actor writes did not start from the same SQL preimage")
 	}
 	peak := 0
@@ -189,17 +189,17 @@ func scaleP21SW76Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, sou
 		}
 		t.Fatalf("literal/bounded actor write errors differ: %T %v / %T %v", wantErr, wantErr, gotErr, gotErr)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
 		if image != nil {
 			image.Close()
 		}
 		t.Fatal("full canonical root, metadata rows or user collection orders differ")
 	}
-	scaleP21SW72Compare(t, source, scope, before)
+	legacyIssueImageCompare(t, source, scope, before)
 	if !reflect.DeepEqual(actor, originalActor) {
 		t.Fatal("actor persistence mutated caller-owned slices, pointers or Via")
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 	if wantErr != nil {
 		if image != nil {
 			image.Close()
@@ -214,7 +214,7 @@ func scaleP21SW76Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, sou
 		t.Fatal("actor persistence omitted its native postimage")
 	}
 	defer image.Close()
-	scaleP21SW72Compare(t, image.Source(), scope, want)
+	legacyIssueImageCompare(t, image.Source(), scope, want)
 	if image.Source().Stamp() != source.Stamp() || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("actor persistence changed metadata generation or decoded full workspace metadata")
 	}
@@ -227,7 +227,7 @@ func scaleP21SW76Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, sou
 		t.Fatal(err)
 	}
 	cancel()
-	scaleP21SW72Compare(t, image.Source(), scope, want)
+	legacyIssueImageCompare(t, image.Source(), scope, want)
 	if view.MetadataWorkUsedForTesting() != held {
 		t.Fatal("rollback or cancellation discarded the owned actor postimage")
 	}
@@ -239,11 +239,11 @@ func scaleP21SW76Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, sou
 	return peak, held
 }
 
-func TestScaleP21SW76LegacyActorWriteLiteral(t *testing.T) {
+func TestLegacyActorWriteLiteral(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +295,7 @@ func TestScaleP21SW76LegacyActorWriteLiteral(t *testing.T) {
 			if test.append && test.shape != "nil" && test.shape != "empty" {
 				data.Users = []domain.User{data.Users[0], data.Users[len(data.Users)-1]}
 			}
-			input := scaleP21SW69OwnedActor(base)
+			input := ownedActor(base)
 			input.Name, input.DisplayName = "Fresh actor", "Fresh display"
 			input.Via = &domain.ActorBot{ID: "sw76-application", Type: domain.ActorBotTypeOAuthApplication, Name: "Native Via", OnBehalfOfID: "person"}
 			if test.append {
@@ -317,7 +317,7 @@ func TestScaleP21SW76LegacyActorWriteLiteral(t *testing.T) {
 				}
 			}()
 			f.db.SetMaxOpenConns(1)
-			scaleP21SW76Compare(t, f, view, source, actor, test.peer, func() {
+			legacyActorWriteCompare(t, f, view, source, actor, test.peer, func() {
 				source.Release()
 				sourceOwned = false
 			})
@@ -326,11 +326,11 @@ func TestScaleP21SW76LegacyActorWriteLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW76LegacyActorWriteWarmReloadBodyBound(t *testing.T) {
+func TestLegacyActorWriteWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -387,11 +387,11 @@ func TestScaleP21SW76LegacyActorWriteWarmReloadBodyBound(t *testing.T) {
 				if original == nil {
 					t.Fatal("small actor fixture missing from installed source")
 				}
-				input := scaleP21SW69OwnedActor(*original)
+				input := ownedActor(*original)
 				input.Name = "Fresh actor"
 				input.Via = &domain.ActorBot{ID: "sw76-body-app", Name: "Native Via"}
 				f.db.SetMaxOpenConns(1)
-				peak, held := scaleP21SW76Compare(t, f, view, source, &input, "", func() {
+				peak, held := legacyActorWriteCompare(t, f, view, source, &input, "", func() {
 					source.Release()
 					sourceOwned = false
 				})
@@ -410,11 +410,11 @@ func TestScaleP21SW76LegacyActorWriteWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW76LegacyActorWriteFailureRelease(t *testing.T) {
+func TestLegacyActorWriteFailureRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	data := domain.Bootstrap{Workspace: f.data.Workspace, Viewer: f.data.Viewer, Users: []domain.User{f.data.Viewer}, Settings: map[string]any{"unchanged": true}}
 	writeFullMetadata(t, f.SQLiteStore, workspace, data)
@@ -428,18 +428,18 @@ func TestScaleP21SW76LegacyActorWriteFailureRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer source.Release()
-	scope := scaleP21SW72FullScope(t, source)
+	scope := fullScope(t, source)
 	nativeBefore, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := scaleP21SW69OwnedActor(f.data.Viewer)
+	actor := ownedActor(f.data.Viewer)
 	actor.Name, actor.Via = "Fresh actor", &domain.ActorBot{ID: "sw76-failure-app", Name: "Native Via"}
 	for _, failure := range []string{"cancel-before", "cancel-after-start", "quota"} {
 		t.Run(failure, func(t *testing.T) {
 			f.db.SetMaxOpenConns(1)
-			tx := scaleP21SW76Begin(t, f)
-			before := scaleP21SW76MetadataImage(t, tx, workspace)
+			tx := legacyActorWriteBegin(t, f)
+			before := metadataImage(t, tx, workspace)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			var want error = context.Canceled
@@ -469,11 +469,11 @@ func TestScaleP21SW76LegacyActorWriteFailureRelease(t *testing.T) {
 				metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 				t.Fatal("failed actor write changed its error or retained source/work", failure, err)
 			}
-			if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, before) {
+			if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, before) {
 				t.Fatal("preflight failure wrote canonical actor metadata", failure)
 			}
-			scaleP21SW72Compare(t, source, scope, nativeBefore)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueImageCompare(t, source, scope, nativeBefore)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 }

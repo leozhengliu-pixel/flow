@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// SW602: a workspace created at runtime with bounded metadata on is served
+// A workspace created at runtime with bounded metadata on is served
 // like one a flag-on start loaded. Before this change POST /api/workspaces
 // answered 201 but installed no logical source for the new workspace, so the
 // built-in agent's installation, every later read and write of it (account
@@ -31,9 +31,9 @@ import (
 // then pass the bounded start's coverage check, and the reads must match
 // again after the restart.
 
-const sw602Fresh, sw602Import = "sw602-fresh", "sw602-import"
+const newWorkspaceFresh, newWorkspaceImport = "sw602-fresh", "sw602-import"
 
-type sw602Run struct {
+type workspaceAccountSettingsRun struct {
 	t      *testing.T
 	st     *rtStack
 	names  *rtRun // id labels and masking
@@ -41,7 +41,7 @@ type sw602Run struct {
 	failed []string
 }
 
-func (r *sw602Run) do(workspace, method, path string, body any) (int, []byte) {
+func (r *workspaceAccountSettingsRun) do(workspace, method, path string, body any) (int, []byte) {
 	r.t.Helper()
 	var reader io.Reader
 	if body != nil {
@@ -67,7 +67,7 @@ func (r *sw602Run) do(workspace, method, path string, body any) (int, []byte) {
 	return response.StatusCode, raw
 }
 
-func (r *sw602Run) write(label, workspace, method, path string, body any, want int) map[string]any {
+func (r *workspaceAccountSettingsRun) write(label, workspace, method, path string, body any, want int) map[string]any {
 	r.t.Helper()
 	status, raw := r.do(workspace, method, path, body)
 	r.log = append(r.log, fmt.Sprintf("%s %s %s %s -> %d", workspace, label, method, r.names.norm(path), status))
@@ -80,20 +80,20 @@ func (r *sw602Run) write(label, workspace, method, path string, body any, want i
 	return out
 }
 
-func (r *sw602Run) name(label, id string) string { return r.names.name(label, id) }
+func (r *workspaceAccountSettingsRun) name(label, id string) string { return r.names.name(label, id) }
 
-// sw602Writes creates the workspaces and drives each through the app's first
+// writes creates the workspaces and drives each through the app's first
 // steps.
-func sw602Writes(r *sw602Run) {
-	created := r.write("create", "", "POST", "/api/workspaces", map[string]any{"name": "SW602 fresh", "urlKey": sw602Fresh, "locale": "en-US"}, 201)
+func newWorkspaceWrites(r *workspaceAccountSettingsRun) {
+	created := r.write("create", "", "POST", "/api/workspaces", map[string]any{"name": "SW602 fresh", "urlKey": newWorkspaceFresh, "locale": "en-US"}, 201)
 	if workspace, ok := created["workspace"].(map[string]any); ok {
 		r.name("freshWorkspace", rtID(workspace))
 	}
-	created = r.write("create", "", "POST", "/api/workspaces", map[string]any{"name": "SW602 import", "urlKey": sw602Import, "tutorial": false}, 201)
+	created = r.write("create", "", "POST", "/api/workspaces", map[string]any{"name": "SW602 import", "urlKey": newWorkspaceImport, "tutorial": false}, 201)
 	if workspace, ok := created["workspace"].(map[string]any); ok {
 		r.name("importWorkspace", rtID(workspace))
 	}
-	for _, workspace := range []string{sw602Fresh, sw602Import} {
+	for _, workspace := range []string{newWorkspaceFresh, newWorkspaceImport} {
 		status, raw := r.do(workspace, "GET", "/api/bootstrap", nil)
 		boot := map[string]any{}
 		_ = json.Unmarshal(raw, &boot)
@@ -132,9 +132,9 @@ func sw602Writes(r *sw602Run) {
 	}
 }
 
-func sw602Reads(r *sw602Run) map[string]string {
+func newWorkspaceReads(r *workspaceAccountSettingsRun) map[string]string {
 	out := map[string]string{}
-	for _, workspace := range []string{sw602Fresh, sw602Import} {
+	for _, workspace := range []string{newWorkspaceFresh, newWorkspaceImport} {
 		for _, path := range []string{
 			"/api/bootstrap", "/api/account/settings", "/api/issues", "/api/issue-records?limit=50", "/api/documents", "/api/projects",
 			"/api/labels", "/api/views", "/api/loops", "/api/application-installations", "/api/agent/sessions", "/api/notifications",
@@ -146,38 +146,38 @@ func sw602Reads(r *sw602Run) map[string]string {
 	return out
 }
 
-// sw602Log captures the server log of one run.
-type sw602Log struct {
+// log captures the server log of one run.
+type workspaceCreationRequestLog struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
 }
 
-func (l *sw602Log) Write(p []byte) (int, error) {
+func (l *workspaceCreationRequestLog) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.buf.Write(p)
 	return os.Stderr.Write(p)
 }
 
-func (l *sw602Log) String() string {
+func (l *workspaceCreationRequestLog) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.buf.String()
 }
 
-func sw602Capture(t *testing.T) *sw602Log {
+func newWorkspaceCapture(t *testing.T) *workspaceCreationRequestLog {
 	t.Helper()
-	captured := &sw602Log{}
+	captured := &workspaceCreationRequestLog{}
 	previous := log.Writer()
 	log.SetOutput(captured)
 	t.Cleanup(func() { log.SetOutput(previous) })
 	return captured
 }
 
-// sw602Refusals are the log lines of a workspace the bounded store does not
-// cover. The log is process-wide: only lines naming an SW602 workspace count,
+// refusals are the log lines of a workspace the bounded store does not
+// cover. The log is process-wide: only lines naming an runtime workspace creation workspace count,
 // not those of a store another test left running.
-func sw602Refusals(text string) []string {
+func newWorkspaceRefusals(text string) []string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(line, "sw602-") && (strings.Contains(line, "coverage is incomplete") || strings.Contains(line, "could not be installed")) {
@@ -187,7 +187,7 @@ func sw602Refusals(text string) []string {
 	return out
 }
 
-func sw602Scenario(t *testing.T, seed string, bounded bool) (rtOutcome, map[string]string) {
+func newWorkspaceScenario(t *testing.T, seed string, bounded bool) (rtOutcome, map[string]string) {
 	t.Helper()
 	name := "off"
 	if bounded {
@@ -195,21 +195,21 @@ func sw602Scenario(t *testing.T, seed string, bounded bool) (rtOutcome, map[stri
 	}
 	path := filepath.Join(t.TempDir(), name+".db")
 	rtCopy(t, seed, path)
-	captured := sw602Capture(t)
+	captured := newWorkspaceCapture(t)
 	st := rtOpen(t, path, bounded)
 	st.svc.workspaceTutorial = true
-	run := &sw602Run{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
-	sw602Writes(run)
+	run := &workspaceAccountSettingsRun{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
+	newWorkspaceWrites(run)
 	rtSleep()
-	reads := sw602Reads(run)
+	reads := newWorkspaceReads(run)
 	st.close()
 	// The restart: a flag-on start refuses a workspace the coverage check
 	// does not certify (rtOpen fails the test).
 	st = rtOpen(t, path, bounded)
 	run.st = st
-	restarted := sw602Reads(run)
+	restarted := newWorkspaceReads(run)
 	st.close()
-	if refusals := sw602Refusals(captured.String()); len(refusals) > 0 {
+	if refusals := newWorkspaceRefusals(captured.String()); len(refusals) > 0 {
 		t.Errorf("%s: the server refused the created workspaces:\n%s", name, strings.Join(refusals, "\n"))
 	}
 	if len(run.failed) > 0 {
@@ -221,20 +221,20 @@ func sw602Scenario(t *testing.T, seed string, bounded bool) (rtOutcome, map[stri
 	return rtOutcome{name: name, log: run.log, failed: run.failed, reads: reads, dump: rtDump(t, path), labels: run.names.labels}, restarted
 }
 
-func TestScaleP21SW602CreatedWorkspaceMatchesLegacy(t *testing.T) {
+func TestCreatedWorkspaceMatchesLegacy(t *testing.T) {
 	seed := rtSeed(t)
-	legacy, legacyRestarted := sw602Scenario(t, seed, false)
-	bounded, boundedRestarted := sw602Scenario(t, seed, true)
+	legacy, legacyRestarted := newWorkspaceScenario(t, seed, false)
+	bounded, boundedRestarted := newWorkspaceScenario(t, seed, true)
 	rtCompare(t, legacy, bounded)
 	if diff := rtDiffReads(legacyRestarted, boundedRestarted, "off", "on"); len(diff) > 0 {
 		t.Errorf("GET responses after the restart differ:\n%s", strings.Join(diff, "\n"))
 	}
-	for _, workspace := range []string{sw602Fresh, sw602Import} {
+	for _, workspace := range []string{newWorkspaceFresh, newWorkspaceImport} {
 		if installations := legacy.reads[workspace+" /api/application-installations"]; !strings.HasPrefix(installations, "200 ") || !strings.Contains(installations, `"builtin":true`) {
 			t.Errorf("%s: the built-in agent is not installed: %s", workspace, rtClip(installations))
 		}
 	}
-	if !strings.Contains(legacy.reads[sw602Fresh+" /api/issue-records?limit=50"], "Welcome to Flow") || strings.Contains(legacy.reads[sw602Import+" /api/issue-records?limit=50"], "Welcome to Flow") {
+	if !strings.Contains(legacy.reads[newWorkspaceFresh+" /api/issue-records?limit=50"], "Welcome to Flow") || strings.Contains(legacy.reads[newWorkspaceImport+" /api/issue-records?limit=50"], "Welcome to Flow") {
 		t.Errorf("the onboarding workspace has no tutorial issues, or the import workspace has them")
 	}
 }
@@ -242,14 +242,14 @@ func TestScaleP21SW602CreatedWorkspaceMatchesLegacy(t *testing.T) {
 // A workspace the bounded store does not cover (the state every workspace
 // created before this change was left in) fails each read of it; the passes
 // over all workspaces skip it, log it once and serve the others.
-func TestScaleP21SW602UncoveredWorkspaceDoesNotStopBackgroundPasses(t *testing.T) {
+func TestUncoveredWorkspaceDoesNotStopBackgroundPasses(t *testing.T) {
 	seed := rtSeed(t)
 	path := filepath.Join(t.TempDir(), "poisoned.db")
 	rtCopy(t, seed, path)
-	captured := sw602Capture(t)
+	captured := newWorkspaceCapture(t)
 	st := rtOpen(t, path, true)
 	defer st.close()
-	run := &sw602Run{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
+	run := &workspaceAccountSettingsRun{t: t, st: st, names: &rtRun{t: t, labels: map[string]string{}}}
 	// Sorted before test-workspace, so a pass that stops at it never
 	// reaches the seeded workspace.
 	const poisoned = "aaa-sw602-poisoned"

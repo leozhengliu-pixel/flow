@@ -160,9 +160,9 @@ func validateBoundedMetadataCoverage(driver string) error {
 	// Activation needs every HOT consumer migrated. An unmigrated consumer
 	// reviewed as COLD (with a reason) keeps its legacy full-workspace
 	// behaviour: its routes run on the COLD scope (default-COLD routing,
-	// SW530/SW550) and its background work under WithColdWork, one COLD slot
+	// flag-on route sweep/route temperature guard) and its background work under WithColdWork, one COLD slot
 	// per replica, and the store refuses a whole-workspace read outside a
-	// COLD facade (SW531).
+	// COLD facade.
 	consumers := registeredHotMetadataConsumers()
 	if len(consumers) != 0 {
 		owners := []string{}

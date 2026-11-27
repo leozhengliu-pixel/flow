@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP20PermissionDifferential(t *testing.T) {
+func TestScalePermissionDifferentialResourceWindowPermissions(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {
 				data.Teams = append(data.Teams, domain.Team{ID: "p20-public", Key: "P20O"}, domain.Team{ID: "p20-private", Key: "P20P", Private: true}, domain.Team{ID: "p20-child", Key: "P20C"})
@@ -34,12 +34,12 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, "p20-private", f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			member, _ := scaleP03Join(t, f, "P20 member", idgen.New("p20-member-")+"@example.test", "member", "p20-public")
-			admin, _ := scaleP03Join(t, f, "P20 outside admin", idgen.New("p20-admin-")+"@example.test", "admin", "p20-public")
-			guest, guestUser := scaleP03Join(t, f, "P20 guest", idgen.New("p20-guest-")+"@example.test", "guest", "p20-public")
-			inherited, inheritedUser := scaleP03Join(t, f, "P20 inherited", idgen.New("p20-inherited-")+"@example.test", "member", "p20-private")
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{"p20-public"})
+			member, _ := resourceAccessScaleJoin(t, f, "P20 member", idgen.New("p20-member-")+"@example.test", "member", "p20-public")
+			admin, _ := resourceAccessScaleJoin(t, f, "P20 outside admin", idgen.New("p20-admin-")+"@example.test", "admin", "p20-public")
+			guest, guestUser := resourceAccessScaleJoin(t, f, "P20 guest", idgen.New("p20-guest-")+"@example.test", "guest", "p20-public")
+			inherited, inheritedUser := resourceAccessScaleJoin(t, f, "P20 inherited", idgen.New("p20-inherited-")+"@example.test", "member", "p20-private")
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{"p20-public"})
 			empty := idgen.New("p20-empty-")
 			at := time.Now().UTC().Truncate(time.Second)
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "p20.fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -77,10 +77,10 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 			for _, principal := range principals {
 				t.Run(principal.name, func(t *testing.T) {
 					if principal.token != "" {
-						scaleP11WarmCredential(t, repo, workspace, principal.token)
+						scaleWarmCredential(t, repo, workspace, principal.token)
 					}
 					read := func(path, key string) (int, []byte) {
-						response := scaleP03Read(t, f, principal.client, principal.token, "GET", path, key)
+						response := resourceAccessScaleRead(t, f, principal.client, principal.token, "GET", path, key)
 						return response.Code, response.Body.Bytes()
 					}
 					status, raw := read("/api/bootstrap", workspace)
@@ -92,7 +92,7 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 					for _, kind := range []string{"users", "members", "teamMembers", "invitations", "departedMembers"} {
-						want, _ := scaleP20Nodes(legacy, kind)
+						want, _ := scaleNodes(legacy, kind)
 						var got []any
 						cursor := ""
 						for {
@@ -174,7 +174,7 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 				})
 			}
 			t.Setenv("FLOW_INDEXED_READS", "on")
-			first := scaleP03Read(t, f, inherited, "", "GET", "/api/resource-windows/members?collection=users&limit=1", workspace)
+			first := resourceAccessScaleRead(t, f, inherited, "", "GET", "/api/resource-windows/members?collection=users&limit=1", workspace)
 			var page store.RecordPage
 			_ = json.Unmarshal(first.Body.Bytes(), &page)
 			if first.Code != http.StatusOK || page.Next == "" {
@@ -183,7 +183,7 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, "p20-private", inheritedUser.ID, "member", false); err != nil {
 				t.Fatal(err)
 			}
-			replayed := scaleP03Read(t, f, inherited, "", "GET", "/api/resource-windows/members?collection=users&limit=1&cursor="+page.Next, workspace)
+			replayed := resourceAccessScaleRead(t, f, inherited, "", "GET", "/api/resource-windows/members?collection=users&limit=1&cursor="+page.Next, workspace)
 			if replayed.Code == http.StatusOK {
 				t.Fatal("pre-revocation continuation replayed")
 			}

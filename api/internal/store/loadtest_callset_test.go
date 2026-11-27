@@ -11,18 +11,18 @@ import (
 	"testing"
 )
 
-// TestScaleP21SW277LoadFixtureCallset proves the synthetic seed and state
+// TestLoadFixtureCallset proves the synthetic seed and state
 // measurement are load-test setup only: they and their bounded writers are
 // declared in files built only with -tags loadtest, no build or release
 // recipe sets that tag, every reference outside tests is the declared
 // wrapper-to-bounded-branch call, and every test reference sits in a
 // loadtest-tagged test file. No HTTP route or ticker can therefore reach
 // them (the server binary does not contain them).
-func TestScaleP21SW277LoadFixtureCallset(t *testing.T) {
+func TestLoadFixtureCallset(t *testing.T) {
 	declared := map[string]string{
 		"SeedSyntheticMetadata": "loadtest_seed.go", "WorkspaceStateBytes": "loadtest_seed.go",
 		"seedSyntheticBatchBounded": "coverage_loadtest_seed.go", "workspaceStateBytesBounded": "coverage_loadtest_seed.go",
-		"seedSyntheticRecords": "coverage_loadtest_seed.go", "SeedScaleP01Principals": "load_seed.go",
+		"seedSyntheticRecords": "coverage_loadtest_seed.go", "SeedScalePrincipals": "load_seed.go",
 	}
 	allowed := map[string]bool{
 		"loadtest_seed.go:SeedSyntheticMetadata->seedSyntheticBatchBounded":         true,

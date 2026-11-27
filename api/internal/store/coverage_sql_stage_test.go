@@ -2,7 +2,7 @@ package store
 
 import "testing"
 
-func TestScaleP21SW219WorkflowSQLStageDeclaration(t *testing.T) {
+func TestWorkflowSQLStageDeclaration(t *testing.T) {
 	base := metadataSQLStageTarget{
 		workspace: "workspace", field: "workflowRuns", key: "run",
 		dataBytes: 2, searchBytes: -1,

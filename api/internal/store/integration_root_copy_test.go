@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW344Spool(t *testing.T, repo *SQLiteStore, value any) *RecordSpool {
+func integrationRootCopySpool(t *testing.T, repo *SQLiteStore, value any) *RecordSpool {
 	t.Helper()
 	frames, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
@@ -42,8 +42,8 @@ func scaleP21SW344Spool(t *testing.T, repo *SQLiteStore, value any) *RecordSpool
 	return spool
 }
 
-func TestScaleP21SW344IntegrationRootCanonicalCopy(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{})
+func TestIntegrationRootCanonicalCopy(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{})
 	payload := json.RawMessage(` { "duplicate": 1, "duplicate": 2, "html": "` +
 		strings.Repeat("<>&\u2028\u2029 ", 12000) + `", "nul":"\u0000", "escaped":"\\u0000" } `)
 	for _, test := range []struct {
@@ -70,8 +70,8 @@ func TestScaleP21SW344IntegrationRootCanonicalCopy(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
-			delivery := scaleP21SW344Spool(t, repo, test.deliveries)
-			connection := scaleP21SW344Spool(t, repo, test.connections)
+			delivery := integrationRootCopySpool(t, repo, test.deliveries)
+			connection := integrationRootCopySpool(t, repo, test.connections)
 			defer delivery.Close()
 			defer connection.Close()
 			if test.requireLarge && (delivery.bytes <= MetadataRecordPageMaxBytes || connection.bytes <= MetadataRecordPageMaxBytes) {
@@ -133,14 +133,14 @@ func TestScaleP21SW344IntegrationRootCanonicalCopy(t *testing.T) {
 	}
 }
 
-type scaleP21SW344CancelWriter struct {
+type cancelWriter struct {
 	bytes.Buffer
 	cancel      context.CancelFunc
 	chunks      int
 	closeOnPart []byte
 }
 
-func (w *scaleP21SW344CancelWriter) Write(part []byte) (int, error) {
+func (w *cancelWriter) Write(part []byte) (int, error) {
 	n, err := w.Buffer.Write(part)
 	if len(part) == metadataRecordChunkBytes {
 		w.chunks++
@@ -154,10 +154,10 @@ func (w *scaleP21SW344CancelWriter) Write(part []byte) (int, error) {
 	return n, err
 }
 
-func TestScaleP21SW344CanonicalReceiptGuardsAndCancellation(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{})
-	spool := scaleP21SW344Spool(t, repo, []domain.IntegrationDelivery{{Payload: json.RawMessage(`"` + strings.Repeat("x", 2*MetadataRecordPageMaxBytes) + `"`)}})
-	other := scaleP21SW344Spool(t, repo, []domain.IntegrationDelivery{})
+func TestCanonicalReceiptGuardsAndCancellation(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{})
+	spool := integrationRootCopySpool(t, repo, []domain.IntegrationDelivery{{Payload: json.RawMessage(`"` + strings.Repeat("x", 2*MetadataRecordPageMaxBytes) + `"`)}})
+	other := integrationRootCopySpool(t, repo, []domain.IntegrationDelivery{})
 	defer spool.Close()
 	defer other.Close()
 	part := legacySessionSpoolPart(spool)
@@ -205,7 +205,7 @@ func TestScaleP21SW344CanonicalReceiptGuardsAndCancellation(t *testing.T) {
 			}
 			defer owner.Close()
 			input := part
-			output := &scaleP21SW344CancelWriter{cancel: owner.Close}
+			output := &cancelWriter{cancel: owner.Close}
 			if phase == "before" {
 				owner.Close()
 			} else if phase == "final-chunk" {
@@ -242,7 +242,7 @@ func TestScaleP21SW344CanonicalReceiptGuardsAndCancellation(t *testing.T) {
 	if err := owner.reserve(ctx, logicalJSONStreamWork); err != nil {
 		t.Fatal(err)
 	}
-	output := &scaleP21SW344CancelWriter{cancel: cancel}
+	output := &cancelWriter{cancel: cancel}
 	err := legacySessionWriteJSONObjectWithCanonical(ctx, owner,
 		map[string]legacySessionJSONPart{"integrationDeliveries": part},
 		map[string]legacySessionJSONPart{"integrationDeliveries": part}, output)
@@ -259,9 +259,9 @@ func TestScaleP21SW344CanonicalReceiptGuardsAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW344IntegrationCanonicalReceiptConstructor(t *testing.T) {
+func TestIntegrationCanonicalReceiptConstructor(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)

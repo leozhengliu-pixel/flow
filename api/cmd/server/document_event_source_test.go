@@ -23,7 +23,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW104DocumentMetadataFailureBoundary(t *testing.T) {
+func TestDocumentMetadataFailureBoundary(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	expired, expire := context.WithDeadline(t.Context(), time.Unix(1, 0))
@@ -64,7 +64,7 @@ func TestScaleP21SW104DocumentMetadataFailureBoundary(t *testing.T) {
 	}
 }
 
-func scaleP21SW104Text(node ast.Node) string {
+func documentEventSourceText(node ast.Node) string {
 	var out bytes.Buffer
 	if err := format.Node(&out, token.NewFileSet(), node); err != nil {
 		return ""
@@ -72,7 +72,7 @@ func scaleP21SW104Text(node ast.Node) string {
 	return out.String()
 }
 
-func scaleP21SW104StoredKey(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
+func storedKey(prefix string, user domain.User, key *domain.APIKey) *domain.APIKey {
 	if key == nil {
 		return nil
 	}
@@ -89,7 +89,7 @@ func scaleP21SW104StoredKey(prefix string, user domain.User, key *domain.APIKey)
 	return &copy
 }
 
-func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
+func TestDocumentLegacyBoundary(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate document boundary")
@@ -158,7 +158,7 @@ func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
 					receiver = "s.store"
 				}
 				call, direct := parents[node].(*ast.CallExpr)
-				if !direct || call.Fun != node || scaleP21SW104Text(selector.X) != receiver {
+				if !direct || call.Fun != node || documentEventSourceText(selector.X) != receiver {
 					t.Errorf("%s: %s escaped its same-server direct-call boundary", site, name)
 					return true
 				}
@@ -192,7 +192,7 @@ func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
 		guarded := false
 		ast.Inspect(fn.Body, func(node ast.Node) bool {
 			branch, ok := node.(*ast.IfStmt)
-			if !ok || scaleP21SW104Text(branch.Cond) != seam.condition {
+			if !ok || documentEventSourceText(branch.Cond) != seam.condition {
 				return true
 			}
 			switch seam.region {
@@ -211,7 +211,7 @@ func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
 				}
 				for index, statement := range block.List {
 					branch, ok := statement.(*ast.IfStmt)
-					if !ok || branch.Else != nil || scaleP21SW104Text(branch.Cond) != seam.condition || len(branch.Body.List) == 0 {
+					if !ok || branch.Else != nil || documentEventSourceText(branch.Cond) != seam.condition || len(branch.Body.List) == 0 {
 						continue
 					}
 					if _, returns := branch.Body.List[len(branch.Body.List)-1].(*ast.ReturnStmt); !returns {
@@ -220,7 +220,7 @@ func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
 					bounded, escape := false, false
 					ast.Inspect(branch.Body, func(node ast.Node) bool {
 						if selector, ok := node.(*ast.SelectorExpr); ok {
-							bounded = bounded || selector.Sel.Name == seam.bounded && scaleP21SW104Text(selector.X) == "s"
+							bounded = bounded || selector.Sel.Name == seam.bounded && documentEventSourceText(selector.X) == "s"
 						}
 						if jump, ok := node.(*ast.BranchStmt); ok && jump.Tok == token.GOTO {
 							escape = true
@@ -240,13 +240,13 @@ func TestScaleP21SW104DocumentLegacyBoundary(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
+func TestDocumentEventSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw104-document-")
 		at := time.Date(2026, 11, 15, 1, 2, 3, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw104_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -256,7 +256,7 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}},
 					{Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}},
 				} {
-					data.APIKeys = append(data.APIKeys, *scaleP21SW104StoredKey(prefix, principal.user, &key))
+					data.APIKeys = append(data.APIKeys, *storedKey(prefix, principal.user, &key))
 				}
 			}
 			private, child := "", ""
@@ -340,10 +340,10 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 				if !reflect.DeepEqual(sources[0].document, sources[1].document) ||
 					sources[0].documentMissing != sources[1].documentMissing ||
 					!reflect.DeepEqual(sources[0].comments, sources[1].comments) {
-					t.Fatalf("document source changed: %s", scaleP21M2Diff(sources[0].document, sources[1].document))
+					t.Fatalf("document source changed: %s", policyFirstDifference(sources[0].document, sources[1].document))
 				}
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-					key = scaleP21SW104StoredKey(prefix, user, key)
+					key = storedKey(prefix, user, key)
 					var events [2]domain.RealtimeEvent
 					var visible [2]bool
 					for i, service := range services {
@@ -363,7 +363,7 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 						}
 					}
 					if visible[0] != visible[1] || !reflect.DeepEqual(events[0], events[1]) {
-						t.Fatalf("document frame changed: visible=%v/%v %s", visible[0], visible[1], scaleP21M2Diff(events[0], events[1]))
+						t.Fatalf("document frame changed: visible=%v/%v %s", visible[0], visible[1], policyFirstDifference(events[0], events[1]))
 					}
 					request := f.literalRequest(user, key, nil)
 					for name, project := range map[string]func(*server) (domain.RealtimeEvent, bool, error){
@@ -377,8 +377,8 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 						want, wantVisible, wantErr := project(services[0])
 						got, gotVisible, gotErr := project(services[1])
 						if wantErr != nil || gotErr != nil || wantVisible != gotVisible ||
-							!reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
-							t.Fatalf("%s document projection changed: visible=%v/%v errors=%v/%v %s", name, wantVisible, gotVisible, wantErr, gotErr, scaleP21M2Diff(want, got))
+							!reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
+							t.Fatalf("%s document projection changed: visible=%v/%v errors=%v/%v %s", name, wantVisible, gotVisible, wantErr, gotErr, policyFirstDifference(want, got))
 						}
 					}
 				})
@@ -401,13 +401,13 @@ func TestScaleP21SW104DocumentEventSourceDifferential(t *testing.T) {
 			}
 			event := domain.RealtimeEvent{ID: prefix + "task-" + name, Type: "agent_task.updated", Payload: payload, CreatedAt: at}
 			f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-				key = scaleP21SW104StoredKey(prefix, user, key)
+				key = storedKey(prefix, user, key)
 				request := f.literalRequest(user, key, nil)
 				want, wantVisible, wantErr := services[0].legacyPagedRealtimeEvent(request, event)
 				got, visible, err := services[1].legacyPagedRealtimeEvent(request, event)
 				if wantErr != nil || err != nil || wantVisible != visible ||
-					!reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
-					t.Fatalf("document task %s changed: visible=%v/%v errors=%v/%v %s", name, wantVisible, visible, wantErr, err, scaleP21M2Diff(want, got))
+					!reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
+					t.Fatalf("document task %s changed: visible=%v/%v errors=%v/%v %s", name, wantVisible, visible, wantErr, err, policyFirstDifference(want, got))
 				}
 			})
 			request := f.literalRequest(domain.User{ID: prefix + "foreign-app", App: true}, nil, nil)

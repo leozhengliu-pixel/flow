@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP19UpdateRecord struct {
+type scaleUpdateRecord struct {
 	id    string
 	value any
 }
-type scaleP19UpdatePage struct {
+type scaleUpdatePage struct {
 	Schema     int               `json:"schema"`
 	Items      []json.RawMessage `json:"items"`
 	Details    map[string]bool   `json:"details,omitempty"`
@@ -31,7 +31,7 @@ type scaleP19UpdatePage struct {
 // Negotiation is explicit: without window=1 the existing handler returns its
 // original array, including its exact field redaction and ordering. Oversized
 // values use authenticated 32 KiB fragments, rather than truncated JSON fields.
-func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind string, values any) {
+func (s *server) scaleUpdatePage(w http.ResponseWriter, r *http.Request, kind string, values any) {
 	access, ok := s.syncAccess(w, r)
 	if !ok {
 		return
@@ -42,18 +42,18 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 		return
 	}
 	revision := strconv.FormatInt(head, 10)
-	records := []scaleP19UpdateRecord{}
+	records := []scaleUpdateRecord{}
 	switch values := values.(type) {
 	case []domain.ProjectUpdate:
 		for _, v := range values {
-			records = append(records, scaleP19UpdateRecord{v.ID, v})
+			records = append(records, scaleUpdateRecord{v.ID, v})
 		}
 	case []domain.InitiativeUpdate:
 		for _, v := range values {
-			records = append(records, scaleP19UpdateRecord{v.ID, v})
+			records = append(records, scaleUpdateRecord{v.ID, v})
 		}
 	}
-	binding, err := scaleP19UpdateBinding(kind, r.PathValue("id"), revision, records)
+	binding, err := scaleUpdateBinding(kind, r.PathValue("id"), revision, records)
 	if err != nil {
 		writeSyncError(w, err)
 		return
@@ -71,7 +71,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 			return
 		}
 		binding += fmt.Sprintf(":%s:%x", id, sha256.Sum256(raw))
-		position, err := s.store.OpenScaleP19Cursor(r.Context(), access, kind, binding, r.URL.Query().Get("cursor"))
+		position, err := s.store.OpenScaleCursor(r.Context(), access, kind, binding, r.URL.Query().Get("cursor"))
 		if err != nil {
 			writeSyncError(w, err)
 			return
@@ -87,7 +87,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 		end := min(offset+32<<10, len(raw))
 		next := ""
 		if end < len(raw) {
-			next, err = s.store.SealScaleP19Cursor(r.Context(), access, kind, binding, strconv.Itoa(end))
+			next, err = s.store.SealScaleCursor(r.Context(), access, kind, binding, strconv.Itoa(end))
 			if err != nil {
 				writeSyncError(w, err)
 				return
@@ -105,7 +105,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 		writeSyncError(w, err)
 		return
 	}
-	position, err := s.store.OpenScaleP19Cursor(r.Context(), access, kind, binding, r.URL.Query().Get("cursor"))
+	position, err := s.store.OpenScaleCursor(r.Context(), access, kind, binding, r.URL.Query().Get("cursor"))
 	if err != nil {
 		writeSyncError(w, err)
 		return
@@ -118,7 +118,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 			return
 		}
 	}
-	page := scaleP19UpdatePage{Schema: 1, Items: []json.RawMessage{}, Details: map[string]bool{}, Total: len(records), Offset: offset, Revision: revision, AuthzEpoch: access.AuthzEpoch}
+	page := scaleUpdatePage{Schema: 1, Items: []json.RawMessage{}, Details: map[string]bool{}, Total: len(records), Offset: offset, Revision: revision, AuthzEpoch: access.AuthzEpoch}
 	bytes := 2048
 	for _, record := range records[min(offset, len(records)):min(offset+limit, len(records))] {
 		raw, err := json.Marshal(record.value)
@@ -138,7 +138,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 	}
 	page.HasMore = offset+len(page.Items) < len(records)
 	if page.HasMore {
-		page.NextCursor, err = s.store.SealScaleP19Cursor(r.Context(), access, kind, binding, strconv.Itoa(offset+len(page.Items)))
+		page.NextCursor, err = s.store.SealScaleCursor(r.Context(), access, kind, binding, strconv.Itoa(offset+len(page.Items)))
 		if err != nil {
 			writeSyncError(w, err)
 			return
@@ -151,7 +151,7 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 	writeSyncJSON(w, page, store.MetadataRecordPageMaxBytes)
 }
 
-func scaleP19UpdateBinding(kind, id, revision string, records []scaleP19UpdateRecord) (string, error) {
+func scaleUpdateBinding(kind, id, revision string, records []scaleUpdateRecord) (string, error) {
 	digest := sha256.New()
 	encoder := json.NewEncoder(digest)
 	// The event head can advance between PulseFeed and this handler, or lag an

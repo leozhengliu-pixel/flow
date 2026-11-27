@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW146Fixture() domain.Bootstrap {
+func bootstrapUpdateMapsFixture() domain.Bootstrap {
 	actor := domain.User{ID: "actor", Name: "real actor"}
 	at := time.Date(2026, 11, 15, 1, 2, 3, 4, time.UTC)
 	comment := func(body string) domain.Comment {
@@ -47,12 +47,12 @@ func scaleP21SW146Fixture() domain.Bootstrap {
 	}
 }
 
-func TestScaleP21SW146BootstrapUpdateMapDifferential(t *testing.T) {
+func TestBootstrapUpdateMapDifferential(t *testing.T) {
 	for _, mode := range []string{"identity", "rekey-reorder-duplicates", "prune", "new-native", "clear", "strip-snapshots", "empty", "nil"} {
 		t.Run(mode, func(t *testing.T) {
-			data := scaleP21SW146Fixture()
-			view, source := scaleP21SW138Source(t, data)
-			projection := scaleP21SW138Begin(t, view, source)
+			data := bootstrapUpdateMapsFixture()
+			view, source := bootstrapBodyProjectionSource(t, data)
+			projection := bootstrapBodyProjectionBegin(t, view, source)
 			if projection.Data.ProjectUpdates[""][0].User.Name != "real actor" ||
 				projection.Data.ProjectUpdates[""][0].Comments[0].QuotedText != "inspected quote" ||
 				projection.Data.InitiativeUpdates[""][0].Health != "at-risk" ||
@@ -107,7 +107,7 @@ func TestScaleP21SW146BootstrapUpdateMapDifferential(t *testing.T) {
 				}
 				return value
 			}
-			scaleP21SW138Equal(t, projection, transform(projection.Data), transform(data))
+			bootstrapBodyProjectionEqual(t, projection, transform(projection.Data), transform(data))
 			if view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("map projection decoded workspace metadata")
 			}
@@ -119,10 +119,10 @@ func TestScaleP21SW146BootstrapUpdateMapDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW146BootstrapUpdateMapSourceOrdinals(t *testing.T) {
-	data := scaleP21SW146Fixture()
-	view, source := scaleP21SW138Source(t, data)
-	projection := scaleP21SW138Begin(t, view, source)
+func TestBootstrapUpdateMapSourceOrdinals(t *testing.T) {
+	data := bootstrapUpdateMapsFixture()
+	view, source := bootstrapBodyProjectionSource(t, data)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	for _, field := range []string{"projectUpdates", "initiativeUpdates"} {
 		index, _, found := metadataLogicalField(field)
 		if !found {
@@ -163,14 +163,14 @@ func TestScaleP21SW146BootstrapUpdateMapSourceOrdinals(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW146BootstrapUpdateMapLargeKeys(t *testing.T) {
+func TestBootstrapUpdateMapLargeKeys(t *testing.T) {
 	key := strings.Repeat("large native map key ", 16000)
 	data := domain.Bootstrap{ProjectUpdates: map[string][]domain.ProjectUpdate{
 		key: {{ID: "duplicate", Body: "body", BodyData: map[string]any{"text": "data"},
 			Comments: []domain.Comment{{Body: "comment"}}}},
 	}}
-	view, source := scaleP21SW138Source(t, data)
-	projection := scaleP21SW138Begin(t, view, source)
+	view, source := bootstrapBodyProjectionSource(t, data)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	if len(key) <= 256<<10 || len(projection.Data.ProjectUpdates[key]) != 1 || view.MetadataWorkUsedForTesting() <= len(key)*8 {
 		t.Fatal("large native key was truncated, skipped, or not admitted")
 	}
@@ -180,7 +180,7 @@ func TestScaleP21SW146BootstrapUpdateMapLargeKeys(t *testing.T) {
 		}
 	}
 	buildWork := view.MetadataWorkUsedForTesting()
-	scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+	bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 	projection.Close()
 	budget, limit := view.metadataResidency.work, view.metadataResidency.work.limit
 	budget.limit = buildWork - 1
@@ -191,7 +191,7 @@ func TestScaleP21SW146BootstrapUpdateMapLargeKeys(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW146BootstrapUpdateMapRejectsLostProvenance(t *testing.T) {
+func TestBootstrapUpdateMapRejectsLostProvenance(t *testing.T) {
 	cases := []struct {
 		name string
 		edit func(*domain.Bootstrap)
@@ -217,8 +217,8 @@ func TestScaleP21SW146BootstrapUpdateMapRejectsLostProvenance(t *testing.T) {
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
-			view, source := scaleP21SW138Source(t, scaleP21SW146Fixture())
-			projection := scaleP21SW138Begin(t, view, source)
+			view, source := bootstrapBodyProjectionSource(t, bootstrapUpdateMapsFixture())
+			projection := bootstrapBodyProjectionBegin(t, view, source)
 			data := cloneBootstrap(projection.Data)
 			item.edit(&data)
 			output, replacements, err := projection.bind(t.Context(), data)
@@ -229,16 +229,16 @@ func TestScaleP21SW146BootstrapUpdateMapRejectsLostProvenance(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW146BootstrapUpdateMapCancellation(t *testing.T) {
-	view, source := scaleP21SW138Source(t, scaleP21SW146Fixture())
+func TestBootstrapUpdateMapCancellation(t *testing.T) {
+	view, source := bootstrapBodyProjectionSource(t, bootstrapUpdateMapsFixture())
 	for _, after := range []int{1, 50, 200} {
-		ctx := &scaleP21SW138CancelContext{Context: t.Context(), after: after}
+		ctx := &bootstrapBodyProjectionCancelContext{Context: t.Context(), after: after}
 		projection, err := view.beginBootstrapBodyProjection(ctx, source)
 		if projection != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("canceled map projection escaped or retained work", after, err)
 		}
-		projection = scaleP21SW138Begin(t, view, source)
-		ctx = &scaleP21SW138CancelContext{Context: t.Context(), after: after}
+		projection = bootstrapBodyProjectionBegin(t, view, source)
+		ctx = &bootstrapBodyProjectionCancelContext{Context: t.Context(), after: after}
 		output, replacements, err := projection.bind(ctx, cloneBootstrap(projection.Data))
 		if output != nil || replacements != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("canceled map bind escaped or retained work", after, err)
@@ -250,7 +250,7 @@ func TestScaleP21SW146BootstrapUpdateMapCancellation(t *testing.T) {
 	source.Release()
 }
 
-func TestScaleP21SW146BootstrapUpdateMapLargeBodies(t *testing.T) {
+func TestBootstrapUpdateMapLargeBodies(t *testing.T) {
 	var baseWork int
 	var baseOutput int64
 	for _, scale := range []int{1, 10} {
@@ -264,7 +264,7 @@ func TestScaleP21SW146BootstrapUpdateMapLargeBodies(t *testing.T) {
 				{ID: "duplicate", Body: body, BodyData: map[string]any{"text": body}, Comments: []domain.Comment{comment}},
 			}},
 		}
-		view, source := scaleP21SW138Source(t, data)
+		view, source := bootstrapBodyProjectionSource(t, data)
 		queries := 0
 		ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
 		projection, err := view.beginBootstrapBodyProjection(ctx, source)

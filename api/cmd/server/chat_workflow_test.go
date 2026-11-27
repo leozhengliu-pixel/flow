@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW53ChatWorkflowCardsDifferential(t *testing.T) {
+func TestChatWorkflowCardsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -277,7 +277,7 @@ func TestScaleP21SW53ChatWorkflowCardsDifferential(t *testing.T) {
 				want, _ := json.Marshal(outputs[0])
 				got, _ := json.Marshal(outputs[1])
 				if !bytes.Equal(want, got) {
-					t.Fatal("actual enabled group/personal workflow card differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("actual enabled group/personal workflow card differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

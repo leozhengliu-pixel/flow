@@ -19,7 +19,7 @@
     "eraseMember": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Legacy mode reads WorkspaceMetadata. Bounded mode takes only the installed core Workspace.ID through eraseMemberWorkspaceID. For a target without a membership row, the former-member read uses BeginFormerMembersRead, retains the handle through every map use, and refuses the write on a failed directory read. SW25 covers identity selection and successful legacy erasure. The bounded writer remains pending at erasePersonInWorkspace.",
+      "reason": "Legacy mode reads WorkspaceMetadata. Bounded mode takes only the installed core Workspace.ID through eraseMemberWorkspaceID. For a target without a membership row, the former-member read uses BeginFormerMembersRead, retains the handle through every map use, and refuses the write on a failed directory read. erasure covers identity selection and successful legacy erasure. The bounded writer remains pending at erasePersonInWorkspace.",
       "accessors": [
         "WorkspaceMetadata",
         "BeginFormerMembersRead"
@@ -42,7 +42,7 @@
     "refuseSoleAdmin": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The existing field accessor requests only workspace identity, which remains resident under the process policy cap. SoleAdminWorkspaces supplies authoritative ownership; no member/body collection is loaded. TestScaleP21M1CoreReadsDifferential compares the refusal body across principal and credential classes, including users from another workspace.",
+      "reason": "The existing field accessor requests only workspace identity, which remains resident under the process policy cap. SoleAdminWorkspaces supplies authoritative ownership; no member/body collection is loaded. TestScaleCoreReadsDifferential compares the refusal body across principal and credential classes, including users from another workspace.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

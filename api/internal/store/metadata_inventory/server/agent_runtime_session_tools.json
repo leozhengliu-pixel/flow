@@ -5,7 +5,7 @@
     "workerChatAsksLoopQuestions": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "Accepted ordinary typed producer states change this predicate: agent.session_updated callbacks can retain a warm AgentSession.UserID or Loop.Status containing NUL while split canonical JSON removes NUL, giving legacy false versus bounded true. Duplicate accepted AgentSession IDs keep the collection inline; legacy selects its first owned session while the raw SQL predicate sees no split rows, giving true versus false. TestScaleP21SW16RuntimeTypedSourceHold executes those three producers and the actual workerChatAsksLoopQuestions off/on branches without reloading the legacy oracle. Request-reference NUL rejection and ordinary permission differentials do not certify stored logical source parity. Keep pending until the bounded predicate preserves that source.",
+      "reason": "Accepted ordinary typed producer states change this predicate: agent.session_updated callbacks can retain a warm AgentSession.UserID or Loop.Status containing NUL while split canonical JSON removes NUL, giving legacy false versus bounded true. Duplicate accepted AgentSession IDs keep the collection inline; legacy selects its first owned session while the raw SQL predicate sees no split rows, giving true versus false. TestRuntimeTypedSourceHold executes those three producers and the actual workerChatAsksLoopQuestions off/on branches without reloading the legacy oracle. Request-reference NUL rejection and ordinary permission differentials do not certify stored logical source parity. Keep pending until the bounded predicate preserves that source.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

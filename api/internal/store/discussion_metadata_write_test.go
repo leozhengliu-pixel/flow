@@ -12,9 +12,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW58DiscussionFixture(t *testing.T, unknown bool) (scaleP09Fixture, *SQLiteStore, *metadataLogicalSource) {
+func discussionFixture(t *testing.T, unknown bool) (scaleFixture, *SQLiteStore, *metadataLogicalSource) {
 	t.Helper()
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+	f, _, _ := warmLogicalFixture(t)
 	workspace, nativeTime := f.data.Workspace.URLKey, time.Now()
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "threadSubscriptions"), workspace, "scale_p21.sw58_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.ThreadSubscriptions = []domain.ThreadSubscription{
@@ -54,7 +54,7 @@ func scaleP21SW58DiscussionFixture(t *testing.T, unknown bool) (scaleP09Fixture,
 	return f, view, source
 }
 
-func scaleP21SW58StageDiscussionRows(t *testing.T, f scaleP09Fixture, tx *sqlTx) {
+func stageDiscussionRows(t *testing.T, f scaleFixture, tx *sqlTx) {
 	t.Helper()
 	stamp := time.Date(2026, 11, 13, 1, 2, 3, 0, time.UTC)
 	issue := domain.Issue{
@@ -70,7 +70,7 @@ func scaleP21SW58StageDiscussionRows(t *testing.T, f scaleP09Fixture, tx *sqlTx)
 	}
 }
 
-func scaleP21SW58AssertDiscussionRows(t *testing.T, reader metadataRowReader, workspace string, present bool) {
+func assertDiscussionRows(t *testing.T, reader metadataRowReader, workspace string, present bool) {
 	t.Helper()
 	var title string
 	err := reader.QueryRowContext(t.Context(), `SELECT title FROM issue_records WHERE workspace_key=? AND id='sw58-issue'`, workspace).Scan(&title)
@@ -95,7 +95,7 @@ func scaleP21SW58AssertDiscussionRows(t *testing.T, reader metadataRowReader, wo
 	}
 }
 
-func scaleP21SW58DiscussionRow(t *testing.T, reader metadataRowReader, workspace string) []byte {
+func discussionRow(t *testing.T, reader metadataRowReader, workspace string) []byte {
 	t.Helper()
 	var raw []byte
 	err := reader.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='threadSubscriptions' AND record_key='sw58-target'`, workspace).Scan(&raw)
@@ -108,7 +108,7 @@ func scaleP21SW58DiscussionRow(t *testing.T, reader metadataRowReader, workspace
 	return raw
 }
 
-func scaleP21SW58AssertInstalled(t *testing.T, view *SQLiteStore, workspace string, prior *metadataLogicalSource, same bool) *metadataLogicalSource {
+func assertInstalled(t *testing.T, view *SQLiteStore, workspace string, prior *metadataLogicalSource, same bool) *metadataLogicalSource {
 	t.Helper()
 	current, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
@@ -121,13 +121,13 @@ func scaleP21SW58AssertInstalled(t *testing.T, view *SQLiteStore, workspace stri
 	return current
 }
 
-func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
+func TestDiscussionMetadataAtomicPublication(t *testing.T) {
 	for _, mode := range []string{
 		"point-update", "point-delete", "complete-field", "peer-field-merge",
 		"peer-deleted", "complete-peer-merge", "unknown-source", "noop-core-declaration", "rollback", "commit-rejected",
 	} {
 		t.Run(mode, func(t *testing.T) {
-			f, view, source := scaleP21SW58DiscussionFixture(t, mode == "unknown-source")
+			f, view, source := discussionFixture(t, mode == "unknown-source")
 			workspace := f.data.Workspace.URLKey
 			readScope := MetadataRecordScope{Fields: []string{"threadSubscriptions", "integrationConnections", "settings", "cycles", "userSettings"}}
 			native, err := source.Select(t.Context(), readScope, 2<<20)
@@ -183,7 +183,7 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			canonicalBefore := scaleP21SW58DiscussionRow(t, f.db, workspace)
+			canonicalBefore := discussionRow(t, f.db, workspace)
 			immutableBefore, immutableNext := cloneBootstrap(before), cloneBootstrap(next)
 			view.writeMu.Lock()
 			defer view.writeMu.Unlock()
@@ -196,7 +196,7 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			scaleP21SW58StageDiscussionRows(t, f, tx)
+			stageDiscussionRows(t, f, tx)
 			view.lastWorkspaceKey = "sw58-retained-default"
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 			exact := source.Stamp().revision >= 0 && source.Stamp() == base
@@ -211,8 +211,8 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 			if err := publication.Install(); !errors.Is(err, ErrBoundedMetadataCoverage) {
 				t.Fatal("uncommitted metadata publication installed", err)
 			}
-			scaleP21SW58AssertInstalled(t, view, workspace, source, true).Release()
-			scaleP21SW58AssertDiscussionRows(t, tx, workspace, true)
+			assertInstalled(t, view, workspace, source, true).Release()
+			assertDiscussionRows(t, tx, workspace, true)
 			rollback := mode == "rollback" || mode == "commit-rejected"
 			if mode == "rollback" {
 				if err := tx.Rollback(); err != nil {
@@ -228,14 +228,14 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Commit never publishes the returned candidate on the caller's behalf.
-			scaleP21SW58AssertInstalled(t, view, workspace, source, true).Release()
-			scaleP21SW58AssertDiscussionRows(t, f.db, workspace, !rollback)
+			assertInstalled(t, view, workspace, source, true).Release()
+			assertDiscussionRows(t, f.db, workspace, !rollback)
 			if rollback {
 				if err := publication.Install(); !errors.Is(err, ErrBoundedMetadataCoverage) {
 					t.Fatal("failed transaction publication installed", err)
 				}
 				publication.Close()
-				if !scaleP21SW36JSONEqual(scaleP21SW58DiscussionRow(t, f.db, workspace), canonicalBefore) ||
+				if !retryJSONEqual(discussionRow(t, f.db, workspace), canonicalBefore) ||
 					metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 					t.Fatal("rollback changed canonical metadata or leaked prepared source work")
 				}
@@ -265,13 +265,13 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 						}
 					}
 				}
-				if !scaleP21SW36JSONEqual(scaleP21SW58DiscussionRow(t, f.db, workspace), canonicalWanted) {
+				if !retryJSONEqual(discussionRow(t, f.db, workspace), canonicalWanted) {
 					t.Fatal("canonical metadata lost callback delta or peer merge")
 				}
 				if err := publication.Install(); err != nil {
 					t.Fatal(err)
 				}
-				current := scaleP21SW58AssertInstalled(t, view, workspace, source, false)
+				current := assertInstalled(t, view, workspace, source, false)
 				actual, selectErr := current.Select(t.Context(), readScope, 2<<20)
 				stamp, stampErr := readMetadataStamp(t.Context(), f.db, workspace)
 				if !exact {
@@ -298,10 +298,10 @@ func TestScaleP21SW58DiscussionMetadataAtomicPublication(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW58DiscussionMetadataFailureLeavesCallerTransaction(t *testing.T) {
+func TestDiscussionMetadataFailureLeavesCallerTransaction(t *testing.T) {
 	for _, mode := range []string{"content-input", "policy-edit", "prepare-budget"} {
 		t.Run(mode, func(t *testing.T) {
-			f, view, source := scaleP21SW58DiscussionFixture(t, false)
+			f, view, source := discussionFixture(t, false)
 			workspace := f.data.Workspace.URLKey
 			scope := MetadataRecordScope{Write: []RecordKey{{Kind: "threadSubscriptions", ID: "sw58-target"}}}
 			before, err := source.Select(t.Context(), scope, 2<<20)
@@ -316,7 +316,7 @@ func TestScaleP21SW58DiscussionMetadataFailureLeavesCallerTransaction(t *testing
 			if mode == "policy-edit" {
 				next.Viewer.Name += " changed policy"
 			}
-			canonicalBefore := scaleP21SW58DiscussionRow(t, f.db, workspace)
+			canonicalBefore := discussionRow(t, f.db, workspace)
 			view.writeMu.Lock()
 			defer view.writeMu.Unlock()
 			tx, err := f.db.BeginTx(t.Context(), nil)
@@ -328,7 +328,7 @@ func TestScaleP21SW58DiscussionMetadataFailureLeavesCallerTransaction(t *testing
 			if err != nil {
 				t.Fatal(err)
 			}
-			scaleP21SW58StageDiscussionRows(t, f, tx)
+			stageDiscussionRows(t, f, tx)
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 			publication, err := func() (*metadataLogicalPublication, error) {
 				if mode == "prepare-budget" {
@@ -354,13 +354,13 @@ func TestScaleP21SW58DiscussionMetadataFailureLeavesCallerTransaction(t *testing
 			if !errors.Is(err, want) {
 				t.Fatal("metadata preparation failure changed", err)
 			}
-			scaleP21SW58AssertDiscussionRows(t, tx, workspace, true)
-			scaleP21SW58AssertInstalled(t, view, workspace, source, true).Release()
+			assertDiscussionRows(t, tx, workspace, true)
+			assertInstalled(t, view, workspace, source, true).Release()
 			if err := tx.Rollback(); err != nil {
 				t.Fatal("helper consumed the caller's transaction", err)
 			}
-			scaleP21SW58AssertDiscussionRows(t, f.db, workspace, false)
-			if !scaleP21SW36JSONEqual(scaleP21SW58DiscussionRow(t, f.db, workspace), canonicalBefore) ||
+			assertDiscussionRows(t, f.db, workspace, false)
+			if !retryJSONEqual(discussionRow(t, f.db, workspace), canonicalBefore) ||
 				metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors ||
 				view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("failed preparation changed metadata or leaked candidate/source work")

@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-func TestScaleP10SyncAPIKeyTeamScopeRoutes(t *testing.T) {
+func TestScaleSyncAPIKeyTeamScopeRoutes(t *testing.T) {
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			f := apiKeyScopeFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
@@ -43,7 +43,7 @@ func TestScaleP10SyncAPIKeyTeamScopeRoutes(t *testing.T) {
 			} {
 				t.Run(spec.name, func(t *testing.T) {
 					secret, key := apiKeyScopeCredential(t, f, spec.actor, spec.restriction, spec.teams, []string{"read", "initiative:read"})
-					scaleP11WarmCredential(t, repo, workspace, secret)
+					scaleWarmCredential(t, repo, workspace, secret)
 					read := func(method, path, body string) *httptest.ResponseRecorder {
 						t.Helper()
 						var response *httptest.ResponseRecorder
@@ -118,8 +118,8 @@ func TestScaleP10SyncAPIKeyTeamScopeRoutes(t *testing.T) {
 	}
 }
 
-func TestScaleP10SyncManifestViewerCredentialScope(t *testing.T) {
-	for _, fixture := range scaleP03ServerTestStores(t) {
+func TestScaleSyncManifestViewerCredentialScope(t *testing.T) {
+	for _, fixture := range scaleServerTestStores(t) {
 		f := apiKeyScopeFixture(t, fixture)
 		for _, teams := range [][]string{{"scope-public"}, {}} {
 			_, key := apiKeyScopeCredential(t, f, "app", "selected", teams, []string{"read"})

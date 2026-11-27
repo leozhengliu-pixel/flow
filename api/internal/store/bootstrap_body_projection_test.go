@@ -12,9 +12,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW138Source(t *testing.T, data domain.Bootstrap) (*SQLiteStore, *metadataLogicalSource) {
+func bootstrapBodyProjectionSource(t *testing.T, data domain.Bootstrap) (*SQLiteStore, *metadataLogicalSource) {
 	t.Helper()
-	view := scaleP21HotLogoStore(t, nil)
+	view := scaleHotLogoStore(t, nil)
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{revision: 138})
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func scaleP21SW138Source(t *testing.T, data domain.Bootstrap) (*SQLiteStore, *me
 	return view, source
 }
 
-func scaleP21SW138Begin(t *testing.T, view *SQLiteStore, source *metadataLogicalSource) *bootstrapBodyProjection {
+func bootstrapBodyProjectionBegin(t *testing.T, view *SQLiteStore, source *metadataLogicalSource) *bootstrapBodyProjection {
 	t.Helper()
 	projection, err := view.beginBootstrapBodyProjection(t.Context(), source)
 	if err != nil {
@@ -35,7 +35,7 @@ func scaleP21SW138Begin(t *testing.T, view *SQLiteStore, source *metadataLogical
 
 // Small fixtures only: rebuild native values using the returned offset map.
 // Large-body tests inspect source nodes without materializing their bodies.
-func scaleP21SW138Value(t *testing.T, node metadataLogicalNode, replacements map[int64]metadataLogicalNode) reflect.Value {
+func bootstrapBodyProjectionValue(t *testing.T, node metadataLogicalNode, replacements map[int64]metadataLogicalNode) reflect.Value {
 	t.Helper()
 	if original, found := replacements[node.offset]; found {
 		value, err := original.Value(t.Context(), int(original.cost))
@@ -59,12 +59,12 @@ func scaleP21SW138Value(t *testing.T, node metadataLogicalNode, replacements map
 			if err != nil {
 				return err
 			}
-			result.SetMapIndex(native, scaleP21SW138Value(t, child, replacements))
+			result.SetMapIndex(native, bootstrapBodyProjectionValue(t, child, replacements))
 			return nil
 		})
 	} else {
 		err = node.Children(t.Context(), func(key reflect.Value, child metadataLogicalNode) error {
-			next := scaleP21SW138Value(t, child, replacements)
+			next := bootstrapBodyProjectionValue(t, child, replacements)
 			switch result.Kind() {
 			case reflect.Struct:
 				result.FieldByName(key.String()).Set(next)
@@ -84,23 +84,23 @@ func scaleP21SW138Value(t *testing.T, node metadataLogicalNode, replacements map
 	return result
 }
 
-func scaleP21SW138Materialize(t *testing.T, output *metadataLogicalSource, replacements map[int64]metadataLogicalNode) domain.Bootstrap {
+func bootstrapBodyProjectionMaterialize(t *testing.T, output *metadataLogicalSource, replacements map[int64]metadataLogicalNode) domain.Bootstrap {
 	t.Helper()
 	result := domain.Bootstrap{}
 	value := reflect.ValueOf(&result).Elem()
 	for index := range value.NumField() {
-		value.Field(index).Set(scaleP21SW138Value(t, output.fields[index], replacements))
+		value.Field(index).Set(bootstrapBodyProjectionValue(t, output.fields[index], replacements))
 	}
 	return result
 }
 
-func scaleP21SW138Equal(t *testing.T, projection *bootstrapBodyProjection, projected, want domain.Bootstrap) {
+func bootstrapBodyProjectionEqual(t *testing.T, projection *bootstrapBodyProjection, projected, want domain.Bootstrap) {
 	t.Helper()
 	output, replacements, err := projection.bind(t.Context(), projected)
 	if err != nil {
 		t.Fatal(err)
 	}
-	actual := scaleP21SW138Materialize(t, output, replacements)
+	actual := bootstrapBodyProjectionMaterialize(t, output, replacements)
 	if !reflect.DeepEqual(actual, want) {
 		t.Fatal("native projected values differ from literal transform")
 	}
@@ -111,7 +111,7 @@ func scaleP21SW138Equal(t *testing.T, projection *bootstrapBodyProjection, proje
 	}
 }
 
-func scaleP21SW138Fixture() domain.Bootstrap {
+func bootstrapBodyProjectionFixture() domain.Bootstrap {
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
 	actor := domain.User{ID: "actor", Name: "Original actor"}
 	comment := domain.Comment{ID: "comment", Body: "comment body\xff", BodyData: map[string]any{"text": "comment body"}, User: actor,
@@ -142,10 +142,10 @@ func scaleP21SW138Fixture() domain.Bootstrap {
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionLiteral(t *testing.T) {
-	data := scaleP21SW138Fixture()
-	view, source := scaleP21SW138Source(t, data)
-	projection := scaleP21SW138Begin(t, view, source)
+func TestBootstrapBodyProjectionLiteral(t *testing.T) {
+	data := bootstrapBodyProjectionFixture()
+	view, source := bootstrapBodyProjectionSource(t, data)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	if len(projection.origins) != 18 || len(projection.rawOrigins) != 2 {
 		t.Fatal("opaque field coverage changed", len(projection.origins), len(projection.rawOrigins))
 	}
@@ -182,7 +182,7 @@ func TestScaleP21SW138BootstrapBodyProjectionLiteral(t *testing.T) {
 			t.Fatal("map marker claimed a string source")
 		}
 	}
-	scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+	bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 	if view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("projection hydrated workspace metadata")
 	}
@@ -197,12 +197,12 @@ func TestScaleP21SW138BootstrapBodyProjectionLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionTransforms(t *testing.T) {
+func TestBootstrapBodyProjectionTransforms(t *testing.T) {
 	for _, mode := range []string{"reorder-duplicate", "clear", "new-native", "drop-all"} {
 		t.Run(mode, func(t *testing.T) {
-			data := scaleP21SW138Fixture()
-			view, source := scaleP21SW138Source(t, data)
-			projection := scaleP21SW138Begin(t, view, source)
+			data := bootstrapBodyProjectionFixture()
+			view, source := bootstrapBodyProjectionSource(t, data)
+			projection := bootstrapBodyProjectionBegin(t, view, source)
 			transform := func(value domain.Bootstrap) domain.Bootstrap {
 				value = cloneBootstrap(value)
 				switch mode {
@@ -232,12 +232,12 @@ func TestScaleP21SW138BootstrapBodyProjectionTransforms(t *testing.T) {
 				}
 				return value
 			}
-			scaleP21SW138Equal(t, projection, transform(projection.Data), transform(data))
+			bootstrapBodyProjectionEqual(t, projection, transform(projection.Data), transform(data))
 		})
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionRejectsLostProvenance(t *testing.T) {
+func TestBootstrapBodyProjectionRejectsLostProvenance(t *testing.T) {
 	cases := []struct {
 		name string
 		edit func(*domain.Bootstrap, *bootstrapBodyProjection)
@@ -302,8 +302,8 @@ func TestScaleP21SW138BootstrapBodyProjectionRejectsLostProvenance(t *testing.T)
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
-			view, source := scaleP21SW138Source(t, scaleP21SW138Fixture())
-			projection := scaleP21SW138Begin(t, view, source)
+			view, source := bootstrapBodyProjectionSource(t, bootstrapBodyProjectionFixture())
+			projection := bootstrapBodyProjectionBegin(t, view, source)
 			data := cloneBootstrap(projection.Data)
 			item.edit(&data, projection)
 			output, replacements, err := projection.bind(t.Context(), data)
@@ -319,18 +319,18 @@ func TestScaleP21SW138BootstrapBodyProjectionRejectsLostProvenance(t *testing.T)
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionNativeMarkerText(t *testing.T) {
+func TestBootstrapBodyProjectionNativeMarkerText(t *testing.T) {
 	literal := bootstrapBodyMarkerPrefix + strings.Repeat("f", 32) + ":4"
-	data := scaleP21SW138Fixture()
+	data := bootstrapBodyProjectionFixture()
 	data.Projects[0].Name = literal
 	data.Loops[0].TriggerConfig[literal] = literal
 	data.Loops[0].TriggerConfig["almost"] = bootstrapBodyMarkerPrefix + strings.Repeat("x", 32) + ":4"
-	view, source := scaleP21SW138Source(t, data)
-	projection := scaleP21SW138Begin(t, view, source)
-	scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+	view, source := bootstrapBodyProjectionSource(t, data)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
+	bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionDerivedForeignNonceLiteral(t *testing.T) {
+func TestBootstrapBodyProjectionDerivedForeignNonceLiteral(t *testing.T) {
 	literal := bootstrapBodyMarkerPrefix + strings.Repeat("f", 32) + ":1"
 	rawLiteral := `"` + bootstrapBodyRawMarkerPrefix + strings.Repeat("e", 32) + `:1"`
 	for _, mode := range []string{"description", "bytes", "raw"} {
@@ -340,8 +340,8 @@ func TestScaleP21SW138BootstrapBodyProjectionDerivedForeignNonceLiteral(t *testi
 				Documents: []domain.Document{{ID: "document"}},
 				Trash:     []domain.TrashEntry{{ID: "trash"}},
 			}
-			view, source := scaleP21SW138Source(t, data)
-			projection := scaleP21SW138Begin(t, view, source)
+			view, source := bootstrapBodyProjectionSource(t, data)
+			projection := bootstrapBodyProjectionBegin(t, view, source)
 			if strings.HasPrefix(literal, projection.prefix) || strings.Contains(rawLiteral, projection.rawPrefix) {
 				t.Fatal("fixture nonce coincided with the fresh projection nonce")
 			}
@@ -368,16 +368,16 @@ func TestScaleP21SW138BootstrapBodyProjectionDerivedForeignNonceLiteral(t *testi
 				projected.Trash[0].Payload = json.RawMessage(rawLiteral)
 				data.Trash[0].Payload = json.RawMessage(rawLiteral)
 			}
-			scaleP21SW138Equal(t, projection, projected, data)
+			bootstrapBodyProjectionEqual(t, projection, projected, data)
 		})
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionRawSemantics(t *testing.T) {
+func TestBootstrapBodyProjectionRawSemantics(t *testing.T) {
 	for _, raw := range []json.RawMessage{nil, {}, json.RawMessage("null"), json.RawMessage(" \n { \"value\": 1 } \t"), json.RawMessage("{")} {
 		data := domain.Bootstrap{Trash: []domain.TrashEntry{{ID: "raw", Payload: raw}}}
-		view, source := scaleP21SW138Source(t, data)
-		projection := scaleP21SW138Begin(t, view, source)
+		view, source := bootstrapBodyProjectionSource(t, data)
+		projection := bootstrapBodyProjectionBegin(t, view, source)
 		projected := cloneBootstrap(projection.Data)
 		if (projected.Trash[0].Payload == nil) != (raw == nil) || (len(projected.Trash[0].Payload) == 0) != (len(raw) == 0) {
 			t.Fatal("raw nil/empty status changed")
@@ -386,7 +386,7 @@ func TestScaleP21SW138BootstrapBodyProjectionRawSemantics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		actual := scaleP21SW138Materialize(t, output, replacements)
+		actual := bootstrapBodyProjectionMaterialize(t, output, replacements)
 		if !reflect.DeepEqual(data, actual) {
 			t.Fatal("raw bytes changed, including whitespace/invalid content")
 		}
@@ -400,14 +400,14 @@ func TestScaleP21SW138BootstrapBodyProjectionRawSemantics(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionLoopEmpty(t *testing.T) {
+func TestBootstrapBodyProjectionLoopEmpty(t *testing.T) {
 	data := domain.Bootstrap{Loops: []domain.Loop{
 		{ID: "nil", Instructions: "", Description: "", InstructionsData: nil},
 		{ID: "empty", Instructions: "", Description: "", InstructionsData: map[string]any{}},
 		{ID: "whitespace", Instructions: " ", Description: " ", InstructionsData: map[string]any{"value": nil}},
 	}}
-	view, source := scaleP21SW138Source(t, data)
-	projection := scaleP21SW138Begin(t, view, source)
+	view, source := bootstrapBodyProjectionSource(t, data)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	for index, loop := range data.Loops {
 		header := projection.Data.Loops[index]
 		if (header.Instructions == "") != (loop.Instructions == "") || (header.Description == "") != (loop.Description == "") ||
@@ -415,10 +415,10 @@ func TestScaleP21SW138BootstrapBodyProjectionLoopEmpty(t *testing.T) {
 			t.Fatal("loop zero/nonzero or nil/empty status changed")
 		}
 	}
-	scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+	bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionOmittedRoots(t *testing.T) {
+func TestBootstrapBodyProjectionOmittedRoots(t *testing.T) {
 	names := []string{"issues", "comments", "activities", "notifications", "notificationDeliveries", "projectUpdates", "initiativeUpdates"}
 	var baseWork int
 	for _, scale := range []int{1, 10} {
@@ -438,7 +438,7 @@ func TestScaleP21SW138BootstrapBodyProjectionOmittedRoots(t *testing.T) {
 			data.ProjectUpdates["duplicate"] = append(data.ProjectUpdates["duplicate"], domain.ProjectUpdate{Body: body})
 			data.InitiativeUpdates["duplicate"] = append(data.InitiativeUpdates["duplicate"], domain.InitiativeUpdate{Body: body})
 		}
-		view, source := scaleP21SW138Source(t, data)
+		view, source := bootstrapBodyProjectionSource(t, data)
 		projection, err := view.beginBootstrapBodyProjection(t.Context(), source, names...)
 		if err != nil {
 			t.Fatal(err)
@@ -457,7 +457,7 @@ func TestScaleP21SW138BootstrapBodyProjectionOmittedRoots(t *testing.T) {
 			t.Fatal("omitted collection growth consumed projection work", baseWork, view.MetadataWorkUsedForTesting())
 		}
 		data.Issues, data.Comments, data.Activities, data.Notifications, data.NotificationDeliveries, data.ProjectUpdates, data.InitiativeUpdates = nil, nil, nil, nil, nil, nil, nil
-		scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+		bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 		projection.Close()
 		if refused, err := view.beginBootstrapBodyProjection(t.Context(), source, "unknown-field"); refused != nil ||
 			!errors.Is(err, ErrMetadataRecordQuery) || view.MetadataWorkUsedForTesting() != 0 {
@@ -466,13 +466,13 @@ func TestScaleP21SW138BootstrapBodyProjectionOmittedRoots(t *testing.T) {
 	}
 }
 
-type scaleP21SW138CancelContext struct {
+type bootstrapBodyProjectionCancelContext struct {
 	context.Context
 	calls int
 	after int
 }
 
-func (ctx *scaleP21SW138CancelContext) Err() error {
+func (ctx *bootstrapBodyProjectionCancelContext) Err() error {
 	ctx.calls++
 	if ctx.calls >= ctx.after {
 		return context.Canceled
@@ -480,8 +480,8 @@ func (ctx *scaleP21SW138CancelContext) Err() error {
 	return ctx.Context.Err()
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionAdmission(t *testing.T) {
-	view, source := scaleP21SW138Source(t, scaleP21SW138Fixture())
+func TestBootstrapBodyProjectionAdmission(t *testing.T) {
+	view, source := bootstrapBodyProjectionSource(t, bootstrapBodyProjectionFixture())
 	if projection, err := (&SQLiteStore{}).beginBootstrapBodyProjection(t.Context(), source); projection != nil || !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("disabled store enabled projection", err)
 	}
@@ -489,13 +489,13 @@ func TestScaleP21SW138BootstrapBodyProjectionAdmission(t *testing.T) {
 		t.Fatal("nil source enabled projection", err)
 	}
 	for _, after := range []int{1, 25, 200} {
-		ctx := &scaleP21SW138CancelContext{Context: t.Context(), after: after}
+		ctx := &bootstrapBodyProjectionCancelContext{Context: t.Context(), after: after}
 		projection, err := view.beginBootstrapBodyProjection(ctx, source)
 		if projection != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("canceled build escaped or retained work", after, ctx.calls, err)
 		}
 	}
-	projection := scaleP21SW138Begin(t, view, source)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	buildWork := view.MetadataWorkUsedForTesting()
 	output, _, err := projection.bind(t.Context(), cloneBootstrap(projection.Data))
 	if err != nil {
@@ -524,14 +524,14 @@ func TestScaleP21SW138BootstrapBodyProjectionAdmission(t *testing.T) {
 	}
 	budget.limit = originalLimit
 	for _, after := range []int{1, 25, 200} {
-		projection = scaleP21SW138Begin(t, view, source)
-		ctx := &scaleP21SW138CancelContext{Context: t.Context(), after: after}
+		projection = bootstrapBodyProjectionBegin(t, view, source)
+		ctx := &bootstrapBodyProjectionCancelContext{Context: t.Context(), after: after}
 		output, replacements, err := projection.bind(ctx, cloneBootstrap(projection.Data))
 		if output != nil || replacements != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("canceled bind escaped or retained work", after, ctx.calls, err)
 		}
 	}
-	projection = scaleP21SW138Begin(t, view, source)
+	projection = bootstrapBodyProjectionBegin(t, view, source)
 	budget.limit = bindWork - 1
 	if output, _, err := projection.bind(t.Context(), cloneBootstrap(projection.Data)); output != nil || !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("partial bind refusal escaped or leaked", err)
@@ -543,17 +543,17 @@ func TestScaleP21SW138BootstrapBodyProjectionAdmission(t *testing.T) {
 	source.Release()
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionUnavailableSource(t *testing.T) {
+func TestBootstrapBodyProjectionUnavailableSource(t *testing.T) {
 	data := domain.Bootstrap{Projects: []domain.Project{{ID: "project", Description: "opaque body",
 		UpdatedAt: time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("unaudited-source", 7331))}}}
-	view, source := scaleP21SW138Source(t, data)
+	view, source := bootstrapBodyProjectionSource(t, data)
 	projection, err := view.beginBootstrapBodyProjection(t.Context(), source)
 	if projection != nil || !errors.Is(err, ErrBoundedMetadataCoverage) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("unavailable inspected native value escaped or leaked", err)
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionAuditedTimestamps(t *testing.T) {
+func TestBootstrapBodyProjectionAuditedTimestamps(t *testing.T) {
 	var data domain.Bootstrap
 	if err := json.Unmarshal([]byte(`{"projects":[{"id":"project","description":"body","createdAt":"2026-11-14T01:02:03.000000004+05:30","comments":[{"body":"comment","createdAt":"2026-11-14T01:02:03+05:45"}]}]}`), &data); err != nil {
 		t.Fatal(err)
@@ -581,18 +581,18 @@ func TestScaleP21SW138BootstrapBodyProjectionAuditedTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(source.Release)
-	view := scaleP21HotLogoStore(t, nil)
-	projection := scaleP21SW138Begin(t, view, source)
-	scaleP21SW138Equal(t, projection, cloneBootstrap(projection.Data), data)
+	view := scaleHotLogoStore(t, nil)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
+	bootstrapBodyProjectionEqual(t, projection, cloneBootstrap(projection.Data), data)
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionIndependentLifetime(t *testing.T) {
-	view := scaleP21HotLogoStore(t, nil)
-	source, err := captureMetadataLogicalSource(t.Context(), scaleP21SW138Fixture(), copyStamp{})
+func TestBootstrapBodyProjectionIndependentLifetime(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
+	source, err := captureMetadataLogicalSource(t.Context(), bootstrapBodyProjectionFixture(), copyStamp{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection := scaleP21SW138Begin(t, view, source)
+	projection := bootstrapBodyProjectionBegin(t, view, source)
 	source.Release()
 	node, found := projection.originalString(projection.Data.Loops[0].Instructions)
 	if !found {
@@ -618,7 +618,7 @@ func TestScaleP21SW138BootstrapBodyProjectionIndependentLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW138BootstrapBodyProjectionLargeBodies(t *testing.T) {
+func TestBootstrapBodyProjectionLargeBodies(t *testing.T) {
 	var firstWork int
 	var firstOutput int64
 	for _, scale := range []int{1, 10} {
@@ -630,7 +630,7 @@ func TestScaleP21SW138BootstrapBodyProjectionLargeBodies(t *testing.T) {
 			Loops:     []domain.Loop{{ID: "loop", Instructions: body, Description: body, InstructionsData: map[string]any{"large": body}}},
 			Trash:     []domain.TrashEntry{{ID: "trash", Payload: raw}},
 		}
-		view, source := scaleP21SW138Source(t, data)
+		view, source := bootstrapBodyProjectionSource(t, data)
 		statements := 0
 		ctx := WithSQLStatementObserver(t.Context(), func(string) { statements++ })
 		projection, err := view.beginBootstrapBodyProjection(ctx, source)

@@ -11,14 +11,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW0DocumentDirectorySigningFallback(t *testing.T) {
+func TestDocumentDirectorySigningFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "document-directory-signing-fixture")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.document_signing", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = []domain.Document{{
 				ID: idgen.New("signed-document-"), Title: "/uploads/title.png",

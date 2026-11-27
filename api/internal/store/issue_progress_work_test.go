@@ -12,10 +12,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21IssueProjectProgressSQLAdmission(t *testing.T) {
+func TestScaleIssueProjectProgressSQLAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	now := utcDay(time.Now().UTC())
 	at := now.AddDate(0, 0, -15)

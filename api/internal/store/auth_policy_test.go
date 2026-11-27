@@ -11,9 +11,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW2AuthenticationProviderPolicy(t *testing.T) {
+func TestAuthenticationProviderPolicy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	providers := make([]domain.IdentityProvider, 75)
 	for i := range providers {

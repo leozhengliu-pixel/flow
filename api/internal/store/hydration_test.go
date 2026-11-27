@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP15UnloadedMutationKeepsStoredValues(t *testing.T) {
+func TestScaleUnloadedMutationKeepsStoredValues(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	workspace := initial.Workspace.URLKey
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -103,7 +103,7 @@ func TestScaleP15UnloadedMutationKeepsStoredValues(t *testing.T) {
 	}
 }
 
-func TestScaleP15RecordScopeNilEmptyAndIsolation(t *testing.T) {
+func TestScaleRecordScopeNilEmptyAndIsolation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	stored := domain.Bootstrap{Projects: []domain.Project{{ID: "read", MemberIDs: []string{"old"}}, {ID: "write", Description: "body"}}, Settings: map[string]any{"read": []any{"old"}, "write": "old"}, Documents: nil, Trash: []domain.TrashEntry{}}
 	scope := MetadataRecordScope{Read: []RecordKey{{"projects", "read"}, {"settings", "read"}}, Write: []RecordKey{{"projects", "write"}, {"settings", "write"}, {"documents", "missing"}}}
@@ -126,9 +126,9 @@ func TestScaleP15RecordScopeNilEmptyAndIsolation(t *testing.T) {
 	}
 }
 
-func TestScaleP15HydratesOnlyDeclaredRecords(t *testing.T) {
+func TestScaleHydratesOnlyDeclaredRecords(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	workspace := initial.Workspace.URLKey
 	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -169,9 +169,9 @@ func TestScaleP15HydratesOnlyDeclaredRecords(t *testing.T) {
 	}
 }
 
-func TestScaleP15FlagOffRestoresFullCallback(t *testing.T) {
+func TestScaleFlagOffRestoresFullCallback(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	data := repo.Bootstrap()
 	ctx := WithMetadataRecords(t.Context(), MetadataRecordScope{Write: []RecordKey{{"projects", "missing"}}})
 	if err := repo.MutateWorkspace(ctx, data.Workspace.URLKey, "project.updated", "", nil, func(got *domain.Bootstrap) error {
@@ -184,12 +184,12 @@ func TestScaleP15FlagOffRestoresFullCallback(t *testing.T) {
 	}
 }
 
-type scaleP15BlobSink struct {
+type scaleBlobSink struct {
 	bytes, max int
 	onWrite    func()
 }
 
-func (w *scaleP15BlobSink) Write(p []byte) (int, error) {
+func (w *scaleBlobSink) Write(p []byte) (int, error) {
 	w.bytes += len(p)
 	w.max = max(w.max, len(p))
 	if w.onWrite != nil {
@@ -198,8 +198,8 @@ func (w *scaleP15BlobSink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestScaleP15OffloadedBodyStreamAndFailures(t *testing.T) {
-	repo, _ := scaleP04OwnedStore(t)
+func TestScaleOffloadedBodyStreamAndFailures(t *testing.T) {
+	repo, _ := scaleOwnedStore(t)
 	workspace := repo.Bootstrap().Workspace.URLKey
 	body := []byte(`{"content":"` + strings.Repeat("history <>&", 1<<19) + `"}`)
 	compressed := gzipBody(body)
@@ -208,7 +208,7 @@ func TestScaleP15OffloadedBodyStreamAndFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := domain.ContentRef{Key: key}
-	sink := &scaleP15BlobSink{}
+	sink := &scaleBlobSink{}
 	if err := repo.StreamOffloadedBody(t.Context(), workspace, ref, sink); err != nil || sink.bytes != len(body) || sink.max > 32<<10 {
 		t.Fatalf("streamed body: bytes=%d chunk=%d error=%v", sink.bytes, sink.max, err)
 	}
@@ -217,7 +217,7 @@ func TestScaleP15OffloadedBodyStreamAndFailures(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	if err := repo.StreamOffloadedBody(ctx, workspace, ref, &scaleP15BlobSink{onWrite: cancel}); !errors.Is(err, context.Canceled) {
+	if err := repo.StreamOffloadedBody(ctx, workspace, ref, &scaleBlobSink{onWrite: cancel}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled stream = %v", err)
 	}
 	if _, err := repo.db.ExecContext(t.Context(), `UPDATE metadata_blobs SET data=NULL WHERE workspace_key=? AND blob_key=?`, workspace, key); err != nil {
@@ -242,7 +242,7 @@ func TestScaleP15OffloadedBodyStreamAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP15RejectsUnknownScopes(t *testing.T) {
+func TestScaleRejectsUnknownScopes(t *testing.T) {
 	for _, scope := range []MetadataRecordScope{{Fields: []string{"unknown"}}, {Write: []RecordKey{{"issues", "issue"}}}, {Read: []RecordKey{{"projectUpdates", "split-key"}}}, {Write: []RecordKey{{"workspaceSettings", "key"}}}, {Read: []RecordKey{{"teamMembers", "compound-key"}}}} {
 		if err := validateMetadataRecordScope(scope); err == nil {
 			t.Fatalf("invalid scope accepted: %+v", scope)
@@ -253,7 +253,7 @@ func TestScaleP15RejectsUnknownScopes(t *testing.T) {
 	}
 }
 
-func TestScaleP15ScopePreservesRecordOrder(t *testing.T) {
+func TestScaleScopePreservesRecordOrder(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	data := domain.Bootstrap{}
 	for i := range 100 {
@@ -269,9 +269,9 @@ func TestScaleP15ScopePreservesRecordOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP15OldAndScopedWritersKeepBothChanges(t *testing.T) {
+func TestScaleOldAndScopedWritersKeepBothChanges(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	repo, config := scaleP04OwnedStore(t)
+	repo, config := scaleOwnedStore(t)
 	initial := repo.Bootstrap()
 	workspace, projectID := initial.Workspace.URLKey, initial.Projects[0].ID
 	peer, err := OpenDatabase(config)
@@ -306,9 +306,9 @@ func TestScaleP15OldAndScopedWritersKeepBothChanges(t *testing.T) {
 	}
 }
 
-func TestScaleP15CanonicalLargeRecordStream(t *testing.T) {
+func TestScaleCanonicalLargeRecordStream(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	workspace := repo.Bootstrap().Workspace.URLKey
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p15-stream", Description: strings.Repeat("x", 3<<20)})
@@ -327,7 +327,7 @@ func TestScaleP15CanonicalLargeRecordStream(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	sink := &scaleP15BlobSink{onWrite: func() {
+	sink := &scaleBlobSink{onWrite: func() {
 		if repo.db.Stats().InUse != 0 {
 			t.Fatal("canonical record stream pinned SQL while writing")
 		}
@@ -338,9 +338,9 @@ func TestScaleP15CanonicalLargeRecordStream(t *testing.T) {
 	}
 }
 
-func TestScaleP15RecordMutationPreservesUnloadedRevisionBodies(t *testing.T) {
+func TestScaleRecordMutationPreservesUnloadedRevisionBodies(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	workspace := repo.Bootstrap().Workspace.URLKey
 	document := offloadTestDocument(time.Now().UTC())
 	if err := repo.MutateWorkspace(t.Context(), workspace, "document.created", document.ID, nil, func(data *domain.Bootstrap) error {
@@ -378,7 +378,7 @@ func TestScaleP15RecordMutationPreservesUnloadedRevisionBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP15HydrationDefaultAndOptOut(t *testing.T) {
+func TestScaleHydrationDefaultAndOptOut(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "")
 	if !RecordHydrationEnabled(t.Context()) {
 		t.Fatal("unset hydration should be enabled on SQLite")
@@ -391,9 +391,9 @@ func TestScaleP15HydrationDefaultAndOptOut(t *testing.T) {
 	}
 }
 
-func TestScaleP15ScopeFailureIsAtomic(t *testing.T) {
+func TestScaleScopeFailureIsAtomic(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	data := repo.Bootstrap()
 	workspace, projectID := data.Workspace.URLKey, data.Projects[0].ID
 	before := dumpWorkspaceMetadata(t, repo, workspace)
@@ -415,7 +415,7 @@ func TestScaleP15ScopeFailureIsAtomic(t *testing.T) {
 	}
 }
 
-func TestScaleP15PointCallbacksRejectUnavailableRequirements(t *testing.T) {
+func TestScalePointCallbacksRejectUnavailableRequirements(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo := &SQLiteStore{}
 	ctx := WithMetadataRecords(t.Context(), MetadataRecordScope{Read: []RecordKey{{"projects", "required"}}})
@@ -431,9 +431,9 @@ func TestScaleP15PointCallbacksRejectUnavailableRequirements(t *testing.T) {
 	}
 }
 
-func TestScaleP15DecodedContainersAreBudgeted(t *testing.T) {
+func TestScaleDecodedContainersAreBudgeted(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	workspace := repo.Bootstrap().Workspace.URLKey
 	items := make([]map[string]any, 6000)
 	for i := range items {

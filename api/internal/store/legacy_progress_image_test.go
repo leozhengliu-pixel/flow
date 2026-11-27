@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW119Data(workspace domain.Workspace, bodyBytes int) domain.Bootstrap {
+func legacyProgressImageData(workspace domain.Workspace, bodyBytes int) domain.Bootstrap {
 	at := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
 	start, noUnestimated := "2026-10-15", false
 	body := strings.Repeat("x", bodyBytes)
@@ -65,7 +65,7 @@ func scaleP21SW119Data(workspace domain.Workspace, bodyBytes int) domain.Bootstr
 	return data
 }
 
-func scaleP21SW119Source(t *testing.T, data domain.Bootstrap, reload bool) (*metadataLogicalSource, domain.Bootstrap) {
+func legacyProgressImageSource(t *testing.T, data domain.Bootstrap, reload bool) (*metadataLogicalSource, domain.Bootstrap) {
 	t.Helper()
 	if reload {
 		raw, err := json.Marshal(data)
@@ -86,10 +86,10 @@ func scaleP21SW119Source(t *testing.T, data domain.Bootstrap, reload bool) (*met
 	return source, data
 }
 
-func TestScaleP21SW119LegacyProgressImageDifferential(t *testing.T) {
+func TestLegacyProgressImageDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestScaleP21SW119LegacyProgressImageDifferential(t *testing.T) {
 	now := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
-			source, data := scaleP21SW119Source(t, scaleP21SW119Data(f.data.Workspace, 64<<10), reload)
+			source, data := legacyProgressImageSource(t, legacyProgressImageData(f.data.Workspace, 64<<10), reload)
 			want := slices.Compact(progressChangedProjects(data, now))
 			plan, err := view.prepareLegacyProgressImage(t.Context(), source, now)
 			if err != nil {
@@ -141,13 +141,13 @@ func TestScaleP21SW119LegacyProgressImageDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
+func TestLegacyProgressSQLRebuildDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
-			f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{
+			f, issue := scaleIssuePersistenceFixture(t, []domain.Project{
 				{ID: "p21-project", Name: "Canonical first project", Description: strings.Repeat("Retained project body ", 4000)},
 				{ID: "sw119-other", Name: "Other empty project"},
 			}, nil)
@@ -167,7 +167,7 @@ func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			view := scaleP21IssuePersistenceView(t, f, true, reload)
+			view := scaleIssuePersistenceView(t, f, true, reload)
 			data, found := f.BootstrapFor(workspace)
 			if !found {
 				t.Fatal("SQL progress fixture missing")
@@ -181,7 +181,7 @@ func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
 			duplicate.Name = "Later native occurrence stays literal"
 			duplicate.ProgressHistory = []domain.ProjectProgressHistoryPoint{{Date: now, Value: 719}}
 			data.Projects = append(data.Projects, duplicate)
-			source, data := scaleP21SW119Source(t, data, reload)
+			source, data := legacyProgressImageSource(t, data, reload)
 			plan, err := view.prepareLegacyProgressImage(t.Context(), source, now)
 			if err != nil {
 				t.Fatal(err)
@@ -189,8 +189,8 @@ func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
 			defer plan.Close()
 			ids := progressChangedProjects(data, now)
 			want := cloneBootstrap(data)
-			tx := scaleP21SW76Begin(t, f)
-			before := scaleP21SW93Rows(t, tx, workspace)
+			tx := legacyActorWriteBegin(t, f)
+			before := legacyRecordBaseRows(t, tx, workspace)
 			// The root writer owns the forced sorted rebase. This test begins
 			// at that helper's immutable, already-rebased input boundary.
 			states := progressStates(want)
@@ -212,12 +212,12 @@ func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(got.Projects, want.Projects) {
-				t.Fatal("logical SQL rebuild differs from literal first-native project loop", scaleP21SW98FirstDiff(scaleP21SW63JSON(t, want.Projects), scaleP21SW63JSON(t, got.Projects), "projects"))
+				t.Fatal("logical SQL rebuild differs from literal first-native project loop", firstDiff(discussionWriterJSON(t, want.Projects), discussionWriterJSON(t, got.Projects), "projects"))
 			}
 			if got.Projects[first].Name != "Canonical first project" || got.Projects[len(got.Projects)-1].ProgressHistory[0].Value != 719 {
 				t.Fatal("progress rewrite changed a later duplicate or an unrelated project field")
 			}
-			if !reflect.DeepEqual(before, scaleP21SW93Rows(t, tx, workspace)) {
+			if !reflect.DeepEqual(before, legacyRecordBaseRows(t, tx, workspace)) {
 				t.Fatal("progress projection wrote business rows before caller persistence")
 			}
 			original, err := source.Select(t.Context(), MetadataRecordScope{Fields: []string{"projects"}}, 64<<20)
@@ -252,10 +252,10 @@ func TestScaleP21SW119LegacyProgressSQLRebuildDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW119LegacyProgressBoundsCancellationRelease(t *testing.T) {
+func TestLegacyProgressBoundsCancellationRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -264,9 +264,9 @@ func TestScaleP21SW119LegacyProgressBoundsCancellationRelease(t *testing.T) {
 	now := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
 	peaks := []int64{}
 	for _, size := range []int{64 << 10, 640 << 10} {
-		source, _ := scaleP21SW119Source(t, scaleP21SW119Data(f.data.Workspace, size), false)
+		source, _ := legacyProgressImageSource(t, legacyProgressImageData(f.data.Workspace, size), false)
 		var peak atomic.Int64
-		ctx := scaleP21HotWebhookContext{Context: t.Context(), check: func() {
+		ctx := scaleHotWebhookContext{Context: t.Context(), check: func() {
 			budget := view.metadataResidency.work
 			if !budget.mu.TryLock() {
 				return
@@ -302,7 +302,7 @@ func TestScaleP21SW119LegacyProgressBoundsCancellationRelease(t *testing.T) {
 	if peaks[0] == 0 || peaks[1] > peaks[0]+(64<<10) {
 		t.Fatal("tenfold unrelated bodies increased admitted project work", peaks)
 	}
-	source, _ := scaleP21SW119Source(t, scaleP21SW119Data(f.data.Workspace, 0), false)
+	source, _ := legacyProgressImageSource(t, legacyProgressImageData(f.data.Workspace, 0), false)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if plan, err := view.prepareLegacyProgressImage(ctx, source, now); !errors.Is(err, context.Canceled) || plan != nil {
@@ -318,17 +318,17 @@ func TestScaleP21SW119LegacyProgressBoundsCancellationRelease(t *testing.T) {
 	t.Logf("unrelated_body_bytes=65536/655360 peak_admitted_work=%d/%d", peaks[0], peaks[1])
 }
 
-func TestScaleP21SW119LegacyProgressIndexScale(t *testing.T) {
+func TestLegacyProgressIndexScale(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
 	for _, count := range []int{64, 640} {
-		base := scaleP21SW119Data(f.data.Workspace, 0)
+		base := legacyProgressImageData(f.data.Workspace, 0)
 		data := domain.Bootstrap{Workspace: base.Workspace, States: base.States, TeamSettings: base.TeamSettings, Activities: map[string][]domain.ActivityEvent{}}
 		for ordinal := range count {
 			id := fmt.Sprintf("sw119-index-%06d", ordinal)
@@ -338,9 +338,9 @@ func TestScaleP21SW119LegacyProgressIndexScale(t *testing.T) {
 			data.Issues = append(data.Issues, issue)
 			data.Activities[issue.ID] = base.Activities[base.Issues[0].ID]
 		}
-		source, _ := scaleP21SW119Source(t, data, false)
+		source, _ := legacyProgressImageSource(t, data, false)
 		ctx := metadataLogicalSourceScratchContext(t.Context(), source)
-		stage, err := sw26NewMigrationStage(ctx)
+		stage, err := newMigrationStage(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

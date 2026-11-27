@@ -115,7 +115,7 @@ func projectRecordRequirements(kind, operation, id string, input any) store.Meta
 		fields("threadSubscriptions", "teams", "teamSettings", "teamParents")
 	case "milestone", "reminder":
 	case "update":
-		// P15's split update collections require complete-field declarations.
+		// record hydration's split update collections require complete-field declarations.
 		fields(kind+"Updates", "settings", "notificationPreferences", "pushSubscriptions", "userSettings", "members", "teamMembers")
 	case "update-create":
 		fields(kind+"Updates", "settings")

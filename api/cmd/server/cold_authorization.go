@@ -16,7 +16,7 @@ type coldAuthorizationMuxKey struct{}
 // A cold-only mux could incorrectly claim a more-specific HOT route.
 //
 // Default COLD routing: with bounded metadata on, every request whose route
-// is not proven bounded (scaleP21RouteTemperature, SW550) runs in a COLD
+// is not proven bounded (scaleRouteTemperature, route temperature guard) runs in a COLD
 // scope for its whole lifetime, authentication included. Its COLD needs take
 // the replica's COLD slot per operation only (store/default_cold.go)
 // and its projections take the COLD projection gate in place of the
@@ -34,7 +34,7 @@ func (s *server) withColdMetadataRouteMux(mux *http.ServeMux, next http.Handler)
 		var endRequest func()
 		ctx, w, endRequest = withLegacyViewBusy(ctx, w)
 		defer endRequest()
-		if _, pattern := mux.Handler(r); pattern != "" && !scaleP21RouteHot(pattern) {
+		if _, pattern := mux.Handler(r); pattern != "" && !scaleRouteHot(pattern) {
 			var scope *store.ColdScope
 			ctx, scope = store.WithColdScope(ctx, pattern)
 			defer scope.Close()
@@ -62,10 +62,10 @@ func (s *server) coldGate() *metadataReadGate {
 	return s.coldProjectionGate
 }
 
-// scaleP21RouteHot reports a route proven bounded (SW550). Any other
+// scaleRouteHot reports a route proven bounded. Any other
 // pattern, including one missing from the generated table, runs COLD.
-func scaleP21RouteHot(pattern string) bool {
-	return scaleP21RouteTemperature[pattern] == "hot"
+func scaleRouteHot(pattern string) bool {
+	return scaleRouteTemperature[pattern] == "hot"
 }
 
 func releaseColdWriteProjection(r *http.Request) {
@@ -75,21 +75,21 @@ func releaseColdWriteProjection(r *http.Request) {
 	releaseProjection(r)
 }
 
-func scaleP21ColdAuthorizationRoute(r *http.Request) (scaleP21ColdRoute, bool) {
+func scaleColdAuthorizationRoute(r *http.Request) (scaleColdRoute, bool) {
 	mux, ok := r.Context().Value(coldAuthorizationMuxKey{}).(*http.ServeMux)
 	if !ok || mux == nil {
-		return scaleP21ColdRoute{}, false
+		return scaleColdRoute{}, false
 	}
 	_, pattern := mux.Handler(r)
 	if pattern == "" {
-		return scaleP21ColdRoute{}, false
+		return scaleColdRoute{}, false
 	}
-	for _, route := range scaleP21ColdRoutes {
+	for _, route := range scaleColdRoutes {
 		if pattern == route.method+" "+route.path {
 			return route, true
 		}
 	}
-	return scaleP21ColdRoute{}, false
+	return scaleColdRoute{}, false
 }
 
 // legacyColdAuthorizationRepository supplies the literal resource auth reads.
@@ -99,7 +99,7 @@ func (s *server) legacyColdAuthorizationRepository(r *http.Request, _ bool) (*st
 	if !s.store.BoundedMetadataEnabled() {
 		return s.store, nil
 	}
-	route, selected := scaleP21ColdAuthorizationRoute(r)
+	route, selected := scaleColdAuthorizationRoute(r)
 	if !selected {
 		return s.store.ColdRequestView(r.Context(), workspaceKey(r))
 	}

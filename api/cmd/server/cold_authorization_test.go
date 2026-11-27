@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	scaleP21SW215ColdReadPath     = "/api/oauth/authorized-applications"
-	scaleP21SW215ColdReadPattern  = "GET " + scaleP21SW215ColdReadPath
-	scaleP21SW215ColdReadConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
+	coldReadPath     = "/api/oauth/authorized-applications"
+	coldReadPattern  = "GET " + coldReadPath
+	coldReadConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
 )
 
-func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
+func TestColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 	mux := http.NewServeMux()
-	for _, route := range scaleP21ColdRoutes {
+	for _, route := range scaleColdRoutes {
 		mux.HandleFunc(route.method+" "+route.path, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	}
 	// A synthetic COLD-only mux would incorrectly classify this exact HOT
@@ -39,18 +39,18 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 		cold                  bool
 		status                int
 	}{
-		{http.MethodGet, scaleP21SW215ColdReadPath, scaleP21SW215ColdReadPattern, true, http.StatusNoContent},
-		{http.MethodHead, scaleP21SW215ColdReadPath, scaleP21SW215ColdReadPattern, true, http.StatusNoContent},
-		{http.MethodPost, scaleP21SW215ColdReadPath, "", false, http.StatusMethodNotAllowed},
+		{http.MethodGet, coldReadPath, coldReadPattern, true, http.StatusNoContent},
+		{http.MethodHead, coldReadPath, coldReadPattern, true, http.StatusNoContent},
+		{http.MethodPost, coldReadPath, "", false, http.StatusMethodNotAllowed},
 		{http.MethodPatch, "/api/drafts/plain", "PATCH /api/drafts/{id}", true, http.StatusNoContent},
 		{http.MethodPatch, "/api/drafts/a%2Fb", "PATCH /api/drafts/{id}", true, http.StatusNoContent},
 		{http.MethodPatch, "/api/drafts/sw215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusAccepted},
 		{http.MethodPatch, "/api/drafts/%73w215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusAccepted},
 		{http.MethodPatch, "/api/drafts//sw215-hot", "PATCH /api/drafts/sw215-hot", false, http.StatusTemporaryRedirect},
-		{http.MethodGet, "/api//oauth/authorized-applications", scaleP21SW215ColdReadPattern, true, http.StatusTemporaryRedirect},
+		{http.MethodGet, "/api//oauth/authorized-applications", coldReadPattern, true, http.StatusTemporaryRedirect},
 		{http.MethodPatch, "/api/drafts/a/b", "", false, http.StatusNotFound},
-		{http.MethodGet, scaleP21SW215ColdReadPath + "/child", "", false, http.StatusNotFound},
-		{http.MethodGet, scaleP21SW215ColdReadPath + "-extra", "", false, http.StatusNotFound},
+		{http.MethodGet, coldReadPath + "/child", "", false, http.StatusNotFound},
+		{http.MethodGet, coldReadPath + "-extra", "", false, http.StatusNotFound},
 	} {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			r := httptest.NewRequest(test.method, test.path, nil)
@@ -60,7 +60,7 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 			if pattern != test.pattern {
 				t.Fatalf("fixture's actual mux winner=%q want=%q", pattern, test.pattern)
 			}
-			route, cold := scaleP21ColdAuthorizationRoute(r)
+			route, cold := scaleColdAuthorizationRoute(r)
 			if cold != test.cold || cold && route.method+" "+route.path != test.pattern {
 				t.Fatalf("actual HOT/HEAD/escaped/redirect winner misclassified: cold=%t route=%+v", cold, route)
 			}
@@ -72,21 +72,21 @@ func TestScaleP21SW215ColdAuthorizationUsesActualMuxWinner(t *testing.T) {
 		})
 	}
 	// No closed complete route authority means no COLD admission.
-	r := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
-	r.Pattern = scaleP21SW215ColdReadPattern
-	if _, selected := scaleP21ColdAuthorizationRoute(r); selected {
+	r := httptest.NewRequest(http.MethodGet, coldReadPath, nil)
+	r.Pattern = coldReadPattern
+	if _, selected := scaleColdAuthorizationRoute(r); selected {
 		t.Fatal("Request.Pattern alone certified a cold route")
 	}
 }
 
-func TestScaleP21SW215UnregisteredColdPagedAuthorizationReusesRequestView(t *testing.T) {
+func TestUnregisteredColdPagedAuthorizationReusesRequestView(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			view, err := repo.BoundedMetadataViewForTesting(t.Context())
 			if err != nil {
@@ -149,13 +149,13 @@ func TestScaleP21SW215UnregisteredColdPagedAuthorizationReusesRequestView(t *tes
 	}
 }
 
-func TestScaleP21SW215UnregisteredColdPagedAuthorizationViewRace(t *testing.T) {
+func TestUnregisteredColdPagedAuthorizationViewRace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			view, err := repo.BoundedMetadataViewForTesting(t.Context())
 			if err != nil {
@@ -212,14 +212,14 @@ func TestScaleP21SW215UnregisteredColdPagedAuthorizationViewRace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
+func TestColdAuthorizationFullHTTPHandoff(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			for _, reload := range []bool{false, true} {
 				if reload {
@@ -241,7 +241,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 					var handoff *pagedMetadataHandoff
 					var facade *store.SQLiteStore
 					var outputChecks int
-					mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
+					mux.HandleFunc(coldReadPattern, func(w http.ResponseWriter, r *http.Request) {
 						if source.BoundedMetadataEnabled() {
 							read, _ = r.Context().Value(coldAuthorizationReadKey{}).(*store.ColdMetadataRead)
 							scope, _ = r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
@@ -253,7 +253,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 							if facade == source || facade.BoundedMetadataEnabled() || service.store != source {
 								t.Fatal("authorization substituted the server receiver")
 							}
-							service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(borrowed *store.SQLiteStore, nested *http.Request) {
+							service.withColdMetadataRequest(w, r, coldReadConsumer, "", func(borrowed *store.SQLiteStore, nested *http.Request) {
 								if borrowed != facade || nested.Context() != r.Context() {
 									t.Fatal("handler bridge did not borrow auth facade/context/slot")
 								}
@@ -264,7 +264,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 						}
 					})
 					handler := service.withColdMetadataRouteMux(mux, service.authenticate(mux))
-					request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
+					request := httptest.NewRequest(http.MethodGet, coldReadPath, nil)
 					request.Header.Set("X-Workspace-Key", workspace)
 					origin, _ := url.Parse(f.host.URL)
 					for _, cookie := range f.admin.Jar.Cookies(origin) {
@@ -273,7 +273,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 					ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 					request = request.WithContext(ctx)
 					recorder := httptest.NewRecorder()
-					writer := &scaleP21SW215ColdOutputWriter{ResponseRecorder: recorder, check: func() {
+					writer := &coldOutputWriter{ResponseRecorder: recorder, check: func() {
 						outputChecks++
 						if source.BoundedMetadataEnabled() && (read == nil || read.Store() != facade || scope.closed || handoff.data.Workspace.ID == "") {
 							t.Error("cold graph/Paged handoff released before response encoding")
@@ -291,7 +291,7 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 							!scope.closed || handoff.data.Workspace.ID != "" || service.store != source {
 							t.Fatal("full HTTP differential or outer output cleanup changed", recorder.Body.String())
 						}
-						next, err := source.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdReadConsumer)
+						next, err := source.BeginColdMetadataRead(t.Context(), coldReadConsumer)
 						if err != nil || next.Store() == nil || next.Store() == facade {
 							t.Fatal("HTTP output scope retained its replica slot", err)
 						}
@@ -303,26 +303,26 @@ func TestScaleP21SW215ColdAuthorizationFullHTTPHandoff(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdAuthorizationEarlyRefusalIsLazy(t *testing.T) {
+func TestColdAuthorizationEarlyRefusalIsLazy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 			if err != nil {
 				t.Fatal(err)
 			}
-			held, err := view.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdReadConsumer)
+			held, err := view.BeginColdMetadataRead(t.Context(), coldReadConsumer)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer held.Close()
 			service := &server{store: view}
 			mux := http.NewServeMux()
-			mux.HandleFunc(scaleP21SW215ColdReadPattern, func(http.ResponseWriter, *http.Request) { t.Error("unauthenticated handler ran") })
+			mux.HandleFunc(coldReadPattern, func(http.ResponseWriter, *http.Request) { t.Error("unauthenticated handler ran") })
 			handler := service.withColdMetadataRouteMux(mux, service.authenticate(mux))
-			request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
+			request := httptest.NewRequest(http.MethodGet, coldReadPath, nil)
 			request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
 			ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
 			defer cancel()
@@ -336,14 +336,14 @@ func TestScaleP21SW215ColdAuthorizationEarlyRefusalIsLazy(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
+func TestColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			var want []byte
 			for _, bounded := range []bool{false, true} {
@@ -363,7 +363,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 				}
 				service := &server{store: source}
 				mux := http.NewServeMux()
-				mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
+				mux.HandleFunc(coldReadPattern, func(w http.ResponseWriter, r *http.Request) {
 					user := authUser(r)
 					first, handed := takePagedMetadata(r, workspace, user.ID)
 					if !handed || first.Workspace.Name != "before authorization" {
@@ -382,7 +382,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(borrowed *store.SQLiteStore, request *http.Request) {
+					service.withColdMetadataRequest(w, r, coldReadConsumer, "", func(borrowed *store.SQLiteStore, request *http.Request) {
 						if err := borrowed.RefreshColdMetadataRead(request.Context(), workspace); err != nil {
 							t.Fatal(err)
 						}
@@ -393,7 +393,7 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 						writeJSON(w, http.StatusOK, map[string]string{"first": first.Workspace.Name, "fresh": fresh.Workspace.Name})
 					})
 				})
-				request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
+				request := httptest.NewRequest(http.MethodGet, coldReadPath, nil)
 				request.Header.Set("X-Workspace-Key", workspace)
 				origin, _ := url.Parse(f.host.URL)
 				for _, cookie := range f.admin.Jar.Cookies(origin) {
@@ -416,13 +416,13 @@ func TestScaleP21SW215ColdAuthorizationHandoffThenFreshAccessor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdQueryCacheAndDraftFreshAccessors(t *testing.T) {
+func TestColdQueryCacheAndDraftFreshAccessors(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			setName := func(value string, addDocument bool) {
 				t.Helper()
@@ -508,34 +508,34 @@ func TestScaleP21SW215ColdQueryCacheAndDraftFreshAccessors(t *testing.T) {
 	}
 }
 
-type scaleP21SW215ColdOutputWriter struct {
+type coldOutputWriter struct {
 	*httptest.ResponseRecorder
 	check func()
 }
 
-func (w *scaleP21SW215ColdOutputWriter) WriteHeader(code int) {
+func (w *coldOutputWriter) WriteHeader(code int) {
 	w.check()
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW215ColdOutputWriter) Write(raw []byte) (int, error) {
+func (w *coldOutputWriter) Write(raw []byte) (int, error) {
 	w.check()
 	return w.ResponseRecorder.Write(raw)
 }
 
-type scaleP21SW215RealCredential struct {
+type realCredential struct {
 	name, session, bearer string
 }
 
-type scaleP21SW215AuthMatrixFixture struct {
-	scaleP21M2Fixture
+type authMatrixFixture struct {
+	policyDifferentialFixture
 	foreign, foreignIssue, grantIssue, publicIssue, childIssue, hiddenIssue string
 	publicProject, childProject, hiddenProject, oldSlug, hiddenMarker       string
 	grantPermissions                                                        []domain.IssuePermission
-	credentials                                                             map[string][]scaleP21SW215RealCredential
+	credentials                                                             map[string][]realCredential
 }
 
-type scaleP21SW215AuthProjection struct {
+type authProjection struct {
 	Workspace string                `json:"workspace"`
 	Viewer    string                `json:"viewer"`
 	Role      string                `json:"role"`
@@ -545,23 +545,23 @@ type scaleP21SW215AuthProjection struct {
 	OldSlugID string                `json:"oldSlugId"`
 }
 
-type scaleP21SW215AuthMatrixOutput struct {
-	Before scaleP21SW215AuthProjection  `json:"before"`
-	Fresh  *scaleP21SW215AuthProjection `json:"fresh,omitempty"`
+type authMatrixOutput struct {
+	Before authProjection  `json:"before"`
+	Fresh  *authProjection `json:"fresh,omitempty"`
 }
 
-func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21SW215AuthMatrixFixture {
+func authMatrixSeed(t *testing.T, repo *store.SQLiteStore) authMatrixFixture {
 	t.Helper()
 	restore := store.ForceFullMutationsForTesting(true)
 	defer restore()
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	prefix := idgen.New("sw215-auth-")
-	result := scaleP21SW215AuthMatrixFixture{
-		scaleP21M2Fixture: f, publicIssue: prefix + "public-issue", childIssue: prefix + "child-issue",
+	result := authMatrixFixture{
+		policyDifferentialFixture: f, publicIssue: prefix + "public-issue", childIssue: prefix + "child-issue",
 		hiddenIssue: prefix + "hidden-issue", foreignIssue: prefix + "foreign-issue",
 		publicProject: prefix + "public-project", childProject: prefix + "child-project",
 		hiddenProject: prefix + "hidden-project", oldSlug: prefix + "old-project",
-		hiddenMarker: prefix + "hidden-actor-and-body", credentials: map[string][]scaleP21SW215RealCredential{},
+		hiddenMarker: prefix + "hidden-actor-and-body", credentials: map[string][]realCredential{},
 	}
 	current, found := repo.BootstrapFor(f.data.Workspace.URLKey)
 	if !found {
@@ -586,7 +586,7 @@ func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21
 	if private == "" || child == "" || result.grantIssue == "" || len(result.grantPermissions) == 0 {
 		t.Fatal("auth matrix lacks private boundary, inherited child or actual issue grant")
 	}
-	_, outsideAdmin := scaleP03Join(t, f.scaleP03PlatformFixture, "SW215 SQL outside admin", idgen.New("sw215-admin-")+"@example.test", "admin", f.public)
+	_, outsideAdmin := resourceAccessScaleJoin(t, f.scalePlatformFixture, "SW215 SQL outside admin", idgen.New("sw215-admin-")+"@example.test", "admin", f.public)
 	role, status, err := repo.WorkspaceRole(t.Context(), f.data.Workspace.ID, outsideAdmin.ID)
 	if err != nil || role != "admin" || status != "active" || outsideAdmin.ID == f.data.Viewer.ID {
 		t.Fatal("auth matrix outside admin lacks a distinct active SQL admin membership", role, status, err)
@@ -608,8 +608,8 @@ func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21
 	if !publicMember {
 		t.Fatal("auth matrix outside admin lacks the requested public team membership")
 	}
-	f.principals = append(f.principals, scaleP21M2Principal{name: "sql-admin-private-outsider", user: outsideAdmin})
-	result.scaleP21M2Fixture = f
+	f.principals = append(f.principals, policyFixturePrincipal{name: "sql-admin-private-outsider", user: outsideAdmin})
+	result.policyDifferentialFixture = f
 	foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW215 foreign", prefix+"foreign", "us")
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +632,7 @@ func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21
 		if err != nil {
 			t.Fatal("mint real fixture session", err)
 		}
-		credentials := []scaleP21SW215RealCredential{{name: "session", session: token}}
+		credentials := []realCredential{{name: "session", session: token}}
 		for _, kind := range []string{"unrestricted", "selected-empty", "selected-set"} {
 			secret := idgen.New("sw215-bearer-")
 			restriction, teams := "all", []string(nil)
@@ -647,7 +647,7 @@ func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21
 				SecretHash: secretHash(secret), Scopes: []string{"read"}, TeamRestriction: restriction,
 				TeamIDs: teams, CreatedAt: at,
 			})
-			credentials = append(credentials, scaleP21SW215RealCredential{name: kind, bearer: secret})
+			credentials = append(credentials, realCredential{name: kind, bearer: secret})
 		}
 		result.credentials[principal.user.ID] = credentials
 	}
@@ -707,13 +707,13 @@ func scaleP21SW215AuthMatrixSeed(t *testing.T, repo *store.SQLiteStore) scaleP21
 	return result
 }
 
-func (f scaleP21SW215AuthMatrixFixture) restoreGrant(ctx context.Context, repo *store.SQLiteStore, revoke bool) error {
+func (f authMatrixFixture) restoreGrant(ctx context.Context, repo *store.SQLiteStore, revoke bool) error {
 	if err := repo.ReloadWorkspace(ctx, f.data.Workspace.URLKey); err != nil {
 		return err
 	}
 	release := store.ForceFullMutationsForTesting(true)
 	defer release()
-	return scaleP03RetryWrite(ctx, func() error {
+	return scaleRetryWrite(ctx, func() error {
 		return repo.MutateWorkspace(ctx, f.data.Workspace.URLKey, "scale_p21.sw215_grant_change", f.grantIssue, nil, func(data *domain.Bootstrap) error {
 			for index := range data.Issues {
 				if data.Issues[index].ID == f.grantIssue {
@@ -729,13 +729,13 @@ func (f scaleP21SW215AuthMatrixFixture) restoreGrant(ctx context.Context, repo *
 	})
 }
 
-func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture, source *store.SQLiteStore, credential scaleP21SW215RealCredential, workspace string, between func()) (*httptest.ResponseRecorder, scaleP21SW215AuthMatrixOutput) {
+func authMatrixServe(t *testing.T, f authMatrixFixture, source *store.SQLiteStore, credential realCredential, workspace string, between func()) (*httptest.ResponseRecorder, authMatrixOutput) {
 	t.Helper()
 	service := &server{store: source}
 	mux := http.NewServeMux()
 	var held *store.ColdMetadataRead
 	var scope *requestResourceReads
-	mux.HandleFunc(scaleP21SW215ColdReadPattern, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(coldReadPattern, func(w http.ResponseWriter, r *http.Request) {
 		if source.BoundedMetadataEnabled() {
 			held, _ = r.Context().Value(coldAuthorizationReadKey{}).(*store.ColdMetadataRead)
 			scope, _ = r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
@@ -743,12 +743,12 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 				t.Fatal("real credentials lost lazy cold ownership before handler entry")
 			}
 		}
-		service.withColdMetadataRequest(w, r, scaleP21SW215ColdReadConsumer, "", func(repo *store.SQLiteStore, request *http.Request) {
+		service.withColdMetadataRequest(w, r, coldReadConsumer, "", func(repo *store.SQLiteStore, request *http.Request) {
 			first, handed := takePagedMetadata(request, workspaceKey(request), authUser(request).ID)
 			if !handed {
 				t.Fatal("real authentication did not hand off its exact viewer projection")
 			}
-			project := func(data domain.Bootstrap) scaleP21SW215AuthProjection {
+			project := func(data domain.Bootstrap) authProjection {
 				t.Helper()
 				filterBootstrapForAPIKey(&data, request)
 				_, query, err := service.issueRecordsQueryWithStore(request, repo)
@@ -761,7 +761,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 				if err != nil {
 					t.Fatal("real credential issue page", err)
 				}
-				out := scaleP21SW215AuthProjection{
+				out := authProjection{
 					Workspace: data.Workspace.ID, Viewer: authUser(request).ID, Role: data.ViewerRole,
 					Projects: data.Projects, Documents: data.Documents, Issues: page,
 				}
@@ -770,7 +770,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 				}
 				return out
 			}
-			output := scaleP21SW215AuthMatrixOutput{Before: project(first)}
+			output := authMatrixOutput{Before: project(first)}
 			if between != nil {
 				original, err := json.Marshal(output.Before)
 				if err != nil {
@@ -793,7 +793,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 			writeJSON(w, http.StatusOK, output)
 		})
 	})
-	request := httptest.NewRequest(http.MethodGet, scaleP21SW215ColdReadPath, nil)
+	request := httptest.NewRequest(http.MethodGet, coldReadPath, nil)
 	request.Header.Set("X-Workspace-Key", workspace)
 	if credential.session != "" {
 		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: credential.session})
@@ -802,7 +802,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 		request.Header.Set("Authorization", "Bearer "+credential.bearer)
 	}
 	recorder := httptest.NewRecorder()
-	writer := &scaleP21SW215ColdOutputWriter{ResponseRecorder: recorder, check: func() {
+	writer := &coldOutputWriter{ResponseRecorder: recorder, check: func() {
 		if source.BoundedMetadataEnabled() && recorder.Code == http.StatusOK && held != nil &&
 			(held.Store() == nil || scope == nil || scope.closed) {
 			t.Error("real credential output lost its cold owner before encoding")
@@ -812,7 +812,7 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 	if source.BoundedMetadataEnabled() && (held != nil && held.Store() != nil || scope != nil && !scope.closed || source.MetadataWorkUsedForTesting() != 0) {
 		t.Fatal("real credential request retained cold ownership")
 	}
-	var output scaleP21SW215AuthMatrixOutput
+	var output authMatrixOutput
 	if recorder.Code == http.StatusOK {
 		if err := json.Unmarshal(recorder.Body.Bytes(), &output); err != nil {
 			t.Fatal(err)
@@ -821,16 +821,16 @@ func scaleP21SW215AuthMatrixServe(t *testing.T, f scaleP21SW215AuthMatrixFixture
 	return recorder, output
 }
 
-func TestScaleP21SW215ColdAuthenticationPermissionMatrix(t *testing.T) {
+func TestColdAuthenticationPermissionMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21SW215AuthMatrixSeed(t, repo)
+			f := authMatrixSeed(t, repo)
 			workspace := f.data.Workspace.URLKey
-			hasIssue := func(data scaleP21SW215AuthProjection, id string) bool {
+			hasIssue := func(data authProjection, id string) bool {
 				return slices.ContainsFunc(data.Issues.Items, func(issue domain.Issue) bool { return issue.ID == id })
 			}
 			for _, reload := range []bool{false, true} {
@@ -850,8 +850,8 @@ func TestScaleP21SW215ColdAuthenticationPermissionMatrix(t *testing.T) {
 					for _, credential := range f.credentials[principal.user.ID] {
 						t.Run(fmt.Sprintf("reload=%t/%s/%s", reload, principal.name, credential.name), func(t *testing.T) {
 							for _, key := range []string{workspace, f.foreign} {
-								expected, want := scaleP21SW215AuthMatrixServe(t, f, repo, credential, key, nil)
-								actual, got := scaleP21SW215AuthMatrixServe(t, f, view, credential, key, nil)
+								expected, want := authMatrixServe(t, f, repo, credential, key, nil)
+								actual, got := authMatrixServe(t, f, view, credential, key, nil)
 								if actual.Code != expected.Code || !bytes.Equal(actual.Body.Bytes(), expected.Body.Bytes()) {
 									t.Fatal("actual-cookie/Bearer legacy/bounded auth or projection differs", actual.Code, expected.Code)
 								}
@@ -937,7 +937,7 @@ func TestScaleP21SW215ColdAuthenticationPermissionMatrix(t *testing.T) {
 						}
 					}
 					restore(false)
-					response, output := scaleP21SW215AuthMatrixServe(t, f, source, credential, workspace, func() { restore(true) })
+					response, output := authMatrixServe(t, f, source, credential, workspace, func() { restore(true) })
 					if response.Code != http.StatusOK || !hasIssue(output.Before, f.grantIssue) ||
 						output.Fresh == nil || hasIssue(*output.Fresh, f.grantIssue) {
 						t.Fatal("capture/fresh-use revocation was not enforced", response.Code)
@@ -947,7 +947,7 @@ func TestScaleP21SW215ColdAuthenticationPermissionMatrix(t *testing.T) {
 					} else if !bytes.Equal(response.Body.Bytes(), expected) {
 						t.Fatal("legacy/bounded capture-to-use grant revocation differs")
 					}
-					next, nextOutput := scaleP21SW215AuthMatrixServe(t, f, source, credential, workspace, nil)
+					next, nextOutput := authMatrixServe(t, f, source, credential, workspace, nil)
 					if next.Code != http.StatusOK || hasIssue(nextOutput.Before, f.grantIssue) {
 						t.Fatal("next authenticated request retained the revoked issue grant", next.Code)
 					}

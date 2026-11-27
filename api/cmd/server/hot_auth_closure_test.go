@@ -18,27 +18,27 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW323HotAuthorizationClosure(t *testing.T) {
+func TestHotAuthorizationClosure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Run("finite-registered-shapes-and-literal-decisions", func(t *testing.T) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
-			if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(method, "/api/files/sign?url=/uploads/image.png", nil)) {
+			if !membershipAuthorizationRequest(httptest.NewRequest(method, "/api/files/sign?url=/uploads/image.png", nil)) {
 				t.Fatal("file-signing membership shape absent", method)
 			}
 			for _, kind := range []string{"projects", "initiatives"} {
-				got, ref, handled := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(method, "/api/"+kind+"/target/updates/diff-preview", nil))
+				got, ref, handled := resourceAuthorizationRequestShape(httptest.NewRequest(method, "/api/"+kind+"/target/updates/diff-preview", nil))
 				if !handled || got != kind || ref != "target" {
 					t.Fatal("composer preview did not reuse source-resource authorization", method, kind, got, ref, handled)
 				}
 			}
 		}
-		if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, "/api/workflows/workflow/run", nil)) {
+		if !membershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, "/api/workflows/workflow/run", nil)) {
 			t.Fatal("finite manual workflow-run membership shape absent")
 		}
 		for _, path := range []string{"/api/workflows/a%2Fb/run", "/%61pi/workflows/a%2Fb/%72un", "/api/workflows/%2F/run"} {
-			if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
+			if !membershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
 				t.Fatal("registered escaped workflow segment was rejected", path)
 			}
 		}
@@ -54,10 +54,10 @@ func TestScaleP21SW323HotAuthorizationClosure(t *testing.T) {
 			{http.MethodPost, "/api/workflows"}, {http.MethodPost, "/api/workflows/workflow/retry"},
 		} {
 			request := httptest.NewRequest(row.method, row.path, nil)
-			if scaleP21SW306MembershipAuthorizationRequest(request) {
+			if membershipAuthorizationRequest(request) {
 				t.Fatal("membership extension captured another contract", row)
 			}
-			if _, _, handled := scaleP21SW255ResourceAuthorizationRequest(request); handled {
+			if _, _, handled := resourceAuthorizationRequestShape(request); handled {
 				t.Fatal("point extension captured another contract", row)
 			}
 		}
@@ -172,10 +172,10 @@ func TestScaleP21SW323HotAuthorizationClosure(t *testing.T) {
 		Body    string
 		Pattern string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw323-")
 			project, initiative := prefix+"project", prefix+"initiative"
 			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw323_seed", "", nil, func(data *domain.Bootstrap) error {

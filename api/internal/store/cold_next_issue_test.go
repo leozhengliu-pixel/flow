@@ -8,7 +8,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW325ColdPreferencesPreserveNextIssueNumber(t *testing.T) {
+func TestColdPreferencesPreserveNextIssueNumber(t *testing.T) {
 	for _, mode := range []string{"warm", "sql-reloaded"} {
 		t.Run(mode, func(t *testing.T) {
 			disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
@@ -17,7 +17,7 @@ func TestScaleP21SW325ColdPreferencesPreserveNextIssueNumber(t *testing.T) {
 					t.Error("cold preferences retained source storage after fixture cleanup")
 				}
 			})
-			f, view, workspace := scaleP21ColdPreferenceFixture(t)
+			f, view, workspace := scaleColdPreferenceFixture(t)
 			if mode == "sql-reloaded" {
 				decodes := f.WorkspaceMetadataDecodes()
 				loaded, stamp, err := f.loadWorkspaceStamped(t.Context(), workspace)
@@ -44,8 +44,8 @@ func TestScaleP21SW325ColdPreferencesPreserveNextIssueNumber(t *testing.T) {
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
-			saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
-			test := scaleP21ColdPreferenceCases(f.data.Viewer.ID)[0]
+			saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			test := scaleColdPreferenceCases(f.data.Viewer.ID)[0]
 			ctx := withMutationAggregateID(ContextWithActor(t.Context(), f.data.Viewer), test.aggregate)
 			var inputs []int
 			callback := func(data *domain.Bootstrap) (string, error) {
@@ -60,8 +60,8 @@ func TestScaleP21SW325ColdPreferencesPreserveNextIssueNumber(t *testing.T) {
 			if !found || want.NextIssueNumber != 777 {
 				t.Fatal("literal preferences kernel did not preserve installed counter", found, want.NextIssueNumber)
 			}
-			wantSQL := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
-			scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
+			wantSQL := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			scaleColdPreferenceRestore(t, f, workspace, saved, original)
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -71,7 +71,7 @@ func TestScaleP21SW325ColdPreferencesPreserveNextIssueNumber(t *testing.T) {
 			if !reflect.DeepEqual(inputs, []int{777, 777}) {
 				t.Fatal("preferences callback inputs changed", inputs)
 			}
-			if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, wantSQL) {
+			if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, wantSQL) {
 				t.Fatal("cold preferences changed literal SQL postimage")
 			}
 			if err := view.withColdMetadataRead(ctx, func(_ context.Context, facade *SQLiteStore) error {

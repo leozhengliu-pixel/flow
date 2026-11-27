@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-func TestScaleP21LogicalPublication(t *testing.T) {
+func TestScaleLogicalPublication(t *testing.T) {
 	for _, exact := range []bool{true, false} {
 		t.Run(map[bool]string{true: "exact", false: "unknown"}[exact], func(t *testing.T) {
-			f, warm, base := scaleP21SW27WarmLogicalFixture(t)
+			f, warm, base := warmLogicalFixture(t)
 			workspace := warm.Workspace.URLKey
 			view, err := f.BoundedMetadataViewForTesting(t.Context())
 			if err != nil {
@@ -32,7 +32,7 @@ func TestScaleP21LogicalPublication(t *testing.T) {
 			}
 			next := cloneBootstrap(before)
 			next.IntegrationConnections[0].Status = "publication-updated"
-			changes, _, err := scaleP16RecordChanges(before, next)
+			changes, _, err := scaleRecordChanges(before, next)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -43,7 +43,7 @@ func TestScaleP21LogicalPublication(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
-			if err := scaleP16WriteChanges(t.Context(), tx, workspace, newIssueReferences(next), changes); err != nil {
+			if err := scaleWriteChanges(t.Context(), tx, workspace, newIssueReferences(next), changes); err != nil {
 				t.Fatal(err)
 			}
 			view.mu.Lock()
@@ -110,8 +110,8 @@ func TestScaleP21LogicalPublication(t *testing.T) {
 	}
 }
 
-func TestScaleP21LogicalPublicationFailures(t *testing.T) {
-	f, warm, base := scaleP21SW27WarmLogicalFixture(t)
+func TestScaleLogicalPublicationFailures(t *testing.T) {
+	f, warm, base := warmLogicalFixture(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

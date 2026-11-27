@@ -10,10 +10,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW0CollectionStampAndProperties(t *testing.T) {
+func TestCollectionStampAndProperties(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	set := func(value bool) {
 		t.Helper()
@@ -84,7 +84,7 @@ func TestScaleP21SW0CollectionStampAndProperties(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0CollectionPostgresNULWorkspace(t *testing.T) {
+func TestCollectionPostgresNULWorkspace(t *testing.T) {
 	// No SQL connection is needed: an impossible PostgreSQL text key must
 	// not be cleaned into the name of a different, existing workspace.
 	s := &SQLiteStore{dialect: "postgres", metadataResidency: newMetadataResidency()}

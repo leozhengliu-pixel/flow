@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW0GuidanceProperties(t *testing.T) {
+func TestGuidanceProperties(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		reset := func() {
 			t.Helper()
@@ -47,7 +47,7 @@ func TestScaleP21SW0GuidanceProperties(t *testing.T) {
 						realtime = append(realtime, event)
 					})
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, f.request(user, key, map[string]string{"instructions": instructions}), (*server).updateWorkspaceAgentGuidance)
+					callPointSettingsHandler(&server{store: source}, w, f.request(user, key, map[string]string{"instructions": instructions}), (*server).updateWorkspaceAgentGuidance)
 					if w.Code != http.StatusOK && w.Code != http.StatusForbidden {
 						t.Fatalf("guidance status=%d body=%s", w.Code, w.Body.String())
 					}
@@ -70,10 +70,10 @@ func TestScaleP21SW0GuidanceProperties(t *testing.T) {
 					for _, event := range realtime {
 						events = append(events, []any{event.Type, event.AggregateID, event.ActorID, event.Payload})
 					}
-					outcomes = append(outcomes, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes()), data.WorkspaceSettings, events})
+					outcomes = append(outcomes, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes()), data.WorkspaceSettings, events})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("guidance property differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("guidance property differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})

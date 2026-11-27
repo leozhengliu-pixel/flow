@@ -10,8 +10,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW32OwnedReadRetainsGenerationAndWork(t *testing.T) {
-	f, warm, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestOwnedReadRetainsGenerationAndWork(t *testing.T) {
+	f, warm, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -67,8 +67,8 @@ func TestScaleP21SW32OwnedReadRetainsGenerationAndWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW32OwnedSelectionCloseAndBindings(t *testing.T) {
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestOwnedSelectionCloseAndBindings(t *testing.T) {
+	f, _, _ := warmLogicalFixture(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -114,8 +114,8 @@ func TestScaleP21SW32OwnedSelectionCloseAndBindings(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW32OwnedProjectionRejectsRecreatedWorkspaceAuthority(t *testing.T) {
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestOwnedProjectionRejectsRecreatedWorkspaceAuthority(t *testing.T) {
+	f, _, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -146,8 +146,8 @@ func TestScaleP21SW32OwnedProjectionRejectsRecreatedWorkspaceAuthority(t *testin
 	}
 }
 
-func TestScaleP21SW32WritesAndRecoveryIgnoreReadPins(t *testing.T) {
-	f, warm, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestWritesAndRecoveryIgnoreReadPins(t *testing.T) {
+	f, warm, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -230,8 +230,8 @@ func TestScaleP21SW32WritesAndRecoveryIgnoreReadPins(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW32OwnedSelectionBudgetErrors(t *testing.T) {
-	f, warm, stamp := scaleP21SW27WarmLogicalFixture(t)
+func TestOwnedSelectionBudgetErrors(t *testing.T) {
+	f, warm, stamp := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

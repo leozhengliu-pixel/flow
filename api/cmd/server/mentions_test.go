@@ -14,13 +14,13 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-type scaleP21SW189Work struct {
+type mentionsWork struct {
 	ctx        context.Context
 	used, peak uint64
 	limit      uint64
 }
 
-func (w *scaleP21SW189Work) admit(cost uint64) (func(), error) {
+func (w *mentionsWork) admit(cost uint64) (func(), error) {
 	if err := w.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (w *scaleP21SW189Work) admit(cost uint64) (func(), error) {
 	}, nil
 }
 
-func TestScaleP21SW189MentionDifferential(t *testing.T) {
+func TestMentionDifferential(t *testing.T) {
 	former := "sw189-former"
 	state := mentioningCollaborationState(former)
 	pending, err := base64.StdEncoding.DecodeString(state)
@@ -79,7 +79,7 @@ func TestScaleP21SW189MentionDifferential(t *testing.T) {
 				CollaborationUpdates: func(string) ([][]byte, error) { return test.updates, nil },
 			}
 			old := refuseFormerMemberStateMentions(&original, test.data, test.before, test.after, "document")
-			work := &scaleP21SW189Work{ctx: t.Context(), limit: 256 << 20}
+			work := &mentionsWork{ctx: t.Context(), limit: 256 << 20}
 			bounded := original
 			bounded.CollaborationWork = func() domain.CollaborationWork {
 				return domain.CollaborationWork{Context: work.ctx, Admit: work.admit}
@@ -99,11 +99,11 @@ func TestScaleP21SW189MentionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW189ContentStatePermissions(t *testing.T) {
+func TestContentStatePermissions(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	state := mentioningCollaborationState(f.data.Viewer.ID)
 	users := []domain.User{f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user, f.principals[4].user}
 	keys := []*domain.APIKey{
@@ -112,24 +112,24 @@ func TestScaleP21SW189ContentStatePermissions(t *testing.T) {
 		{ID: "sw189-empty", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}},
 		{ID: "sw189-selected", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}},
 	}
-	var cases []scaleP21IssueUpdateCase
+	var cases []scaleIssueUpdateCase
 	for principal, user := range users {
 		for credential, key := range keys {
 			for _, issue := range []string{f.triage.ID, f.hidden.ID} {
-				cases = append(cases, scaleP21IssueUpdateCase{
+				cases = append(cases, scaleIssueUpdateCase{
 					name: fmt.Sprintf("principal-%d/key-%d/%s", principal, credential, issue),
 					user: user, key: key, issue: issue, body: map[string]any{"contentState": state},
 				})
 			}
 		}
 	}
-	cases = append(cases, scaleP21IssueUpdateCase{
+	cases = append(cases, scaleIssueUpdateCase{
 		name: "old-identifier", user: f.data.Viewer, issue: f.triage.Identifier, body: map[string]any{"contentState": state},
 	})
 	f.runCases(t, cases)
 }
 
-func TestScaleP21SW189MentionFailureIsNotInvalidOldState(t *testing.T) {
+func TestMentionFailureIsNotInvalidOldState(t *testing.T) {
 	state := mentioningCollaborationState("former")
 	for _, failure := range []error{store.ErrMetadataWorkBudget, context.Canceled} {
 		t.Run(failure.Error(), func(t *testing.T) {
@@ -147,14 +147,14 @@ func TestScaleP21SW189MentionFailureIsNotInvalidOldState(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW189ContentStateRouteDifferential(t *testing.T) {
+func TestContentStateRouteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	former := mentioningCollaborationState(f.former.ID)
 	active := mentioningCollaborationState(f.data.Viewer.ID)
-	f.runCases(t, []scaleP21IssueUpdateCase{
+	f.runCases(t, []scaleIssueUpdateCase{
 		{name: "content-state-new-former", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": former}, code: 400},
 		{name: "content-state-active", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": active}, code: 200},
 		{name: "content-state-retained", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": former}, code: 200, edit: func(issue *domain.Issue) {
@@ -162,13 +162,13 @@ func TestScaleP21SW189ContentStateRouteDifferential(t *testing.T) {
 		}},
 		{name: "content-state-malformed", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": "invalid"}, code: 400},
 	})
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "content-state-active", user: f.data.Viewer, ids: []string{f.triage.ID, f.visible.ID}, update: map[string]any{"contentState": active}, code: 200},
 		{name: "content-state-new-former-rollback", user: f.data.Viewer, ids: []string{f.triage.ID, f.visible.ID}, update: map[string]any{"contentState": former}, code: 400},
 	})
 }
 
-func BenchmarkScaleP21SW189BoundedMentions(b *testing.B) {
+func BenchmarkBoundedMentions(b *testing.B) {
 	for _, count := range []int{100, 1000} {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {
 			ids := make([]string, count)
@@ -176,7 +176,7 @@ func BenchmarkScaleP21SW189BoundedMentions(b *testing.B) {
 				ids[index] = fmt.Sprintf("former-%d", index)
 			}
 			state := mentioningCollaborationState(ids...)
-			work := &scaleP21SW189Work{ctx: b.Context(), limit: 256 << 20}
+			work := &mentionsWork{ctx: b.Context(), limit: 256 << 20}
 			data := domain.Bootstrap{FormerMembers: func() map[string]bool { return map[string]bool{ids[0]: true} }}
 			data.CollaborationWork = func() domain.CollaborationWork {
 				return domain.CollaborationWork{Context: work.ctx, Admit: work.admit}

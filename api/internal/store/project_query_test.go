@@ -17,7 +17,7 @@ func TestProjectDirectoryPagesAndStripsDetailPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	ctx := scaleP21ResourceOutputContext(t)
+	ctx := scaleResourceOutputContext(t)
 	data := repo.Bootstrap()
 	teamID := data.Teams[0].ID
 	if err := repo.MutateWorkspace(WithColdWork(WithoutIssueRecordMutations(ctx), "workspace fixture"), data.Workspace.URLKey, "projects.seeded", "query-test", nil, func(next *domain.Bootstrap) error {

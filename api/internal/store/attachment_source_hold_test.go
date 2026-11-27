@@ -11,11 +11,11 @@ import (
 
 // Keep this accepted producer regression: the legacy decoded identity can
 // differ from the physical SQL row key after the public typed importer.
-func TestScaleP21SW16AttachmentImportedIdentitySourceHold(t *testing.T) {
+func TestAttachmentImportedIdentitySourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite preserves a NUL identity column while canonical JSON is sanitized")
 	}

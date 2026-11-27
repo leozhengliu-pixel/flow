@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21InstalledPointJSON(t *testing.T, data domain.Bootstrap, kind, ref string) []byte {
+func scaleInstalledPointJSON(t *testing.T, data domain.Bootstrap, kind, ref string) []byte {
 	t.Helper()
 	var selected any
 	if kind == "projects" {
@@ -32,7 +32,7 @@ func scaleP21InstalledPointJSON(t *testing.T, data domain.Bootstrap, kind, ref s
 	return raw
 }
 
-func TestScaleP21InstalledResourcePointReadNative(t *testing.T) {
+func TestScaleInstalledResourcePointReadNative(t *testing.T) {
 	stamp := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("native", 7*3600+123))
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "organization", URLKey: "logical"},
@@ -52,7 +52,7 @@ func TestScaleP21InstalledResourcePointReadNative(t *testing.T) {
 		},
 	}
 	values := map[string]domain.Bootstrap{"physical\x00": data}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = "physical\x00"
 	legacy := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical\x00"}
 	for _, workspace := range []string{"physical\x00", ""} {
@@ -68,8 +68,8 @@ func TestScaleP21InstalledResourcePointReadNative(t *testing.T) {
 				if err != nil || !found {
 					t.Fatal("trusted point read failed", kind, ref, found, err)
 				}
-				want := scaleP21InstalledPointJSON(t, prior, kind, ref)
-				got := scaleP21InstalledPointJSON(t, read.Data, kind, ref)
+				want := scaleInstalledPointJSON(t, prior, kind, ref)
+				got := scaleInstalledPointJSON(t, read.Data, kind, ref)
 				if !bytes.Equal(got, want) || read.Allowed != !bytes.Equal(want, []byte("null")) {
 					t.Fatalf("native point output differs %s/%q:\n%s\n%s", kind, ref, want, got)
 				}
@@ -111,10 +111,10 @@ func TestScaleP21InstalledResourcePointReadNative(t *testing.T) {
 	view.metadataResidency.work.limit = limit
 }
 
-func TestScaleP21InstalledResourcePointReadPinnedAndConcurrent(t *testing.T) {
+func TestScaleInstalledResourcePointReadPinnedAndConcurrent(t *testing.T) {
 	before := domain.Bootstrap{Projects: []domain.Project{{ID: "target", Name: "Before", IssueCount: 99}}}
 	after := domain.Bootstrap{Projects: []domain.Project{{ID: "target", Name: "After", IssueCount: 7}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
 	view.lastWorkspaceKey = "physical"
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "")
 	if err != nil {
@@ -169,10 +169,10 @@ func TestScaleP21InstalledResourcePointReadPinnedAndConcurrent(t *testing.T) {
 	}
 }
 
-func TestScaleP21InstalledResourcePointReadWarmReloadBodyBound(t *testing.T) {
+func TestScaleInstalledResourcePointReadWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -217,8 +217,8 @@ func TestScaleP21InstalledResourcePointReadWarmReloadBodyBound(t *testing.T) {
 				if err != nil || !found {
 					t.Fatal("warm/reloaded trusted point failed", state, found, err)
 				}
-				want := scaleP21InstalledPointJSON(t, prior, resource.kind, resource.ref)
-				got := scaleP21InstalledPointJSON(t, read.Data, resource.kind, resource.ref)
+				want := scaleInstalledPointJSON(t, prior, resource.kind, resource.ref)
+				got := scaleInstalledPointJSON(t, read.Data, resource.kind, resource.ref)
 				if !bytes.Equal(want, got) {
 					t.Fatal("warm/reloaded native output changed", state, resource.kind)
 				}
@@ -239,11 +239,11 @@ func TestScaleP21InstalledResourcePointReadWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21InstalledResourcePointReadProjectedComposition(t *testing.T) {
+func TestScaleInstalledResourcePointReadProjectedComposition(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -346,8 +346,8 @@ func TestScaleP21InstalledResourcePointReadProjectedComposition(t *testing.T) {
 			if err != nil {
 				t.Fatal("native projected read failed", provenance, resource, err)
 			}
-			before := scaleP21InstalledPointJSON(t, want, resource.kind, resource.ref)
-			after := scaleP21InstalledPointJSON(t, read.Data, resource.kind, resource.ref)
+			before := scaleInstalledPointJSON(t, want, resource.kind, resource.ref)
+			after := scaleInstalledPointJSON(t, read.Data, resource.kind, resource.ref)
 			if !bytes.Equal(before, after) || normalizedTargetQueries != 0 {
 				t.Fatalf("native projection differs provenance=%s kind=%s ref=%s SQL=%d\n%s\n%s", provenance, resource.kind, resource.ref, normalizedTargetQueries, before, after)
 			}
@@ -380,11 +380,11 @@ func TestScaleP21InstalledResourcePointReadProjectedComposition(t *testing.T) {
 	}
 }
 
-func TestScaleP21InstalledResourcePointReadSQLIdentityDifferential(t *testing.T) {
+func TestScaleInstalledResourcePointReadSQLIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect == "postgres" {
 		t.Skip("PostgreSQL text parameters cannot retain the NUL record key")
 	}
@@ -428,12 +428,12 @@ func TestScaleP21InstalledResourcePointReadSQLIdentityDifferential(t *testing.T)
 		t.Fatal("supported SQL identity was rejected", err)
 	}
 	for _, resource := range []struct{ kind, ref string }{{"projects", prefix + "project"}, {"initiatives", prefix + "initiative"}} {
-		before := scaleP21InstalledPointJSON(t, prior, resource.kind, resource.ref)
+		before := scaleInstalledPointJSON(t, prior, resource.kind, resource.ref)
 		read, err := view.BeginProjectedInstalledResourcePointRead(t.Context(), access, resource.kind, resource.ref)
 		if err != nil || bytes.Equal(before, []byte("null")) {
 			t.Fatal("supported SQL public point read failed", err)
 		}
-		after := scaleP21InstalledPointJSON(t, read.Data, resource.kind, resource.ref)
+		after := scaleInstalledPointJSON(t, read.Data, resource.kind, resource.ref)
 		read.Close()
 		if !bytes.Equal(before, after) {
 			t.Fatal("supported SQL point output changed")

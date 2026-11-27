@@ -1,4 +1,4 @@
-/** FilterBlock platform (Wave 5) — public surface. */
+/** Public FilterBlock exports. */
 
 export type {
   ActiveFilterBlock,

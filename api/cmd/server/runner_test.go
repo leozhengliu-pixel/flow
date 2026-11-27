@@ -26,11 +26,11 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP01Metrics struct {
-	SQL                  store.ScaleP01SQL
-	Commits              []store.ScaleP01Commit
+type scaleMetrics struct {
+	SQL                  store.ScaleSQL
+	Commits              []store.ScaleCommit
 	Evicted              int64
-	CPU                  scaleP01CPU
+	CPU                  scaleCPU
 	PID                  int
 	HeapAlloc, HeapInuse uint64
 	MaxRSS               int64
@@ -38,30 +38,30 @@ type scaleP01Metrics struct {
 	RequestTracking      bool
 }
 
-type scaleP01MetricSource func(context.Context) (scaleP01Metrics, error)
+type scaleMetricSource func(context.Context) (scaleMetrics, error)
 
-func scaleP01LocalMetricSource(probe *store.ScaleP01Probe) scaleP01MetricSource {
-	return func(context.Context) (scaleP01Metrics, error) {
+func scaleLocalMetricSource(probe *store.ScaleProbe) scaleMetricSource {
+	return func(context.Context) (scaleMetrics, error) {
 		sql, commits, evicted := probe.Snapshot()
 		var memory runtime.MemStats
 		runtime.ReadMemStats(&memory)
-		return scaleP01Metrics{SQL: sql, Commits: commits, Evicted: evicted, CPU: scaleP01CPUTime(), PID: os.Getpid(), HeapAlloc: memory.HeapAlloc, HeapInuse: memory.HeapInuse, MaxRSS: maxRSSBytes(), ActiveWrites: probe.ActiveLoadWrites(), RequestTracking: true}, nil
+		return scaleMetrics{SQL: sql, Commits: commits, Evicted: evicted, CPU: scaleCPUTime(), PID: os.Getpid(), HeapAlloc: memory.HeapAlloc, HeapInuse: memory.HeapInuse, MaxRSS: maxRSSBytes(), ActiveWrites: probe.ActiveLoadWrites(), RequestTracking: true}, nil
 	}
 }
 
-func scaleP01RunLocal(t *testing.T) {
+func scaleRunLocal(t *testing.T) {
 	t.Helper()
-	peers := scaleP01NewPeers(t)
-	fixture := scaleP01SeedFixture(t, peers)
-	sources := []scaleP01MetricSource{}
+	peers := scaleNewPeers(t)
+	fixture := scaleSeedFixture(t, peers)
+	sources := []scaleMetricSource{}
 	for _, repo := range peers.stores {
-		probe, _ := scaleP01Probes.Load(repo)
-		sources = append(sources, scaleP01LocalMetricSource(probe.(*store.ScaleP01Probe)))
+		probe, _ := scaleProbes.Load(repo)
+		sources = append(sources, scaleLocalMetricSource(probe.(*store.ScaleProbe)))
 	}
-	scaleP01Run(t, []string{peers.first.URL, peers.second.URL}, fixture, sources, false)
+	scaleRun(t, []string{peers.first.URL, peers.second.URL}, fixture, sources, false)
 }
 
-func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources []scaleP01MetricSource, external bool) {
+func scaleRun(t *testing.T, bases []string, fixture fixtureScaleFixture, sources []scaleMetricSource, external bool) {
 	t.Helper()
 	users := loadEnvInt("FLOW_LOAD_USERS", 100)
 	duration := loadEnvDuration("FLOW_LOAD_DURATION", 2*time.Minute)
@@ -75,7 +75,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	}
 	transport := &http.Transport{MaxIdleConnsPerHost: users * 2}
 	defer transport.CloseIdleConnections()
-	stats, ledger := newScaleP01RouteStats(), newScaleP01Ledger()
+	stats, ledger := newScaleRouteStats(), newScaleLedger()
 	streamCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	workCtx, stopWork := context.WithTimeout(streamCtx, duration)
@@ -88,12 +88,12 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	}
 	for index := range users {
 		identity := identities[index%len(identities)]
-		clients[index] = scaleP01Client(identity, bases, transport, timeout)
+		clients[index] = scaleClient(identity, bases, transport, timeout)
 		for kind, expected := range expectedByKind {
 			expected[index] = identity.ExpectedKinds[kind]
 		}
 	}
-	admin := scaleP01Client(fixture.Admin, bases, transport, timeout)
+	admin := scaleClient(fixture.Admin, bases, transport, timeout)
 	var requestCount, writeCount, writeFailures, streamAttempts, streamFailures atomic.Int64
 	var requestID atomic.Int64
 	var inFlight, maxInFlight atomic.Int64
@@ -145,7 +145,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 				var state domain.Bootstrap
 				return json.Unmarshal(raw, &state) == nil && state.Workspace.ID == fixture.WorkspaceID
 			}
-			if code != http.StatusServiceUnavailable || !scaleP01Pause(ctx, time.Duration(float64(2*time.Second)*(0.75+0.5*float64(attempt%3)/2))) {
+			if code != http.StatusServiceUnavailable || !scalePause(ctx, time.Duration(float64(2*time.Second)*(0.75+0.5*float64(attempt%3)/2))) {
 				return false
 			}
 		}
@@ -154,11 +154,11 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
-	start, cpuBefore := time.Now(), scaleP01CPUTime()
-	metricsBefore := make([]scaleP01Metrics, len(sources))
-	metricsAfter := make([]scaleP01Metrics, len(sources))
+	start, cpuBefore := time.Now(), scaleCPUTime()
+	metricsBefore := make([]scaleMetrics, len(sources))
+	metricsAfter := make([]scaleMetrics, len(sources))
 	apiHeapPeak := make([]uint64, len(sources))
-	browserLog := scaleP01BrowserLog{path: os.Getenv("FLOW_LOAD_BROWSER_ACKS")}
+	browserLog := scaleBrowserLog{path: os.Getenv("FLOW_LOAD_BROWSER_ACKS")}
 	metricErrors := []string{}
 	for i, source := range sources {
 		value, err := source(streamCtx)
@@ -264,7 +264,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			if !scaleP01Pause(workCtx, time.Duration(float64(duration)*.2*float64(index)/float64(users))) {
+			if !scalePause(workCtx, time.Duration(float64(duration)*.2*float64(index)/float64(users))) {
 				return
 			}
 			client, base := clients[index], bases[0]
@@ -283,7 +283,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 					case <-streamCtx.Done():
 						return
 					case first := <-reloads:
-						if !scaleP01Pause(streamCtx, time.Duration(index%1000)*time.Millisecond) {
+						if !scalePause(streamCtx, time.Duration(index%1000)*time.Millisecond) {
 							return
 						}
 						batch := []domain.RealtimeEvent{first}
@@ -292,9 +292,9 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 						}
 						ok := bootstrap(streamCtx, client, base)
 						code, _ := do(streamCtx, client, "visibility", http.MethodPost, base, "/api/issue-records/visibility", visibility, false)
-						if ok && code == http.StatusOK && scaleP01Pause(streamCtx, applyDelay) {
+						if ok && code == http.StatusOK && scalePause(streamCtx, applyDelay) {
 							for _, event := range batch {
-								ledger.ack(scaleP01Ack{event.ID, index, time.Now()}, "applied")
+								ledger.ack(scaleAck{event.ID, index, time.Now()}, "applied")
 							}
 						}
 					}
@@ -304,8 +304,8 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 				defer streams.Done()
 				streamClient := &http.Client{Jar: client.Jar, Transport: transport}
 				appliedState := map[string]json.RawMessage{}
-				scaleP01Stream(streamCtx, streamClient, base, fixture.Workspace, &streamAttempts, &streamFailures, func(event domain.RealtimeEvent) {
-					ledger.ack(scaleP01Ack{event.ID, index, time.Now()}, "received")
+				scaleStream(streamCtx, streamClient, base, fixture.Workspace, &streamAttempts, &streamFailures, func(event domain.RealtimeEvent) {
+					ledger.ack(scaleAck{event.ID, index, time.Now()}, "received")
 					kind, action := loadClientAction(loadRealtimeEvent{Type: event.Type, AggregateID: event.AggregateID, Payload: event.Payload})
 					if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") {
 						kind, action = "issue", "apply"
@@ -323,16 +323,16 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 						}
 						if kind == "team" && event.AggregateID != "" && json.Valid(event.Payload) {
 							appliedState[event.AggregateID] = bytes.Clone(event.Payload)
-							if scaleP01Pause(streamCtx, applyDelay) {
-								ledger.ack(scaleP01Ack{event.ID, index, time.Now()}, "applied")
+							if scalePause(streamCtx, applyDelay) {
+								ledger.ack(scaleAck{event.ID, index, time.Now()}, "applied")
 							}
 						} else if json.Unmarshal(event.Payload, &payload) != nil || len(payload.Entity) == 0 || string(payload.Entity) == "null" {
 							action = "reload"
 						} else {
 							var entity map[string]any
-							if json.Unmarshal(payload.Entity, &entity) == nil && entity["id"] == event.AggregateID && scaleP01Pause(streamCtx, applyDelay) {
+							if json.Unmarshal(payload.Entity, &entity) == nil && entity["id"] == event.AggregateID && scalePause(streamCtx, applyDelay) {
 								appliedState[event.AggregateID] = bytes.Clone(payload.Entity)
-								ledger.ack(scaleP01Ack{event.ID, index, time.Now()}, "applied")
+								ledger.ack(scaleAck{event.ID, index, time.Now()}, "applied")
 							}
 						}
 					}
@@ -490,7 +490,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 			metricMu.Unlock()
 			break
 		}
-		if !scaleP01Pause(streamCtx, 100*time.Millisecond) {
+		if !scalePause(streamCtx, 100*time.Millisecond) {
 			break
 		}
 		pollMetrics()
@@ -501,7 +501,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	background.Wait()
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
-	cpuAfter, ended := scaleP01CPUTime(), time.Now()
+	cpuAfter, ended := scaleCPUTime(), time.Now()
 	runtime.GC()
 	var settled runtime.MemStats
 	runtime.ReadMemStats(&settled)
@@ -519,7 +519,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 		"commitMetricsAvailable": len(sources) > 0, "browserMetricsAvailable": browserLog.path != "", "metricsComplete": len(sources) > 0 && len(metricErrors) == 0 && unaccounted == 0, "unaccountedSuccessfulWrites": unaccounted, "apiProcessIsolationVerified": external && len(sources) == 2,
 		"outstandingServerWrites": outstandingWrites,
 		"writes":                  writeCount.Load(), "writeErrors": writeFailures.Load(), "events": events, "clientActions": actions, "routes": stats.report(), "streamAttempts": streamAttempts.Load(), "streamErrors": streamFailures.Load(),
-		"processCPU": scaleP01CPUReport(cpuBefore, cpuAfter, ended.Sub(start), users), "memoryScope": "generator and both APIs in the same process", "metricErrors": metricErrors,
+		"processCPU": scaleCPUReport(cpuBefore, cpuAfter, ended.Sub(start), users), "memoryScope": "generator and both APIs in the same process", "metricErrors": metricErrors,
 	}
 	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" {
 		report["databaseDriver"] = driver
@@ -530,7 +530,7 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	if len(sources) == 0 {
 		report["sql"], report["commitClock"] = nil, "unavailable: external APIs have no P01 metric source; no commit latency can be claimed"
 	} else {
-		sqlBefore, sqlAfter := store.ScaleP01SQL{}, store.ScaleP01SQL{}
+		sqlBefore, sqlAfter := store.ScaleSQL{}, store.ScaleSQL{}
 		replicas := []any{}
 		for i := range sources {
 			a, b := metricsBefore[i], metricsAfter[i]
@@ -550,11 +550,11 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 				sqlBefore.ExecutionBuckets[bucket] += a.SQL.ExecutionBuckets[bucket]
 				sqlAfter.ExecutionBuckets[bucket] += b.SQL.ExecutionBuckets[bucket]
 			}
-			replicas = append(replicas, map[string]any{"pid": b.PID, "sql": scaleP01SQLDelta(a.SQL, b.SQL, int(requestCount.Load())), "cpu": scaleP01CPUReport(a.CPU, b.CPU, ended.Sub(start), users), "commitRingEvictions": b.Evicted - a.Evicted, "baselineHeapInuseMiB": a.HeapInuse >> 20, "sampledPeakHeapInuseMiB": apiHeapPeak[i] >> 20, "finalHeapInuseMiB": b.HeapInuse >> 20, "maxRSSMiB": b.MaxRSS >> 20})
+			replicas = append(replicas, map[string]any{"pid": b.PID, "sql": scaleSQLDelta(a.SQL, b.SQL, int(requestCount.Load())), "cpu": scaleCPUReport(a.CPU, b.CPU, ended.Sub(start), users), "commitRingEvictions": b.Evicted - a.Evicted, "baselineHeapInuseMiB": a.HeapInuse >> 20, "sampledPeakHeapInuseMiB": apiHeapPeak[i] >> 20, "finalHeapInuseMiB": b.HeapInuse >> 20, "maxRSSMiB": b.MaxRSS >> 20})
 		}
-		report["sql"], report["replicaMetrics"], report["commitClock"] = scaleP01SQLDelta(sqlBefore, sqlAfter, int(requestCount.Load())), replicas, "driver commit return, before sequencing and publication; same-host wall clock"
+		report["sql"], report["replicaMetrics"], report["commitClock"] = scaleSQLDelta(sqlBefore, sqlAfter, int(requestCount.Load())), replicas, "driver commit return, before sequencing and publication; same-host wall clock"
 	}
-	scaleP01SaveReport(t, report)
+	scaleSaveReport(t, report)
 }
 
 func maxTime(a, b time.Time) time.Time {
@@ -564,7 +564,7 @@ func maxTime(a, b time.Time) time.Time {
 	return a
 }
 
-func scaleP01Pause(ctx context.Context, duration time.Duration) bool {
+func scalePause(ctx context.Context, duration time.Duration) bool {
 	timer := time.NewTimer(max(duration, 0))
 	defer timer.Stop()
 	select {
@@ -575,7 +575,7 @@ func scaleP01Pause(ctx context.Context, duration time.Duration) bool {
 	}
 }
 
-func scaleP01Stream(ctx context.Context, client *http.Client, base, workspace string, attempts, failures *atomic.Int64, handle func(domain.RealtimeEvent)) {
+func scaleStream(ctx context.Context, client *http.Client, base, workspace string, attempts, failures *atomic.Int64, handle func(domain.RealtimeEvent)) {
 	cursor := ""
 	for ctx.Err() == nil {
 		attempts.Add(1)
@@ -617,7 +617,7 @@ func scaleP01Stream(ctx context.Context, client *http.Client, base, workspace st
 		} else if ctx.Err() == nil {
 			failures.Add(1)
 		}
-		if !scaleP01Pause(ctx, time.Second) {
+		if !scalePause(ctx, time.Second) {
 			return
 		}
 	}

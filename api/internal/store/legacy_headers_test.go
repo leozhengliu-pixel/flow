@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW196HeaderPlan(t *testing.T, before, next domain.Bootstrap, name string) (*legacyMetadataWritePlan, *legacyMetadataWriteField) {
+func headerPlan(t *testing.T, before, next domain.Bootstrap, name string) (*legacyMetadataWritePlan, *legacyMetadataWriteField) {
 	t.Helper()
 	left, err := captureMetadataLogicalSource(t.Context(), before, copyStamp{workspaceID: "sw196"})
 	if err != nil {
@@ -35,7 +35,7 @@ func scaleP21SW196HeaderPlan(t *testing.T, before, next domain.Bootstrap, name s
 	return plan, &legacyMetadataWriteField{field: field, before: left.fields[index], next: right.fields[index]}
 }
 
-func TestScaleP21SW196LegacyHeadersDuplicateOccurrences(t *testing.T) {
+func TestLegacyHeadersDuplicateOccurrences(t *testing.T) {
 	const count = 20000
 	before := domain.Bootstrap{Cycles: make([]domain.Cycle, count)}
 	next := domain.Bootstrap{Cycles: make([]domain.Cycle, count)}
@@ -43,7 +43,7 @@ func TestScaleP21SW196LegacyHeadersDuplicateOccurrences(t *testing.T) {
 		before.Cycles[index] = domain.Cycle{ID: "same-cycle", Number: index, Status: "current"}
 		next.Cycles[index] = domain.Cycle{ID: "same-cycle", Number: index, Status: "previous"}
 	}
-	plan, field := scaleP21SW196HeaderPlan(t, before, next, "cycles")
+	plan, field := headerPlan(t, before, next, "cycles")
 	if err := plan.headers(t.Context(), field); err != nil {
 		t.Fatal("legal duplicate fallback exceeded its topology budget", err)
 	}
@@ -74,12 +74,12 @@ func TestScaleP21SW196LegacyHeadersDuplicateOccurrences(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW196LegacyHeadersKeepOriginalIdentity(t *testing.T) {
+func TestLegacyHeadersKeepOriginalIdentity(t *testing.T) {
 	for _, id := range []string{"", strings.Repeat("x", 192), "invalid-\xff", "<tag>&\u2028"} {
 		t.Run(strings.ReplaceAll(id, "/", "_"), func(t *testing.T) {
 			before := domain.Bootstrap{Cycles: []domain.Cycle{{ID: id, Number: 1}}}
 			next := domain.Bootstrap{Cycles: []domain.Cycle{{ID: id, Number: 2}}}
-			plan, field := scaleP21SW196HeaderPlan(t, before, next, "cycles")
+			plan, field := headerPlan(t, before, next, "cycles")
 			if err := plan.headers(t.Context(), field); err != nil {
 				t.Fatal(err)
 			}
@@ -93,11 +93,11 @@ func TestScaleP21SW196LegacyHeadersKeepOriginalIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW196LegacyHeadersRefusalReleases(t *testing.T) {
+func TestLegacyHeadersRefusalReleases(t *testing.T) {
 	before := domain.Bootstrap{Cycles: []domain.Cycle{{ID: "cycle", Number: 1}}}
 	next := domain.Bootstrap{Cycles: []domain.Cycle{{ID: "cycle", Number: 2}}}
 	for _, cancelled := range []bool{false, true} {
-		plan, field := scaleP21SW196HeaderPlan(t, before, next, "cycles")
+		plan, field := headerPlan(t, before, next, "cycles")
 		ctx := t.Context()
 		want := ErrMetadataWorkBudget
 		if cancelled {

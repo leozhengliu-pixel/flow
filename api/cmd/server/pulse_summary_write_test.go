@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21PulseDispatch(input store.PulseSummaryDispatchInput) (store.PulseSummaryDispatch, error) {
+func scalePulseDispatch(input store.PulseSummaryDispatchInput) (store.PulseSummaryDispatch, error) {
 	preferences := input.Preferences
 	if !input.HasPreferences {
 		preferences = defaultPreferences(input.Notification.RecipientID)
@@ -32,7 +32,7 @@ func scaleP21PulseDispatch(input store.PulseSummaryDispatchInput) (store.PulseSu
 	return store.PulseSummaryDispatch{Send: true, Deliveries: data.NotificationDeliveries}, nil
 }
 
-func scaleP21PulseLegacyWrite(ctx context.Context, repo *store.SQLiteStore, workspace string, due []pulseDue, now time.Time) error {
+func scalePulseLegacyWrite(ctx context.Context, repo *store.SQLiteStore, workspace string, due []pulseDue, now time.Time) error {
 	ctx = store.WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
 	return repo.MutateWorkspace(ctx, workspace, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
 		if !workspaceFeatureEnabled(data.WorkspaceSettings, "pulse") {
@@ -69,7 +69,7 @@ func scaleP21PulseLegacyWrite(ctx context.Context, repo *store.SQLiteStore, work
 	})
 }
 
-func TestScaleP21PulseSummaryWriterServerPolicyDifferential(t *testing.T) {
+func TestScalePulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -79,7 +79,7 @@ func TestScaleP21PulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 	operator := previousDefaults
 	operator.User.EmailNotifications, operator.User.DesktopNotifications, operator.User.EmailFormat = &email, &desktop, &format
 	domain.SetCreationDefaults(operator)
-	for _, repo := range scaleP03ServerTestStores(t) {
+	for _, repo := range scaleServerTestStores(t) {
 		enabled := domain.NotificationChannelPreferences{Enabled: true}
 		empty := domain.NotificationChannelPreferences{Enabled: true, Categories: map[string]bool{}}
 		pulseOff := domain.NotificationChannelPreferences{Enabled: true, Categories: map[string]bool{"pulse": false}}
@@ -107,7 +107,7 @@ func TestScaleP21PulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 			t.Run(scenario.name, func(t *testing.T) {
 				// Missing preferences are normalized on reload. Keep each case's
 				// canonical preimage independent of previous case deletions.
-				f := scaleP03Fixture(t, repo)
+				f := resourceAccessScaleFixture(t, repo)
 				if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 					t.Fatal(err)
 				}
@@ -186,9 +186,9 @@ func TestScaleP21PulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 						if scenario.eligible && scenario.total > 0 {
 							candidate.Notification = &notification
 						}
-						err = source.CommitPulseSummaries(t.Context(), workspace, []store.PulseSummaryCandidate{candidate}, scaleP21PulseDispatch)
+						err = source.CommitPulseSummaries(t.Context(), workspace, []store.PulseSummaryCandidate{candidate}, scalePulseDispatch)
 					} else {
-						err = scaleP21PulseLegacyWrite(t.Context(), source, workspace, due, now)
+						err = scalePulseLegacyWrite(t.Context(), source, workspace, due, now)
 					}
 					if err != nil {
 						t.Fatal("summary policy write failed", bounded, err)
@@ -221,12 +221,12 @@ func TestScaleP21PulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21PulseSummaryWriterSchedulerDifferential(t *testing.T) {
+func TestScalePulseSummaryWriterSchedulerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}

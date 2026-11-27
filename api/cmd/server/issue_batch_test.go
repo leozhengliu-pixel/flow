@@ -25,7 +25,7 @@ import (
 // updates, atomic failures of mixed-team and 1000-issue batches, team-move
 // permissions, cancellation, concurrent batches and inline collections.
 
-func (f scaleP21IssueUpdateFixture) batch(service *server, user domain.User, key *domain.APIKey, ids []string, update map[string]any, cancelled bool) *httptest.ResponseRecorder {
+func (f scaleIssueUpdateFixture) batch(service *server, user domain.User, key *domain.APIKey, ids []string, update map[string]any, cancelled bool) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(map[string]any{"issueIds": ids, "update": update})
 	r := httptest.NewRequest(http.MethodPost, "/api/issue-records/batch", bytes.NewReader(raw))
 	r.Header.Set("Content-Type", "application/json")
@@ -66,9 +66,9 @@ func (f scaleP21IssueUpdateFixture) batch(service *server, user domain.User, key
 	return w
 }
 
-type scaleP21IssueBatchCase struct {
+type scaleIssueBatchCase struct {
 	name   string
-	opts   scaleP21TeamMoveOptions
+	opts   scaleTeamMoveOptions
 	edit   func(*domain.Issue)
 	setup  func(*testing.T)
 	user   domain.User
@@ -80,18 +80,18 @@ type scaleP21IssueBatchCase struct {
 	// fresh issues were created just before the batch, so an edit by their
 	// creator adds no history (the creation window); the others are aged.
 	fresh bool
-	check func(*testing.T, scaleP21IssueUpdateOutcome)
+	check func(*testing.T, scaleIssueUpdateOutcome)
 }
 
-func (f scaleP21IssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleP21IssueBatchCase) {
+func (f scaleIssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleIssueBatchCase) {
 	t.Helper()
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			single := scaleP21IssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID}
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(single)
-			f.scaleP21TriageWriterFixture.editBaseline = pinIssueFixtureAges(test.fresh)
-			defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
-			var before scaleP21IssueUpdateState
+			single := scaleIssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID}
+			f.scaleTriageWriterFixture.prepare = f.prepare(single)
+			f.scaleTriageWriterFixture.editBaseline = pinIssueFixtureAges(test.fresh)
+			defer func() { f.scaleTriageWriterFixture.prepare, f.scaleTriageWriterFixture.editBaseline = nil, nil }()
+			var before scaleIssueUpdateState
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				if !service.store.BoundedMetadataEnabled() {
 					before = f.state(t)
@@ -117,11 +117,11 @@ func (f scaleP21IssueUpdateFixture) runBatchCases(t *testing.T, cases []scaleP21
 	}
 }
 
-func TestScaleP21IssueBatchDifferential(t *testing.T) {
+func TestScaleIssueBatchDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member, guest, sub := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user, f.principals[4].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	pair := []string{f.triage.ID, f.visible.ID}
@@ -164,7 +164,7 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 		return string(raw)
 	}
 	// The new SLA's started event follows the three stored ones.
-	slaEvents := func(t *testing.T, outcome scaleP21IssueUpdateOutcome) {
+	slaEvents := func(t *testing.T, outcome scaleIssueUpdateOutcome) {
 		rows := f.rows(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='slaEvents' ORDER BY collection_order`, f.data.Workspace.URLKey)
 		numbered := false
 		for _, row := range rows {
@@ -180,8 +180,8 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 	// The admin created the hidden issue: moving it records history only
 	// outside the creation window; the owner's triage issue records it
 	// either way.
-	history := func(hidden bool) func(*testing.T, scaleP21IssueUpdateOutcome) {
-		return func(t *testing.T, outcome scaleP21IssueUpdateOutcome) {
+	history := func(hidden bool) func(*testing.T, scaleIssueUpdateOutcome) {
+		return func(t *testing.T, outcome scaleIssueUpdateOutcome) {
 			recorded := map[string]bool{}
 			for _, row := range outcome.State.Content {
 				var activity domain.ActivityEvent
@@ -194,7 +194,7 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 			}
 		}
 	}
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "priority-pair", edit: subscribe, user: owner, ids: pair, update: map[string]any{"priority": 2, "estimate": 3}, code: http.StatusOK},
 		{name: "duplicate-ids", user: owner, ids: []string{f.triage.ID, f.triage.ID}, update: map[string]any{"priority": 1}, code: http.StatusOK},
 		{name: "noop", user: owner, ids: pair, update: map[string]any{"priority": 0}, code: 0},
@@ -215,10 +215,10 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 		{name: "archive", user: owner, ids: pair, update: map[string]any{"archived": true}, code: http.StatusOK},
 		{name: "mixed-team-label-rolls-back", user: owner, ids: mixed, update: map[string]any{"labelIds": []string{"tm-l-bug"}}, code: http.StatusBadRequest},
 		{name: "mixed-team-priority", user: owner, ids: mixed, update: map[string]any{"priority": 4}, code: http.StatusOK},
-		{name: "move-pair-parent", opts: scaleP21TeamMoveOptions{project: "triage-p-public"}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusOK},
-		{name: "move-mixed-sub-team", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, code: http.StatusOK, check: history(true)},
-		{name: "move-mixed-sub-team-fresh", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, fresh: true, code: http.StatusOK, check: history(false)},
-		{name: "move-triage-target", opts: scaleP21TeamMoveOptions{triageTarget: true}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-triage"}, code: http.StatusOK},
+		{name: "move-pair-parent", opts: scaleTeamMoveOptions{project: "triage-p-public"}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusOK},
+		{name: "move-mixed-sub-team", opts: scaleTeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, code: http.StatusOK, check: history(true)},
+		{name: "move-mixed-sub-team-fresh", opts: scaleTeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: admin, ids: mixed, update: map[string]any{"teamId": "tm-sub", "stateId": "tmp-started"}, fresh: true, code: http.StatusOK, check: history(false)},
+		{name: "move-triage-target", opts: scaleTeamMoveOptions{triageTarget: true}, edit: subscribe, user: owner, ids: pair, update: map[string]any{"teamId": "tm-triage"}, code: http.StatusOK},
 		{name: "move-into-private-by-member", edit: subscribe, user: admin, ids: pair, update: map[string]any{"teamId": f.private}, code: http.StatusOK},
 		{name: "move-into-private-by-outsider", user: owner, ids: pair, update: map[string]any{"teamId": f.private}, code: http.StatusForbidden},
 		{name: "move-by-guest", user: guest, ids: pair, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusForbidden},
@@ -229,24 +229,24 @@ func TestScaleP21IssueBatchDifferential(t *testing.T) {
 	})
 }
 
-func TestScaleP21IssueBatchContentStateDifferential(t *testing.T) {
+func TestScaleIssueBatchContentStateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	state := mentioningCollaborationState(f.principals[2].user.ID)
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "content-state", user: f.data.Viewer, ids: []string{f.triage.ID, f.visible.ID}, update: map[string]any{"contentState": state}, code: http.StatusOK},
 	})
 }
 
 // Concurrent batches over overlapping issues serialize: each bounded
 // outcome equals one sequential legacy order.
-func TestScaleP21IssueBatchConcurrent(t *testing.T) {
+func TestScaleIssueBatchConcurrent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member := f.data.Viewer, f.principals[1].user, f.principals[2].user
 	triageOff := func(t *testing.T) {
 		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.issue_batch_triage_off", "", nil, func(data *domain.Bootstrap) error {
@@ -256,11 +256,11 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	test := scaleP21IssueUpdateCase{issue: f.triage.ID, setup: triageOff, edit: func(issue *domain.Issue) { issue.SubscriberIDs = []string{member.ID} }}
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
+	test := scaleIssueUpdateCase{issue: f.triage.ID, setup: triageOff, edit: func(issue *domain.Issue) { issue.SubscriberIDs = []string{member.ID} }}
+	f.scaleTriageWriterFixture.prepare = f.prepare(test)
 	// The owner moves issues it created: every run sees them aged.
-	f.scaleP21TriageWriterFixture.editBaseline = pinIssueFixtureAges(false)
-	defer func() { f.scaleP21TriageWriterFixture.prepare, f.scaleP21TriageWriterFixture.editBaseline = nil, nil }()
+	f.scaleTriageWriterFixture.editBaseline = pinIssueFixtureAges(false)
+	defer func() { f.scaleTriageWriterFixture.prepare, f.scaleTriageWriterFixture.editBaseline = nil, nil }()
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.batch(service, owner, nil, []string{f.triage.ID, f.visible.ID}, map[string]any{"teamId": "tm-parent"}, false)
 	}
@@ -277,8 +277,8 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 			}
 			return nil
 		})
-		got.Webhooks, got.Realtime = scaleP21IssueUpdateSorted(t, got.Webhooks, started), scaleP21IssueUpdateSorted(t, got.Realtime, started)
-		expected[scaleP21IssueUpdateNormalize(t, got, started)] = true
+		got.Webhooks, got.Realtime = scaleIssueUpdateSorted(t, got.Webhooks, started), scaleIssueUpdateSorted(t, got.Realtime, started)
+		expected[scaleIssueUpdateNormalize(t, got, started)] = true
 	}
 	for _, source := range []string{"warm", "reloaded"} {
 		for attempt := range 3 {
@@ -298,8 +298,8 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 				}
 				return nil
 			})
-			got.Webhooks, got.Realtime = scaleP21IssueUpdateSorted(t, got.Webhooks, started), scaleP21IssueUpdateSorted(t, got.Realtime, started)
-			if !expected[scaleP21IssueUpdateNormalize(t, got, started)] {
+			got.Webhooks, got.Realtime = scaleIssueUpdateSorted(t, got.Webhooks, started), scaleIssueUpdateSorted(t, got.Realtime, started)
+			if !expected[scaleIssueUpdateNormalize(t, got, started)] {
 				t.Fatalf("%s attempt %d: concurrent batches match no sequential legacy order", source, attempt)
 			}
 		}
@@ -308,11 +308,11 @@ func TestScaleP21IssueBatchConcurrent(t *testing.T) {
 
 // Inline labels and documents (duplicate IDs): a batch move remaps labels
 // by first match and rescopes every attached copy.
-func TestScaleP21IssueBatchInlineCollections(t *testing.T) {
+func TestScaleIssueBatchInlineCollections(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner := f.data.Viewer
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	inline := func(t *testing.T) {
@@ -338,16 +338,16 @@ func TestScaleP21IssueBatchInlineCollections(t *testing.T) {
 			}
 		}
 	}
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "inline-move", setup: inline, user: owner, ids: []string{f.triage.ID, f.visible.ID}, update: map[string]any{"teamId": "tm-parent"}, code: http.StatusOK},
 		{name: "inline-priority", setup: inline, user: owner, ids: []string{f.triage.ID}, update: map[string]any{"priority": 2}, code: http.StatusOK},
 	})
 }
 
-// scaleP21IssueBatchBulk adds issues to the fixture's public team so a
+// scaleIssueBatchBulk adds issues to the fixture's public team so a
 // batch names size issues (with the triage and visible issues), and
 // returns their IDs. Triage runs are off: the batch writer is measured.
-func scaleP21IssueBatchBulk(t *testing.T, f scaleP21IssueUpdateFixture, size int) []string {
+func scaleIssueBatchBulk(t *testing.T, f scaleIssueUpdateFixture, size int) []string {
 	t.Helper()
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	ids := []string{f.triage.ID, f.visible.ID}
@@ -381,7 +381,7 @@ func scaleP21IssueBatchBulk(t *testing.T, f scaleP21IssueUpdateFixture, size int
 	return ids
 }
 
-func scaleP21IssueBatchArchive(f scaleP21IssueUpdateFixture, id string) func(*testing.T) {
+func scaleIssueBatchArchive(f scaleIssueUpdateFixture, id string) func(*testing.T) {
 	return func(t *testing.T) {
 		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		if err := f.repository.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), id), f.data.Workspace.URLKey, "scale_p21.issue_batch_archived", id, nil, func(data *domain.Bootstrap) error {
@@ -399,32 +399,32 @@ func scaleP21IssueBatchArchive(f scaleP21IssueUpdateFixture, id string) func(*te
 
 // A 500-issue batch commits, and one failing issue rolls the whole batch
 // back, byte for byte like the legacy writer.
-func TestScaleP21IssueBatchLarge(t *testing.T) {
+func TestScaleIssueBatchLarge(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21IssueBatchBulk(t, f, 500)
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
+	f := scaleIssueUpdateSetup(t)
+	ids := scaleIssueBatchBulk(t, f, 500)
+	f.runBatchCases(t, []scaleIssueBatchCase{
 		{name: "500-priority", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusOK},
-		{name: "500-one-archived-rolls-back", setup: scaleP21IssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
+		{name: "500-one-archived-rolls-back", setup: scaleIssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
 	})
 }
 
 // A full 1000-issue request preserves legacy commit and rollback behavior.
-func TestScaleP21IssueBatchThousandAtomic(t *testing.T) {
+func TestScaleIssueBatchThousandAtomic(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21IssueBatchBulk(t, f, 1000)
-	f.runBatchCases(t, []scaleP21IssueBatchCase{
-		{name: "commit", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusOK, check: func(t *testing.T, got scaleP21IssueUpdateOutcome) {
+	f := scaleIssueUpdateSetup(t)
+	ids := scaleIssueBatchBulk(t, f, 1000)
+	f.runBatchCases(t, []scaleIssueBatchCase{
+		{name: "commit", user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusOK, check: func(t *testing.T, got scaleIssueUpdateOutcome) {
 			if len(got.State.Events) != 1 {
 				t.Fatalf("committed batch published %d events", len(got.State.Events))
 			}
 		}},
-		{name: "one-archived", setup: scaleP21IssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
+		{name: "one-archived", setup: scaleIssueBatchArchive(f, ids[len(ids)-1]), user: f.data.Viewer, ids: ids, update: map[string]any{"priority": 2}, code: http.StatusBadRequest},
 	})
 }
 
@@ -433,7 +433,7 @@ func TestScaleP21IssueBatchThousandAtomic(t *testing.T) {
 // updateIssueRecord (whose event payload is the input; updateIssue would
 // emit {changes, issue}) and POST /api/issues/batch by the scoped
 // batchUpdate. updateIssue's own binding is never reached.
-func TestScaleP21LegacyIssueWritesReachRecordRoutes(t *testing.T) {
+func TestScaleLegacyIssueWritesReachRecordRoutes(t *testing.T) {
 	repo, err := store.OpenSQLiteTestFixture(t.TempDir() + "/routes.db")
 	if err != nil {
 		t.Fatal(err)

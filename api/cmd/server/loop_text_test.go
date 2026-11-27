@@ -16,7 +16,7 @@ import (
 	"unsafe"
 )
 
-func scaleP21SW136Chunks(value []byte, width int) func(func([]byte) error) error {
+func loopTextChunks(value []byte, width int) func(func([]byte) error) error {
 	return func(visit func([]byte) error) error {
 		if err := visit(nil); err != nil {
 			return err
@@ -32,11 +32,11 @@ func scaleP21SW136Chunks(value []byte, width int) func(func([]byte) error) error
 	}
 }
 
-func scaleP21SW136Compare(t *testing.T, name, instructions string, widths ...int) {
+func loopTextCompare(t *testing.T, name, instructions string, widths ...int) {
 	t.Helper()
 	wantHash, wantDescription := loopContractHash(name, instructions), fallbackLoopDescription(instructions)
 	for _, width := range widths {
-		hash, description, err := scaleP21LoopText(t.Context(), name, scaleP21SW136Chunks([]byte(instructions), width))
+		hash, description, err := scaleLoopText(t.Context(), name, loopTextChunks([]byte(instructions), width))
 		if err != nil || hash != wantHash || description != wantDescription {
 			t.Fatalf("width=%d name=%q text=%.400q\nhash=%q/%q description=%q/%q err=%v",
 				width, name, instructions, wantHash, hash, wantDescription, description, err)
@@ -44,7 +44,7 @@ func scaleP21SW136Compare(t *testing.T, name, instructions string, widths ...int
 	}
 }
 
-func TestScaleP21SW136LoopTextDifferential(t *testing.T) {
+func TestLoopTextDifferential(t *testing.T) {
 	cases := []string{
 		"", " \t\r\n\v\f\u0085\u00a0\u2000\u2028\u3000", "plain",
 		" \n\t# Heading:\n## Another:\n  - Do work. Then continue.\n ",
@@ -74,7 +74,7 @@ func TestScaleP21SW136LoopTextDifferential(t *testing.T) {
 	for index, value := range cases {
 		for _, name := range names {
 			t.Run(strings.Join([]string{"case", string(rune('A' + index))}, "-"), func(t *testing.T) {
-				scaleP21SW136Compare(t, name, value, 1, 2, 3, 4, 7, 64, 1024)
+				loopTextCompare(t, name, value, 1, 2, 3, 4, 7, 64, 1024)
 			})
 		}
 	}
@@ -86,22 +86,22 @@ func TestScaleP21SW136LoopTextDifferential(t *testing.T) {
 		for index := range value {
 			value[index] = alphabet[random.Intn(len(alphabet))]
 		}
-		scaleP21SW136Compare(t, "\u3000random\xff ", string(value), 1, 2, 3, 7, 64)
+		loopTextCompare(t, "\u3000random\xff ", string(value), 1, 2, 3, 7, 64)
 	}
 }
 
-func TestScaleP21SW136LoopTextHugeAndReusedChunks(t *testing.T) {
+func TestLoopTextHugeAndReusedChunks(t *testing.T) {
 	for _, value := range []string{
 		strings.Repeat("**", 2<<20),
 		strings.Repeat(" # Heading:\n", 100000) + "\u3000Last valid line? More text",
 		strings.Repeat("# Heading:\n", 100000),
 		"  start" + strings.Repeat("\u3000", 1<<20),
 	} {
-		scaleP21SW136Compare(t, " Large loop ", value, 1021, 16<<10)
+		loopTextCompare(t, " Large loop ", value, 1021, 16<<10)
 	}
 	value := " \u3000# Heading:\n**Do work**.\xa0discarded\x00"
 	var reused [3]byte
-	hash, description, err := scaleP21LoopText(t.Context(), "reused", func(visit func([]byte) error) error {
+	hash, description, err := scaleLoopText(t.Context(), "reused", func(visit func([]byte) error) error {
 		for offset := 0; offset < len(value); {
 			n := copy(reused[:], value[offset:])
 			if err := visit(reused[:n]); err != nil {
@@ -119,13 +119,13 @@ func TestScaleP21SW136LoopTextHugeAndReusedChunks(t *testing.T) {
 	}
 }
 
-type scaleP21SW136CancelContext struct {
+type loopTextCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	checks int
 }
 
-func (c *scaleP21SW136CancelContext) Err() error {
+func (c *loopTextCancelContext) Err() error {
 	c.checks++
 	if c.checks == 8 {
 		c.cancel()
@@ -133,17 +133,17 @@ func (c *scaleP21SW136CancelContext) Err() error {
 	return c.Context.Err()
 }
 
-func TestScaleP21SW136LoopTextFailures(t *testing.T) {
+func TestLoopTextFailures(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if hash, description, err := scaleP21LoopText(ctx, "", func(func([]byte) error) error {
+	if hash, description, err := scaleLoopText(ctx, "", func(func([]byte) error) error {
 		t.Fatal("canceled helper called its producer")
 		return nil
 	}); !errors.Is(err, context.Canceled) || hash != "" || description != "" {
 		t.Fatal("initial cancellation escaped partial text", err)
 	}
 	failure := errors.New("instruction read failed")
-	hash, description, err := scaleP21LoopText(t.Context(), "", func(visit func([]byte) error) error {
+	hash, description, err := scaleLoopText(t.Context(), "", func(visit func([]byte) error) error {
 		if err := visit([]byte("partial")); err != nil {
 			return err
 		}
@@ -154,9 +154,9 @@ func TestScaleP21SW136LoopTextFailures(t *testing.T) {
 	}
 	base, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	observed := &scaleP21SW136CancelContext{Context: base, cancel: cancel}
+	observed := &loopTextCancelContext{Context: base, cancel: cancel}
 	large := []byte(strings.Repeat("streamed text ", 100000))
-	hash, description, err = scaleP21LoopText(observed, "", func(visit func([]byte) error) error {
+	hash, description, err = scaleLoopText(observed, "", func(visit func([]byte) error) error {
 		_ = visit(large)
 		// Even a producer ignoring the callback failure must not publish output.
 		_ = visit([]byte("ignored"))
@@ -165,12 +165,12 @@ func TestScaleP21SW136LoopTextFailures(t *testing.T) {
 	if !errors.Is(err, context.Canceled) || hash != "" || description != "" {
 		t.Fatal("single-chunk cancellation escaped partial text", err)
 	}
-	if hash, description, err := scaleP21LoopText(t.Context(), "", nil); err == nil || hash != "" || description != "" {
+	if hash, description, err := scaleLoopText(t.Context(), "", nil); err == nil || hash != "" || description != "" {
 		t.Fatal("nil producer was accepted")
 	}
 }
 
-func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
+func TestLoopTextScratchBound(t *testing.T) {
 	// TotalAlloc is process-wide. Run only this test in the child, with no
 	// server or store fixtures to start background workers.
 	const child = "FLOW_TEST_LOOP_TEXT_SCRATCH_CHILD"
@@ -191,7 +191,7 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 		t.Logf("%s", output)
 		return
 	}
-	stateBytes := unsafe.Sizeof(scaleP21LoopTextState{})
+	stateBytes := unsafe.Sizeof(scaleLoopTextState{})
 	if stateBytes > 4<<10 {
 		t.Fatal("streamed loop text state exceeds 4 KiB", stateBytes)
 	}
@@ -213,7 +213,7 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			hash, description, err := scaleP21LoopText(t.Context(), "allocation bound", chunks)
+			hash, description, err := scaleLoopText(t.Context(), "allocation bound", chunks)
 			runtime.ReadMemStats(&after)
 			if err != nil || len(hash) != 24 || utf8.RuneCountInString(description) > 140 {
 				t.Fatal("bounded fixture failed", hash, description, err)

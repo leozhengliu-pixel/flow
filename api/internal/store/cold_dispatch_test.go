@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	scaleP21SW191Read  = "server/oauth_authorized_applications.go:listAuthorizedApplications"
-	scaleP21SW191Write = "server/settings_features.go:createProjectStatus"
+	coldDispatchRead  = "server/oauth_authorized_applications.go:listAuthorizedApplications"
+	coldDispatchWrite = "server/settings_features.go:createProjectStatus"
 )
 
-func TestScaleP21SW191ColdDispatchOffAndRegistration(t *testing.T) {
+func TestColdDispatchOffAndRegistration(t *testing.T) {
 	repo := &SQLiteStore{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -40,7 +40,7 @@ func TestScaleP21SW191ColdDispatchOffAndRegistration(t *testing.T) {
 			t.Fatal("off dispatch changed the literal result", err)
 		}
 	}
-	_, view, _ := scaleP21ColdReadFixture(t)
+	_, view, _ := scaleColdReadFixture(t)
 	for _, consumer := range []string{"missing", "server/issue_record_aliases.go:buildIssueRecordAuthorizationData"} {
 		err := view.WithColdMetadataRead(t.Context(), consumer, func(context.Context, *SQLiteStore) error {
 			t.Fatal("unregistered or HOT consumer entered the cold lifetime")
@@ -52,8 +52,8 @@ func TestScaleP21SW191ColdDispatchOffAndRegistration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
-	f, view, workspace := scaleP21ColdReadFixture(t)
+func TestColdDispatchNestedAndPublication(t *testing.T) {
+	f, view, workspace := scaleColdReadFixture(t)
 	expected, found := f.WorkspaceMetadata(workspace)
 	if !found {
 		t.Fatal("owned source missing")
@@ -61,7 +61,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 	const event = "project_status.created"
 	status := domain.ProjectStatus{ID: "sw191-project-status", Name: "New status", Type: "planned", Position: float64(len(expected.ProjectStatuses))}
 	containsStatus := func(data domain.Bootstrap) bool { return slices.Contains(data.ProjectStatuses, status) }
-	err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(ctx context.Context, facade *SQLiteStore) error {
+	err := view.WithColdMetadataRead(t.Context(), coldDispatchRead, func(ctx context.Context, facade *SQLiteStore) error {
 		if facade == view || facade.BoundedMetadataEnabled() || facade.db != view.db || len(view.metadataResidency.coldSlot) != 1 {
 			t.Fatal("cold dispatch changed database ownership or admission")
 		}
@@ -69,7 +69,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 		if !found || !reflect.DeepEqual(actual, expected) {
 			t.Fatal("cold dispatch changed accepted native inputs")
 		}
-		if err := facade.WithColdMetadataRead(ctx, scaleP21SW191Read, func(_ context.Context, nested *SQLiteStore) error {
+		if err := facade.WithColdMetadataRead(ctx, coldDispatchRead, func(_ context.Context, nested *SQLiteStore) error {
 			if nested != facade || len(view.metadataResidency.coldSlot) != 1 {
 				t.Fatal("nested facade read acquired a second lifetime")
 			}
@@ -85,7 +85,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 			t.Fatal("read-only cold facade accepted a write", err)
 		}
 		payload := map[string]any{"name": status.Name}
-		return facade.WithColdMetadataMutation(ctx, scaleP21SW191Write, workspace, event, payload, func(ctx context.Context, nested *SQLiteStore) error {
+		return facade.WithColdMetadataMutation(ctx, coldDispatchWrite, workspace, event, payload, func(ctx context.Context, nested *SQLiteStore) error {
 			if nested != facade || nested.coldWrite == nil || nested.writeMu.shared != &view.writeMu || len(view.metadataResidency.coldSlot) != 1 {
 				t.Fatal("nested cold writer lost its shared publication lifetime")
 			}
@@ -95,7 +95,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 			}); err != nil {
 				return err
 			}
-			return nested.WithColdMetadataRead(ctx, scaleP21SW191Read, func(_ context.Context, borrowed *SQLiteStore) error {
+			return nested.WithColdMetadataRead(ctx, coldDispatchRead, func(_ context.Context, borrowed *SQLiteStore) error {
 				current, found := borrowed.WorkspaceMetadata(workspace)
 				if borrowed != facade || !found || !containsStatus(current) {
 					t.Fatal("nested cold reader lost the committed postimage")
@@ -117,7 +117,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 	if !containsStatus(persisted) {
 		t.Fatal("cold dispatch failed to persist its postimage")
 	}
-	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(_ context.Context, facade *SQLiteStore) error {
+	if err := view.WithColdMetadataRead(t.Context(), coldDispatchRead, func(_ context.Context, facade *SQLiteStore) error {
 		current, found := facade.WorkspaceMetadata(workspace)
 		if !found || !containsStatus(current) {
 			t.Fatal("parent installed generation missed the cold write")
@@ -126,7 +126,7 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := view.WithColdMetadataMutation(t.Context(), scaleP21SW191Write, workspace, "issue.updated", nil, func(context.Context, *SQLiteStore) error {
+	if err := view.WithColdMetadataMutation(t.Context(), coldDispatchWrite, workspace, "issue.updated", nil, func(context.Context, *SQLiteStore) error {
 		t.Fatal("unintegrated issue writer was admitted")
 		return nil
 	}); !errors.Is(err, ErrBoundedMetadataCoverage) {
@@ -134,23 +134,23 @@ func TestScaleP21SW191ColdDispatchNestedAndPublication(t *testing.T) {
 	}
 }
 
-type scaleP21SW191WaitingContext struct {
+type waitingContext struct {
 	context.Context
 	waiting chan struct{}
 	once    sync.Once
 }
 
-func (c *scaleP21SW191WaitingContext) Done() <-chan struct{} {
+func (c *waitingContext) Done() <-chan struct{} {
 	c.once.Do(func() { close(c.waiting) })
 	return c.Context.Done()
 }
 
-func TestScaleP21SW191ColdDispatchCancellationAndLifetime(t *testing.T) {
-	_, view, _ := scaleP21ColdReadFixture(t)
+func TestColdDispatchCancellationAndLifetime(t *testing.T) {
+	_, view, _ := scaleColdReadFixture(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	first := make(chan error, 1)
 	go func() {
-		first <- view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(context.Context, *SQLiteStore) error {
+		first <- view.WithColdMetadataRead(t.Context(), coldDispatchRead, func(context.Context, *SQLiteStore) error {
 			close(entered)
 			<-release
 			return nil
@@ -158,10 +158,10 @@ func TestScaleP21SW191ColdDispatchCancellationAndLifetime(t *testing.T) {
 	}()
 	<-entered
 	ctx, cancel := context.WithCancel(t.Context())
-	waiting := &scaleP21SW191WaitingContext{Context: ctx, waiting: make(chan struct{})}
+	waiting := &waitingContext{Context: ctx, waiting: make(chan struct{})}
 	second := make(chan error, 1)
 	go func() {
-		second <- view.WithColdMetadataRead(waiting, scaleP21SW191Read, func(context.Context, *SQLiteStore) error {
+		second <- view.WithColdMetadataRead(waiting, coldDispatchRead, func(context.Context, *SQLiteStore) error {
 			t.Error("cancelled cold waiter entered the callback")
 			return nil
 		})

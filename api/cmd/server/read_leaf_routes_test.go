@@ -20,20 +20,20 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW240Result struct {
+type readLeafRoutesResult struct {
 	code    int
 	header  http.Header
 	body    []byte
 	queries int
 }
 
-func scaleP21SW240Route(t *testing.T, source *store.SQLiteStore, request *http.Request, dev, shared, requireOwnership bool) scaleP21SW240Result {
+func readLeafRoutesRoute(t *testing.T, source *store.SQLiteStore, request *http.Request, dev, shared, requireOwnership bool) readLeafRoutesResult {
 	t.Helper()
 	owned, release := beginRequestResourceReads(request)
 	defer release()
 	statements := 0
 	owned = owned.WithContext(store.WithSQLStatementObserver(owned.Context(), func(string) { statements++ }))
-	writer := &scaleP21SW59ResponseWriter{
+	writer := &responseWriter{
 		ResponseRecorder: httptest.NewRecorder(), t: t, source: source,
 		requireHeld: source.BoundedMetadataEnabled() && requireOwnership,
 	}
@@ -46,19 +46,19 @@ func scaleP21SW240Route(t *testing.T, source *store.SQLiteStore, request *http.R
 	if source.MetadataWorkUsedForTesting() != 0 || source.BoundedMetadataEnabled() && source.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("route retained work or decoded the full metadata graph")
 	}
-	return scaleP21SW240Result{writer.Code, writer.Header().Clone(), append([]byte(nil), writer.Body.Bytes()...), statements}
+	return readLeafRoutesResult{writer.Code, writer.Header().Clone(), append([]byte(nil), writer.Body.Bytes()...), statements}
 }
 
-func scaleP21SW240Compare(t *testing.T, name string, old, bounded scaleP21SW240Result) {
+func readLeafRoutesCompare(t *testing.T, name string, old, bounded readLeafRoutesResult) {
 	t.Helper()
 	if old.code != bounded.code || !bytes.Equal(old.body, bounded.body) || !reflect.DeepEqual(old.header, bounded.header) {
 		t.Fatalf("%s differs:\nliteral=%d %v %s\nbounded=%d %v %s", name, old.code, old.header, old.body, bounded.code, bounded.header, bounded.body)
 	}
 }
 
-// scaleP21SW240Stored digests every canonical row the two routes could
+// stored digests every canonical row the two routes could
 // touch, plus the global event log. Both routes are read-only.
-func scaleP21SW240Stored(t *testing.T, database *scaleP04Database, workspace string) [32]byte {
+func readLeafRoutesStored(t *testing.T, database *scaleDatabase, workspace string) [32]byte {
 	t.Helper()
 	digest := sha256.New()
 	for _, query := range []string{
@@ -88,24 +88,24 @@ func scaleP21SW240Stored(t *testing.T, database *scaleP04Database, workspace str
 	return [32]byte(digest.Sum(nil))
 }
 
-func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
+func TestReadLeafRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	database := &scaleP04Database{config: config}
+	database := &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if database.reader != nil {
 			_ = database.reader.Close()
 		}
 	})
-	other := scaleP03Fixture(t, repo)
-	f := scaleP21M2Setup(t, repo)
+	other := resourceAccessScaleFixture(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	var events atomic.Int64
 	repo.SetWebhookSink(func(string, domain.DomainEvent) { events.Add(1) })
 	repo.SetRealtimeSink(func(string, domain.RealtimeEvent) { events.Add(1) })
@@ -265,7 +265,7 @@ func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, empty.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21SW240Stored(t, database, workspace)
+		before := readLeafRoutesStored(t, database, workspace)
 		eventsBefore := events.Load()
 		t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
 			legacySQL, boundedSQL := 0, 0
@@ -275,9 +275,9 @@ func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
 					old := f.literalRequest(user, key, nil)
 					old.Method, old.URL.Path, old.URL.RawQuery = http.MethodGet, "/api/search/filter-suggestions", parameters
 					next := old.Clone(old.Context())
-					literal := scaleP21SW240Route(t, repo, old, false, false, true)
-					bounded := scaleP21SW240Route(t, f.probe, next, false, false, true)
-					scaleP21SW240Compare(t, "facets "+parameters, literal, bounded)
+					literal := readLeafRoutesRoute(t, repo, old, false, false, true)
+					bounded := readLeafRoutesRoute(t, f.probe, next, false, false, true)
+					readLeafRoutesCompare(t, "facets "+parameters, literal, bounded)
 					if parameters == "field=label" && user.ID == f.data.Viewer.ID && key == nil {
 						var values []domain.FilterSuggestion
 						if json.Unmarshal(bounded.body, &values) != nil || len(values) != 50 || values[0].Count <= values[49].Count {
@@ -291,9 +291,9 @@ func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
 					foreign := f.literalRequest(user, key, nil)
 					foreign.Method, foreign.URL.Path = http.MethodGet, "/api/search/filter-suggestions"
 					foreign.Header.Set("X-Workspace-Key", target)
-					scaleP21SW240Compare(t, "workspace facets "+target,
-						scaleP21SW240Route(t, repo, foreign, false, false, false),
-						scaleP21SW240Route(t, f.probe, foreign.Clone(foreign.Context()), false, false, false))
+					readLeafRoutesCompare(t, "workspace facets "+target,
+						readLeafRoutesRoute(t, repo, foreign, false, false, false),
+						readLeafRoutesRoute(t, f.probe, foreign.Clone(foreign.Context()), false, false, false))
 				}
 			})
 			if !full {
@@ -314,9 +314,9 @@ func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
 					old.SetPathValue("token", spec.token)
 					next := old.Clone(old.Context())
 					owned := strings.TrimSpace(spec.workspace) == workspace
-					literal := scaleP21SW240Route(t, repo, old, false, true, owned)
-					bounded := scaleP21SW240Route(t, f.probe, next, false, true, owned)
-					scaleP21SW240Compare(t, "shared "+spec.workspace+" "+spec.token, literal, bounded)
+					literal := readLeafRoutesRoute(t, repo, old, false, true, owned)
+					bounded := readLeafRoutesRoute(t, f.probe, next, false, true, owned)
+					readLeafRoutesCompare(t, "shared "+spec.workspace+" "+spec.token, literal, bounded)
 					if spec.workspace == workspace && spec.token == token {
 						var result struct {
 							Issue    domain.Issue
@@ -340,25 +340,25 @@ func TestScaleP21SW240ReadLeafRoutesDifferential(t *testing.T) {
 					old.Method, old.URL.Path, old.URL.RawQuery = http.MethodGet, "/api/search/filter-suggestions", parameters
 					old.Header.Set("X-Workspace-Key", target)
 					next := old.Clone(context.Background())
-					scaleP21SW240Compare(t, "development facets "+target+" "+parameters,
-						scaleP21SW240Route(t, repo, old, true, false, target == workspace),
-						scaleP21SW240Route(t, f.probe, next, true, false, target == workspace))
+					readLeafRoutesCompare(t, "development facets "+target+" "+parameters,
+						readLeafRoutesRoute(t, repo, old, true, false, target == workspace),
+						readLeafRoutesRoute(t, f.probe, next, true, false, target == workspace))
 				}
 			}
 			shared := f.literalRequest(domain.User{}, nil, nil)
 			shared.Method, shared.URL.Path = http.MethodGet, "/api/shared/issues/"+token
 			shared.URL.RawQuery = url.Values{"workspace": {workspace}}.Encode()
 			shared.SetPathValue("token", token)
-			scaleP21SW240Compare(t, "development shared",
-				scaleP21SW240Route(t, repo, shared, true, true, true),
-				scaleP21SW240Route(t, f.probe, shared.Clone(context.Background()), true, true, true))
+			readLeafRoutesCompare(t, "development shared",
+				readLeafRoutesRoute(t, repo, shared, true, true, true),
+				readLeafRoutesRoute(t, f.probe, shared.Clone(context.Background()), true, true, true))
 			anonymous := f.literalRequest(domain.User{}, nil, nil)
 			anonymous.Method, anonymous.URL.Path = http.MethodGet, "/api/search/filter-suggestions"
-			scaleP21SW240Compare(t, "missing-principal facets",
-				scaleP21SW240Route(t, repo, anonymous, false, false, false),
-				scaleP21SW240Route(t, f.probe, anonymous.Clone(anonymous.Context()), false, false, false))
+			readLeafRoutesCompare(t, "missing-principal facets",
+				readLeafRoutesRoute(t, repo, anonymous, false, false, false),
+				readLeafRoutesRoute(t, f.probe, anonymous.Clone(anonymous.Context()), false, false, false))
 		})
-		if after := scaleP21SW240Stored(t, database, workspace); after != before || events.Load() != eventsBefore {
+		if after := readLeafRoutesStored(t, database, workspace); after != before || events.Load() != eventsBefore {
 			t.Fatal("read leaves changed stored state or published events")
 		}
 	}

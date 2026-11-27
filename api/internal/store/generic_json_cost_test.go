@@ -12,9 +12,9 @@ import (
 	"testing"
 )
 
-// scaleP21GenericJSONCostRescan is the former range-per-node measurement,
+// scaleGenericJSONCostRescan is the former range-per-node measurement,
 // kept verbatim as the oracle for the single-pass measurement.
-func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part legacySessionJSONPart, work *metadataAggregateTraversal) (uint64, error) {
+func scaleGenericJSONCostRescan(ctx context.Context, typ reflect.Type, part legacySessionJSONPart, work *metadataAggregateTraversal) (uint64, error) {
 	if !metadataGenericJSONType(typ) {
 		return 0, ErrBoundedMetadataCoverage
 	}
@@ -35,7 +35,7 @@ func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part l
 		return cost, err
 	}
 	if typ.Kind() == reflect.Interface {
-		child, err := scaleP21GenericJSONCostRescan(ctx, metadataGenericJSONDynamic(prefix), part, work)
+		child, err := scaleGenericJSONCostRescan(ctx, metadataGenericJSONDynamic(prefix), part, work)
 		if err != nil {
 			return 0, err
 		}
@@ -65,7 +65,7 @@ func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part l
 				typ  reflect.Type
 				part metadataCollectionRange
 			}{{typ.Key(), key}, {typ.Elem(), value}} {
-				size, err := scaleP21GenericJSONCostRescan(ctx, child.typ, legacySessionJSONPart{part.input, child.part.offset, child.part.size}, work)
+				size, err := scaleGenericJSONCostRescan(ctx, child.typ, legacySessionJSONPart{part.input, child.part.offset, child.part.size}, work)
 				if err != nil {
 					return err
 				}
@@ -80,7 +80,7 @@ func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part l
 			if err := add(uint64(typ.Elem().Size())*2 + 64); err != nil {
 				return err
 			}
-			size, err := scaleP21GenericJSONCostRescan(ctx, typ.Elem(), legacySessionJSONPart{part.input, value.offset, value.size}, work)
+			size, err := scaleGenericJSONCostRescan(ctx, typ.Elem(), legacySessionJSONPart{part.input, value.offset, value.size}, work)
 			if err != nil {
 				return err
 			}
@@ -90,7 +90,7 @@ func scaleP21GenericJSONCostRescan(ctx context.Context, typ reflect.Type, part l
 	return cost, err
 }
 
-func scaleP21GenericJSONCostRandom(r *rand.Rand, depth int) any {
+func scaleGenericJSONCostRandom(r *rand.Rand, depth int) any {
 	choice := r.Intn(9)
 	if depth <= 0 {
 		choice = r.Intn(5)
@@ -107,13 +107,13 @@ func scaleP21GenericJSONCostRandom(r *rand.Rand, depth int) any {
 	case 5, 6:
 		items := make([]any, r.Intn(5))
 		for index := range items {
-			items[index] = scaleP21GenericJSONCostRandom(r, depth-1)
+			items[index] = scaleGenericJSONCostRandom(r, depth-1)
 		}
 		return items
 	default:
 		items := map[string]any{}
 		for index := range r.Intn(5) {
-			items[fmt.Sprintf("k%dé\"%d", index, r.Intn(3))] = scaleP21GenericJSONCostRandom(r, depth-1)
+			items[fmt.Sprintf("k%dé\"%d", index, r.Intn(3))] = scaleGenericJSONCostRandom(r, depth-1)
 		}
 		return items
 	}
@@ -122,8 +122,8 @@ func scaleP21GenericJSONCostRandom(r *rand.Rand, depth int) any {
 // The single-pass measurement must return the former value and error for
 // every generic type over normalized ranges, whitespace-separated ranges,
 // invalid ranges' error presence and deep chains.
-func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
-	repo := scaleP21SW248Repo(t)
+func TestScaleGenericJSONCostSinglePass(t *testing.T) {
+	repo := genericJSONRepo(t)
 	types := []reflect.Type{
 		reflect.TypeFor[any](), reflect.TypeFor[map[string]any](), reflect.TypeFor[[]any](),
 		reflect.TypeFor[string](), reflect.TypeFor[bool](), reflect.TypeFor[float64](), reflect.TypeFor[int](),
@@ -134,7 +134,7 @@ func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
 			part := legacySessionJSONPart{strings.NewReader(raw), 0, int64(len(raw))}
 			var err error
 			if rescan {
-				cost, err = scaleP21GenericJSONCostRescan(ctx, typ, part, work)
+				cost, err = scaleGenericJSONCostRescan(ctx, typ, part, work)
 			} else {
 				cost, err = metadataGenericJSONCost(ctx, typ, part, work)
 			}
@@ -157,7 +157,7 @@ func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(248))
 	for index := range 400 {
-		raw, err := json.Marshal(scaleP21GenericJSONCostRandom(r, 1+index%6))
+		raw, err := json.Marshal(scaleGenericJSONCostRandom(r, 1+index%6))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +183,7 @@ func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
 	cancel()
 	for _, typ := range types {
 		for _, measure := range []func(context.Context, reflect.Type, legacySessionJSONPart, *metadataAggregateTraversal) (uint64, error){
-			scaleP21GenericJSONCostRescan, metadataGenericJSONCost,
+			scaleGenericJSONCostRescan, metadataGenericJSONCost,
 		} {
 			work, err := beginMetadataAggregateTraversal(t.Context(), func(uint64) (func(), error) { return func() {}, nil })
 			if err != nil {
@@ -202,7 +202,7 @@ func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
 	// One pass per measured range: a deep chain reads its bytes a bounded
 	// number of times instead of once per enclosing container.
 	deep := strings.Repeat(`{"next":[`, 1000) + `{"id":"deep","text":"` + strings.Repeat("x", 4096) + `"}` + strings.Repeat(`]}`, 1000)
-	input := &scaleP21GenericJSONCountingReader{ReaderAt: strings.NewReader(deep)}
+	input := &scaleGenericJSONCountingReader{ReaderAt: strings.NewReader(deep)}
 	err := metadataGenericJSONWork(t.Context(), repo, func(work *metadataAggregateTraversal) error {
 		_, err := metadataGenericJSONCost(t.Context(), reflect.TypeFor[map[string]any](), legacySessionJSONPart{input, 0, int64(len(deep))}, work)
 		return err
@@ -215,12 +215,12 @@ func TestScaleP21GenericJSONCostSinglePass(t *testing.T) {
 	}
 }
 
-type scaleP21GenericJSONCountingReader struct {
+type scaleGenericJSONCountingReader struct {
 	io.ReaderAt
 	read int64
 }
 
-func (r *scaleP21GenericJSONCountingReader) ReadAt(buffer []byte, offset int64) (int, error) {
+func (r *scaleGenericJSONCountingReader) ReadAt(buffer []byte, offset int64) (int, error) {
 	count, err := r.ReaderAt.ReadAt(buffer, offset)
 	r.read += int64(count)
 	return count, err

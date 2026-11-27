@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW72FullScope(t *testing.T, source *metadataLogicalSource) MetadataRecordScope {
+func fullScope(t *testing.T, source *metadataLogicalSource) MetadataRecordScope {
 	t.Helper()
 	scope := MetadataRecordScope{}
 	if err := source.VisitFields(t.Context(), func(name string, _ metadataLogicalNode) error {
@@ -27,7 +27,7 @@ func scaleP21SW72FullScope(t *testing.T, source *metadataLogicalSource) Metadata
 	return scope
 }
 
-func scaleP21SW72Want(t *testing.T, f scaleP21SW70Fixture, tx *sqlTx, source *metadataLogicalSource, scope MetadataRecordScope) (domain.Bootstrap, domain.Bootstrap) {
+func legacyIssueImageWant(t *testing.T, f legacyIssueScanFixture, tx *sqlTx, source *metadataLogicalSource, scope MetadataRecordScope) (domain.Bootstrap, domain.Bootstrap) {
 	t.Helper()
 	before, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil {
@@ -46,7 +46,7 @@ func scaleP21SW72Want(t *testing.T, f scaleP21SW70Fixture, tx *sqlTx, source *me
 	return before, want
 }
 
-func scaleP21SW72Compare(t *testing.T, source *metadataLogicalSource, scope MetadataRecordScope, want domain.Bootstrap) {
+func legacyIssueImageCompare(t *testing.T, source *metadataLogicalSource, scope MetadataRecordScope, want domain.Bootstrap) {
 	t.Helper()
 	got, err := source.Select(t.Context(), scope, 64<<20)
 	if err != nil || !reflect.DeepEqual(got, want) {
@@ -54,8 +54,8 @@ func scaleP21SW72Compare(t *testing.T, source *metadataLogicalSource, scope Meta
 	}
 }
 
-func TestScaleP21SW72LegacyIssueImageNative(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueImageNative(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	nativeTime := time.Now()
 	storedTime := time.Date(2026, 11, 14, 1, 2, 3, 400, time.FixedZone("stored", 5400))
@@ -93,14 +93,14 @@ func TestScaleP21SW72LegacyIssueImageNative(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer source.Release()
-				scope := scaleP21SW72FullScope(t, source)
+				scope := fullScope(t, source)
 				tx := f.begin(t)
 				if populated {
 					f.put(t, tx, workspace, "physical-z", 4, raw)
 					f.put(t, tx, workspace, "physical-a", -2, []byte(`{"id":"semantic-duplicate","title":"First physical row","version":0,"labels":null}`))
 					f.put(t, tx, workspace, "physical-m", 4, []byte(" \nnull\t"))
 				}
-				before, want := scaleP21SW72Want(t, f, tx, source, scope)
+				before, want := legacyIssueImageWant(t, f, tx, source, scope)
 				image, err := f.view.prepareLegacyIssueImage(t.Context(), tx, workspace, source)
 				if err != nil || image == nil {
 					t.Fatal("complete issue image failed", err)
@@ -109,8 +109,8 @@ func TestScaleP21SW72LegacyIssueImageNative(t *testing.T) {
 				if image.Stamp() != source.Stamp() {
 					t.Fatal("SQL issue replacement changed the supplied metadata generation")
 				}
-				scaleP21SW72Compare(t, image, scope, want)
-				scaleP21SW72Compare(t, source, scope, before)
+				legacyIssueImageCompare(t, image, scope, want)
+				legacyIssueImageCompare(t, source, scope, before)
 				if want.Issues == nil || len(want.Issues) != map[bool]int{false: 0, true: 3}[populated] {
 					t.Fatal("literal SQL nil/empty/count fixture changed", populated, len(want.Issues))
 				}
@@ -126,12 +126,12 @@ func TestScaleP21SW72LegacyIssueImageNative(t *testing.T) {
 				if f.view.MetadataWorkUsedForTesting() != 0 || f.view.WorkspaceMetadataDecodes() != 0 {
 					t.Fatal("completed issue image retained transient row work or decoded complete metadata")
 				}
-				scaleP21SW70Usable(t, tx)
+				legacyIssueScanUsable(t, tx)
 				source.Release()
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
-				scaleP21SW72Compare(t, image, scope, want)
+				legacyIssueImageCompare(t, image, scope, want)
 				image.Release()
 				if _, err := image.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) {
 					t.Fatal("released issue image remained selectable", err)
@@ -141,8 +141,8 @@ func TestScaleP21SW72LegacyIssueImageNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW72LegacyIssueImageWarmReloadBodyBound(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueImageWarmReloadBodyBound(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	peaks := map[bool]int{}
 	for _, size := range []int{2000, 20000} {
@@ -171,11 +171,11 @@ func TestScaleP21SW72LegacyIssueImageWarmReloadBodyBound(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer source.Release()
-				scope := scaleP21SW72FullScope(t, source)
+				scope := fullScope(t, source)
 				f.db.SetMaxOpenConns(1)
 				tx := f.begin(t)
 				f.put(t, tx, workspace, "physical-current", 0, []byte(`{"id":"semantic-current","title":"Complete SQL title","description":"Fixed SQL body","reactions":{"like":["actor"]}}`))
-				before, want := scaleP21SW72Want(t, f, tx, source, scope)
+				before, want := legacyIssueImageWant(t, f, tx, source, scope)
 				peak, writes := 0, 0
 				ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 					peak = max(peak, f.view.MetadataWorkUsedForTesting())
@@ -189,8 +189,8 @@ func TestScaleP21SW72LegacyIssueImageWarmReloadBodyBound(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer image.Release()
-				scaleP21SW72Compare(t, image, scope, want)
-				scaleP21SW72Compare(t, source, scope, before)
+				legacyIssueImageCompare(t, image, scope, want)
+				legacyIssueImageCompare(t, source, scope, before)
 				if peak == 0 || writes != 0 || f.view.MetadataWorkUsedForTesting() != 0 || f.view.WorkspaceMetadataDecodes() != 0 {
 					t.Fatal("issue image skipped admission, wrote SQL, retained transient work or hydrated metadata", peak, writes)
 				}
@@ -201,14 +201,14 @@ func TestScaleP21SW72LegacyIssueImageWarmReloadBodyBound(t *testing.T) {
 					t.Fatal("10x unrelated source bodies changed SQL-image admitted work", reload, peak, peaks[reload])
 				}
 				t.Logf("source_body_size=%d reload=%t constructor_sql_peak=%d", size, reload, peak)
-				scaleP21SW70Usable(t, tx)
+				legacyIssueScanUsable(t, tx)
 			})
 		}
 	}
 }
 
-func TestScaleP21SW72LegacyIssueImageFailureRelease(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestLegacyIssueImageFailureRelease(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	workspace := f.data.Workspace.URLKey
 	for _, failure := range []string{"cancel-before", "cancel-after-start", "malformed-sql", "quota", "foreign-source"} {
 		t.Run(failure, func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestScaleP21SW72LegacyIssueImageFailureRelease(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer source.Release()
-			scope := scaleP21SW72FullScope(t, source)
+			scope := fullScope(t, source)
 			before, err := source.Select(t.Context(), scope, 64<<20)
 			if err != nil {
 				t.Fatal(err)
@@ -280,8 +280,8 @@ func TestScaleP21SW72LegacyIssueImageFailureRelease(t *testing.T) {
 			if f.view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 				t.Fatal("failed issue image retained row work, candidate storage or descriptors", failure)
 			}
-			scaleP21SW72Compare(t, source, scope, before)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueImageCompare(t, source, scope, before)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 }

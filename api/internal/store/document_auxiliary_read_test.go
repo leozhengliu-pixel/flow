@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW129Document(data domain.Bootstrap, ref string) (domain.Document, bool) {
+func documentAuxiliaryReadDocument(data domain.Bootstrap, ref string) (domain.Document, bool) {
 	for _, item := range data.Documents {
 		if item.ID == ref || item.SlugID == ref {
 			return item, true
@@ -32,8 +32,8 @@ func scaleP21SW129Document(data domain.Bootstrap, ref string) (domain.Document, 
 	return domain.Document{}, false
 }
 
-func scaleP21SW129History(data domain.Bootstrap, ref string) ([]domain.DocumentRevision, bool) {
-	if document, found := scaleP21SW129Document(data, ref); found {
+func documentAuxiliaryReadHistory(data domain.Bootstrap, ref string) ([]domain.DocumentRevision, bool) {
+	if document, found := documentAuxiliaryReadDocument(data, ref); found {
 		return slices.Clone(document.Revisions), true
 	}
 	for _, entry := range data.Trash {
@@ -46,7 +46,7 @@ func scaleP21SW129History(data domain.Bootstrap, ref string) ([]domain.DocumentR
 	return nil, false
 }
 
-func TestScaleP21SW129DocumentAuxiliaryTrashJSONHeaders(t *testing.T) {
+func TestDocumentAuxiliaryTrashJSONHeaders(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	read := &DocumentRead{owner: &ResourceRead{store: repo}}
 	defer read.Close()
@@ -87,11 +87,11 @@ func TestScaleP21SW129DocumentAuxiliaryTrashJSONHeaders(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW129DocumentAuxiliaryLiteralAndOwnership(t *testing.T) {
+func TestDocumentAuxiliaryLiteralAndOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw129-")
 	stamp := time.Date(2026, time.November, 15, 3, 4, 5, 123, time.UTC)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "documents", "documentContentDrafts", "trash"), workspace, "scale_p21.sw129_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -184,8 +184,8 @@ func TestScaleP21SW129DocumentAuxiliaryLiteralAndOwnership(t *testing.T) {
 							read.Data.DocumentContentDrafts[0].ContentData["mutable"].([]any)[0] = "caller"
 						}
 					} else {
-						expected, found := scaleP21SW129History(want, ref)
-						got, gotFound := scaleP21SW129History(read.Data, ref)
+						expected, found := documentAuxiliaryReadHistory(want, ref)
+						got, gotFound := documentAuxiliaryReadHistory(read.Data, ref)
 						if found != gotFound {
 							t.Fatal("live/trash auxiliary resolution differs", ref, found, gotFound)
 						}
@@ -249,11 +249,11 @@ func TestScaleP21SW129DocumentAuxiliaryLiteralAndOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW129DocumentAuxiliaryTypedTrashAdmission(t *testing.T) {
+func TestDocumentAuxiliaryTypedTrashAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, ref := f.data.Workspace.URLKey, idgen.New("sw129-typed-trash-")
 	count := resourceWindowMaxWork/(int(reflect.TypeFor[domain.DocumentRevision]().Size())*2+128) + 1
 	id, err := json.Marshal(ref)
@@ -287,14 +287,14 @@ func TestScaleP21SW129DocumentAuxiliaryTypedTrashAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW129DocumentAuxiliaryInstalledLifetimeAndGrowth(t *testing.T) {
+func TestDocumentAuxiliaryInstalledLifetimeAndGrowth(t *testing.T) {
 	const workspace, ref = "physical", "sw129-lifetime"
 	before := domain.Bootstrap{
 		Workspace:             domain.Workspace{URLKey: workspace},
 		Documents:             []domain.Document{{ID: ref}},
 		DocumentContentDrafts: []domain.DocumentContentDraft{{ID: "selected", DocumentID: ref, Content: "before", ContentData: map[string]any{"mutable": []any{"original"}}}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{workspace: before})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{workspace: before})
 	parent, found, err := view.BeginInstalledMetadataRead(t.Context(), workspace)
 	if err != nil || !found {
 		t.Fatal("missing parent generation", err)
@@ -377,11 +377,11 @@ func TestScaleP21SW129DocumentAuxiliaryInstalledLifetimeAndGrowth(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW129DocumentAuxiliaryCallerAndOutputOwner(t *testing.T) {
+func TestDocumentAuxiliaryCallerAndOutputOwner(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, ref := f.data.Workspace.URLKey, idgen.New("sw129-caller-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "documents"), workspace, "scale_p21.sw129_caller", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, domain.Document{ID: ref, Creator: data.Viewer})

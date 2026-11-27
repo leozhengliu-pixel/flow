@@ -173,7 +173,7 @@ func integrationCanonicalRecord(ctx context.Context, store *SQLiteStore, frames 
 	if err := owner.reserve(ctx, logicalJSONStreamWork); err != nil {
 		return metadataLogicalNode{}, err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}

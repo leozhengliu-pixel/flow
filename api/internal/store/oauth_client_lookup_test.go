@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW411: OAuthApplicationByClientID on the legacy store, a warm bounded probe
+// OAuthApplicationByClientID on the legacy store, a warm bounded probe
 // and a bounded view loaded from SQL. Every lookup (present, duplicate in a
 // workspace, empty, case/space variants, NUL, unknown, built-in, nil and empty
 // lists, a record larger than a page, unicode) must return the same value,
@@ -22,7 +22,7 @@ import (
 // workspaces the original's first match is map iteration order; the bounded
 // lookup takes the first workspace key.
 
-func scaleP21SW411Lookup(t *testing.T, repo *SQLiteStore, client string) (domain.OAuthApplication, bool) {
+func oAuthClientLookupLookup(t *testing.T, repo *SQLiteStore, client string) (domain.OAuthApplication, bool) {
 	t.Helper()
 	decodes := repo.WorkspaceMetadataDecodes()
 	app, found := repo.OAuthApplicationByClientID(client)
@@ -35,9 +35,9 @@ func scaleP21SW411Lookup(t *testing.T, repo *SQLiteStore, client string) (domain
 	return app, found
 }
 
-func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
+func TestOAuthApplicationByClientIDDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx := ContextWithActor(t.Context(), f.data.Viewer)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 6, 7, 8, 9, 10, 123456789, time.FixedZone("x", 3600))
@@ -88,7 +88,7 @@ func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	for _, key := range append([]string{workspace}, others...) {
 		if err := probe.ReloadWorkspace(t.Context(), key); err != nil {
 			t.Fatal(err)
@@ -103,10 +103,10 @@ func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
 	compare := func(stage string) {
 		t.Helper()
 		for _, client := range clients {
-			want, wantFound := scaleP21SW411Lookup(t, f.SQLiteStore, client)
+			want, wantFound := oAuthClientLookupLookup(t, f.SQLiteStore, client)
 			wantJSON, _ := json.Marshal(want)
 			for name, view := range map[string]*SQLiteStore{"warm": probe, "reloaded": reloaded} {
-				got, found := scaleP21SW411Lookup(t, view, client)
+				got, found := oAuthClientLookupLookup(t, view, client)
 				gotJSON, _ := json.Marshal(got)
 				// Equal as a load reads them: the legacy store keeps a writer's
 				// time location and an empty omitempty list until reload; JSON
@@ -119,7 +119,7 @@ func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
 				}
 				if found && len(got.RedirectURIs) > 0 {
 					got.RedirectURIs[0] = "mutated"
-					again, _ := scaleP21SW411Lookup(t, view, client)
+					again, _ := oAuthClientLookupLookup(t, view, client)
 					if again.RedirectURIs[0] == "mutated" {
 						t.Fatal("lookup shares its redirect list")
 					}
@@ -159,7 +159,7 @@ func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
 	}
 	t.Logf("legacy shared client ID resolved to %d distinct applications over 64 lookups: %v", len(seen), seen)
 	for name, view := range map[string]*SQLiteStore{"warm": probe, "reloaded": reloaded} {
-		app, found := scaleP21SW411Lookup(t, view, "sw411-shared")
+		app, found := oAuthClientLookupLookup(t, view, "sw411-shared")
 		if !found || app.Name != "Shared -a" {
 			t.Fatalf("%s: shared lookup %v %q", name, found, app.Name)
 		}
@@ -177,7 +177,7 @@ func TestScaleP21SW411OAuthApplicationByClientIDDifferential(t *testing.T) {
 			}
 			f.mu.RUnlock()
 			want, wantFound := (&SQLiteStore{workspaces: legacyView}).OAuthApplicationByClientID("sw411-shared")
-			got, found := scaleP21SW411Lookup(t, view, "sw411-shared")
+			got, found := oAuthClientLookupLookup(t, view, "sw411-shared")
 			view.mu.Lock()
 			view.workspaces[missing] = held
 			view.mu.Unlock()

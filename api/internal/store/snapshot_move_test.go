@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW214InstalledMoveInputs(t *testing.T) {
+func TestInstalledMoveInputs(t *testing.T) {
 	at := time.Date(2026, 11, 16, 3, 4, 5, 6, time.UTC)
 	last := at.Add(time.Hour)
 	members := []domain.WorkspaceMember{
@@ -27,7 +27,7 @@ func TestScaleP21SW214InstalledMoveInputs(t *testing.T) {
 		{UserID: "", TeamID: "empty-user", JoinedAt: at},
 	}
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "identity"}, NextIssueNumber: 9147, Members: members, TeamMembers: teams}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	for _, test := range []struct {
 		name  string
 		users []string

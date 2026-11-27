@@ -12,18 +12,18 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW576: both P19 summary readers (the literal one and the bounded owned
+// Both project and initiative queries summary readers (the literal one and the bounded owned
 // reader) take up to accessChangedReadAttempts snapshots while the installed
 // metadata moves past their SQL revision, answer the post-change snapshot
 // exactly as a quiet read does, and answer the bare ErrResourceAccessChanged
 // only when every attempt is retired.
-func TestScaleP21SW576P19SnapshotRetriesChangedAccessMetadata(t *testing.T) {
+func TestSnapshotRetriesChangedAccessMetadata(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw576-")
-	scaleP21SW112Seed(t, f, prefix, "Excluded P19 body.")
+	snapshotReadSeed(t, f, prefix, "Excluded P19 body.")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -47,10 +47,10 @@ func TestScaleP21SW576P19SnapshotRetriesChangedAccessMetadata(t *testing.T) {
 		// change commits a write the reader's installed source has seen
 		// but its SQL snapshot has not.
 		change func(string)
-		read   func(context.Context) (ScaleP19Snapshot, error)
+		read   func(context.Context) (ScaleSnapshot, error)
 	}{
-		{"literal", rename, func(ctx context.Context) (ScaleP19Snapshot, error) {
-			return f.ReadScaleP19Snapshot(ctx, workspace, f.data.Viewer.ID, false)
+		{"literal", rename, func(ctx context.Context) (ScaleSnapshot, error) {
+			return f.ReadScaleSnapshot(ctx, workspace, f.data.Viewer.ID, false)
 		}},
 		{"bounded", func(name string) {
 			// The view installs another request's reload of the write.
@@ -58,10 +58,10 @@ func TestScaleP21SW576P19SnapshotRetriesChangedAccessMetadata(t *testing.T) {
 			if err := view.ReloadWorkspace(context.Background(), workspace); err != nil {
 				t.Error(err)
 			}
-		}, func(ctx context.Context) (ScaleP19Snapshot, error) {
-			read, err := view.BeginP19SnapshotRead(ctx, workspace, f.data.Viewer.ID, false)
+		}, func(ctx context.Context) (ScaleSnapshot, error) {
+			read, err := view.BeginSnapshotRead(ctx, workspace, f.data.Viewer.ID, false)
 			if err != nil {
-				return ScaleP19Snapshot{}, err
+				return ScaleSnapshot{}, err
 			}
 			defer read.Close()
 			return read.Snapshot, nil
@@ -97,7 +97,7 @@ func TestScaleP21SW576P19SnapshotRetriesChangedAccessMetadata(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got.Revision != quiet.Revision || !reflect.DeepEqual(scaleP21SW112Comparable(t, got, started), scaleP21SW112Comparable(t, quiet, started)) {
+				if got.Revision != quiet.Revision || !reflect.DeepEqual(snapshotReadComparable(t, got, started), snapshotReadComparable(t, quiet, started)) {
 					t.Fatalf("%d changes: retried snapshot differs from a quiet read (revision %s/%s)", changes, got.Revision, quiet.Revision)
 				}
 			}
@@ -106,7 +106,7 @@ func TestScaleP21SW576P19SnapshotRetriesChangedAccessMetadata(t *testing.T) {
 	// A cancelled wait between attempts answers the same bare error.
 	ctx, cancel := context.WithCancel(t.Context())
 	calls := 0
-	_, err = f.ReadScaleP19Snapshot(WithAccessChangedReadHookForTesting(ctx, func(attempt int) {
+	_, err = f.ReadScaleSnapshot(WithAccessChangedReadHookForTesting(ctx, func(attempt int) {
 		calls++
 		rename(fmt.Sprintf("cancelled-%d", attempt))
 		if attempt == 2 {

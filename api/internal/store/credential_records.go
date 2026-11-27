@@ -15,14 +15,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-const sw17CredentialFixedWork = 256 << 10
+const credentialFixedWork = 256 << 10
 
 // VisitCanonicalCredentialSettings visits trusted canonical storage, before
 // replica load normalization. It does not reproduce a warm installed snapshot
 // and does not authorize. Callers must finish processing each owned record
 // under its callback lease and must not retain records.
 func (s *SQLiteStore) VisitCanonicalCredentialSettings(ctx context.Context, workspace, kind string, ref *string, visit func(context.Context, domain.Bootstrap) error) (MetadataArrayShape, error) {
-	recordType, err := sw17CredentialType(kind)
+	recordType, err := credentialType(kind)
 	if err != nil || visit == nil || ref != nil && kind != "oauthApplications" {
 		return MetadataArrayShape{}, ErrMetadataRecordQuery
 	}
@@ -37,12 +37,12 @@ func (s *SQLiteStore) VisitCanonicalCredentialSettings(ctx context.Context, work
 			return fmt.Errorf("%w: credential source needs detached random access", ErrMetadataRecordQuery)
 		}
 		if ref != nil {
-			match, err := s.sw17CredentialIDMatches(recordCtx, input, record.EncodedBytes, *ref)
+			match, err := s.credentialIDMatches(recordCtx, input, record.EncodedBytes, *ref)
 			if err != nil || !match {
 				return err
 			}
 		}
-		cost, err := sw17CredentialPreflight(recordCtx, input, record.EncodedBytes, recordType)
+		cost, err := credentialPreflight(recordCtx, input, record.EncodedBytes, recordType)
 		if err != nil {
 			return err
 		}
@@ -51,7 +51,7 @@ func (s *SQLiteStore) VisitCanonicalCredentialSettings(ctx context.Context, work
 			return err
 		}
 		defer release()
-		value, err := sw17DecodeCredential(typedCtx, input, record.EncodedBytes, recordType)
+		value, err := decodeCredential(typedCtx, input, record.EncodedBytes, recordType)
 		if err != nil {
 			return err
 		}
@@ -75,7 +75,7 @@ func (s *SQLiteStore) VisitCanonicalCredentialSettings(ctx context.Context, work
 	return read.Shape, errors.Join(err, read.Close())
 }
 
-func sw17CredentialType(kind string) (reflect.Type, error) {
+func credentialType(kind string) (reflect.Type, error) {
 	var recordType reflect.Type
 	switch kind {
 	case "apiKeys":
@@ -105,14 +105,14 @@ func sw17CredentialType(kind string) (reflect.Type, error) {
 	return recordType, nil
 }
 
-func sw17CredentialScanner(ctx context.Context, input io.ReaderAt, offset, size int64) *metadataCollectionScanner {
+func credentialScanner(ctx context.Context, input io.ReaderAt, offset, size int64) *metadataCollectionScanner {
 	return &metadataCollectionScanner{
 		ctx: ctx, offset: offset,
 		input: bufio.NewReaderSize(io.NewSectionReader(input, offset, size), metadataRecordChunkBytes),
 	}
 }
 
-func sw17CredentialField(input io.ReaderAt, key metadataCollectionRange, recordType reflect.Type) (int, error) {
+func credentialField(input io.ReaderAt, key metadataCollectionRange, recordType reflect.Type) (int, error) {
 	if key.size > 4096 {
 		return -1, nil
 	}
@@ -130,8 +130,8 @@ func sw17CredentialField(input io.ReaderAt, key metadataCollectionRange, recordT
 	return -1, nil
 }
 
-func sw17VisitCredentialFields(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type, visit func(int, metadataCollectionRange) error) error {
-	scanner := sw17CredentialScanner(ctx, input, 0, size)
+func visitCredentialFields(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type, visit func(int, metadataCollectionRange) error) error {
+	scanner := credentialScanner(ctx, input, 0, size)
 	if err := scanner.spaces(); err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func sw17VisitCredentialFields(ctx context.Context, input io.ReaderAt, size int6
 		return scanner.end()
 	}
 	if err := scanner.object(func(key, value metadataCollectionRange) error {
-		index, err := sw17CredentialField(input, key, recordType)
+		index, err := credentialField(input, key, recordType)
 		if err != nil || index < 0 {
 			return err
 		}
@@ -162,8 +162,8 @@ func sw17VisitCredentialFields(ctx context.Context, input io.ReaderAt, size int6
 // for bucket growth, key/value headers and the encoder's sorted keys.
 // Repeated field occurrences are all charged, although their values may merge
 // or replace earlier typed state. Unknown fields never enter typed storage.
-func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type) (int, error) {
-	cost := int64(sw17CredentialFixedWork)
+func credentialPreflight(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type) (int, error) {
+	cost := int64(credentialFixedWork)
 	add := func(bytes int64) error {
 		if bytes < 0 || bytes > int64(metadataWorkBytes())-cost {
 			return ErrMetadataWorkBudget
@@ -171,14 +171,14 @@ func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64,
 		cost += bytes
 		return nil
 	}
-	err := sw17VisitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
+	err := visitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
 		if part.size > int64(metadataWorkBytes())/4 {
 			return ErrMetadataWorkBudget
 		}
 		if err := add(part.size*4 + 512); err != nil {
 			return err
 		}
-		encoded, err := sw17CredentialEncodedBound(ctx, input, part)
+		encoded, err := credentialEncodedBound(ctx, input, part)
 		if err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64,
 			return err
 		}
 		field := recordType.Field(index).Type
-		scanner := sw17CredentialScanner(ctx, input, part.offset, part.size)
+		scanner := credentialScanner(ctx, input, part.offset, part.size)
 		first, err := scanner.peek()
 		if err != nil {
 			return err
@@ -205,7 +205,7 @@ func sw17CredentialPreflight(ctx context.Context, input io.ReaderAt, size int64,
 	return int(cost), err
 }
 
-func sw17CredentialEncodedBound(ctx context.Context, input io.ReaderAt, part metadataCollectionRange) (int64, error) {
+func credentialEncodedBound(ctx context.Context, input io.ReaderAt, part metadataCollectionRange) (int64, error) {
 	reader := bufio.NewReaderSize(io.NewSectionReader(input, part.offset, part.size), metadataRecordChunkBytes)
 	encoded, quoted, escaped := part.size, false, false
 	for {
@@ -247,9 +247,9 @@ func sw17CredentialEncodedBound(ctx context.Context, input io.ReaderAt, part met
 	}
 }
 
-func sw17DecodeCredential(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type) (reflect.Value, error) {
+func decodeCredential(ctx context.Context, input io.ReaderAt, size int64, recordType reflect.Type) (reflect.Value, error) {
 	value := reflect.New(recordType).Elem()
-	err := sw17VisitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
+	err := visitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
 		decoder := json.NewDecoder(io.NewSectionReader(input, part.offset, part.size))
 		// Decode into existing fields: duplicate map members merge, array
 		// elements reuse backing state, and null strings preserve prior text.
@@ -265,14 +265,14 @@ func sw17DecodeCredential(ctx context.Context, input io.ReaderAt, size int64, re
 	return value, err
 }
 
-func (s *SQLiteStore) sw17CredentialIDMatches(ctx context.Context, input io.ReaderAt, size int64, ref string) (bool, error) {
+func (s *SQLiteStore) credentialIDMatches(ctx context.Context, input io.ReaderAt, size int64, ref string) (bool, error) {
 	match := ref == ""
 	recordType := reflect.TypeFor[domain.OAuthApplication]()
-	err := sw17VisitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
+	err := visitCredentialFields(ctx, input, size, recordType, func(index int, part metadataCollectionRange) error {
 		if recordType.Field(index).Name != "ID" {
 			return nil
 		}
-		scanner := sw17CredentialScanner(ctx, input, part.offset, part.size)
+		scanner := credentialScanner(ctx, input, part.offset, part.size)
 		first, err := scanner.peek()
 		if err != nil {
 			return err
@@ -289,10 +289,10 @@ func (s *SQLiteStore) sw17CredentialIDMatches(ctx context.Context, input io.Read
 			match = false
 			return nil
 		}
-		if part.size > (int64(metadataWorkBytes())-sw17CredentialFixedWork)/4 {
+		if part.size > (int64(metadataWorkBytes())-credentialFixedWork)/4 {
 			return ErrMetadataWorkBudget
 		}
-		_, release, err := s.admitMetadataWork(ctx, int(part.size*4)+sw17CredentialFixedWork)
+		_, release, err := s.admitMetadataWork(ctx, int(part.size*4)+credentialFixedWork)
 		if err != nil {
 			return err
 		}

@@ -5,7 +5,7 @@
     "ImportIssues": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The workspace existence check selects identity only with exact WorkspaceMetadata off dispatch; existing1000-record/16MiB transaction limits, native issue/history/index/count/sequence writes and no-publication behavior are unchanged. TestScaleP21SW22ImportIssuesIdentityDifferential compares final SQL detail/list/version/order, labels/count/number sequence, idempotence, missing workspace, duplicate/empty IDs, oversized input and cancellation rollback with zero full metadata decodes.",
+      "reason": "The workspace existence check selects identity only with exact WorkspaceMetadata off dispatch; existing1000-record/16MiB transaction limits, native issue/history/index/count/sequence writes and no-publication behavior are unchanged. TestImportIssuesIdentityDifferential compares final SQL detail/list/version/order, labels/count/number sequence, idempotence, missing workspace, duplicate/empty IDs, oversized input and cancellation rollback with zero full metadata decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -13,7 +13,7 @@
     "WorkspaceMetadata": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Closed by reachability: TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) finds no HOT consumer reaching WorkspaceMetadata with FLOW_BOUNDED_METADATA on, and its allow-list is empty; TestScaleP21SW292WriteChainHotBoundaries finds no HOT reacher of the legacy write chain. processIntegrationDelivery dispatches to the bounded delivery worker (TestScaleP21SW510DeliveryOutcomesDifferential), workflow execution and the due-workflow scheduler run on their bounded writers (TestScaleP21SW500WorkflowActionTriggerDifferential, TestScaleP21SW501WorkflowDueSchedulerWeekdayAndSunday, TestScaleP21SW504WorkflowWriterKernelBoundary), attachmentVisible and generateCommentActions are closed, and refuseFormerMemberCollaborationUpdate reads the selected standalone document through BeginCollaborationDocumentContentRead (TestScaleP21SW520FormerMemberDocumentDifferential), so socketWorkspaceMetadata is a guard-closed consumer. Every other flag-on caller is COLD, flag-off-only, guard-closed or a relay pinned by SW225. The literal wrapper is unchanged for flag-off callers.",
+      "reason": "Closed by reachability: TestStoreWrapperHotBoundaries (with the store wrapper boundary probe) finds no HOT consumer reaching WorkspaceMetadata with FLOW_BOUNDED_METADATA on, and its allow-list is empty; TestWriteChainHotBoundaries finds no HOT reacher of the legacy write chain. processIntegrationDelivery dispatches to the bounded delivery worker (TestDeliveryOutcomesDifferential), workflow execution and the due-workflow scheduler run on their bounded writers (TestWorkflowActionTriggerDifferential, TestWorkflowDueSchedulerWeekdayAndSunday, TestWorkflowWriterKernelBoundary), attachmentVisible and generateCommentActions are closed, and refuseFormerMemberCollaborationUpdate reads the selected standalone document through BeginCollaborationDocumentContentRead (TestFormerMemberDocumentDifferential), so socketWorkspaceMetadata is a guard-closed consumer. Every other flag-on caller is COLD, flag-off-only, guard-closed or a relay pinned by issue bootstrap boundary. The literal wrapper is unchanged for flag-off callers.",
       "accessors": [
         "WorkspaceMetadataForRead"
       ],
@@ -112,7 +112,7 @@
     "WorkspaceMetadataForRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Closed by reachability: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by SW225), which TestScaleP21SW286StoreWrapperHotBoundaries (with the SW290 probe) and TestScaleP21SW292WriteChainHotBoundaries find no HOT reacher of. The literal reader is unchanged for flag-off callers.",
+      "reason": "Closed by reachability: reached with the flag on only through WorkspaceMetadata (issueRecordsBootstrapData's development branch is a relay pinned by issue bootstrap boundary), which TestStoreWrapperHotBoundaries (with the store wrapper boundary probe) and TestWriteChainHotBoundaries find no HOT reacher of. The literal reader is unchanged for flag-off callers.",
       "accessors": [
         "resident-state"
       ],
@@ -139,7 +139,7 @@
     "migrateIssueSequences": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Genuine native scalar migration enumerates only resident workspace keys charged to the process policy budget, then uses SQL COUNT/MAX(number) without transferring issue bodies. TestScaleP21SW22IssueSequenceMigrationDifferential isolates an owned external-database-aware catalog, compares legacy/bounded modes over120 issues with a high maximum, cancellation/recovery and idempotent preservation of an existing higher sequence; no full metadata decode.",
+      "reason": "Genuine native scalar migration enumerates only resident workspace keys charged to the process policy budget, then uses SQL COUNT/MAX(number) without transferring issue bodies. TestIssueSequenceMigrationDifferential isolates an owned external-database-aware catalog, compares legacy/bounded modes over120 issues with a high maximum, cancellation/recovery and idempotent preservation of an existing higher sequence; no full metadata decode.",
       "accessors": [
         "resident-state"
       ]

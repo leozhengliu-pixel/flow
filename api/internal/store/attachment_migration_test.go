@@ -17,11 +17,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW16AttachmentMigrationDifferential(t *testing.T) {
+func TestAttachmentMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw16-attachment-")
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	longURL := "https://Example.test/" + strings.Repeat("\u6c49\u5b57\U0001f680/quotes\"\\?x=1&y=2 ", 14000)

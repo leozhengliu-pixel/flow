@@ -5,7 +5,7 @@
     "getLoopConfig": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Bounded mode forwards directly to getLoopConfigWithStore, whose scoped workspaceSettings, members and integrationConnections read preserves the literal response without whole-workspace hydration. Flag off keeps the existing withColdMetadataRequest path. SW191 compares both actual GET route bodies over the M principal/key matrix, including native NUL labels and exact status predicates.",
+      "reason": "Bounded mode forwards directly to getLoopConfigWithStore, whose scoped workspaceSettings, members and integrationConnections read preserves the literal response without whole-workspace hydration. Flag off keeps the existing withColdMetadataRequest path. draft and settings reads compares both actual GET route bodies over the M principal/key matrix, including native NUL labels and exact status predicates.",
       "accessors": [
         "WorkspaceMetadataScoped"
       ],
@@ -19,7 +19,7 @@
     "updateLoopSettings": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Bounded mode forwards directly to updateLoopSettingsWithStore, whose scoped workspaceSettings, members and integrationConnections mutation preserves the literal validation, event and response behavior without whole-workspace hydration. Flag off keeps the existing withColdMetadataRequest path. SW191 compares exact warm/reloaded responses and parent installed settings for valid, clear and invalid inputs, next-read visibility and cancellation.",
+      "reason": "Bounded mode forwards directly to updateLoopSettingsWithStore, whose scoped workspaceSettings, members and integrationConnections mutation preserves the literal validation, event and response behavior without whole-workspace hydration. Flag off keeps the existing withColdMetadataRequest path. draft and settings reads compares exact warm/reloaded responses and parent installed settings for valid, clear and invalid inputs, next-read visibility and cancellation.",
       "accessors": [
         "MutateWorkspaceScoped"
       ],
@@ -32,7 +32,7 @@
     "getLoopConfigWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal getLoopConfig body with only s.store replaced by the explicitly borrowed repository. Bounded mode reads workspaceSettings, members and integrationConnections through WorkspaceMetadataScoped, preserving the exact GET body while avoiding unrelated workspace records. Its only production caller is the registered cold wrapper, and SW191 compares exact GET outputs with legacy across the M principal/key matrix and native labels/status values.",
+      "reason": "Literal getLoopConfig body with only s.store replaced by the explicitly borrowed repository. Bounded mode reads workspaceSettings, members and integrationConnections through WorkspaceMetadataScoped, preserving the exact GET body while avoiding unrelated workspace records. Its only production caller is the registered cold wrapper, and draft and settings reads compares exact GET outputs with legacy across the M principal/key matrix and native labels/status values.",
       "accessors": ["WorkspaceMetadataScoped"],
       "temperature": "hot",
       "temperatureReason": "Scoped body of the bounded loop settings GET routes.",
@@ -41,7 +41,7 @@
     "updateLoopSettingsWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal updateLoopSettings body with only s.store replaced by the explicitly borrowed repository. Bounded mode uses MutateWorkspaceScoped for workspaceSettings, members and integrationConnections, preserving the legacy writer and response graph while avoiding unrelated workspace records. Its registered cold wrapper owns the whole operation, and SW191 compares exact warm/reloaded responses and parent installed postimages for valid/clear/invalid input.",
+      "reason": "Literal updateLoopSettings body with only s.store replaced by the explicitly borrowed repository. Bounded mode uses MutateWorkspaceScoped for workspaceSettings, members and integrationConnections, preserving the legacy writer and response graph while avoiding unrelated workspace records. Its registered cold wrapper owns the whole operation, and draft and settings reads compares exact warm/reloaded responses and parent installed postimages for valid/clear/invalid input.",
       "accessors": ["MutateWorkspaceScoped"],
       "temperature": "hot",
       "temperatureReason": "Scoped body of the bounded loop settings PATCH route.",

@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW122Equal(t *testing.T, view, literal *SQLiteStore, ctx context.Context, workspace, user string, passkeys bool) *AccountCollectionRead {
+func accountCollectionReadEqual(t *testing.T, view, literal *SQLiteStore, ctx context.Context, workspace, user string, passkeys bool) *AccountCollectionRead {
 	t.Helper()
 	wantKeys, wantSettings, wantFound := literal.AccountCollections(workspace, user)
 	if !passkeys {
@@ -39,7 +39,7 @@ func scaleP21SW122Equal(t *testing.T, view, literal *SQLiteStore, ctx context.Co
 	return read
 }
 
-func TestScaleP21SW122AccountCollectionNative(t *testing.T) {
+func TestAccountCollectionNative(t *testing.T) {
 	at, enabled := time.Now(), false
 	originalAt := at
 	large := strings.Repeat("selected legal settings ", 20000)
@@ -64,12 +64,12 @@ func TestScaleP21SW122AccountCollectionNative(t *testing.T) {
 	physical := "physical\x00workspace"
 	values := map[string]domain.Bootstrap{physical: data, "nil": {}, "empty": {Passkeys: []domain.Passkey{}, UserSettings: map[string]domain.UserSettings{}}}
 	literal := &SQLiteStore{workspaces: values, lastWorkspaceKey: physical}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = physical
 	for _, workspace := range []string{physical, "", "nil", "empty", "missing", "logical", physical + " "} {
 		for _, user := range []string{"target", "other", "", "user\x00id", " target ", "TARGET", "missing"} {
 			for _, keys := range []bool{false, true} {
-				read := scaleP21SW122Equal(t, view, literal, t.Context(), workspace, user, keys)
+				read := accountCollectionReadEqual(t, view, literal, t.Context(), workspace, user, keys)
 				if read == nil {
 					continue
 				}
@@ -105,11 +105,11 @@ func TestScaleP21SW122AccountCollectionNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW122AccountCollectionGeneration(t *testing.T) {
+func TestAccountCollectionGeneration(t *testing.T) {
 	before := domain.Bootstrap{UserSettings: map[string]domain.UserSettings{"user": {UserID: "before"}}}
 	after := domain.Bootstrap{UserSettings: map[string]domain.UserSettings{"user": {UserID: "after"}}}
 	other := domain.Bootstrap{UserSettings: map[string]domain.UserSettings{"user": {UserID: "other"}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "other": other})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "other": other})
 	view.lastWorkspaceKey = "physical"
 	old, _, err := view.BeginAccountCollectionRead(t.Context(), "physical", "user", false)
 	if err != nil {
@@ -154,12 +154,12 @@ func TestScaleP21SW122AccountCollectionGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW122AccountCollectionAdmission(t *testing.T) {
+func TestAccountCollectionAdmission(t *testing.T) {
 	values := map[string]domain.Bootstrap{"workspace": {
 		UserSettings: map[string]domain.UserSettings{"user": {UserID: "user", AgentInstructions: strings.Repeat("settings ", 10000)}},
 		Passkeys:     []domain.Passkey{{ID: "key", UserID: "user", CredentialJSON: strings.Repeat("credential ", 30000)}},
 	}}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if read, _, err := view.BeginAccountCollectionRead(ctx, "workspace", "user", true); read != nil || !errors.Is(err, context.Canceled) {
@@ -224,11 +224,11 @@ func TestScaleP21SW122AccountCollectionAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW122AccountCollectionWarmReloadBodyBound(t *testing.T) {
+func TestAccountCollectionWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, user := f.data.Workspace.URLKey, f.data.Viewer.ID
 	prefix := idgen.New("sw122-")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -273,7 +273,7 @@ func TestScaleP21SW122AccountCollectionWarmReloadBodyBound(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, keys := range []bool{false, true} {
-				read := scaleP21SW122Equal(t, view, f.SQLiteStore, t.Context(), workspace, user, keys)
+				read := accountCollectionReadEqual(t, view, f.SQLiteStore, t.Context(), workspace, user, keys)
 				held := view.MetadataWorkUsedForTesting()
 				if expected[reload][keys] == 0 {
 					expected[reload][keys] = held

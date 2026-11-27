@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW162Put(t *testing.T, f scaleP21SW70Fixture, tx *sqlTx, workspace string, physical any, order int64, issue domain.Issue, raw []byte) {
+func bootstrapIssueWalkPut(t *testing.T, f legacyIssueScanFixture, tx *sqlTx, workspace string, physical any, order int64, issue domain.Issue, raw []byte) {
 	t.Helper()
 	values, err := issueRecordValues(workspace, issue)
 	if err != nil {
@@ -35,14 +35,14 @@ func scaleP21SW162Put(t *testing.T, f scaleP21SW70Fixture, tx *sqlTx, workspace 
 	}
 }
 
-func scaleP21SW162Context(t *testing.T, f scaleP21SW70Fixture, tx *sqlTx, workspace string, metadata domain.Bootstrap) context.Context {
+func bootstrapIssueWalkContext(t *testing.T, f legacyIssueScanFixture, tx *sqlTx, workspace string, metadata domain.Bootstrap) context.Context {
 	t.Helper()
 	return context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{
 		database: f.db, workspace: workspace, reader: tx, metadata: metadata,
 	})
 }
 
-func scaleP21SW162Compare(t *testing.T, f scaleP21SW70Fixture, ctx context.Context, q IssueRecordQuery, count int) int {
+func bootstrapIssueWalkCompare(t *testing.T, f legacyIssueScanFixture, ctx context.Context, q IssueRecordQuery, count int) int {
 	t.Helper()
 	var want, got []domain.Issue
 	wantErr := f.WalkIssueRecords(ctx, q, func(issue domain.Issue) error {
@@ -66,7 +66,7 @@ func scaleP21SW162Compare(t *testing.T, f scaleP21SW70Fixture, ctx context.Conte
 			t.Fatal("issue reached visitor without row admission")
 		}
 		held := ctx.Value(workspaceReadKey{}).(workspaceRead)
-		scaleP21SW70Usable(t, held.reader)
+		legacyIssueScanUsable(t, held.reader)
 		got = append(got, issue)
 		return nil
 	})
@@ -90,8 +90,8 @@ func scaleP21SW162Compare(t *testing.T, f scaleP21SW70Fixture, ctx context.Conte
 	return bodyQueries
 }
 
-func TestScaleP21SW162BootstrapIssueWalkSQLOrderAndReferences(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestBootstrapIssueWalkSQLOrderAndReferences(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	tx := f.begin(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw162-")
 	if f.dialect == "sqlite" {
@@ -119,7 +119,7 @@ func TestScaleP21SW162BootstrapIssueWalkSQLOrderAndReferences(t *testing.T) {
 			Assignee: &domain.User{ID: user.ID}, Delegate: &domain.User{ID: user.ID},
 			Project: &domain.ProjectSummary{ID: project.ID}, Labels: []domain.IssueLabel{{ID: label.ID, Name: "Stale label"}},
 		}
-		scaleP21SW162Put(t, f, tx, workspace, physical, int64(i%3), issue, nil)
+		bootstrapIssueWalkPut(t, f, tx, workspace, physical, int64(i%3), issue, nil)
 	}
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprint("reloaded=", reload), func(t *testing.T) {
@@ -133,16 +133,16 @@ func TestScaleP21SW162BootstrapIssueWalkSQLOrderAndReferences(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			ctx := scaleP21SW162Context(t, f, tx, workspace, input)
-			scaleP21SW162Compare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Archived: "all"}, 73)
-			scaleP21SW162Compare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Text: "Case 00", Archived: "all"}, 10)
-			scaleP21SW162Compare(t, f, ctx, IssueRecordQuery{Workspace: workspace, IssueIDs: []string{}, RestrictToIssueIDs: true}, 0)
+			ctx := bootstrapIssueWalkContext(t, f, tx, workspace, input)
+			bootstrapIssueWalkCompare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Archived: "all"}, 73)
+			bootstrapIssueWalkCompare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Text: "Case 00", Archived: "all"}, 10)
+			bootstrapIssueWalkCompare(t, f, ctx, IssueRecordQuery{Workspace: workspace, IssueIDs: []string{}, RestrictToIssueIDs: true}, 0)
 		})
 	}
 }
 
-func TestScaleP21SW162BootstrapIssueWalkAccessMatrix(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestBootstrapIssueWalkAccessMatrix(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	tx := f.begin(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw162-access-")
 	public, private := prefix+"public", prefix+"private"
@@ -160,9 +160,9 @@ func TestScaleP21SW162BootstrapIssueWalkAccessMatrix(t *testing.T) {
 			stamp := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
 			issue.ArchivedAt = &stamp
 		}
-		scaleP21SW162Put(t, f, tx, workspace, id, int64(i), issue, nil)
+		bootstrapIssueWalkPut(t, f, tx, workspace, id, int64(i), issue, nil)
 	}
-	scaleP21SW162Put(t, f, tx, prefix+"other-workspace", prefix+"cross-workspace", 0, domain.Issue{ID: prefix + "cross-workspace", Team: domain.Team{ID: public}}, nil)
+	bootstrapIssueWalkPut(t, f, tx, prefix+"other-workspace", prefix+"cross-workspace", 0, domain.Issue{ID: prefix + "cross-workspace", Team: domain.Team{ID: public}}, nil)
 	for _, grant := range [][2]string{{ids[1], guest}, {ids[2], inherited}} {
 		if _, err := tx.ExecContext(t.Context(), `INSERT INTO issue_permission_records(workspace_key,issue_id,subject_type,subject_id,role) VALUES(?,?,'user',?,'viewer')`, workspace, grant[0], grant[1]); err != nil {
 			t.Fatal(err)
@@ -186,20 +186,20 @@ func TestScaleP21SW162BootstrapIssueWalkAccessMatrix(t *testing.T) {
 		{"api-selected-set", &IssueRecordAccess{Admin: true}, []string{public}, 1},
 		{"archived-team-hidden", &IssueRecordAccess{Admin: true, ArchivedTeamIDs: []string{private}}, nil, 1},
 	}
-	ctx := scaleP21SW162Context(t, f, tx, workspace, f.data)
+	ctx := bootstrapIssueWalkContext(t, f, tx, workspace, f.data)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scaleP21SW162Compare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Access: test.access, AllowedTeamIDs: test.allowed}, test.count)
+			bootstrapIssueWalkCompare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Access: test.access, AllowedTeamIDs: test.allowed}, test.count)
 		})
 	}
 	if _, err := tx.ExecContext(t.Context(), `DELETE FROM issue_permission_records WHERE workspace_key=? AND subject_id=?`, workspace, guest); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW162Compare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Access: &IssueRecordAccess{UserID: guest}}, 0)
+	bootstrapIssueWalkCompare(t, f, ctx, IssueRecordQuery{Workspace: workspace, Access: &IssueRecordAccess{UserID: guest}}, 0)
 }
 
-func TestScaleP21SW162BootstrapIssueOutlinesLiteral(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestBootstrapIssueOutlinesLiteral(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	tx := f.begin(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw162-outline-")
 	issue := domain.Issue{ID: prefix, Title: "Full title", Description: "Body", Reactions: map[string][]string{"like": {"one", "two"}}}
@@ -215,7 +215,7 @@ func TestScaleP21SW162BootstrapIssueOutlinesLiteral(t *testing.T) {
 		if i == 2 {
 			raw = []byte("{invalid full body")
 		}
-		scaleP21SW162Put(t, f, tx, workspace, id, int64(i), issue, raw)
+		bootstrapIssueWalkPut(t, f, tx, workspace, id, int64(i), issue, raw)
 		if i != 0 {
 			if _, err := tx.ExecContext(t.Context(), `UPDATE issue_records SET list_data=? WHERE workspace_key=? AND id=?`, summaryJSON, workspace, id); err != nil {
 				t.Fatal(err)
@@ -227,7 +227,7 @@ func TestScaleP21SW162BootstrapIssueOutlinesLiteral(t *testing.T) {
 	// The old outline selects metadata.Workspace.URLKey after resolving its
 	// source; the caller's snapshot key may still be an old route slug.
 	alias := workspace + "-old-route"
-	ctx := scaleP21SW162Context(t, f, tx, alias, f.data)
+	ctx := bootstrapIssueWalkContext(t, f, tx, alias, f.data)
 	want := []domain.Issue{}
 	rows, err := tx.QueryContext(ctx, `SELECT COALESCE(list_data,data) FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, workspace)
 	if err != nil {
@@ -250,7 +250,7 @@ func TestScaleP21SW162BootstrapIssueOutlinesLiteral(t *testing.T) {
 	}
 	var got []domain.Issue
 	if err := f.view.walkBoundedBootstrapIssueOutlines(ctx, alias, func(value domain.Issue) error {
-		scaleP21SW70Usable(t, tx)
+		legacyIssueScanUsable(t, tx)
 		got = append(got, value)
 		return nil
 	}); err != nil || !reflect.DeepEqual(want, got) || len(got) != 3 {
@@ -261,21 +261,21 @@ func TestScaleP21SW162BootstrapIssueOutlinesLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW162BootstrapIssueWalkLargeDenseAndRelease(t *testing.T) {
-	f := scaleP21SW70Setup(t)
+func TestBootstrapIssueWalkLargeDenseAndRelease(t *testing.T) {
+	f := legacyIssueScanSetup(t)
 	tx := f.begin(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw162-large-")
 	large := domain.Issue{ID: prefix + "large", Title: "Large legal record", Description: strings.Repeat("x", 3<<20)}
 	dense := domain.Issue{ID: prefix + "dense", Title: "Dense legal record", Labels: make([]domain.IssueLabel, 6000)}
-	scaleP21SW162Put(t, f, tx, workspace, large.ID, 0, large, nil)
-	scaleP21SW162Put(t, f, tx, workspace, dense.ID, 1, dense, nil)
+	bootstrapIssueWalkPut(t, f, tx, workspace, large.ID, 0, large, nil)
+	bootstrapIssueWalkPut(t, f, tx, workspace, dense.ID, 1, dense, nil)
 	for i := range 5 {
 		issue := domain.Issue{ID: fmt.Sprint(prefix, "medium-", i), Description: strings.Repeat("m", 64<<10)}
-		scaleP21SW162Put(t, f, tx, workspace, issue.ID, int64(i+2), issue, nil)
+		bootstrapIssueWalkPut(t, f, tx, workspace, issue.ID, int64(i+2), issue, nil)
 	}
-	ctx := scaleP21SW162Context(t, f, tx, workspace, f.data)
+	ctx := bootstrapIssueWalkContext(t, f, tx, workspace, f.data)
 	q := IssueRecordQuery{Workspace: workspace}
-	if batches := scaleP21SW162Compare(t, f, ctx, q, 7); batches != 4 {
+	if batches := bootstrapIssueWalkCompare(t, f, ctx, q, 7); batches != 4 {
 		t.Fatal("giant rows or the 256 KiB payload boundary were not isolated", batches)
 	}
 	sentinel := errors.New("visitor stopped")
@@ -304,5 +304,5 @@ func TestScaleP21SW162BootstrapIssueWalkLargeDenseAndRelease(t *testing.T) {
 	if err := f.view.walkBoundedBootstrapIssueRecords(t.Context(), q, func(domain.Issue) error { return nil }); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("unowned SQL/reference source was admitted", err)
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 }

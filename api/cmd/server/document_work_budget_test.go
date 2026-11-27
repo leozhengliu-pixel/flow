@@ -12,18 +12,18 @@ import (
 	"flow/api/internal/store"
 )
 
-// TestScaleP21DocumentUpdateWorkBudget: with bounded metadata on, an allowed
+// TestScaleDocumentUpdateWorkBudget: with bounded metadata on, an allowed
 // PATCH /api/documents/{id} that finds the process work budget held by
 // concurrent work is not answered 500. When the work ends while the edit
 // waits, the edit is made (200); when the budget stays held past the wait,
 // the answer is the retryable 503 + Retry-After and nothing is written.
-func TestScaleP21DocumentUpdateWorkBudget(t *testing.T) {
+func TestScaleDocumentUpdateWorkBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("work-budget-document-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.work_budget_seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = append(data.Documents, domain.Document{ID: id, Title: "Before", Content: strings.Repeat("body ", 2000), Creator: data.Viewer, Version: 1, TeamIDs: []string{f.public}})

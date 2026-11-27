@@ -9,11 +9,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW15NotificationReadCallerEffects(t *testing.T) {
+func TestNotificationReadCallerEffects(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		view, err := repo.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {

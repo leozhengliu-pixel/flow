@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW169Expr(t *testing.T, source string) ast.Expr {
+func deliveryEmbeddedFieldsExpr(t *testing.T, source string) ast.Expr {
 	t.Helper()
 	expression, err := parser.ParseExpr(source)
 	if err != nil {
@@ -16,7 +16,7 @@ func scaleP21SW169Expr(t *testing.T, source string) ast.Expr {
 	return expression
 }
 
-func scaleP21SW169Function(t *testing.T, source string) *ast.FuncDecl {
+func deliveryEmbeddedFieldsFunction(t *testing.T, source string) *ast.FuncDecl {
 	t.Helper()
 	file, err := parser.ParseFile(token.NewFileSet(), "sw169-snippet.go", "package store\n"+source, 0)
 	if err != nil {
@@ -32,9 +32,9 @@ func scaleP21SW169Function(t *testing.T, source string) *ast.FuncDecl {
 	return function
 }
 
-func scaleP21SW169Catalog(t *testing.T) deliveryBoundaryCatalog {
+func deliveryEmbeddedFieldsCatalog(t *testing.T) deliveryBoundaryCatalog {
 	t.Helper()
-	expr := func(source string) ast.Expr { return scaleP21SW169Expr(t, source) }
+	expr := func(source string) ast.Expr { return deliveryEmbeddedFieldsExpr(t, source) }
 	return deliveryBoundaryCatalog{
 		fields: map[string]map[string]ast.Expr{
 			"Bootstrap":            {"NotificationDeliveries": expr("[]domain.NotificationDelivery")},
@@ -56,7 +56,7 @@ func scaleP21SW169Catalog(t *testing.T) deliveryBoundaryCatalog {
 	}
 }
 
-func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
+func TestDeliveryEmbeddedFieldResolution(t *testing.T) {
 	type fixture struct {
 		name, source, receiver string
 		setup                  func(*deliveryBoundaryCatalog)
@@ -113,8 +113,8 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 				_ = read.Data.NotificationDeliveries
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
-				c.fields["DirectRead"] = map[string]ast.Expr{"Data": scaleP21SW169Expr(t, "domain.Bootstrap")}
-				c.embedded["DirectRead"] = []ast.Expr{scaleP21SW169Expr(t, "*UnknownRead")}
+				c.fields["DirectRead"] = map[string]ast.Expr{"Data": deliveryEmbeddedFieldsExpr(t, "domain.Bootstrap")}
+				c.embedded["DirectRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*UnknownRead")}
 			},
 			receiver: "Bootstrap", allowed: true,
 		},
@@ -124,8 +124,8 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 				_ = read.Data.NotificationDeliveries
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
-				c.fields["DirectRead"] = map[string]ast.Expr{"Data": scaleP21SW169Expr(t, "*SQLiteStore")}
-				c.embedded["DirectRead"] = []ast.Expr{scaleP21SW169Expr(t, "*IssueBootstrapRead")}
+				c.fields["DirectRead"] = map[string]ast.Expr{"Data": deliveryEmbeddedFieldsExpr(t, "*SQLiteStore")}
+				c.embedded["DirectRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*IssueBootstrapRead")}
 			},
 			receiver: "SQLiteStore",
 		},
@@ -137,10 +137,10 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["ShallowRead"] = map[string]ast.Expr{}
 				c.fields["DeepRead"] = map[string]ast.Expr{}
-				c.fields["StoreData"] = map[string]ast.Expr{"Data": scaleP21SW169Expr(t, "*SQLiteStore")}
+				c.fields["StoreData"] = map[string]ast.Expr{"Data": deliveryEmbeddedFieldsExpr(t, "*SQLiteStore")}
 				// Visit the losing deep branch first to catch a DFS shortcut.
-				c.embedded["ShallowRead"] = []ast.Expr{scaleP21SW169Expr(t, "*DeepRead"), scaleP21SW169Expr(t, "IssueBootstrapRead")}
-				c.embedded["DeepRead"] = []ast.Expr{scaleP21SW169Expr(t, "StoreData")}
+				c.embedded["ShallowRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*DeepRead"), deliveryEmbeddedFieldsExpr(t, "IssueBootstrapRead")}
+				c.embedded["DeepRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "StoreData")}
 			},
 			receiver: "Bootstrap", allowed: true,
 		},
@@ -151,8 +151,8 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["AmbiguousRead"] = map[string]ast.Expr{}
-				c.fields["StoreData"] = map[string]ast.Expr{"Data": scaleP21SW169Expr(t, "*SQLiteStore")}
-				c.embedded["AmbiguousRead"] = []ast.Expr{scaleP21SW169Expr(t, "IssueBootstrapRead"), scaleP21SW169Expr(t, "*StoreData")}
+				c.fields["StoreData"] = map[string]ast.Expr{"Data": deliveryEmbeddedFieldsExpr(t, "*SQLiteStore")}
+				c.embedded["AmbiguousRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "IssueBootstrapRead"), deliveryEmbeddedFieldsExpr(t, "*StoreData")}
 			},
 		},
 		{
@@ -162,8 +162,8 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["AmbiguousRead"] = map[string]ast.Expr{}
-				c.fields["OtherBootstrapRead"] = map[string]ast.Expr{"Data": scaleP21SW169Expr(t, "domain.Bootstrap")}
-				c.embedded["AmbiguousRead"] = []ast.Expr{scaleP21SW169Expr(t, "IssueBootstrapRead"), scaleP21SW169Expr(t, "OtherBootstrapRead")}
+				c.fields["OtherBootstrapRead"] = map[string]ast.Expr{"Data": deliveryEmbeddedFieldsExpr(t, "domain.Bootstrap")}
+				c.embedded["AmbiguousRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "IssueBootstrapRead"), deliveryEmbeddedFieldsExpr(t, "OtherBootstrapRead")}
 			},
 		},
 		{
@@ -175,9 +175,9 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 				for _, name := range []string{"DiamondRead", "LeftRead", "RightRead"} {
 					c.fields[name] = map[string]ast.Expr{}
 				}
-				c.embedded["DiamondRead"] = []ast.Expr{scaleP21SW169Expr(t, "LeftRead"), scaleP21SW169Expr(t, "RightRead")}
-				c.embedded["LeftRead"] = []ast.Expr{scaleP21SW169Expr(t, "*IssueBootstrapRead")}
-				c.embedded["RightRead"] = []ast.Expr{scaleP21SW169Expr(t, "IssueBootstrapRead")}
+				c.embedded["DiamondRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "LeftRead"), deliveryEmbeddedFieldsExpr(t, "RightRead")}
+				c.embedded["LeftRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*IssueBootstrapRead")}
+				c.embedded["RightRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "IssueBootstrapRead")}
 			},
 		},
 		{
@@ -187,8 +187,8 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["CycleA"], c.fields["CycleB"] = map[string]ast.Expr{}, map[string]ast.Expr{}
-				c.embedded["CycleA"] = []ast.Expr{scaleP21SW169Expr(t, "*CycleB")}
-				c.embedded["CycleB"] = []ast.Expr{scaleP21SW169Expr(t, "*CycleA")}
+				c.embedded["CycleA"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*CycleB")}
+				c.embedded["CycleB"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*CycleA")}
 			},
 		},
 		{
@@ -198,7 +198,7 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["UnresolvedRead"] = map[string]ast.Expr{}
-				c.embedded["UnresolvedRead"] = []ast.Expr{scaleP21SW169Expr(t, "*NotInCatalog")}
+				c.embedded["UnresolvedRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "*NotInCatalog")}
 			},
 		},
 		{
@@ -208,16 +208,16 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 			}`,
 			setup: func(c *deliveryBoundaryCatalog) {
 				c.fields["UnresolvedRead"] = map[string]ast.Expr{}
-				c.embedded["UnresolvedRead"] = []ast.Expr{scaleP21SW169Expr(t, "IssueBootstrapRead"), scaleP21SW169Expr(t, "*NotInCatalog")}
+				c.embedded["UnresolvedRead"] = []ast.Expr{deliveryEmbeddedFieldsExpr(t, "IssueBootstrapRead"), deliveryEmbeddedFieldsExpr(t, "*NotInCatalog")}
 			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			catalog := scaleP21SW169Catalog(t)
+			catalog := deliveryEmbeddedFieldsCatalog(t)
 			if test.setup != nil {
 				test.setup(&catalog)
 			}
-			function := scaleP21SW169Function(t, test.source)
+			function := deliveryEmbeddedFieldsFunction(t, test.source)
 			var selector *ast.SelectorExpr
 			ast.Inspect(function, func(node ast.Node) bool {
 				if candidate, ok := node.(*ast.SelectorExpr); ok && candidate.Sel.Name == "NotificationDeliveries" {
@@ -244,7 +244,7 @@ func TestScaleP21SW169DeliveryEmbeddedFieldResolution(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW169DeliveryMethodsKeepOriginalBoundaries(t *testing.T) {
+func TestDeliveryMethodsKeepOriginalBoundaries(t *testing.T) {
 	for _, test := range []struct {
 		name, source string
 		spec         deliveryBoundarySpec
@@ -314,8 +314,8 @@ func TestScaleP21SW169DeliveryMethodsKeepOriginalBoundaries(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			catalog := scaleP21SW169Catalog(t)
-			function := scaleP21SW169Function(t, test.source)
+			catalog := deliveryEmbeddedFieldsCatalog(t)
+			function := deliveryEmbeddedFieldsFunction(t, test.source)
 			err := deliveryBoundaryCheck(catalog, function, test.spec)
 			if (err == nil) != test.allowed {
 				t.Fatalf("method boundary acceptance=%t want=%t: %v", err == nil, test.allowed, err)

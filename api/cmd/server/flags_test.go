@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestScaleP16FamilyRollbackAndHydrationGate(t *testing.T) {
+func TestScaleFamilyRollbackAndHydrationGate(t *testing.T) {
 	ctx := context.Background()
 	for _, kind := range []string{"project", "initiative"} {
 		for _, hydration := range []string{"off", "on"} {

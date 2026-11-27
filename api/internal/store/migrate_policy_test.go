@@ -11,9 +11,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21MigrateResidentPolicyReaders(t *testing.T) {
+func TestScaleMigrateResidentPolicyReaders(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.policy_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "p21-migrate-private", Key: "Private", Name: "Private", Private: true}, domain.Team{ID: "p21-migrate-child", Key: "Child", Name: "Child"})
@@ -24,7 +24,7 @@ func TestScaleP21MigrateResidentPolicyReaders(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -78,10 +78,10 @@ func TestScaleP21MigrateResidentPolicyReaders(t *testing.T) {
 	}
 }
 
-func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
+func TestScaleMigratePolicyPermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	public, private, child := "p21-migrate-public", "p21-migrate-private", "p21-migrate-child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.policy_matrix", "", nil, func(data *domain.Bootstrap) error {
@@ -127,7 +127,7 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 	member := identity("member", []string{public})
 	guest := identity("guest", []string{public})
 	inherited := identity("member", []string{private})
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 			{"selected-set", &domain.APIKey{ID: "p21-migrate-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{public}}},
 		} {
 			t.Run(principal.name+"/"+credential.name, func(t *testing.T) {
-				outputContext := scaleP21ResourceOutputContext(t)
+				outputContext := scaleResourceOutputContext(t)
 				before, err := f.ResolveAccess(t.Context(), workspace, principal.user.ID, credential.key)
 				if err != nil {
 					t.Fatal(err)
@@ -212,12 +212,12 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21MigrateInventoryCount(t *testing.T) {
+func TestScaleMigrateInventoryCount(t *testing.T) {
 	inventory, err := metadataConsumerReviews()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(metadataFullWorkspaceConsumers())+len(scaleP21MigrateReviewedConsumers()) != len(inventory.Consumers) {
+	if len(metadataFullWorkspaceConsumers())+len(scaleMigrateReviewedConsumers()) != len(inventory.Consumers) {
 		t.Fatal("consumer partition differs from registered total")
 	}
 }

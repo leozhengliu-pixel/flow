@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW109LegacyReadReservationBoundary(t *testing.T) {
+func TestLegacyReadReservationBoundary(t *testing.T) {
 	const physical, nativeKey = "physical\x00key", "native-large"
 	stamp := time.Now()
 	body := strings.Repeat("immutable native body\x00", 50000)
@@ -38,7 +38,7 @@ func TestScaleP21SW109LegacyReadReservationBoundary(t *testing.T) {
 	off := &SQLiteStore{workspaces: values, lastWorkspaceKey: physical}
 	// The installed-reader harness supplies a bounded store. Its deliberately
 	// smaller logical image must be irrelevant to this contextless scalar.
-	on := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{
+	on := scaleHotLogoStore(t, map[string]domain.Bootstrap{
 		physical: small, nativeKey: {Workspace: native.Workspace},
 	})
 	on.mu.Lock()
@@ -104,10 +104,10 @@ func TestScaleP21SW109LegacyReadReservationBoundary(t *testing.T) {
 		values[nativeKey].Documents[0].Content != body {
 		t.Fatal("reservation mutated or normalized native resident values")
 	}
-	t.Run("fixed-maximum-guard-precedes-traversal", scaleP21SW109ReservationGuard)
+	t.Run("fixed-maximum-guard-precedes-traversal", reservationGuard)
 }
 
-func scaleP21SW109ReservationGuard(t *testing.T) {
+func reservationGuard(t *testing.T) {
 	t.Helper()
 	file, err := parser.ParseFile(token.NewFileSet(), "snapshot_reservation.go", nil, 0)
 	if err != nil {
@@ -129,14 +129,14 @@ func scaleP21SW109ReservationGuard(t *testing.T) {
 	guardIndex := -1
 	for index, statement := range function.Body.List {
 		guard, ok := statement.(*ast.IfStmt)
-		if !ok || !scaleP21SW109BoundedGuard(guard.Cond, receiver) {
+		if !ok || !boundedGuard(guard.Cond, receiver) {
 			continue
 		}
 		if guard.Init != nil || guard.Else != nil || len(guard.Body.List) != 1 {
 			t.Fatal("bounded guard can perform extra work or fall through")
 		}
 		result, ok := guard.Body.List[0].(*ast.ReturnStmt)
-		if !ok || len(result.Results) != 1 || !scaleP21SW109Ident(result.Results[0], "HydratedSnapshotReservationMaxBytes") {
+		if !ok || len(result.Results) != 1 || !legacyReadBoundariesIdent(result.Results[0], "HydratedSnapshotReservationMaxBytes") {
 			t.Fatal("bounded guard does not directly return the fixed maximum")
 		}
 		guardIndex = index
@@ -159,7 +159,7 @@ func scaleP21SW109ReservationGuard(t *testing.T) {
 					break
 				}
 				mutex, ok := method.X.(*ast.SelectorExpr)
-				if !ok || mutex.Sel.Name != "mu" || !scaleP21SW109Ident(mutex.X, receiver) {
+				if !ok || mutex.Sel.Name != "mu" || !legacyReadBoundariesIdent(mutex.X, receiver) {
 					t.Error("reservation calls an unproved method before the bounded guard")
 				}
 			}
@@ -174,34 +174,34 @@ func scaleP21SW109ReservationGuard(t *testing.T) {
 		t.Fatal("missing literal off reservation return")
 	}
 	call, ok := result.Results[0].(*ast.CallExpr)
-	if !ok || !scaleP21SW109Ident(call.Fun, "HydratedSnapshotReservation") || len(call.Args) != 1 {
+	if !ok || !legacyReadBoundariesIdent(call.Fun, "HydratedSnapshotReservation") || len(call.Args) != 1 {
 		t.Fatal("off path no longer invokes the literal reservation helper")
 	}
 }
 
-func scaleP21SW109Ident(expression ast.Expr, name string) bool {
+func legacyReadBoundariesIdent(expression ast.Expr, name string) bool {
 	value, ok := expression.(*ast.Ident)
 	return ok && value.Name == name
 }
 
-func scaleP21SW109BoundedGuard(expression ast.Expr, receiver string) bool {
+func boundedGuard(expression ast.Expr, receiver string) bool {
 	if grouped, ok := expression.(*ast.ParenExpr); ok {
-		return scaleP21SW109BoundedGuard(grouped.X, receiver)
+		return boundedGuard(grouped.X, receiver)
 	}
 	binary, ok := expression.(*ast.BinaryExpr)
 	if !ok {
 		return false
 	}
 	if binary.Op == token.LOR {
-		return scaleP21SW109BoundedGuard(binary.X, receiver) || scaleP21SW109BoundedGuard(binary.Y, receiver)
+		return boundedGuard(binary.X, receiver) || boundedGuard(binary.Y, receiver)
 	}
 	if binary.Op != token.NEQ {
 		return false
 	}
 	residency := func(expression ast.Expr) bool {
 		field, ok := expression.(*ast.SelectorExpr)
-		return ok && field.Sel.Name == "metadataResidency" && scaleP21SW109Ident(field.X, receiver)
+		return ok && field.Sel.Name == "metadataResidency" && legacyReadBoundariesIdent(field.X, receiver)
 	}
-	return residency(binary.X) && scaleP21SW109Ident(binary.Y, "nil") ||
-		residency(binary.Y) && scaleP21SW109Ident(binary.X, "nil")
+	return residency(binary.X) && legacyReadBoundariesIdent(binary.Y, "nil") ||
+		residency(binary.Y) && legacyReadBoundariesIdent(binary.X, "nil")
 }

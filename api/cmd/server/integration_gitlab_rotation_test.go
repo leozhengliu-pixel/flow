@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW559: with bounded metadata on, BeginGitLabConnectionConfigsRead read the
+// With bounded metadata on, BeginGitLabConnectionConfigsRead read the
 // resident image, which holds no integration connections, so the minute
 // sweep's token rotation found no connection and never renewed a token. The
 // differential seeds one database flag off (GitLab connections that rotate,
@@ -28,7 +28,7 @@ import (
 // loaded from SQL). Each must present the same tokens to GitLab in the same
 // order, store the same credentials and leave the same connection configs
 // (rotation times masked).
-func TestScaleP21SW559GitLabRotationDifferential(t *testing.T) {
+func TestGitLabRotationDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -128,7 +128,7 @@ func TestScaleP21SW559GitLabRotationDifferential(t *testing.T) {
 	run := func(mode string) outcome {
 		t.Helper()
 		path := filepath.Join(dir, mode+".db")
-		scaleP21SW559CopyDatabase(t, seed, path)
+		copyDatabase(t, seed, path)
 		bounded := mode != "legacy"
 		work := ctx
 		if bounded {
@@ -202,7 +202,7 @@ func TestScaleP21SW559GitLabRotationDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW559CopyDatabase(t *testing.T, from, to string) {
+func copyDatabase(t *testing.T, from, to string) {
 	t.Helper()
 	for _, suffix := range []string{"", "-wal", "-shm"} {
 		source, err := os.Open(from + suffix)

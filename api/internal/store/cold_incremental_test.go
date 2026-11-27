@@ -19,12 +19,12 @@ import (
 // coldIncrementalFixture is a bounded store (a production-coverage view of a
 // journaled database) whose installed image is a fresh SQL reload, with a
 // workspace holding many metadata collections.
-func coldIncrementalFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func coldIncrementalFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 19, 8, 0, 0, 0, time.UTC)
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.cold_incremental_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -81,7 +81,7 @@ func coldIncrementalFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string
 	}); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21CompleteWorkspaceCatalog(t, f, workspace)
+	scaleCompleteWorkspaceCatalog(t, f, workspace)
 	f.db.boundedCatalog.Store(true)
 	t.Cleanup(func() { f.db.boundedCatalog.Store(false) })
 	view := coldIncrementalReloadedView(t, f, workspace)
@@ -90,7 +90,7 @@ func coldIncrementalFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string
 
 // coldIncrementalReloadedView is a production-coverage bounded view whose
 // installed image of workspace is a fresh SQL reload.
-func coldIncrementalReloadedView(t *testing.T, f scaleP09Fixture, workspace string) *SQLiteStore {
+func coldIncrementalReloadedView(t *testing.T, f scaleFixture, workspace string) *SQLiteStore {
 	t.Helper()
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -110,11 +110,11 @@ func coldIncrementalReloadedView(t *testing.T, f scaleP09Fixture, workspace stri
 
 // coldIncrementalAssertExact compares view's installed image of workspace
 // with a fresh SQL reload: the decoded image, the stamp and the policy.
-func coldIncrementalAssertExact(t *testing.T, f scaleP09Fixture, view *SQLiteStore, workspace, label string) domain.Bootstrap {
+func coldIncrementalAssertExact(t *testing.T, f scaleFixture, view *SQLiteStore, workspace, label string) domain.Bootstrap {
 	t.Helper()
-	got := scaleP21ColdTeamNative(t, view, workspace)
+	got := scaleColdTeamNative(t, view, workspace)
 	fresh := coldIncrementalReloadedView(t, f, workspace)
-	want := scaleP21ColdTeamNative(t, fresh, workspace)
+	want := scaleColdTeamNative(t, fresh, workspace)
 	if !reflect.DeepEqual(got, want) {
 		gv, wv := reflect.ValueOf(got), reflect.ValueOf(want)
 		for i := 0; i < gv.NumField(); i++ {
@@ -497,7 +497,7 @@ func TestColdIncrementalPublicationDifferential(t *testing.T) {
 		if step%7 == 3 {
 			// The legacy writer stores the request actor's account over its
 			// user row: a change of that user alone.
-			current := scaleP21ColdTeamNative(t, view, workspace)
+			current := scaleColdTeamNative(t, view, workspace)
 			if len(current.Users) > 0 {
 				actor := current.Users[rng.IntN(len(current.Users))]
 				actor.DisplayName = fmt.Sprintf("Actor %d", step)
@@ -962,7 +962,7 @@ func TestColdIncrementalReloadDerivesFromKnown(t *testing.T) {
 		data.SavedViews = append(data.SavedViews, domain.SavedView{ID: "reload-view", Name: "Reload", Resource: "issues", Scope: "workspace"})
 		return nil
 	})
-	users := scaleP21ColdTeamNative(t, view, workspace).Users
+	users := scaleColdTeamNative(t, view, workspace).Users
 	if len(users) == 0 {
 		t.Fatal("fixture has no users")
 	}

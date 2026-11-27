@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW31InlineMembersRefreshDifferential(t *testing.T) {
+func TestInlineMembersRefreshDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -28,7 +28,7 @@ func TestScaleP21SW31InlineMembersRefreshDifferential(t *testing.T) {
 				name += "-large-member"
 			}
 			t.Run(name, func(t *testing.T) {
-				f := scaleP09Database(t)
+				f := journalScaleDatabase(t)
 				workspace := f.data.Workspace.URLKey
 				personID := idgen.New("sw31-person-")
 				fresh := domain.User{ID: personID, Name: "Fresh member", DisplayName: "Fresh display", Active: true}
@@ -148,11 +148,11 @@ func TestScaleP21SW31InlineMembersRefreshDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31InlineMembersBudgetAndCancellation(t *testing.T) {
+func TestInlineMembersBudgetAndCancellation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

@@ -43,10 +43,10 @@ import { labelsForResource } from '@/lib/labels'
 import type { TeamSettings } from '@/types/flow'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { ScaleP19ProjectPager } from '@/components/projects-page/scale-p19-project-pager'
-import { useScaleP19InitiativeWindow } from './scale-p19-initiative-window'
-import { ScaleP19InitiativeContext, useScaleP19InitiativeSupport, useScaleP19RemoteInitiativeWindow } from './scale-p19-remote-window'
-import { useScaleP19InitiativeUpdates } from '@/components/projects-page/scale-p19-project-updates'
+import { ProjectWindowPager } from '@/components/projects-page/project-window-pager'
+import { useInitiativeWindow } from './initiative-window'
+import { InitiativeWindowContext, useInitiativeWindowSupport, useRemoteInitiativeWindow } from './remote-initiative-window'
+import { useInitiativeUpdateWindow } from '@/components/projects-page/use-project-update-window'
 
 type Props = {
   teamContext?: Team
@@ -99,7 +99,7 @@ export function InitiativesPage(props: Props) {
   const defaultSort = displayDefault?.ordering && ['manual', 'name', 'status', 'priority', 'target', 'health', 'created', 'updated'].includes(displayDefault.ordering) ? displayDefault.ordering as Sort : 'manual'
   const defaultGrouping = displayDefault?.grouping && ['none','contributingTeam','leadTeam','owner','health','status','priority','label'].includes(displayDefault.grouping) ? displayDefault.grouping as Grouping : 'none'
   const defaultShowTeam = displayDefault?.showTeamInitiatives ?? true
-  const queryWindows = useScaleP19InitiativeSupport().enabled
+  const queryWindows = useInitiativeWindowSupport().enabled
   const [creating, setCreating] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showContributing, setShowContributing] = useState(() => localStorage.getItem(`flow:initiatives:${props.teamContext?.id}:contributing`) !== 'false')
@@ -136,7 +136,7 @@ export function InitiativesPage(props: Props) {
   useFlowRowShortcuts(INITIATIVE_ROW_SHORTCUTS)
   useRequestEntityUpdates('initiative', [queryWindows ? undefined : updatesInitiative?.id])
   const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth > 800 && localStorage.getItem('flow:initiatives:details-open') === 'true')
-  const remote = useScaleP19RemoteInitiativeWindow({ schema: 1, view, initiativeFilters: filters, filterMode, sort, grouping, showNested, showParents, showTeamInitiatives, showContributing, leadTeamId: props.teamContext?.id, collapsed: [...collapsed], locale: navigator.language }, selected)
+  const remote = useRemoteInitiativeWindow({ schema: 1, view, initiativeFilters: filters, filterMode, sort, grouping, showNested, showParents, showTeamInitiatives, showContributing, leadTeamId: props.teamContext?.id, collapsed: [...collapsed], locale: navigator.language }, selected)
 
   const visible = useMemo(() => scopedInitiatives.filter(item => {
     const inView = view === 'active' ? item.status === 'active' : view === 'planned' ? item.status === 'planned' || item.status === 'proposed' : true
@@ -173,7 +173,7 @@ export function InitiativesPage(props: Props) {
     ...(grouping !== 'none' ? [{ key: `group:${group.key}`, kind: 'group' as const, label: group.label, count: group.items.length, entityName: ['owner','leadTeam','contributingTeam','label'].includes(grouping) }] : []),
     ...(showNested ? initiativeTreeRows(group.items, graph, collapsed) : group.items.map(initiative => ({ initiative, depth: 0, childCount: 0 }))).map(row => ({ key: `initiative:${group.key}:${row.initiative.id}`, kind: 'initiative' as const, ...row })),
   ]), [grouped, grouping, graph, collapsed, showNested])
-  const listWindow = useScaleP19InitiativeWindow(listEntries, JSON.stringify([view, filters, filterMode, sort, grouping, showNested, showParents, showTeamInitiatives, showContributing, [...collapsed]]), remote.enabled)
+  const listWindow = useInitiativeWindow(listEntries, JSON.stringify([view, filters, filterMode, sort, grouping, showNested, showParents, showTeamInitiatives, showContributing, [...collapsed]]), remote.enabled)
   const pageEntries: InitiativeListEntry[] = remote.enabled ? remote.entries : listWindow.entries
   const displayDirty = showNested !== (displayDefault?.showNestedInitiatives ?? true) || showParents !== (displayDefault?.showParentInitiatives ?? true) || grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
   const resetDisplay = () => { setShowNested(displayDefault?.showNestedInitiatives ?? true); setShowParents(displayDefault?.showParentInitiatives ?? true); setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
@@ -223,7 +223,7 @@ export function InitiativesPage(props: Props) {
 
   const rowCount = remote.enabled ? remote.page?.total ?? 0 : visible.length
   const tableHeader = rowCount > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
-  return <ScaleP19InitiativeContext.Provider value={remote.enabled ? remote.page : undefined}><main className="main-panel li-page">
+  return <InitiativeWindowContext.Provider value={remote.enabled ? remote.page : undefined}><main className="main-panel li-page">
     <div className="li-list-header" data-testid="initiatives-header">
     <header className="li-page-header">
       <button aria-label={t('Open sidebar')} className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><SidebarLeftIcon/></button>
@@ -261,16 +261,16 @@ export function InitiativesPage(props: Props) {
       </div>
       {showDetails && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
     </div>
-    {listWindow.enabled && <ScaleP19ProjectPager label="Initiatives" page={listWindow.page} loading={false} onPage={listWindow.onPage}/ >}
-    {remote.enabled && <ScaleP19ProjectPager label="Initiatives" page={remote.page ? { ...remote.page, items: remote.entries.filter(entry => entry.kind === 'initiative'), index: remote.index } : undefined} loading={remote.loading} onPage={index => { void remote.load(index) }}/ >}
+    {listWindow.enabled && <ProjectWindowPager label="Initiatives" page={listWindow.page} loading={false} onPage={listWindow.onPage}/ >}
+    {remote.enabled && <ProjectWindowPager label="Initiatives" page={remote.page ? { ...remote.page, items: remote.entries.filter(entry => entry.kind === 'initiative'), index: remote.index } : undefined} loading={remote.loading} onPage={index => { void remote.load(index) }}/ >}
     {selected.size > 0 && <InitiativesBulkBar initiatives={remote.enabled ? remote.selectedItems : initiatives.filter(item => selected.has(item.id))} labels={labels} users={users} onClear={() => setSelected(new Set())} onDelete={async () => { await Promise.all([...selected].map(onDelete)); setSelected(new Set()) }} onUpdate={input => Promise.all([...selected].map(id => onUpdate(id, input)))}/>}
     {updatesInitiative && <InitiativeUpdatesPanel composeOnOpen={composeUpdate} initiative={updatesInitiative} updates={initiativeUpdates[updatesInitiative.id] ?? []} viewer={viewer} onClose={() => setUpdatesInitiative(undefined)} onCreateUpdate={onCreateUpdate} onOpen={() => onOpen(updatesInitiative, 'activity')} onUpdate={input => onUpdate(updatesInitiative.id, input)}/>}
-  </main></ScaleP19InitiativeContext.Provider>
+  </main></InitiativeWindowContext.Provider>
 }
 
 function InitiativesListSidebar({ initiatives, users, teams, view }: { initiatives: Initiative[]; users: User[]; teams: Team[]; view: InitiativesRouteView }) {
   const [tab, setTab] = useState<'owner' | 'leadTeam' | 'health'>('owner')
-  const remote = useContext(ScaleP19InitiativeContext)
+  const remote = useContext(InitiativeWindowContext)
   if (view === 'planned' || (remote ? remote.total === 0 : initiatives.length === 0)) return <aside className="li-list-sidebar"><div className="li-list-sidebar-empty">No initiative details</div></aside>
   const ownerCounts = users.map(user => ({ user, count: remote ? remote.counts?.['visible:ownerId']?.[user.id] ?? 0 : initiatives.filter(item => item.owner?.id === user.id).length })).filter(item => item.count > 0)
   const teamCounts = teams.map(team => ({ team, count: remote ? remote.counts?.['visible:leadTeamId']?.[team.id] ?? 0 : initiatives.filter(item => item.leadTeamId === team.id).length })).filter(item => item.count > 0)
@@ -301,7 +301,7 @@ export function InitiativeRow({ phoneCompact = false, contextOnly, depth, childC
   initiative: Initiative; initiativeUpdates: InitiativeUpdate[]; projects: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; properties: Set<Property>; columns: Property[]; grid: string; href: string; selected: boolean; users: User[]; teams: Team[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]
   onCreateLabel: (name: string, groupId?: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect?: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
-  const remote = useContext(ScaleP19InitiativeContext)
+  const remote = useContext(InitiativeWindowContext)
   const aggregate = remote?.aggregates?.[initiative.id]
   contextOnly = remote ? remote.entries?.find(entry => entry.id === initiative.id)?.contextOnly === true : contextOnly
   const linked = projects.filter(project => projectIds.has(project.id))
@@ -410,7 +410,7 @@ function InitiativeFilterIcon({ field }: { field: string }) {
 }
 
 function InitiativeFilterValues({ entry, filters, initiatives, labels, onChange, onCreateLabel, teams, users }: { entry: { id: string; label: string }; filters: FilterState; initiatives: Initiative[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onCreateLabel?: (name: string) => Promise<IssueLabel>; teams: Team[]; users: User[] }) {
-  const remote = useContext(ScaleP19InitiativeContext)
+  const remote = useContext(InitiativeWindowContext)
   const options = useMemo(() => filterOptions(entry.id, initiatives, users, teams, labels).map(option => ({ ...option, id: String(option.value), entity: ['ownerId','creatorId','leadTeamId','teamId','labelId'].includes(entry.id) })), [entry.id, initiatives, users, teams, labels])
   const counts = useMemo(() => remote ? new Map(Object.entries(remote.counts?.[entry.id] ?? {})) : entry.id === 'date' ? new Map(options.map(option => [option.id, initiatives.filter(item => matchesDateFilter(item, option.value as NonNullable<FilterState['date']>)).length])) : countInitiativeFilterValues(initiatives, entry.id), [entry.id, initiatives, options, remote])
   return <SearchableMenuItems options={options} onSelect={option => onChange({ ...filters, [entry.id]: option.value })} onCreate={entry.id === 'labelId' && onCreateLabel ? async name => { const label = await onCreateLabel(name); onChange({ ...filters, labelId: label.id }) } : undefined} renderOption={option => <><span className="li-filter-checkbox">{filters[entry.id as keyof FilterState] === option.value && <Check size={10}/>}</span>{option.icon}<span data-menu-label data-i18n-ignore={option.entity || undefined}>{option.label}</span>{Boolean(counts.get(option.id)) && <small className="li-menu-end">{counts.get(option.id)} initiative{counts.get(option.id) === 1 ? '' : 's'}</small>}</>}/>
@@ -487,7 +487,7 @@ function AdvancedFilterPicker(props: AdvancedFilterProps) {
 
 function InitiativeUpdatesPanel({ composeOnOpen = false, initiative, updates: legacyUpdates, viewer, onClose, onCreateUpdate, onOpen, onUpdate }: { composeOnOpen?: boolean; initiative: Initiative; updates: InitiativeUpdate[]; viewer: User; onClose: () => void; onCreateUpdate: Props['onCreateUpdate']; onOpen: () => void; onUpdate: (input: InitiativeMutationInput) => Promise<Initiative> }) {
   const { t } = useI18n()
-  const window = useScaleP19InitiativeUpdates(initiative.id, legacyUpdates)
+  const window = useInitiativeUpdateWindow(initiative.id, legacyUpdates)
   const updates = window.items
   const [composing, setComposing] = useState(composeOnOpen)
   const [body, setBody] = useState('')
@@ -498,7 +498,7 @@ function InitiativeUpdatesPanel({ composeOnOpen = false, initiative, updates: le
     <header><button data-i18n-ignore onClick={onOpen} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/>{initiative.name}</button><button aria-pressed={initiative.subscribed} onClick={() => void onUpdate({ subscribed: !initiative.subscribed })} type="button">{initiative.subscribed ? 'Subscribed' : 'Subscribe'}</button><button onClick={() => setComposing(true)} type="button">New update</button><button aria-label="Close initiative updates" onClick={onClose} type="button"><X size={15}/></button></header>
     {composing && <div className="li-update-panel-composer"><div><Avatar id={viewer.id} name={viewer.displayName || viewer.name}/><strong>{viewer.displayName || viewer.name}</strong><SelectControl label="Update health" value={health} onChange={value => setHealth(value as Project['health'])} options={[{value:'onTrack',label:'On track'},{value:'atRisk',label:'At risk'},{value:'offTrack',label:'Off track'}]}/></div><MentionTextField autoFocus ariaLabel="Initiative update" placeholder="Write an initiative update…" value={body} onChange={setBody} onSubmit={() => void submit()}/><footer><button onClick={() => setComposing(false)} type="button">Cancel</button><button disabled={!body.trim() || saving} onClick={() => void submit()} type="button">Post update</button></footer></div>}
     {window.loading ? <div role="status">{t('Loading…')}</div> : window.error ? <button type="button" onClick={() => { void window.reload() }}>{t('Retry')}</button> : !updates.length && !composing ? <div className="li-update-panel-empty"><span><Send size={22}/></span><strong>Initiative updates</strong><p>Write a short status report to keep everyone up-to-date on the progress and health of this initiative</p><button onClick={() => setComposing(true)} type="button">New initiative update <kbd>N</kbd><span>then</span><kbd>U</kbd></button><a href="https://flow.app/docs/initiative-and-project-updates" rel="noreferrer" target="_blank">Documentation</a></div> : <div className="li-update-panel-list">{updates.map(update => <article key={update.id}><header><Avatar id={update.user.id} name={update.user.displayName}/><strong data-i18n-ignore>{update.user.displayName}</strong><time>{new Date(update.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time><span className={`li-update-health is-${update.health}`}/>{healthLabel(update.health)}</header><div className="li-rich-text" data-i18n-ignore><RichComment body={update.body} data={update.bodyData}/></div></article>)}</div>}
-    {window.enabled && <ScaleP19ProjectPager label="Initiative updates" page={window.page} loading={window.loading} onPage={index => { void window.onPage(index) }}/ >}
+    {window.enabled && <ProjectWindowPager label="Initiative updates" page={window.page} loading={window.loading} onPage={index => { void window.onPage(index) }}/ >}
   </aside></div>
 }
 

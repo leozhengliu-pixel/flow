@@ -18,9 +18,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW4AttachmentJSON(t *testing.T, value any, attachment domain.Attachment) any {
+func attachmentJSON(t *testing.T, value any, attachment domain.Attachment) any {
 	t.Helper()
-	decoded := scaleP21M2JSON(t, value, false)
+	decoded := normalizePolicyJSON(t, value, false)
 	var normalize func(any) any
 	normalize = func(value any) any {
 		switch value := value.(type) {
@@ -45,14 +45,14 @@ func scaleP21SW4AttachmentJSON(t *testing.T, value any, attachment domain.Attach
 	return normalize(decoded)
 }
 
-func TestScaleP21SW4AttachmentCreationDifferential(t *testing.T) {
+func TestAttachmentCreationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		unrelated := scaleP21M3Fingerprint(t, f.probe, workspace, "projects")
+		unrelated := pointRecordFingerprint(t, f.probe, workspace, "projects")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, mode := range []string{"created", "missing", "cancelled"} {
 				var results []any
@@ -141,7 +141,7 @@ func TestScaleP21SW4AttachmentCreationDifferential(t *testing.T) {
 					if len(files) != wantFiles {
 						t.Fatalf("upload cleanup left %d files, want %d", len(files), wantFiles)
 					}
-					rows := scaleP21M2Canonical(t, repo, workspace,
+					rows := policyCanonicalRecords(t, repo, workspace,
 						store.RecordKey{Kind: "customerRequests", ID: "sw4-request"},
 						store.RecordKey{Kind: "customerRequests", ID: "sw4-other-request"})
 					entries, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, store.AuditQuery{Since: started})
@@ -151,18 +151,18 @@ func TestScaleP21SW4AttachmentCreationDifferential(t *testing.T) {
 					for i := range entries {
 						entries[i].ID, entries[i].Hash, entries[i].Seq, entries[i].CreatedAt = "", "", 0, time.Time{}
 					}
-					results = append(results, scaleP21SW4AttachmentJSON(t, []any{
-						w.Code, scaleP21M2Response(t, w, false), rows,
+					results = append(results, attachmentJSON(t, []any{
+						w.Code, policyDifferentialResponse(t, w, false), rows,
 						event.Type, event.AggregateID, event.Payload, event.PreviousValues,
 						realtime.Type, realtime.Payload, entries,
 					}, created))
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("attachment %s differential: %s", mode, scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("attachment %s differential: %s", mode, policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
-		if f.probe.WorkspaceMetadataDecodes() != 0 || scaleP21M3Fingerprint(t, f.probe, workspace, "projects") != unrelated {
+		if f.probe.WorkspaceMetadataDecodes() != 0 || pointRecordFingerprint(t, f.probe, workspace, "projects") != unrelated {
 			t.Fatal("attachment operations decoded or changed unrelated metadata")
 		}
 	}

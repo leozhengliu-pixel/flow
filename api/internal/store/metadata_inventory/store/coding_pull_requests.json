@@ -12,7 +12,7 @@
       "temperature": "cold",
       "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
       "callers": [
-        "codehost.Installations interface declaration (api/internal/codehost/codehost.go:286); no production .IntegrationConnections(...) invocation found; legacy adapter exercised by TestScaleP21SW15NotificationReadDueLimitAndOffConnections"
+        "codehost.Installations interface declaration (api/internal/codehost/codehost.go:286); no production .IntegrationConnections(...) invocation found; legacy adapter exercised by TestNotificationReadDueLimitAndOffConnections"
       ]
     }
   }

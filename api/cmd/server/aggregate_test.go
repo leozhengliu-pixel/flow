@@ -10,12 +10,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW25AggregateCollisionEvidence(t *testing.T) {
+func TestAggregateCollisionEvidence(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		ids := []string{"migration_sw25_collision", "review_event_sw25_collision", "release_pipeline_sw25_collision"}
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw25.collisions", "", nil, func(data *domain.Bootstrap) error {

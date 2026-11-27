@@ -1589,7 +1589,7 @@ func (s *SQLiteStore) CycleForCalendar(id, token string) (domain.Cycle, bool) {
 }
 
 // installedCycleForCalendar is CycleForCalendar on a bounded store, whose
-// image holds no cycles (the public calendar feed answered 404, SW559): each
+// image holds no cycles (the public calendar feed answered 404, resident image readers): each
 // workspace's cycles are read from its legacy view, in workspace key order.
 // handled is false flag off and on a store without installed sources (a test
 // view), which read the image as before.
@@ -2519,7 +2519,7 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 	if s.metadataResidency != nil {
 		// COLD: the literal legacy update on the COLD facade, which answers
 		// and writes the complete workspace (default_cold.go). A
-		// rename also publishes the new key and drops the old one (SW555).
+		// rename also publishes the new key and drops the old one.
 		next := workspace.URLKey
 		if next == "" {
 			next = workspaceKey

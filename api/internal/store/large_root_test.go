@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW33LargeRoot(t *testing.T) (scaleP09Fixture, *SQLiteStore, int) {
+func largeRoot(t *testing.T) (scaleFixture, *SQLiteStore, int) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "members"), workspace, "scale_p21_sw33.large_inline", "", nil, func(data *domain.Bootstrap) error {
 		data.Members = nil
@@ -47,8 +47,8 @@ func scaleP21SW33LargeRoot(t *testing.T) (scaleP09Fixture, *SQLiteStore, int) {
 	return f, view, size
 }
 
-func TestScaleP21SW33LargeInlineRootColdDifferential(t *testing.T) {
-	f, view, size := scaleP21SW33LargeRoot(t)
+func TestLargeInlineRootColdDifferential(t *testing.T) {
+	f, view, size := largeRoot(t)
 	workspace := f.data.Workspace.URLKey
 	legacySQL := 0
 	legacyContext := WithSQLStatementObserver(t.Context(), func(string) { legacySQL++ })
@@ -104,8 +104,8 @@ func TestScaleP21SW33LargeInlineRootColdDifferential(t *testing.T) {
 	t.Logf("SQL statements old=%d bounded=%d root SUBSTR chunks=%d; whole-member comparison owns a separate 16MiB lease", legacySQL, boundedSQL, rootChunks)
 }
 
-func TestScaleP21SW33LargeInlineRootPeerReload(t *testing.T) {
-	f, view, _ := scaleP21SW33LargeRoot(t)
+func TestLargeInlineRootPeerReload(t *testing.T) {
+	f, view, _ := largeRoot(t)
 	workspace := f.data.Workspace.URLKey
 	// This isolated view does not certify the unrelated scalar-catalog
 	// backfill. A real peer write must still force its normal cold reload.
@@ -156,8 +156,8 @@ func TestScaleP21SW33LargeInlineRootPeerReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW33LargeInlineRootCancellation(t *testing.T) {
-	f, view, _ := scaleP21SW33LargeRoot(t)
+func TestLargeInlineRootCancellation(t *testing.T) {
+	f, view, _ := largeRoot(t)
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -192,8 +192,8 @@ func TestScaleP21SW33LargeInlineRootCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW33LargeInlineRootRepeatedRecognizedProperties(t *testing.T) {
-	f, view, _ := scaleP21SW33LargeRoot(t)
+func TestLargeInlineRootRepeatedRecognizedProperties(t *testing.T) {
+	f, view, _ := largeRoot(t)
 	workspace := f.data.Workspace.URLKey
 	var raw []byte
 	if err := f.db.QueryRowContext(t.Context(), "SELECT data FROM workspace_states WHERE workspace_key=?", workspace).Scan(&raw); err != nil {

@@ -12,7 +12,7 @@ import (
 // A DescriptionState-only request still reconstructs the old CRDT tree when
 // deciding whether a former-member mention is retained. It cannot be admitted
 // solely by accounting for the new JSON description.
-func TestScaleP21IssueEditorDescriptionStateReadsCRDT(t *testing.T) {
+func TestScaleIssueEditorDescriptionStateReadsCRDT(t *testing.T) {
 	state := mentioningCollaborationState("departed-without-directory-entry")
 	update, err := base64.StdEncoding.DecodeString(state)
 	if err != nil {

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28AggregateLegacyPrecedence(t *testing.T) {
+func TestAggregateLegacyPrecedence(t *testing.T) {
 	const id = "aggregate_sw28"
 	collision := map[string]any{"id": id, "marker": "nested"}
 	cases := []struct {
@@ -104,7 +104,7 @@ func TestScaleP21SW28AggregateLegacyPrecedence(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			want := scaleP21SW28JSONValue(t, test.want)
+			want := jsonValue(t, test.want)
 			if got := aggregateJSONValue(test.data, test.id); !reflect.DeepEqual(got, want) {
 				t.Fatalf("legacy oracle got %#v, want %#v", got, want)
 			}
@@ -121,7 +121,7 @@ func TestScaleP21SW28AggregateLegacyPrecedence(t *testing.T) {
 	}
 }
 
-func scaleP21SW28JSONValue(t *testing.T, value any) any {
+func jsonValue(t *testing.T, value any) any {
 	t.Helper()
 	if value == nil {
 		return nil
@@ -137,7 +137,7 @@ func scaleP21SW28JSONValue(t *testing.T, value any) any {
 	return result
 }
 
-func TestScaleP21SW28AggregateLegacyDeletionDiff(t *testing.T) {
+func TestAggregateLegacyDeletionDiff(t *testing.T) {
 	const id = "template_sw28_deleted"
 	first := domain.IssueTemplate{ID: id, Name: "Before"}
 	later := map[string]any{"id": id, "name": "Later", "nested": true}
@@ -159,7 +159,7 @@ func TestScaleP21SW28AggregateLegacyDeletionDiff(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateMapAmbiguity(t *testing.T) {
+func TestAggregateMapAmbiguity(t *testing.T) {
 	const id = "ambiguous_sw28"
 	data := domain.Bootstrap{Settings: map[string]any{
 		"first":  map[string]any{"id": id, "marker": "first"},
@@ -185,7 +185,7 @@ func TestScaleP21SW28AggregateMapAmbiguity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateLargeAndCancellation(t *testing.T) {
+func TestAggregateLargeAndCancellation(t *testing.T) {
 	const id = "aggregate_sw28_large"
 	whole := domain.Bootstrap{Settings: map[string]any{"id": id, "body": strings.Repeat("whole map ", 40000)}}
 	source, err := captureMetadataLogicalSource(t.Context(), whole, copyStamp{})
@@ -211,7 +211,7 @@ func TestScaleP21SW28AggregateLargeAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateRejectLargeUnrelatedID(t *testing.T) {
+func TestAggregateRejectLargeUnrelatedID(t *testing.T) {
 	const id = "aggregate_sw28_after_large"
 	data := domain.Bootstrap{
 		Documents: []domain.Document{{
@@ -233,7 +233,7 @@ func TestScaleP21SW28AggregateRejectLargeUnrelatedID(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateOverlayDifferential(t *testing.T) {
+func TestAggregateOverlayDifferential(t *testing.T) {
 	const id = "aggregate_sw28_overlay"
 	base := domain.Bootstrap{
 		Documents: []domain.Document{
@@ -301,7 +301,7 @@ func TestScaleP21SW28AggregateOverlayDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateUpdatesMapShape(t *testing.T) {
+func TestAggregateUpdatesMapShape(t *testing.T) {
 	const id = "update_sw28"
 	base := domain.Bootstrap{
 		ProjectUpdates: map[string][]domain.ProjectUpdate{
@@ -344,7 +344,7 @@ func TestScaleP21SW28AggregateUpdatesMapShape(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateLegacyContentUniverse(t *testing.T) {
+func TestAggregateLegacyContentUniverse(t *testing.T) {
 	const id = "issue_sw28_universe"
 	data := domain.Bootstrap{
 		Issues:    []domain.Issue{{ID: id, Title: "Hydrated issue"}},
@@ -369,7 +369,7 @@ func TestScaleP21SW28AggregateLegacyContentUniverse(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateCompactsLargeUploadedInput(t *testing.T) {
+func TestAggregateCompactsLargeUploadedInput(t *testing.T) {
 	const id = "import_sw28_large"
 	data := domain.Bootstrap{ImportJobs: []domain.ImportJob{{
 		ID: id, Filename: "source.csv", Rows: []map[string]string{{"body": strings.Repeat("uploaded source ", 50000)}},
@@ -385,7 +385,7 @@ func TestScaleP21SW28AggregateCompactsLargeUploadedInput(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateAllPrefixBranches(t *testing.T) {
+func TestAggregateAllPrefixBranches(t *testing.T) {
 	for _, test := range []struct {
 		prefix, field string
 		terminalMiss  bool
@@ -428,21 +428,21 @@ func TestScaleP21SW28AggregateAllPrefixBranches(t *testing.T) {
 			item := reflect.New(field.Type().Elem()).Elem()
 			item.FieldByName("ID").SetString(id)
 			field.Set(reflect.Append(field, item, item))
-			if got, want := aggregateJSONValue(data, id), scaleP21SW28JSONValue(t, item.Interface()); !reflect.DeepEqual(got, want) {
+			if got, want := aggregateJSONValue(data, id), jsonValue(t, item.Interface()); !reflect.DeepEqual(got, want) {
 				t.Fatalf("positive prefix result %#v, want %#v", got, want)
 			}
-			checkBounded(scaleP21SW28JSONValue(t, item.Interface()))
+			checkBounded(jsonValue(t, item.Interface()))
 		})
 	}
 }
 
-func TestScaleP21SW28AggregateScopedProducerDifferential(t *testing.T) {
+func TestAggregateScopedProducerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, operation := range []string{"emoji-update", "template-delete", "emoji-update-large-winner"} {
 		t.Run(operation, func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			id, documentID := idgen.New("sw28_target_"), idgen.New("document_sw28_")
 			stamp := time.Date(2026, 11, 13, 1, 2, 3, 0, time.UTC)
@@ -544,11 +544,11 @@ func TestScaleP21SW28AggregateScopedProducerDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregateCanceledProducer(t *testing.T) {
+func TestAggregateCanceledProducer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("emoji_sw28_cancel_")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "customEmojis"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.CustomEmojis = []domain.CustomEmoji{{ID: id, Name: "Before"}}
@@ -585,7 +585,7 @@ func TestScaleP21SW28AggregateCanceledProducer(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28AggregatePublicationAdmission(t *testing.T) {
+func TestAggregatePublicationAdmission(t *testing.T) {
 	const id = "aggregate_sw28_admission"
 	data := domain.Bootstrap{Settings: map[string]any{
 		"id": id, "body": strings.Repeat("retained publication ", 20000),
@@ -638,7 +638,7 @@ func TestScaleP21SW28AggregatePublicationAdmission(t *testing.T) {
 	}
 }
 
-func BenchmarkScaleP21SW28AggregateClosure(b *testing.B) {
+func BenchmarkAggregateClosure(b *testing.B) {
 	for _, bodyMiB := range []int{1, 10} {
 		b.Run(fmt.Sprintf("unrelated-%dMiB", bodyMiB), func(b *testing.B) {
 			const id = "aggregate_sw28_benchmark"

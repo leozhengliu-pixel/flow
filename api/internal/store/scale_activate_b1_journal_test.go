@@ -9,46 +9,46 @@ import (
 	"time"
 )
 
-func TestScaleP09ActivateB1PointCommitMatchesGeneric(t *testing.T) {
+func TestScaleActivateB1PointCommitMatchesGeneric(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite commit plan; other dialects retain their existing path")
 	}
 	workspace := f.data.Workspace.URLKey
 	for _, operation := range []string{"create", "body", "rename", "timezone", "spill", "delete", "oversize-key", "authz-key"} {
 		t.Run(operation, func(t *testing.T) {
-			head := scaleP09Head(t, f)
+			head := scaleHead(t, f)
 			tx, err := f.db.BeginTx(t.Context(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
 			if operation == "timezone" {
-				scaleP09Put(t, tx, workspace, "teamSettings", "b1-timezone", map[string]string{"teamId": "b1-timezone", "timezone": "Asia/Shanghai", "access": "public"})
+				journalScalePut(t, tx, workspace, "teamSettings", "b1-timezone", map[string]string{"teamId": "b1-timezone", "timezone": "Asia/Shanghai", "access": "public"})
 			} else if operation == "delete" {
 				if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key='b1-project'`, workspace); err != nil {
 					t.Fatal(err)
 				}
 			} else if operation == "oversize-key" {
-				scaleP09Put(t, tx, workspace, "projects", strings.Repeat("key", 24000), map[string]string{"id": "short-body-id", "name": "Bounded delta"})
+				journalScalePut(t, tx, workspace, "projects", strings.Repeat("key", 24000), map[string]string{"id": "short-body-id", "name": "Bounded delta"})
 			} else if operation == "authz-key" {
-				scaleP09Put(t, tx, workspace, "@authz", "b1-authority", map[string]string{"id": "b1-authority"})
+				journalScalePut(t, tx, workspace, "@authz", "b1-authority", map[string]string{"id": "b1-authority"})
 			} else {
 				name := "Point project"
 				if operation == "rename" || operation == "spill" {
 					name = "Point project renamed"
 				}
-				scaleP09Put(t, tx, workspace, "projects", "b1-project", map[string]any{"id": "b1-project", "name": name, "description": operation, "teamIds": []string{"one", "two"}, "previousSlugIds": []string{"old-point"}})
+				journalScalePut(t, tx, workspace, "projects", "b1-project", map[string]any{"id": "b1-project", "name": name, "description": operation, "teamIds": []string{"one", "two"}, "previousSlugIds": []string{"old-point"}})
 				if operation == "spill" {
 					if err := tx.materializeInlineJournal(); err != nil {
 						t.Fatal(err)
 					}
-					scaleP09Put(t, tx, workspace, "projects", "b1-project", map[string]any{"id": "b1-project", "name": name, "description": "latest body", "teamIds": []string{"one", "two"}, "previousSlugIds": []string{"old-point"}})
-					scaleP09Put(t, tx, workspace, "initiatives", "b1-initiative", map[string]any{"id": "b1-initiative", "name": "Related initiative", "projectIds": []string{"b1-project"}})
+					journalScalePut(t, tx, workspace, "projects", "b1-project", map[string]any{"id": "b1-project", "name": name, "description": "latest body", "teamIds": []string{"one", "two"}, "previousSlugIds": []string{"old-point"}})
+					journalScalePut(t, tx, workspace, "initiatives", "b1-initiative", map[string]any{"id": "b1-initiative", "name": "Related initiative", "projectIds": []string{"b1-project"}})
 				}
 			}
-			scaleP09Event(t, f, tx, []byte(`{"activation":"b1"}`))
+			scaleEvent(t, f, tx, []byte(`{"activation":"b1"}`))
 			created := time.Now().UTC().Format(time.RFC3339Nano)
 			queued, err := json.Marshal([]map[string]any{{"Workspace": workspace, "Kind": "metadata", "Flush": true}})
 			if err != nil {
@@ -117,9 +117,9 @@ func compareRecordJournalPointRelation(a, b recordJournalRelation) int {
 	return 0
 }
 
-func TestScaleP09ActivateB1PointCommitUsesIndexes(t *testing.T) {
+func TestScaleActivateB1PointCommitUsesIndexes(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite commit plan")
 	}

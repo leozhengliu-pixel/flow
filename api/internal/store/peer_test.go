@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP11Stores(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
+func peerScaleStores(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
 	t.Helper()
 	// The original peer installer updates a decoded workspace.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -69,8 +69,8 @@ func scaleP11Stores(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
 	return writer, peer, workspace
 }
 
-func TestScaleP11StoreInstallsCommittedPageWithoutFullDecode(t *testing.T) {
-	writer, peer, workspace := scaleP11Stores(t)
+func TestScaleStoreInstallsCommittedPageWithoutFullDecode(t *testing.T) {
+	writer, peer, workspace := peerScaleStores(t)
 	state, err := peer.WorkspacePeerState(t.Context(), workspace)
 	if err != nil || !state.Current {
 		t.Fatalf("initial SQL copy: %+v %v", state, err)
@@ -121,8 +121,8 @@ func TestScaleP11StoreInstallsCommittedPageWithoutFullDecode(t *testing.T) {
 	}
 }
 
-func TestScaleP11StoreRejectsPartialOrUnknownPage(t *testing.T) {
-	_, peer, workspace := scaleP11Stores(t)
+func TestScaleStoreRejectsPartialOrUnknownPage(t *testing.T) {
+	_, peer, workspace := peerScaleStores(t)
 	state, err := peer.WorkspacePeerState(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -140,8 +140,8 @@ func TestScaleP11StoreRejectsPartialOrUnknownPage(t *testing.T) {
 	}
 }
 
-func TestScaleP11AuthorityRejectsPinnedRead(t *testing.T) {
-	writer, peer, workspace := scaleP11Stores(t)
+func TestScaleAuthorityRejectsPinnedRead(t *testing.T) {
+	writer, peer, workspace := peerScaleStores(t)
 	readCtx, release, err := peer.BeginWorkspaceRead(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -158,8 +158,8 @@ func TestScaleP11AuthorityRejectsPinnedRead(t *testing.T) {
 	}
 }
 
-func TestScaleP11ProjectReplacementKeepsCurrentStatusReference(t *testing.T) {
-	writer, peer, workspace := scaleP11Stores(t)
+func TestScaleProjectReplacementKeepsCurrentStatusReference(t *testing.T) {
+	writer, peer, workspace := peerScaleStores(t)
 	old := domain.ProjectStatus{ID: "p11-status", Name: "old status"}
 	if err := writer.MutateWorkspace(t.Context(), workspace, "test.p11_status", "", nil, func(data *domain.Bootstrap) error {
 		data.ProjectStatuses = append(data.ProjectStatuses, old)

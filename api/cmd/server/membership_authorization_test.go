@@ -19,7 +19,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW306MembershipAuthorization(t *testing.T) {
+func TestMembershipAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
@@ -57,7 +57,7 @@ func TestScaleP21SW306MembershipAuthorization(t *testing.T) {
 	}
 	t.Run("finite-membership-only-boundary", func(t *testing.T) {
 		for _, row := range routes {
-			if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)) {
+			if !membershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)) {
 				t.Fatal("membership-only registered route not selected", row)
 			}
 		}
@@ -77,7 +77,7 @@ func TestScaleP21SW306MembershipAuthorization(t *testing.T) {
 			{http.MethodPost, "/api/agent/sessions/session/approvals/"},
 			{http.MethodPost, "/api/agent/sessions/session/approvals/approval/extra"},
 		} {
-			if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)) {
+			if membershipAuthorizationRequest(httptest.NewRequest(row.method, row.path, nil)) {
 				t.Fatal("membership adapter captured another predicate", row)
 			}
 		}
@@ -188,7 +188,7 @@ func TestScaleP21SW306MembershipAuthorization(t *testing.T) {
 		Status  int
 		Body    string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			type sqlCounts struct {
 				pairs, legacy, bounded, legacyMax, boundedMax       int
@@ -226,8 +226,8 @@ func TestScaleP21SW306MembershipAuthorization(t *testing.T) {
 					t.Logf("authorization SQL %s pairs=%d legacy/bounded=%d/%d max=%d/%d regressed-pairs=%d worst-pair=%d/%d increase=%d", route, counts.pairs, counts.legacy, counts.bounded, counts.legacyMax, counts.boundedMax, counts.regressions, counts.worstLegacy, counts.worstBounded, counts.maxIncrease)
 				}
 			}()
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			tokens := map[string]string{}
 			for _, principal := range f.principals {

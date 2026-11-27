@@ -203,7 +203,7 @@ func (s *SQLiteStore) deliveryDisplayColumns(ctx context.Context, owner *Resourc
 		columns[index] = "COALESCE(" + s.jsonText("data", field) + ",'')"
 	}
 	var size int64
-	if err := reader.QueryRowContext(ctx, "SELECT "+s.scaleP21SW22VisibilityLength(columns...)+" FROM "+table+" WHERE "+where, args...).Scan(&size); err != nil {
+	if err := reader.QueryRowContext(ctx, "SELECT "+s.visibilityLength(columns...)+" FROM "+table+" WHERE "+where, args...).Scan(&size); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > (int64(metadataWorkBytes())-8192)/32 {

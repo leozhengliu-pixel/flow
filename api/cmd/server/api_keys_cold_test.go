@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW450: the API key and MCP authorization settings routes, served through
+// The API key and MCP authorization settings routes, served through
 // the real cookie/Bearer authentication and route mux on the legacy store, a
 // warm bounded view and a bounded view loaded from SQL:
 //   - GET /api/api-keys (COLD: the registered cold facade), for every role,
@@ -31,7 +31,7 @@ import (
 // image must agree byte for byte except generated IDs, secrets and clocks;
 // bounded, the installed image must equal a reload exactly.
 
-func sw450Handler(s *server) http.Handler {
+func apiKeysColdHandler(s *server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
@@ -48,7 +48,7 @@ func sw450Handler(s *server) http.Handler {
 	return s.withColdMetadataRouteMux(mux, s.authenticate(mux))
 }
 
-func sw450Do(s *server, method, target, body, workspace string, user domain.User, bearer string) *httptest.ResponseRecorder {
+func apiKeysColdDo(s *server, method, target, body, workspace string, user domain.User, bearer string) *httptest.ResponseRecorder {
 	var r *http.Request
 	if body != "" {
 		r = httptest.NewRequest(method, target, strings.NewReader(body))
@@ -62,43 +62,43 @@ func sw450Do(s *server, method, target, body, workspace string, user domain.User
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
 	} else if user.ID != "" {
-		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sw410Session(user)})
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: oAuthClientLookupSession(user)})
 	}
 	w := httptest.NewRecorder()
-	sw450Handler(s).ServeHTTP(w, r)
+	apiKeysColdHandler(s).ServeHTTP(w, r)
 	return w
 }
 
 // Generated API key secrets and their 17-character prefixes, OAuth client
 // IDs and secrets. Fixture values use other prefixes, so only generated ones
 // are replaced.
-var sw450Generated = regexp.MustCompile(`flow_(api|client|secret)_[A-Za-z0-9_-]{8,}`)
+var apiKeysCOLDGenerated = regexp.MustCompile(`flow_(api|client|secret)_[A-Za-z0-9_-]{8,}`)
 
-// sw450Differential is sw430Differential with sessions for every principal
+// apiKeysColdDifferential is oauthColdDifferential with sessions for every principal
 // and generated API key secrets normalized.
-func (f scaleP21TeamCreateFixture) sw450Differential(t *testing.T, name string, setup func(*testing.T), call func(*server) string) []sw410Outcome {
+func (f scaleTeamCreateFixture) apiKeysColdDifferential(t *testing.T, name string, setup func(*testing.T), call func(*server) string) []oauthClientLookupOutcome {
 	t.Helper()
-	prepare := f.sw294Prepare(setup)
+	prepare := f.oauthMetadataPrepare(setup)
 	users := []domain.User{}
 	for _, principal := range f.principals {
 		users = append(users, principal.user)
 	}
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		f.exec(t, `DELETE FROM oauth_authorization_codes WHERE 1=?`, 1)
 		f.exec(t, `DELETE FROM oauth_refresh_tokens WHERE 1=?`, 1)
 		stamp := time.Now().UTC()
 		for _, user := range users {
 			f.exec(t, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
-			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(sw410Session(user)), user.ID,
+			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(oAuthClientLookupSession(user)), user.ID,
 				stamp.Add(24*time.Hour).Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano))
 		}
 		prepare(t)
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
-	var outcomes []sw410Outcome
+	var outcomes []oauthClientLookupOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started, decoded := f.sw410Run(t, source, call)
+		got, started, decoded := f.oauthClientLookupRun(t, source, call)
 		if decoded != 0 {
 			t.Logf("%s: %s: cold accessors on the route decoded full metadata %d times", name, source, decoded)
 		}
@@ -106,7 +106,7 @@ func (f scaleP21TeamCreateFixture) sw450Differential(t *testing.T, name string, 
 			t.Errorf("%s: %s: installed fields not equal to a reload %q", name, source, got.Stale)
 		}
 		// A legacy key a writer handed keeps an empty teamRestriction until a
-		// reload fills it (sw430Differential).
+		// reload fills it (oauthColdDifferential).
 		for _, row := range got.State.Metadata {
 			if fmt.Sprint(row[0]) != "apiKeys" {
 				continue
@@ -138,23 +138,23 @@ func (f scaleP21TeamCreateFixture) sw450Differential(t *testing.T, name string, 
 			row[3] = string(raw)
 		}
 		outcomes = append(outcomes, got)
-		text := sw450Generated.ReplaceAllString(sw410Normalize(t, got, started), "flow_${1}_<generated>")
+		text := apiKeysCOLDGenerated.ReplaceAllString(oauthClientLookupNormalize(t, got, started), "flow_${1}_<generated>")
 		normalized = append(normalized, text)
 		if dir := os.Getenv("FLOW_SW450_DUMP"); dir != "" {
 			_ = os.WriteFile(filepath.Join(dir, name+"-"+source+".json"), []byte(text), 0o600)
 		}
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Errorf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Errorf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
+func TestAPIKeyAndMCPSettingsRoutes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
 	t.Cleanup(func() { webhookDeliverySlots = oldSlots })
@@ -221,7 +221,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 					k.Scopes = []string{"read"}
 				}),
 				key("sw450-key-app-member", "App OAuth token", member.ID, appSecret, func(k *domain.APIKey) {
-					k.SubjectUserID, k.OAuthClientID, k.AuthorizationID, k.GrantType, k.ExpiresAt = member.ID, sw410Plain, "sw450-grant-app", "authorization_code", &live
+					k.SubjectUserID, k.OAuthClientID, k.AuthorizationID, k.GrantType, k.ExpiresAt = member.ID, oAuthCOLDPlain, "sw450-grant-app", "authorization_code", &live
 					k.Scopes = []string{"read"}
 				}),
 			)
@@ -259,7 +259,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 		}
 		f.mutate(t, "scale_p21_sw450.apps", func(data *domain.Bootstrap) {
 			data.OAuthApplications = append(data.OAuthApplications,
-				domain.OAuthApplication{ID: "sw450-app-plain", ClientID: sw410Plain, ClientSecret: "sw450-plain-secret", Name: "SW450 Plain", GitHubUsername: "SW450-Plain-User", RedirectURIs: []string{sw410Callback}, Scopes: []string{"read", "write"}, CreatorID: owner.ID, CreatedAt: at, UpdatedAt: at})
+				domain.OAuthApplication{ID: "sw450-app-plain", ClientID: oAuthCOLDPlain, ClientSecret: "sw450-plain-secret", Name: "SW450 Plain", GitHubUsername: "SW450-Plain-User", RedirectURIs: []string{oAuthClientLookupCallback}, Scopes: []string{"read", "write"}, CreatorID: owner.ID, CreatedAt: at, UpdatedAt: at})
 			data.OAuthAuthorizations = append(data.OAuthAuthorizations,
 				domain.OAuthAuthorization{ID: "sw450-grant-mcp-member", ClientID: mcpA, ClientName: "SW450 Claude", UserID: member.ID, Scopes: []string{"read", "write"}, CreatedAt: at, LastUsedAt: &recent},
 				domain.OAuthAuthorization{ID: "sw450-grant-mcp-member-b", ClientID: mcpB, ClientName: "SW450 Cursor", UserID: member.ID, Scopes: []string{"read"}, CreatedAt: at.Add(time.Minute)},
@@ -269,7 +269,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 				domain.OAuthAuthorization{ID: "sw450-grant-mcp-revoked", ClientID: mcpA, ClientName: "SW450 Claude", UserID: owner.ID, Scopes: []string{"read"}, CreatedAt: at, RevokedAt: &revoked},
 				domain.OAuthAuthorization{ID: "sw450-grant-mcp-app-actor", ClientID: mcpB, ClientName: "SW450 Cursor", UserID: member.ID, Actor: "app", Scopes: []string{"read"}, CreatedAt: at},
 				domain.OAuthAuthorization{ID: "sw450-grant-mcp-installed", ClientID: mcpInstalled, ClientName: "Installed MCP", UserID: member.ID, Scopes: []string{"read"}, CreatedAt: at},
-				domain.OAuthAuthorization{ID: "sw450-grant-app", ClientID: sw410Plain, ClientName: "SW450 Plain", UserID: member.ID, Scopes: []string{"read"}, CreatedAt: at},
+				domain.OAuthAuthorization{ID: "sw450-grant-app", ClientID: oAuthCOLDPlain, ClientName: "SW450 Plain", UserID: member.ID, Scopes: []string{"read"}, CreatedAt: at},
 			)
 		})
 		if _, err := f.repository.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{ClientID: mcpInstalled, Name: "Installed MCP", InstalledBy: owner.ID, Scopes: []string{"read"}, TeamIDs: []string{f.public}, Active: true}, ""); err != nil {
@@ -288,7 +288,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	current := t
 	type step func(*testing.T, *server, *trace)
 	record := func(out *trace, name string, w *httptest.ResponseRecorder) {
-		out.lines = append(out.lines, sw410Response(name, w))
+		out.lines = append(out.lines, oauthClientLookupResponse(name, w))
 	}
 	run := func(steps ...step) func(*server) string {
 		return func(s *server) string {
@@ -301,7 +301,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	}
 	do := func(name, method, target, body string, user domain.User) step {
 		return func(t *testing.T, s *server, out *trace) {
-			record(out, name, sw450Do(s, method, target, body, workspace, user, ""))
+			record(out, name, apiKeysColdDo(s, method, target, body, workspace, user, ""))
 		}
 	}
 	list := func(user domain.User) step {
@@ -312,7 +312,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	// and waits for its usage stamp.
 	bearer := func(name, target, secret string) step {
 		return func(t *testing.T, s *server, out *trace) {
-			w := sw450Do(s, http.MethodGet, target, "", workspace, domain.User{}, secret)
+			w := apiKeysColdDo(s, http.MethodGet, target, "", workspace, domain.User{}, secret)
 			record(out, "bearer "+name, w)
 			// Authentication stamps every key it accepts (whatever the
 			// route answers next); a refused key stamps nothing.
@@ -323,7 +323,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 			if _, item, found := s.store.FindAPIKey(secretHash(secret)); !found || item.RevokedAt != nil {
 				stamp = ""
 			}
-			sw430Quiet(t, s, workspace, stamp)
+			oAuthCOLDQuiet(t, s, workspace, stamp)
 		}
 	}
 	create := func(user domain.User, body map[string]any) step {
@@ -351,7 +351,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	}
 	other := func(name, method, target string) step {
 		return func(t *testing.T, s *server, out *trace) {
-			record(out, name, sw450Do(s, method, target, "", "sw450-missing", owner, ""))
+			record(out, name, apiKeysColdDo(s, method, target, "", "sw450-missing", owner, ""))
 		}
 	}
 	// probeTokens authenticates every fixture token after the case.
@@ -377,7 +377,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	}
 	application := func(name, method, target, body string, user domain.User, secret string) step {
 		return func(t *testing.T, s *server, out *trace) {
-			w := sw450Do(s, method, target, body, workspace, user, secret)
+			w := apiKeysColdDo(s, method, target, body, workspace, user, secret)
 			record(out, name, w)
 			stamp := secret
 			if w.Code == http.StatusUnauthorized {
@@ -385,11 +385,11 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 			}
 			// Let both the webhook reconcile and any accepted bearer use settle
 			// before comparing the installed image with SQL.
-			sw430Quiet(t, s, workspace, stamp)
+			oAuthCOLDQuiet(t, s, workspace, stamp)
 		}
 	}
 	installPlain := func(t *testing.T) {
-		if _, err := f.repository.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{ClientID: sw410Plain, Name: "SW450 Plain", InstalledBy: owner.ID, Scopes: []string{"read", "write"}, TeamIDs: []string{f.public}, Active: true}, ""); err != nil {
+		if _, err := f.repository.InstallApplication(t.Context(), workspace, domain.ApplicationInstallation{ClientID: oAuthCOLDPlain, Name: "SW450 Plain", InstalledBy: owner.ID, Scopes: []string{"read", "write"}, TeamIDs: []string{f.public}, Active: true}, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -451,7 +451,7 @@ func TestScaleP21SW450APIKeyAndMCPSettingsRoutes(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			current = t
-			outcomes := f.sw450Differential(t, test.name, test.setup, test.call)
+			outcomes := f.apiKeysColdDifferential(t, test.name, test.setup, test.call)
 			t.Logf("legacy result %s", outcomes[0].Result)
 		})
 	}

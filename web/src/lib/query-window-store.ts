@@ -1,6 +1,6 @@
 import { recordKey } from '@/lib/record-loader'
-import { cacheStringBytes } from '@/lib/scale-p08'
-import { modelRecordKind } from '@/lib/scale-p13-wire'
+import { cacheStringBytes } from '@/lib/realtime-cache-limits'
+import { modelRecordKind } from '@/lib/sync-wire'
 import type { SyncPageRequest, SyncRecordPage } from '@/types/flow'
 
 export interface QueryWindow {

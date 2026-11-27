@@ -13,18 +13,18 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW559 differentials: the store accessors that read a record field from the
+// resident image readers differentials: the store accessors that read a record field from the
 // installed image (which a bounded store holds without it) answer, bounded,
 // what the legacy store answers. A flag-off fixture holds a cycle with a
 // calendar token, a document, a project with an update, a trash entry and
 // its member directory; a bounded test view of it is taken from the
 // owner's installed generation (warm) and again after the owner reloaded the
 // workspace from SQL (reloaded). Every accessor must encode the same answer.
-func TestScaleP21SW559InstalledAccessorsDifferential(t *testing.T) {
+func TestInstalledAccessorsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx := t.Context()
 	workspace := f.data.Workspace.URLKey
 	team := f.data.Teams[0].ID
@@ -112,7 +112,7 @@ func TestScaleP21SW559InstalledAccessorsDifferential(t *testing.T) {
 		}
 		// The skeleton itself still holds none of them: the answers came
 		// from the installed source.
-		skeleton, _ := scaleP21ResidentOracle(probe, workspace)
+		skeleton, _ := scaleResidentOracle(probe, workspace)
 		if len(skeleton.Cycles)+len(skeleton.Documents)+len(skeleton.Projects)+len(skeleton.Trash)+len(skeleton.Users) != 0 {
 			t.Fatal("the bounded view holds record fields in its image")
 		}
@@ -123,12 +123,12 @@ func TestScaleP21SW559InstalledAccessorsDifferential(t *testing.T) {
 	}
 }
 
-// SW559: the storage maintenance pass moves audit entries an older server left
+// The storage maintenance pass moves audit entries an older server left
 // in the workspace document into the audit table. Bounded, the image holds no
 // audit log, so the pass never moved them. One database seeded flag off with
 // two such entries is copied; the copies opened flag off and flag on (the
 // production bounded store) must move the same entries and leave none.
-func TestScaleP21SW559LegacyAuditLogMigrationDifferential(t *testing.T) {
+func TestLegacyAuditLogMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -183,7 +183,7 @@ func TestScaleP21SW559LegacyAuditLogMigrationDifferential(t *testing.T) {
 	results := map[bool]outcome{}
 	for _, bounded := range []bool{false, true} {
 		path := filepath.Join(dir, fmt.Sprintf("copy-%v.db", bounded))
-		scaleP21SW557CopyDatabase(t, seed, path)
+		copyDatabase(t, seed, path)
 		repo := open(path, bounded)
 		work := ctx
 		if bounded {

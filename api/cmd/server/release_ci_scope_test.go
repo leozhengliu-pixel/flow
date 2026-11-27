@@ -18,8 +18,8 @@ func TestReleaseCIOutOfScopeIssuesAreUnknown(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", bounded)
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			for _, repo := range scaleP03ServerTestStores(t) {
-				f := scaleP03Fixture(t, repo)
+			for _, repo := range scaleServerTestStores(t) {
+				f := resourceAccessScaleFixture(t, repo)
 				workspace := f.data.Workspace.URLKey
 				teams := f.host.URL + "/api/workspaces/" + workspace + "/teams"
 				open := authRequest[domain.Team](t, f.admin, http.MethodPost, teams, map[string]any{"name": "Open", "key": "RCO"}, "", http.StatusCreated).ID

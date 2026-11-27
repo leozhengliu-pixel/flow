@@ -15,12 +15,12 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-func TestScaleP21RedisRecoveryRechecksPolicyWithoutFullDecode(t *testing.T) {
+func TestScaleRedisRecoveryRechecksPolicyWithoutFullDecode(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -99,12 +99,12 @@ func TestScaleP21RedisRecoveryRechecksPolicyWithoutFullDecode(t *testing.T) {
 	}
 }
 
-func TestScaleP21PeerStateAcceptsExactLogicalSourceWithoutPolicyRebuild(t *testing.T) {
+func TestScalePeerStateAcceptsExactLogicalSourceWithoutPolicyRebuild(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -145,10 +145,10 @@ func sourceStamp(source *metadataLogicalSource) copyStamp {
 	return source.Stamp()
 }
 
-func TestScaleP21CommittedPeerPageKeepsBodiesEvictable(t *testing.T) {
+func TestScaleCommittedPeerPageKeepsBodiesEvictable(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p21-peer-project", Name: "Before", TeamIDs: []string{data.Teams[0].ID}})
@@ -156,7 +156,7 @@ func TestScaleP21CommittedPeerPageKeepsBodiesEvictable(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}

@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW46ChatHealthMutationDifferential(t *testing.T) {
+func TestChatHealthMutationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, target := f.data.Workspace.URLKey, idgen.New("sw46-chat-health-")
 		probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
@@ -108,8 +108,8 @@ func TestScaleP21SW46ChatHealthMutationDifferential(t *testing.T) {
 					if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 						t.Fatal(err)
 					}
-					beforeDocuments := scaleP21M3Fingerprint(t, repo, workspace, "documents")
-					beforeProjects := scaleP21M3Fingerprint(t, repo, workspace, "projects")
+					beforeDocuments := pointRecordFingerprint(t, repo, workspace, "documents")
+					beforeProjects := pointRecordFingerprint(t, repo, workspace, "projects")
 					var got outcome
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						got.Domain = append(got.Domain, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})
@@ -144,7 +144,7 @@ func TestScaleP21SW46ChatHealthMutationDifferential(t *testing.T) {
 					if got.Error != "" || test.wantNoop && !got.Noop {
 						t.Fatal("chat health result differs", source.BoundedMetadataEnabled(), got.Noop, err)
 					}
-					if beforeDocuments != scaleP21M3Fingerprint(t, repo, workspace, "documents") || beforeProjects != scaleP21M3Fingerprint(t, repo, workspace, "projects") {
+					if beforeDocuments != pointRecordFingerprint(t, repo, workspace, "documents") || beforeProjects != pointRecordFingerprint(t, repo, workspace, "projects") {
 						t.Fatal("health write changed unrelated canonical records")
 					}
 					decoded := source.WorkspaceMetadataDecodes() - beforeDecodes
@@ -218,7 +218,7 @@ func TestScaleP21SW46ChatHealthMutationDifferential(t *testing.T) {
 					decodes = append(decodes, decoded)
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("full legacy/bounded chat health effects differ", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("full legacy/bounded chat health effects differ", policyFirstDifference(outputs[0], outputs[1]))
 				}
 				t.Logf("SQL full_legacy=%d bounded=%d full_decodes=%d/%d", counts[0], counts[1], decodes[0], decodes[1])
 			})

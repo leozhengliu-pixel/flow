@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW23HistoryPayloadDifferential(t *testing.T) {
+func TestHistoryPayloadDifferential(t *testing.T) {
 	large := strings.Repeat(`large ignored \"value\" \u0041 `, 40000)
 	cases := []string{
 		`{}`, `null`, `true`, `false`, `[]`, `[{"agentWebAccess":true}]`,
@@ -39,7 +39,7 @@ func TestScaleP21SW23HistoryPayloadDifferential(t *testing.T) {
 	}
 	for index, payload := range cases {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
-			got, err := sw23HistoryEnabled(strings.NewReader(payload))
+			got, err := historyEnabled(strings.NewReader(payload))
 			if err != nil || got != agentWebSearchEnabledIn([]byte(payload)) {
 				t.Fatalf("projected=%v err=%v legacy=%v bytes=%d", got, err, agentWebSearchEnabledIn([]byte(payload)), len(payload))
 			}
@@ -63,19 +63,19 @@ func TestScaleP21SW23HistoryPayloadDifferential(t *testing.T) {
 			offset := random.IntN(len(raw))
 			raw = raw[:offset] + string([]byte{byte(random.IntN(256))}) + raw[offset+1:]
 		}
-		got, err := sw23HistoryEnabled(strings.NewReader(raw))
+		got, err := historyEnabled(strings.NewReader(raw))
 		if err != nil || got != agentWebSearchEnabledIn([]byte(raw)) {
 			t.Fatalf("case=%d projected=%v err=%v legacy=%v payload=%q", index, got, err, agentWebSearchEnabledIn([]byte(raw)), raw)
 		}
 	}
 }
 
-type sw23HistoryFailingReader struct {
+type historyFailingReader struct {
 	sent bool
 	err  error
 }
 
-func (r *sw23HistoryFailingReader) Read(output []byte) (int, error) {
+func (r *historyFailingReader) Read(output []byte) (int, error) {
 	if !r.sent {
 		r.sent = true
 		return copy(output, `{"agentWebAccess":true,"ignored":"`), nil
@@ -83,10 +83,10 @@ func (r *sw23HistoryFailingReader) Read(output []byte) (int, error) {
 	return 0, r.err
 }
 
-func TestScaleP21SW23HistoryBoundedMemoryAndErrors(t *testing.T) {
+func TestHistoryBoundedMemoryAndErrors(t *testing.T) {
 	before := recordSpoolBytes.Load()
 	for _, err := range []error{context.Canceled, io.ErrUnexpectedEOF} {
-		if _, got := sw23HistoryEnabled(&sw23HistoryFailingReader{err: err}); !errors.Is(got, err) {
+		if _, got := historyEnabled(&historyFailingReader{err: err}); !errors.Is(got, err) {
 			t.Fatalf("payload transport error was hidden: %v", got)
 		}
 	}
@@ -94,11 +94,11 @@ func TestScaleP21SW23HistoryBoundedMemoryAndErrors(t *testing.T) {
 		t.Helper()
 		// The repeated body is generated outside the parser, without retaining
 		// a second giant test string in the measured working set.
-		payload := io.MultiReader(strings.NewReader(`{"agentWebAccess":true,"ignored":"`), io.LimitReader(sw23HistoryRepeatReader{}, int64(size)), strings.NewReader(`"}`))
+		payload := io.MultiReader(strings.NewReader(`{"agentWebAccess":true,"ignored":"`), io.LimitReader(historyRepeatReader{}, int64(size)), strings.NewReader(`"}`))
 		runtime.GC()
 		var start, end runtime.MemStats
 		runtime.ReadMemStats(&start)
-		enabled, err := sw23HistoryEnabled(payload)
+		enabled, err := historyEnabled(payload)
 		runtime.ReadMemStats(&end)
 		if err != nil || !enabled {
 			t.Fatal("large ignored payload was not projected", err)
@@ -112,20 +112,20 @@ func TestScaleP21SW23HistoryBoundedMemoryAndErrors(t *testing.T) {
 	}
 }
 
-type sw23HistoryRepeatReader struct{}
+type historyRepeatReader struct{}
 
-func (sw23HistoryRepeatReader) Read(output []byte) (int, error) {
+func (historyRepeatReader) Read(output []byte) (int, error) {
 	for index := range output {
 		output[index] = 'x'
 	}
 	return len(output), nil
 }
 
-func TestScaleP21SW23HistoryDatabaseDifferential(t *testing.T) {
+func TestHistoryDatabaseDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	prefix := idgen.New("sw23-history-")
 	owned := []string{}
 	t.Cleanup(func() {

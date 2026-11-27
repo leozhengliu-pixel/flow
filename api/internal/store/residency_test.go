@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21BoundedActivationFailsBeforeOpeningDatabase(t *testing.T) {
+func TestScaleBoundedActivationFailsBeforeOpeningDatabase(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	for _, flag := range []string{"on", "true", "1"} {
 		t.Run(flag, func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestScaleP21BoundedActivationFailsBeforeOpeningDatabase(t *testing.T) {
 	}
 }
 
-func scaleP21ResidentProbe(repo *SQLiteStore) *SQLiteStore {
+func scaleResidentProbe(repo *SQLiteStore) *SQLiteStore {
 	probe := &SQLiteStore{db: repo.db, dialect: repo.dialect, maxStateBytes: repo.maxStateBytes, workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency()}
 	// Exercise the storage primitive independently of the production gate.
 	// Existing business consumers cannot run against this partial snapshot.
@@ -41,9 +41,9 @@ func scaleP21ResidentProbe(repo *SQLiteStore) *SQLiteStore {
 	return probe
 }
 
-func TestScaleP21ResidentRecoveryKeepsPolicyAndEvictsRecords(t *testing.T) {
+func TestScaleResidentRecoveryKeepsPolicyAndEvictsRecords(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		for i := 0; i < 300; i++ {
@@ -62,7 +62,7 @@ func TestScaleP21ResidentRecoveryKeepsPolicyAndEvictsRecords(t *testing.T) {
 	if !ok {
 		t.Fatal("owned workspace missing")
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	probe.metadataResidency.cacheLimit = 2048
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
@@ -129,10 +129,10 @@ func TestScaleP21ResidentRecoveryKeepsPolicyAndEvictsRecords(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResidentRecoveryRejectsUnknownFieldsAndPreservesInstalledCopy(t *testing.T) {
+func TestScaleResidentRecoveryRejectsUnknownFieldsAndPreservesInstalledCopy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	f := journalScaleDatabase(t)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	workspace := f.data.Workspace.URLKey
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
@@ -160,9 +160,9 @@ func TestScaleP21ResidentRecoveryRejectsUnknownFieldsAndPreservesInstalledCopy(t
 	}
 }
 
-func TestScaleP21PolicyBudgetIsSharedAcrossWorkspaces(t *testing.T) {
+func TestScalePolicyBudgetIsSharedAcrossWorkspaces(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	other, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "P21 additional owned workspace", idgen.New("scale-p21-"), "us")
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestScaleP21PolicyBudgetIsSharedAcrossWorkspaces(t *testing.T) {
 			t.Errorf("clean up additional owned workspace: %v", err)
 		}
 	})
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -192,12 +192,12 @@ func TestScaleP21PolicyBudgetIsSharedAcrossWorkspaces(t *testing.T) {
 	}
 }
 
-func TestScaleP21RecoveryRejectsCanonicalFieldsOutsideManifest(t *testing.T) {
+func TestScaleRecoveryRejectsCanonicalFieldsOutsideManifest(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestScaleP21RecoveryRejectsCanonicalFieldsOutsideManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SeedRow(t, tx, workspace, "unregisteredP21Field", "new-record", 0, map[string]string{"body": strings.Repeat("x", 800000)})
+	scaleSeedRow(t, tx, workspace, "unregisteredP21Field", "new-record", 0, map[string]string{"body": strings.Repeat("x", 800000)})
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -219,28 +219,28 @@ func TestScaleP21RecoveryRejectsCanonicalFieldsOutsideManifest(t *testing.T) {
 	}
 }
 
-func TestScaleP21RecoveryRejectsUnknownPolicySetting(t *testing.T) {
+func TestScaleRecoveryRejectsUnknownPolicySetting(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SeedRow(t, tx, workspace, "workspaceSettings", "unregisteredP21Policy", 0, true)
+	scaleSeedRow(t, tx, workspace, "workspaceSettings", "unregisteredP21Policy", 0, true)
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatalf("unknown policy setting was silently ignored: %v", err)
 	}
 }
 
-func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
+func TestScalePolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "p21-canonical-detail", Name: "Canonical project", Description: "canonical body", TeamIDs: []string{data.Teams[0].ID}})
@@ -248,7 +248,7 @@ func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, allowed, err := probe.ResourceReadMetadata(scaleP21ResourceOutputContext(t), access, "projects", "p21-canonical-detail")
+	data, allowed, err := probe.ResourceReadMetadata(scaleResourceOutputContext(t), access, "projects", "p21-canonical-detail")
 	if err != nil || !allowed || len(data.Projects) != 1 || data.Projects[0].Description != "canonical body" {
 		t.Fatalf("partial residency hid canonical detail: allowed=%v error=%v projects=%d", allowed, err, len(data.Projects))
 	}
@@ -268,7 +268,7 @@ func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
 	}
 }
 
-func TestScaleP21InternalWorkAdmissionCancelsAndDoesNotLeak(t *testing.T) {
+func TestScaleInternalWorkAdmissionCancelsAndDoesNotLeak(t *testing.T) {
 	budget := newMetadataWorkBudget(100)
 	ctx, release, err := budget.acquire(t.Context(), 100)
 	if err != nil {
@@ -302,13 +302,13 @@ func TestScaleP21InternalWorkAdmissionCancelsAndDoesNotLeak(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResidentBackfillCoverageRejectsOldWriterGaps(t *testing.T) {
+func TestScaleResidentBackfillCoverageRejectsOldWriterGaps(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	// Limit this owned fixture to policy collections. Scalar catalog parsing
-	// is a separate P05 concern; readiness must still cover every row present.
+	// is a separate metadata catalog concern; readiness must still cover every row present.
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

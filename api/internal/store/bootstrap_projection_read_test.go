@@ -18,14 +18,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW143Setup(t *testing.T) {
+func bootstrapProjectionReadSetup(t *testing.T) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 }
 
-func scaleP21SW143Encode(t *testing.T, data domain.Bootstrap) []byte {
+func bootstrapProjectionReadEncode(t *testing.T, data domain.Bootstrap) []byte {
 	t.Helper()
 	var output bytes.Buffer
 	if err := json.NewEncoder(&output).Encode(data); err != nil {
@@ -34,11 +34,11 @@ func scaleP21SW143Encode(t *testing.T, data domain.Bootstrap) []byte {
 	return output.Bytes()
 }
 
-func scaleP21SW143Compare(t *testing.T, ctx context.Context, want domain.Bootstrap, read *IssueBootstrapRead) {
+func bootstrapProjectionReadCompare(t *testing.T, ctx context.Context, want domain.Bootstrap, read *IssueBootstrapRead) {
 	t.Helper()
 	// These are the intermediate reader's seven audited dead fields. The HTTP
 	// handler replaces update maps and removes these transient families before
-	// publication; SW145 proves that complete route boundary independently.
+	// publication; parent issue bootstrap proves that complete route boundary independently.
 	want.ProjectUpdates, want.InitiativeUpdates = nil, nil
 	want.ProviderJobs, want.CommentActions = nil, nil
 	want.LoopRuns, want.LoopVersions, want.LoopAttachments = nil, nil, nil
@@ -46,7 +46,7 @@ func scaleP21SW143Compare(t *testing.T, ctx context.Context, want domain.Bootstr
 	if err := read.WriteJSON(ctx, &output); err != nil {
 		t.Fatal("encode bounded bootstrap", err)
 	}
-	expected := scaleP21SW143Encode(t, want)
+	expected := bootstrapProjectionReadEncode(t, want)
 	if !bytes.Equal(expected, output.Bytes()) {
 		position := 0
 		for position < min(len(expected), output.Len()) && expected[position] == output.Bytes()[position] {
@@ -59,9 +59,9 @@ func scaleP21SW143Compare(t *testing.T, ctx context.Context, want domain.Bootstr
 	}
 }
 
-func scaleP21SW143Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
+func bootstrapProjectionReadSeed(t *testing.T, f scaleFixture, prefix, body string) {
 	t.Helper()
-	scaleP21SW112Seed(t, f, prefix, body)
+	snapshotReadSeed(t, f, prefix, body)
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw143_seed", "", nil, func(data *domain.Bootstrap) error {
 		actor := data.Viewer
 		actor.Name = "Body actor <>&"
@@ -86,18 +86,18 @@ func scaleP21SW143Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
 	}
 }
 
-func TestScaleP21SW143BootstrapProjectedHeaderJSONWarmReloadGrowth(t *testing.T) {
-	scaleP21SW143Setup(t)
+func TestBootstrapProjectedHeaderJSONWarmReloadGrowth(t *testing.T) {
+	bootstrapProjectionReadSetup(t)
 	for _, reloaded := range []bool{false, true} {
 		t.Run(fmt.Sprint("reloaded-", reloaded), func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw143-body-")
 			held := 0
 			// Reuse identities and SQL directory timestamps: their admitted
 			// policy/header bytes must not vary with an unrelated fixture.
 			for _, copies := range []int{1000, 10000} {
 				body := strings.Repeat("Legal bootstrap body <>&\u2028\xff. ", copies)
-				scaleP21SW143Seed(t, f, prefix, body)
+				bootstrapProjectionReadSeed(t, f, prefix, body)
 				if reloaded {
 					f.mu.Lock()
 					f.forgetCopyRevisionLocked(workspace)
@@ -133,7 +133,7 @@ func TestScaleP21SW143BootstrapProjectedHeaderJSONWarmReloadGrowth(t *testing.T)
 				} else if work != held {
 					t.Fatal("10x opaque body growth changed retained admission", reloaded, held, work)
 				}
-				scaleP21SW143Compare(t, observed, want, read)
+				bootstrapProjectionReadCompare(t, observed, want, read)
 				var streamed bytes.Buffer
 				if err := read.StreamString(t.Context(), read.Data.Loops[0].Instructions, func(chunk []byte) error {
 					_, err := streamed.Write(chunk)
@@ -153,11 +153,11 @@ func TestScaleP21SW143BootstrapProjectedHeaderJSONWarmReloadGrowth(t *testing.T)
 	}
 }
 
-func TestScaleP21SW143BootstrapExplicitHandoffAndDefaults(t *testing.T) {
-	scaleP21SW143Setup(t)
-	f := scaleP09Database(t)
+func TestBootstrapExplicitHandoffAndDefaults(t *testing.T) {
+	bootstrapProjectionReadSetup(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw143-handoff-")
-	scaleP21SW143Seed(t, f, prefix, "Explicit handed body")
+	bootstrapProjectionReadSeed(t, f, prefix, "Explicit handed body")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestScaleP21SW143BootstrapExplicitHandoffAndDefaults(t *testing.T) {
 		t.Fatalf("handoff: %v; installed viewer equals fixture owner=%t role=%s/%s roleErr=%v directAccessErr=%v",
 			err, handed.Viewer.ID == f.data.Viewer.ID, legacyRole, legacyStatus, legacyRoleErr, accessErr)
 	}
-	scaleP21SW143Compare(t, ctx, want, read)
+	bootstrapProjectionReadCompare(t, ctx, want, read)
 	read.Close()
 	for _, mismatch := range []bool{false, true} {
 		borrowed := ctx
@@ -228,7 +228,7 @@ func TestScaleP21SW143BootstrapExplicitHandoffAndDefaults(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer read.Close()
-				scaleP21SW143Compare(t, borrowed, expected, read)
+				bootstrapProjectionReadCompare(t, borrowed, expected, read)
 			})
 		}
 	}
@@ -259,7 +259,7 @@ func TestScaleP21SW143BootstrapExplicitHandoffAndDefaults(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer read.Close()
-				scaleP21SW143Compare(t, t.Context(), want, read)
+				bootstrapProjectionReadCompare(t, t.Context(), want, read)
 			})
 		}
 	}
@@ -278,7 +278,7 @@ func TestScaleP21SW143BootstrapExplicitHandoffAndDefaults(t *testing.T) {
 	}
 }
 
-func scaleP21SW143Join(t *testing.T, f scaleP09Fixture, role string, teams []string) domain.User {
+func bootstrapProjectionReadJoin(t *testing.T, f scaleFixture, role string, teams []string) domain.User {
 	t.Helper()
 	user, token, err := f.Register(t.Context(), "SW143 "+role, idgen.New("sw143-person-")+"@example.test", "sw143-password")
 	if err != nil {
@@ -305,9 +305,9 @@ func scaleP21SW143Join(t *testing.T, f scaleP09Fixture, role string, teams []str
 	return user
 }
 
-func TestScaleP21SW143BootstrapPermissionProjectedHeaderJSON(t *testing.T) {
-	scaleP21SW143Setup(t)
-	f := scaleP09Database(t)
+func TestBootstrapPermissionProjectedHeaderJSON(t *testing.T) {
+	bootstrapProjectionReadSetup(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw143-M-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw143_teams", "", nil, func(data *domain.Bootstrap) error {
@@ -319,10 +319,10 @@ func TestScaleP21SW143BootstrapPermissionProjectedHeaderJSON(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	admin := scaleP21SW143Join(t, f, "admin", []string{private})
-	member := scaleP21SW143Join(t, f, "member", []string{public})
-	guest := scaleP21SW143Join(t, f, "guest", []string{public})
-	inherited := scaleP21SW143Join(t, f, "member", []string{private})
+	admin := bootstrapProjectionReadJoin(t, f, "admin", []string{private})
+	member := bootstrapProjectionReadJoin(t, f, "member", []string{public})
+	guest := bootstrapProjectionReadJoin(t, f, "guest", []string{public})
+	inherited := bootstrapProjectionReadJoin(t, f, "member", []string{private})
 	principals := []struct {
 		name string
 		user domain.User
@@ -394,7 +394,7 @@ func TestScaleP21SW143BootstrapPermissionProjectedHeaderJSON(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer read.Close()
-					scaleP21SW143Compare(t, t.Context(), want, read)
+					bootstrapProjectionReadCompare(t, t.Context(), want, read)
 					read.Close()
 					if view.MetadataWorkUsedForTesting() != 0 || read.access != (AccessContext{}) || read.principal != "" {
 						t.Fatal("permission read retained work")
@@ -443,7 +443,7 @@ func TestScaleP21SW143BootstrapPermissionProjectedHeaderJSON(t *testing.T) {
 	}
 }
 
-func scaleP21SW143LargeDirectory(t *testing.T, f scaleP09Fixture) {
+func largeDirectory(t *testing.T, f scaleFixture) {
 	t.Helper()
 	ids := make([]string, 0, 512)
 	t.Cleanup(func() {
@@ -491,11 +491,11 @@ func scaleP21SW143LargeDirectory(t *testing.T, f scaleP09Fixture) {
 	}
 }
 
-func TestScaleP21SW143BootstrapCancellationQuotaAndLifetime(t *testing.T) {
-	scaleP21SW143Setup(t)
-	f := scaleP09Database(t)
+func TestBootstrapCancellationQuotaAndLifetime(t *testing.T) {
+	bootstrapProjectionReadSetup(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw143-lifetime-")
-	scaleP21SW143Seed(t, f, prefix, strings.Repeat("Legal body <>& ", 20000))
+	bootstrapProjectionReadSeed(t, f, prefix, strings.Repeat("Legal body <>& ", 20000))
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -521,7 +521,7 @@ func TestScaleP21SW143BootstrapCancellationQuotaAndLifetime(t *testing.T) {
 			t.Fatal("small directory did not fit comparison budget", err)
 		}
 		probe.Close()
-		scaleP21SW143LargeDirectory(t, f)
+		largeDirectory(t, f)
 		read, err := view.BeginIssueBootstrapRead(t.Context(), workspace, f.data.Viewer.ID, nil)
 		view.metadataResidency.work.limit = limit
 		if read != nil {
@@ -543,7 +543,7 @@ func TestScaleP21SW143BootstrapCancellationQuotaAndLifetime(t *testing.T) {
 			defer cancel()
 			sentinel := errors.New("destination refused")
 			calls := 0
-			writer := &scaleP21SW88Writer{write: func(raw []byte) (int, error) {
+			writer := &bootstrapWriter{write: func(raw []byte) (int, error) {
 				calls++
 				switch mode {
 				case "cancel":

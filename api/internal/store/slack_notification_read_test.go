@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SlackNotificationProjection(data domain.Bootstrap, kind, id string, requests []SlackNotificationTeam) domain.Bootstrap {
+func scaleSlackNotificationProjection(data domain.Bootstrap, kind, id string, requests []SlackNotificationTeam) domain.Bootstrap {
 	result := domain.Bootstrap{Workspace: domain.Workspace{URLKey: data.Workspace.URLKey}}
 	for _, connection := range data.IntegrationConnections {
 		if connection.Provider == "slack" && connection.Status == "connected" && connection.OAuthAuthorized {
@@ -59,7 +59,7 @@ func scaleP21SlackNotificationProjection(data domain.Bootstrap, kind, id string,
 	return result
 }
 
-func TestScaleP21SlackNotificationNativeOwnership(t *testing.T) {
+func TestScaleSlackNotificationNativeOwnership(t *testing.T) {
 	wide := strings.Repeat("Unrelated Slack metadata ", 40000)
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{URLKey: "logical\x00workspace", Name: wide},
@@ -90,7 +90,7 @@ func TestScaleP21SlackNotificationNativeOwnership(t *testing.T) {
 		},
 	}
 	requests := []SlackNotificationTeam{{"team\x00id", "projectUpdates"}, {"team\x00id", "issueCreated"}, {"", "commentCreated"}, {"other", "projectUpdates"}, {"missing", "projectUpdates"}, {"team\x00id", "projectUpdates"}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, test := range []struct{ kind, id string }{{"project", "duplicate"}, {"initiative", "duplicate"}, {"project", ""}, {"project", "nul\x00id"}, {"project", "missing"}, {"project", "native\x00slug"}} {
 		for _, key := range []string{"physical", ""} {
@@ -105,7 +105,7 @@ func TestScaleP21SlackNotificationNativeOwnership(t *testing.T) {
 			if err := read.LoadTeams(t.Context(), requests); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(read.Data, scaleP21SlackNotificationProjection(data, test.kind, test.id, requests)) || statements != 0 || view.WorkspaceMetadataDecodes() != 0 {
+			if !reflect.DeepEqual(read.Data, scaleSlackNotificationProjection(data, test.kind, test.id, requests)) || statements != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("Slack projection/order/exact-ID semantics changed", test, statements)
 			}
 			if view.metadataResidency.work.used == 0 {
@@ -164,7 +164,7 @@ func TestScaleP21SlackNotificationNativeOwnership(t *testing.T) {
 				if err := read.LoadTeams(t.Context(), requests); err != nil {
 					t.Error(err)
 				}
-				if !reflect.DeepEqual(read.Data, scaleP21SlackNotificationProjection(data, "project", "duplicate", requests)) {
+				if !reflect.DeepEqual(read.Data, scaleSlackNotificationProjection(data, "project", "duplicate", requests)) {
 					t.Error("concurrent Slack source changed")
 				}
 				read.Close()
@@ -177,8 +177,8 @@ func TestScaleP21SlackNotificationNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SlackNotificationPostAdmission(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestScaleSlackNotificationPostAdmission(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	read, _, err := view.BeginSlackNotificationRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -217,13 +217,13 @@ func TestScaleP21SlackNotificationPostAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SlackNotificationSelectedBudget(t *testing.T) {
+func TestScaleSlackNotificationSelectedBudget(t *testing.T) {
 	channel := strings.Repeat("C", 200000)
 	data := domain.Bootstrap{
 		IntegrationConnections: []domain.IntegrationConnection{{Provider: "slack", Status: "connected", OAuthAuthorized: true}},
 		TeamSettings:           map[string]domain.TeamSettings{"team": {SlackChannelID: channel, SlackNotifications: map[string]bool{"projectUpdates": true}}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, _, err := view.BeginSlackNotificationRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -248,10 +248,10 @@ func TestScaleP21SlackNotificationSelectedBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21SlackNotificationWarmReloadAndGenerations(t *testing.T) {
+func TestScaleSlackNotificationWarmReloadAndGenerations(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -302,7 +302,7 @@ func TestScaleP21SlackNotificationWarmReloadAndGenerations(t *testing.T) {
 			if err := read.LoadTeams(t.Context(), requests); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(read.Data, scaleP21SlackNotificationProjection(data, "project", "project", requests)) {
+			if !reflect.DeepEqual(read.Data, scaleSlackNotificationProjection(data, "project", "project", requests)) {
 				t.Fatal("warm/reloaded Slack source changed")
 			}
 			held := view.metadataResidency.work.used
@@ -347,7 +347,7 @@ func TestScaleP21SlackNotificationWarmReloadAndGenerations(t *testing.T) {
 	if err := pinned.LoadTeams(t.Context(), requests); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(pinned.Data, scaleP21SlackNotificationProjection(old, "project", "project", requests)) {
+	if !reflect.DeepEqual(pinned.Data, scaleSlackNotificationProjection(old, "project", "project", requests)) {
 		t.Fatal("pinned Slack child changed generation after parent closed")
 	}
 	second, _, err := view.BeginSlackNotificationRead(t.Context(), workspace)

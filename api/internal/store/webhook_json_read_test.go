@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21WebhookJSONView(t *testing.T, data domain.Bootstrap) *SQLiteStore {
+func scaleWebhookJSONView(t *testing.T, data domain.Bootstrap) *SQLiteStore {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
 	if err != nil {
@@ -32,7 +32,7 @@ func scaleP21WebhookJSONView(t *testing.T, data domain.Bootstrap) *SQLiteStore {
 	return view
 }
 
-func scaleP21WebhookJSONTeams(object map[string]any, teams []string) bool {
+func scaleWebhookJSONTeams(object map[string]any, teams []string) bool {
 	if id, _ := object["teamId"].(string); id != "" {
 		return slices.Contains(teams, id)
 	}
@@ -51,7 +51,7 @@ func scaleP21WebhookJSONTeams(object map[string]any, teams []string) bool {
 	return false
 }
 
-func scaleP21WebhookJSONLiteral(t *testing.T, data domain.Bootstrap, id string, teams []string) bool {
+func scaleWebhookJSONLiteral(t *testing.T, data domain.Bootstrap, id string, teams []string) bool {
 	t.Helper()
 	// WorkspaceMetadata discards the five issue/content families, deep-clones
 	// metadata, and otherwise retains its installed native values.
@@ -83,10 +83,10 @@ func scaleP21WebhookJSONLiteral(t *testing.T, data domain.Bootstrap, id string, 
 		}
 		return nil
 	}
-	return scaleP21WebhookJSONTeams(find(root), teams)
+	return scaleWebhookJSONTeams(find(root), teams)
 }
 
-func TestScaleP21WebhookJSONDifferential(t *testing.T) {
+func TestScaleWebhookJSONDifferential(t *testing.T) {
 	const target = "event-webhook-json"
 	object := func(team string) map[string]any { return map[string]any{"id": target, "teamId": team} }
 	tests := []struct {
@@ -136,13 +136,13 @@ func TestScaleP21WebhookJSONDifferential(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			view := scaleP21WebhookJSONView(t, test.data)
+			view := scaleWebhookJSONView(t, test.data)
 			read, found, err := view.BeginWebhookAggregateRead(t.Context(), "")
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
 			for _, teams := range [][]string{nil, {"allowed"}, {"hidden"}, {"allowed", "hidden"}} {
-				want := scaleP21WebhookJSONLiteral(t, test.data, test.id, teams)
+				want := scaleWebhookJSONLiteral(t, test.data, test.id, teams)
 				got, err := read.TeamsAllowed(t.Context(), test.id, teams)
 				if err != nil || got != want {
 					t.Fatalf("teams=%v got=%v want=%v error=%v", teams, got, want, err)
@@ -156,8 +156,8 @@ func TestScaleP21WebhookJSONDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookJSONPinnedCancelAndConcurrent(t *testing.T) {
-	view := scaleP21WebhookJSONView(t, domain.Bootstrap{Settings: map[string]any{"id": "target", "teamId": "old"}})
+func TestScaleWebhookJSONPinnedCancelAndConcurrent(t *testing.T) {
+	view := scaleWebhookJSONView(t, domain.Bootstrap{Settings: map[string]any{"id": "target", "teamId": "old"}})
 	read, found, err := view.BeginWebhookAggregateRead(t.Context(), "")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -229,12 +229,12 @@ func TestScaleP21WebhookJSONPinnedCancelAndConcurrent(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookJSONFreshObjectTraversalAndLargeValues(t *testing.T) {
+func TestScaleWebhookJSONFreshObjectTraversalAndLargeValues(t *testing.T) {
 	data := domain.Bootstrap{Settings: map[string]any{
 		"first":  map[string]string{"id": "target", "teamId": "allowed"},
 		"second": map[string]string{"id": "target", "teamId": "hidden"},
 	}}
-	view := scaleP21WebhookJSONView(t, data)
+	view := scaleWebhookJSONView(t, data)
 	read, _, err := view.BeginWebhookAggregateRead(t.Context(), "")
 	if err != nil {
 		t.Fatal(err)
@@ -252,7 +252,7 @@ func TestScaleP21WebhookJSONFreshObjectTraversalAndLargeValues(t *testing.T) {
 		t.Fatal("JSON object traversal cached a fixed duplicate-ID winner")
 	}
 	large := strings.Repeat("legal 界", 100000)
-	largeView := scaleP21WebhookJSONView(t, domain.Bootstrap{Settings: map[string]any{
+	largeView := scaleWebhookJSONView(t, domain.Bootstrap{Settings: map[string]any{
 		"raw": json.RawMessage(`{"id":"target","teamId":"allowed","body":` + strconv.Quote(large) + `}`),
 	}})
 	largeRead, _, err := largeView.BeginWebhookAggregateRead(t.Context(), "")
@@ -268,10 +268,10 @@ func TestScaleP21WebhookJSONFreshObjectTraversalAndLargeValues(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookJSONWarmReloadAndBodyBound(t *testing.T) {
+func TestScaleWebhookJSONWarmReloadAndBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("webhook-json-target-")
 	for _, reload := range []bool{false, true} {
 		var costs []int
@@ -301,14 +301,14 @@ func TestScaleP21WebhookJSONWarmReloadAndBodyBound(t *testing.T) {
 			}
 			queries := 0
 			peak := 0
-			ctx := scaleP21HotWebhookContext{WithSQLStatementObserver(t.Context(), func(string) { queries++ }), func() {
+			ctx := scaleHotWebhookContext{WithSQLStatementObserver(t.Context(), func(string) { queries++ }), func() {
 				// This fixture is single-threaded. Err is also called while
 				// admission holds its mutex, so the observer must not lock it.
 				peak = max(peak, view.metadataResidency.work.used)
 			}}
 			for _, id := range []string{target, "missing"} {
 				got, err := read.TeamsAllowed(ctx, id, []string{"allowed"})
-				want := scaleP21WebhookJSONLiteral(t, data, id, []string{"allowed"})
+				want := scaleWebhookJSONLiteral(t, data, id, []string{"allowed"})
 				if err != nil || got != want {
 					t.Fatalf("reload=%v size=%d got=%v want=%v err=%v", reload, size, got, want, err)
 				}

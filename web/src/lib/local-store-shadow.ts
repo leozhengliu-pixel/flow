@@ -8,7 +8,7 @@ import {
   localStoreAuthority, localStoreBuildId, localStoreEnabled, localStoreEraseReason, markLocalStoreErase, planLocalChanges, projectLocalCollection,
   type LocalChange, type LocalStoreAuthority, type LocalStoreEraseReason,
 } from './local-store-model'
-import { modelChanges } from './scale-p13-wire'
+import { modelChanges } from './sync-wire'
 import { catchUpLocalIssues, localStoreLoadedWorkspace, readLocalIssueChanges, readLocalIssueManifest } from './local-store-resume'
 import { openLocalStoreNotices, type LocalStoreNotice } from './local-store-notice'
 

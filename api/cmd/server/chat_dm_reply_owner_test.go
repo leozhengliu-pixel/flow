@@ -15,13 +15,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW171ChatDMReplyIndependentOutputLifetime(t *testing.T) {
+func TestChatDMReplyIndependentOutputLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, mode := range []string{"completed", "caller-closed", "coordination-canceled", "platform-final"} {
 		t.Run(mode, func(t *testing.T) {
-			f, database, _ := scaleP21SW44ChatFixture(t)
+			f, database, _ := chatFixture(t)
 			view, err := database.repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), database.key)
 			if err != nil {
 				t.Fatal(err)

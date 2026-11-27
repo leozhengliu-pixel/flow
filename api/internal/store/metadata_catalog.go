@@ -275,7 +275,7 @@ func metadataCatalogRelations(raw []byte) map[string][]string {
 
 // MetadataCatalogStatus deliberately never declares writer coverage. A pass
 // is useful for shadow comparison, but old replicas and direct SQL can change
-// already-scanned rows. P09 owns the transactional coverage required to serve.
+// already-scanned rows. record journal owns the transactional coverage required to serve.
 type MetadataCatalogStatus struct {
 	Complete bool
 	Shadow   bool
@@ -349,7 +349,7 @@ func (s *SQLiteStore) MetadataCatalogStatus(ctx context.Context, workspace, kind
 // a JSON ProjectRecordQuery for projects; it reuses the canonical predicates,
 // including customer summaries supplied by the trusted caller. Other kinds
 // currently support unfiltered summary pages. No canonical body is fetched.
-// Public access-bound tokens and field redaction belong to P03/P10.
+// Public access-bound tokens and field redaction belong to resource access/sync authorization.
 func (s *SQLiteStore) ReadMetadataCatalogPage(ctx context.Context, workspace string, q PageRequest) (RecordPage, error) {
 	return s.readMetadataCatalogPage(ctx, workspace, q, nil)
 }

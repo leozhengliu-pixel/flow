@@ -16,12 +16,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW16FormerMemberRequestMatrix(t *testing.T) {
+func TestFormerMemberRequestMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		target := f.principals[2].user
 		old, bounded := &server{store: repo}, &server{store: f.probe}
 		check := func(want bool) {
@@ -62,11 +62,11 @@ func TestScaleP21SW16FormerMemberRequestMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16FormerMemberCollaborationLease(t *testing.T) {
+func TestFormerMemberCollaborationLease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, f.principals[2].user.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +160,7 @@ func TestScaleP21SW16FormerMemberCollaborationLease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16FormerMemberProductionCallers(t *testing.T) {
+func TestFormerMemberProductionCallers(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate production caller source")

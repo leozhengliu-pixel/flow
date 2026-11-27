@@ -19,7 +19,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-type scaleP04Database struct {
+type scaleDatabase struct {
 	repo             *store.SQLiteStore
 	config           store.DatabaseConfig
 	key, workspaceID string
@@ -29,9 +29,9 @@ type scaleP04Database struct {
 	ownsRepo         bool
 }
 
-const scaleP04Password = "p04-fixture-password"
+const scalePassword = "p04-fixture-password"
 
-func scaleP04DatabaseConfig(t *testing.T) store.DatabaseConfig {
+func httpAllocationDatabaseFixtureScaleDatabaseConfig(t *testing.T) store.DatabaseConfig {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -50,19 +50,19 @@ func scaleP04DatabaseConfig(t *testing.T) store.DatabaseConfig {
 	return config
 }
 
-func newScaleP04Database(t *testing.T) *scaleP04Database {
+func newScaleDatabase(t *testing.T) *scaleDatabase {
 	t.Helper()
-	config := scaleP04DatabaseConfig(t)
+	config := httpAllocationDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newScaleP04DatabaseForStore(t, repo, config, true)
+	return newScaleDatabaseForStore(t, repo, config, true)
 }
 
-func newScaleP04DatabaseForStore(t *testing.T, repo *store.SQLiteStore, config store.DatabaseConfig, ownsRepo bool) *scaleP04Database {
+func newScaleDatabaseForStore(t *testing.T, repo *store.SQLiteStore, config store.DatabaseConfig, ownsRepo bool) *scaleDatabase {
 	t.Helper()
-	database := &scaleP04Database{repo: repo, config: config, key: idgen.New("p04-"), ownsRepo: ownsRepo}
+	database := &scaleDatabase{repo: repo, config: config, key: idgen.New("p04-"), ownsRepo: ownsRepo}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -128,9 +128,9 @@ func newScaleP04DatabaseForStore(t *testing.T, repo *store.SQLiteStore, config s
 	return database
 }
 
-func (database *scaleP04Database) register(t *testing.T, name string) domain.User {
+func (database *scaleDatabase) register(t *testing.T, name string) domain.User {
 	t.Helper()
-	user, token, err := database.repo.Register(t.Context(), name, idgen.New("p04-user-")+"@example.test", scaleP04Password)
+	user, token, err := database.repo.Register(t.Context(), name, idgen.New("p04-user-")+"@example.test", scalePassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,14 +143,14 @@ func (database *scaleP04Database) register(t *testing.T, name string) domain.Use
 	return user
 }
 
-func (database *scaleP04Database) login(t *testing.T, baseURL string, user domain.User) *http.Client {
+func (database *scaleDatabase) login(t *testing.T, baseURL string, user domain.User) *http.Client {
 	t.Helper()
 	client := authClient(t)
-	authRequest[domain.AuthSession](t, client, http.MethodPost, baseURL+"/api/auth/login", map[string]string{"email": user.Email, "password": scaleP04Password}, "", http.StatusOK)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, baseURL+"/api/auth/login", map[string]string{"email": user.Email, "password": scalePassword}, "", http.StatusOK)
 	return client
 }
 
-func (database *scaleP04Database) join(t *testing.T, baseURL string, admin *http.Client, name, role string, teams ...string) (*http.Client, domain.User) {
+func (database *scaleDatabase) join(t *testing.T, baseURL string, admin *http.Client, name, role string, teams ...string) (*http.Client, domain.User) {
 	t.Helper()
 	user := database.register(t, name)
 	client := database.login(t, baseURL, user)
@@ -159,12 +159,12 @@ func (database *scaleP04Database) join(t *testing.T, baseURL string, admin *http
 	return client, user
 }
 
-func (database *scaleP04Database) handler(t *testing.T, authDisabled bool) http.Handler {
+func (database *scaleDatabase) handler(t *testing.T, authDisabled bool) http.Handler {
 	// In-process script requests still use a real owned session. The global
 	// development viewer can belong to an earlier shared-database fixture.
 	var ownerToken string
 	if authDisabled {
-		_, token, err := database.repo.Login(t.Context(), database.users[0].Email, scaleP04Password)
+		_, token, err := database.repo.Login(t.Context(), database.users[0].Email, scalePassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func (database *scaleP04Database) handler(t *testing.T, authDisabled bool) http.
 	})
 }
 
-func (database *scaleP04Database) reopen(t *testing.T) {
+func (database *scaleDatabase) reopen(t *testing.T) {
 	t.Helper()
 	if err := database.repo.Close(); err != nil {
 		t.Fatal(err)
@@ -199,7 +199,7 @@ func (database *scaleP04Database) reopen(t *testing.T) {
 	database.repo = repo
 }
 
-func (database *scaleP04Database) query(t *testing.T, query string, arg any) *sql.Rows {
+func (database *scaleDatabase) query(t *testing.T, query string, arg any) *sql.Rows {
 	t.Helper()
 	if database.reader == nil {
 		driver, dsn := database.config.Driver, database.config.URL

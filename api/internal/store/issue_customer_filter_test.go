@@ -325,7 +325,7 @@ func TestProjectCustomerSummariesAndFilters(t *testing.T) {
 			t.Fatalf("invalid values accepted: %v", values)
 		}
 	}
-	page, err := repo.QueryProjectDirectory(scaleP21ResourceOutputContext(t), ProjectRecordQuery{Workspace: q.Workspace, Admin: true, Limit: 100, Filters: []ProjectDirectoryFilter{{Field: "customers", Operator: "is", Values: []string{"customer:c1"}}}, CustomerSummaries: summaries})
+	page, err := repo.QueryProjectDirectory(scaleResourceOutputContext(t), ProjectRecordQuery{Workspace: q.Workspace, Admin: true, Limit: 100, Filters: []ProjectDirectoryFilter{{Field: "customers", Operator: "is", Values: []string{"customer:c1"}}}, CustomerSummaries: summaries})
 	if err != nil {
 		t.Fatal(err)
 	}

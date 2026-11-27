@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestScaleP09CommitPlan(t *testing.T) {
+func TestScaleCommitPlan(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite commit plan")
 	}

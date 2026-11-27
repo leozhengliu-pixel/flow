@@ -15,7 +15,7 @@ import (
 	"github.com/Deln0r/ygo"
 )
 
-func scaleP21SW232ActionFixture(t *testing.T, size int) domain.Bootstrap {
+func actionFixture(t *testing.T, size int) domain.Bootstrap {
 	t.Helper()
 	body := strings.Repeat("x", size)
 	document := map[string]any{
@@ -72,10 +72,10 @@ func scaleP21SW232ActionFixture(t *testing.T, size int) domain.Bootstrap {
 	}
 }
 
-func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
+func TestWorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 	bounds := map[string]int{}
 	for _, size := range []int{32, 4 << 20} {
-		data := scaleP21SW232ActionFixture(t, size)
+		data := actionFixture(t, size)
 		repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 		source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
 		if err != nil {
@@ -91,7 +91,7 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 				defer inputs.close()
 				if inputs.resourceOrdinal != 1 || inputs.placeholders != 1 ||
 					len(inputs.data.Issues) != 2 || inputs.data.Issues[0].Number != 17 ||
-					scaleP21SW201NextIssueNumber(inputs.data.Issues) != scaleP21SW201NextIssueNumber(data.Issues) {
+					workflowInputsNextIssueNumber(inputs.data.Issues) != workflowInputsNextIssueNumber(data.Issues) {
 					t.Fatal("original ordinal, first duplicate or number-only placeholders changed")
 				}
 				for _, view := range []domain.Bootstrap{inputs.data, inputs.before} {
@@ -156,8 +156,8 @@ func TestScaleP21SW232WorkflowActionFieldsKeepEditorFrames(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW232WorkflowActionDeltaRejectsUnrelatedChanges(t *testing.T) {
-	data := scaleP21SW232ActionFixture(t, 32)
+func TestWorkflowActionDeltaRejectsUnrelatedChanges(t *testing.T) {
+	data := actionFixture(t, 32)
 	for _, field := range []string{"Title", "Description", "DescriptionState", "DocumentContent", "ID", "Number"} {
 		t.Run(field, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}

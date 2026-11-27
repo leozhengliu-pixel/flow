@@ -19,13 +19,13 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-type scaleP21SW301Case struct {
+type retryAdversariesCase struct {
 	name, field string
 	body, deep  int
 	marker      bool
 }
 
-type scaleP21SW301Image struct {
+type retryAdversariesImage struct {
 	Workspace domain.Workspace
 	Documents []domain.Document
 	Projects  []domain.Project
@@ -33,29 +33,29 @@ type scaleP21SW301Image struct {
 	owner     *ResourceRead
 }
 
-func (image *scaleP21SW301Image) Close() {
+func (image *retryAdversariesImage) Close() {
 	owner := image.owner
-	*image = scaleP21SW301Image{}
+	*image = retryAdversariesImage{}
 	if owner != nil {
 		owner.Close()
 	}
 }
 
-func scaleP21SW301Read(t *testing.T, source *SQLiteStore, workspace string) scaleP21SW301Image {
+func retryAdversariesRead(t *testing.T, source *SQLiteStore, workspace string) retryAdversariesImage {
 	t.Helper()
 	if !source.BoundedMetadataEnabled() {
 		data, found := source.storedWorkspace(workspace)
 		if !found {
 			t.Fatal("literal retry source missing")
 		}
-		return scaleP21SW301Image{Workspace: data.Workspace, Documents: data.Documents, Projects: data.Projects}
+		return retryAdversariesImage{Workspace: data.Workspace, Documents: data.Documents, Projects: data.Projects}
 	}
 	logical, err := source.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	owner := &ResourceRead{store: source, source: logical}
-	result := scaleP21SW301Image{stamp: logical.Stamp(), owner: owner}
+	result := retryAdversariesImage{stamp: logical.Stamp(), owner: owner}
 	if err := owner.reserve(t.Context(), 64<<10); err != nil {
 		result.Close()
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func scaleP21SW301Read(t *testing.T, source *SQLiteStore, workspace string) scal
 	return result
 }
 
-func scaleP21SW301LogicalStack() bool {
+func logicalStack() bool {
 	var callers [128]uintptr
 	count := runtime.Callers(2, callers[:])
 	frames := runtime.CallersFrames(callers[:count])
@@ -99,7 +99,7 @@ func scaleP21SW301LogicalStack() bool {
 	}
 }
 
-func scaleP21SW301Raw(t *testing.T, source *SQLiteStore, workspace, field, key string) []byte {
+func retryAdversariesRaw(t *testing.T, source *SQLiteStore, workspace, field, key string) []byte {
 	t.Helper()
 	var raw []byte
 	if err := source.db.QueryRowContext(t.Context(),
@@ -110,7 +110,7 @@ func scaleP21SW301Raw(t *testing.T, source *SQLiteStore, workspace, field, key s
 	return raw
 }
 
-func scaleP21SW301Deep(t *testing.T, textBytes int, phase string, blocks int) map[string]any {
+func retryAdversariesDeep(t *testing.T, textBytes int, phase string, blocks int) map[string]any {
 	t.Helper()
 	raw := `{"type":"doc","content":[` + strings.Repeat(`{"type":"blockquote","content":[`, blocks) +
 		`{"type":"paragraph","content":[{"type":"text","text":"` + strings.Repeat(phase, textBytes) + `"}]}` +
@@ -122,13 +122,13 @@ func scaleP21SW301Deep(t *testing.T, textBytes int, phase string, blocks int) ma
 	return value
 }
 
-func TestScaleP21SW301MySQLNativeJSONBoundary(t *testing.T) {
+func TestMySQLNativeJSONBoundary(t *testing.T) {
 	if os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "mysql" {
 		t.Skip("MySQL native JSON producer boundary")
 	}
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	for _, blocks := range []int{40, 256} {
-		raw, err := json.Marshal(scaleP21SW301Deep(t, 32, "A", blocks))
+		raw, err := json.Marshal(retryAdversariesDeep(t, 32, "A", blocks))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func TestScaleP21SW301MySQLNativeJSONBoundary(t *testing.T) {
 
 // The conflict is produced by the real three-way rebase, not by constructing
 // metadataConflictError or by a callback returning ErrConcurrentWrite.
-func scaleP21SW301Conflict(t *testing.T, owner *SQLiteStore, workspace, field, key string) error {
+func retryAdversariesConflict(t *testing.T, owner *SQLiteStore, workspace, field, key string) error {
 	t.Helper()
 	stale, found := owner.storedWorkspace(workspace)
 	if !found {
@@ -180,7 +180,7 @@ func scaleP21SW301Conflict(t *testing.T, owner *SQLiteStore, workspace, field, k
 	return conflict
 }
 
-func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
+func TestSharedRetryFramingAdversaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "false")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
@@ -197,7 +197,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 				// either reader runs; the boundary test pins that refusal.
 				blocks = 40
 			}
-			for _, row := range []scaleP21SW301Case{
+			for _, row := range []retryAdversariesCase{
 				{name: "document-4MiB", field: "documents", body: 4 << 20},
 				{name: "project-4MiB", field: "projects", body: 4 << 20},
 				{name: "document-deep-large", field: "documents", deep: 512 << 10},
@@ -244,7 +244,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 									target := &data.Documents[0]
 									target.Title, target.Content = "peer-"+phase, strings.Repeat(phase, row.body)
 									if row.deep != 0 {
-										target.ContentData = scaleP21SW301Deep(t, row.deep, phase, blocks)
+										target.ContentData = retryAdversariesDeep(t, row.deep, phase, blocks)
 									}
 									if row.marker {
 										target.Revisions = []domain.DocumentRevision{{ID: "sw301-revision", DocumentID: doc.ID,
@@ -313,7 +313,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 									if err := source.ReloadWorkspace(t.Context(), workspace); err != nil {
 										t.Fatal(err)
 									}
-									image := scaleP21SW301Read(t, source, workspace)
+									image := retryAdversariesRead(t, source, workspace)
 									name := image.Workspace.Name
 									image.Close()
 									if name != "SW301 actual SQL reload" || bounded && source.WorkspaceMetadataDecodes() != before ||
@@ -323,7 +323,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 								}
 								// Deep content is introduced only after shallow source capture.
 								edit(t, "A")
-								rawA := scaleP21SW301Raw(t, peer, workspace, row.field, key)
+								rawA := retryAdversariesRaw(t, peer, workspace, row.field, key)
 								large := row.body >= 4<<20 || row.deep >= 512<<10
 								if (len(rawA) > MetadataRecordPageMaxBytes) != large ||
 									row.marker && !bytes.Contains(rawA, []byte(`"body":"document"`)) {
@@ -349,11 +349,11 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 								} else {
 									expected.Projects[0] = record.Interface().(domain.Project)
 								}
-								conflict := scaleP21SW301Conflict(t, owner, workspace, row.field, key)
+								conflict := retryAdversariesConflict(t, owner, workspace, row.field, key)
 								if bounded && row.name == "document-4MiB" && !reload {
 									for _, exit := range []string{"canceled-before", "canceled-stream", "denied"} {
 										t.Run(exit, func(t *testing.T) {
-											before := scaleP21SW301Read(t, source, workspace)
+											before := retryAdversariesRead(t, source, workspace)
 											stamp := before.stamp
 											before.Close()
 											disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
@@ -361,7 +361,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 											defer cancel()
 											chunks := 0
 											ctx = WithSQLStatementObserver(ctx, func(query string) {
-												if strings.HasPrefix(query, "SELECT SUBSTR(") && strings.Contains(query, "workspace_metadata_records") && scaleP21SW301LogicalStack() {
+												if strings.HasPrefix(query, "SELECT SUBSTR(") && strings.Contains(query, "workspace_metadata_records") && logicalStack() {
 													chunks++
 													if exit == "canceled-stream" && chunks == 2 {
 														cancel()
@@ -389,7 +389,7 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 											if !errors.Is(err, want) || exit == "canceled-stream" && chunks < 2 {
 												t.Fatal("retry failure boundary changed", exit, chunks, err)
 											}
-											after := scaleP21SW301Read(t, source, workspace)
+											after := retryAdversariesRead(t, source, workspace)
 											unchanged := after.stamp == stamp && reflect.DeepEqual(after.Documents, base.Documents) && reflect.DeepEqual(after.Projects, base.Projects)
 											after.Close()
 											if !unchanged || source.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk ||
@@ -408,10 +408,10 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 									}
 									late = true
 									edit(t, "B")
-									rawB = scaleP21SW301Raw(t, peer, workspace, row.field, key)
+									rawB = retryAdversariesRaw(t, peer, workspace, row.field, key)
 								}
 								ctx := WithSQLStatementObserver(t.Context(), func(query string) {
-									if !scaleP21SW301LogicalStack() {
+									if !logicalStack() {
 										return
 									}
 									if strings.HasPrefix(query, "SELECT record_key,") &&
@@ -445,10 +445,10 @@ func TestScaleP21SW301SharedRetryFramingAdversaries(t *testing.T) {
 									// Literal rows and small frames are captured atomically.
 									lateEdit()
 								}
-								if len(rawA) != len(rawB) || bytes.Equal(rawA, rawB) || !bytes.Equal(rawB, scaleP21SW301Raw(t, peer, workspace, row.field, key)) {
+								if len(rawA) != len(rawB) || bytes.Equal(rawA, rawB) || !bytes.Equal(rawB, retryAdversariesRaw(t, peer, workspace, row.field, key)) {
 									t.Fatal("genuine later peer edit was absent or overwritten")
 								}
-								image := scaleP21SW301Read(t, source, workspace)
+								image := retryAdversariesRead(t, source, workspace)
 								if !reflect.DeepEqual(image.Documents, expected.Documents) || !reflect.DeepEqual(image.Projects, expected.Projects) {
 									image.Close()
 									t.Fatal("retry mixed SQL generations, skipped marker expansion, or refreshed an unrequested sibling")

@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW112Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
+func snapshotReadSeed(t *testing.T, f scaleFixture, prefix, body string) {
 	t.Helper()
 	at := time.Date(2026, 11, 15, 10, 20, 30, 123, time.UTC)
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw112_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -61,9 +61,9 @@ func scaleP21SW112Seed(t *testing.T, f scaleP09Fixture, prefix, body string) {
 	}
 }
 
-func scaleP21SW112Comparable(t *testing.T, snapshot ScaleP19Snapshot, started time.Time) ScaleP19Snapshot {
+func snapshotReadComparable(t *testing.T, snapshot ScaleSnapshot, started time.Time) ScaleSnapshot {
 	t.Helper()
-	// P19 deliberately omits stored notification preferences, so its literal
+	// project and initiative queries deliberately omits stored notification preferences, so its literal
 	// normalizer creates fresh defaults on every call. Only that generated
 	// clock field is normalized; all preference values and other native fields
 	// remain part of the exact differential.
@@ -78,12 +78,12 @@ func scaleP21SW112Comparable(t *testing.T, snapshot ScaleP19Snapshot, started ti
 	return snapshot
 }
 
-func scaleP21SW112Compare(t *testing.T, want ScaleP19Snapshot, read *P19SnapshotRead, started time.Time) {
+func snapshotReadCompare(t *testing.T, want ScaleSnapshot, read *SnapshotRead, started time.Time) {
 	t.Helper()
-	want = scaleP21SW112Comparable(t, want, started)
-	var got ScaleP19Snapshot
+	want = snapshotReadComparable(t, want, started)
+	var got ScaleSnapshot
 	if read != nil {
-		got = scaleP21SW112Comparable(t, read.Snapshot, started)
+		got = snapshotReadComparable(t, read.Snapshot, started)
 	}
 	if read == nil || !reflect.DeepEqual(got, want) {
 		if read != nil {
@@ -105,7 +105,7 @@ func scaleP21SW112Compare(t *testing.T, want ScaleP19Snapshot, read *P19Snapshot
 	}
 }
 
-func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
+func TestSnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -116,9 +116,9 @@ func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 			// Each size starts with the same fixture shape. Reusing a fixture
 			// after its reload would change selected auxiliary native shapes,
 			// independently of the excluded body-size comparison.
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw112-")
-			scaleP21SW112Seed(t, f, prefix, strings.Repeat("Excluded P19 bodies and histories. ", size))
+			snapshotReadSeed(t, f, prefix, strings.Repeat("Excluded P19 bodies and histories. ", size))
 			view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 			if err != nil {
 				t.Fatal(err)
@@ -133,7 +133,7 @@ func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 				for _, unfiltered := range []bool{true, false} {
 					var oldQueries, newQueries int
 					started := time.Now()
-					want, err := f.ReadScaleP19Snapshot(WithSQLStatementObserver(t.Context(), func(string) { oldQueries++ }), workspace, f.data.Viewer.ID, unfiltered)
+					want, err := f.ReadScaleSnapshot(WithSQLStatementObserver(t.Context(), func(string) { oldQueries++ }), workspace, f.data.Viewer.ID, unfiltered)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -152,17 +152,17 @@ func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 							rowsWork = view.MetadataWorkUsedForTesting()
 						}
 					})
-					read, err := view.BeginP19SnapshotRead(ctx, workspace, f.data.Viewer.ID, unfiltered)
+					read, err := view.BeginSnapshotRead(ctx, workspace, f.data.Viewer.ID, unfiltered)
 					if err != nil {
 						t.Fatal(size, reload, unfiltered, err)
 					}
 					defer read.Close()
-					scaleP21SW112Compare(t, want, read, started)
+					snapshotReadCompare(t, want, read, started)
 					if countWork == 0 || rowsWork <= countWork {
 						t.Fatal("version rows transferred before count/key admission", countWork, rowsWork)
 					}
 					key := fmt.Sprint(reload, "/", unfiltered)
-					for _, name := range p19SnapshotFields {
+					for _, name := range snapshotFields {
 						switch name {
 						case "projects", "initiatives", "documents", "projectUpdates", "initiativeUpdates":
 							continue
@@ -180,21 +180,21 @@ func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 					if work[key] == 0 {
 						work[key] = held
 					}
-					if held != work[key] || read.work > p19SnapshotMaxWork {
+					if held != work[key] || read.work > snapshotMaxWork {
 						t.Fatal("10x excluded body/history growth changed retained work", size, key, held, work[key], read.work)
 					}
 					t.Log("body repetitions/reloaded/unfiltered/admitted work/legacy SQL/bounded SQL", size, reload, unfiltered, held, oldQueries, newQueries)
 					read.Snapshot.Data.Projects[0].Name = "caller mutation"
 					read.Close()
 					read.Close()
-					if view.MetadataWorkUsedForTesting() != 0 || !reflect.DeepEqual(read.Snapshot, ScaleP19Snapshot{}) {
+					if view.MetadataWorkUsedForTesting() != 0 || !reflect.DeepEqual(read.Snapshot, ScaleSnapshot{}) {
 						t.Fatal("snapshot close retained output/work")
 					}
-					current, err := f.ReadScaleP19Snapshot(t.Context(), workspace, f.data.Viewer.ID, unfiltered)
+					current, err := f.ReadScaleSnapshot(t.Context(), workspace, f.data.Viewer.ID, unfiltered)
 					if err != nil {
 						t.Fatal("caller changed installed source", err)
 					}
-					scaleP21SW112Compare(t, want, &P19SnapshotRead{Snapshot: current}, started)
+					snapshotReadCompare(t, want, &SnapshotRead{Snapshot: current}, started)
 				}
 			}
 			if view.WorkspaceMetadataDecodes() != 0 {
@@ -204,11 +204,11 @@ func TestScaleP21SW112P19SnapshotNativeWarmReloadBodyGrowth(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW112P19SnapshotPrincipalDifferential(t *testing.T) {
+func TestSnapshotPrincipalDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID, prefix := f.data.Workspace.URLKey, f.data.Workspace.ID, idgen.New("sw112-policy-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw112_teams", "", nil, func(data *domain.Bootstrap) error {
@@ -293,16 +293,16 @@ func TestScaleP21SW112P19SnapshotPrincipalDifferential(t *testing.T) {
 		} {
 			t.Run(fmt.Sprint(reload, "/", principal.name), func(t *testing.T) {
 				started := time.Now()
-				want, err := f.ReadScaleP19Snapshot(t.Context(), workspace, principal.user.ID, false)
+				want, err := f.ReadScaleSnapshot(t.Context(), workspace, principal.user.ID, false)
 				if err != nil {
 					t.Fatal(err)
 				}
-				read, err := view.BeginP19SnapshotRead(t.Context(), workspace, principal.user.ID, false)
+				read, err := view.BeginSnapshotRead(t.Context(), workspace, principal.user.ID, false)
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer read.Close()
-				scaleP21SW112Compare(t, want, read, started)
+				snapshotReadCompare(t, want, read, started)
 				read.Close()
 				if view.MetadataWorkUsedForTesting() != 0 {
 					t.Fatal("principal snapshot leaked work")
@@ -333,19 +333,19 @@ func TestScaleP21SW112P19SnapshotPrincipalDifferential(t *testing.T) {
 		}
 	}
 	started := time.Now()
-	want, err := f.ReadScaleP19Snapshot(t.Context(), workspace, inherited.ID, false)
+	want, err := f.ReadScaleSnapshot(t.Context(), workspace, inherited.ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 		t.Fatal(err)
 	}
-	read, err := view.BeginP19SnapshotRead(t.Context(), workspace, inherited.ID, false)
+	read, err := view.BeginSnapshotRead(t.Context(), workspace, inherited.ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	scaleP21SW112Compare(t, want, read, started)
+	snapshotReadCompare(t, want, read, started)
 	read.Close()
 	other, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "SW112 other", idgen.New("sw112-other-"), "us")
 	if err != nil {
@@ -361,8 +361,8 @@ func TestScaleP21SW112P19SnapshotPrincipalDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer otherView.releaseMetadataLogicalSources()
-	_, legacyErr := f.ReadScaleP19Snapshot(t.Context(), other.Workspace.URLKey, member.ID, false)
-	cross, boundedErr := otherView.BeginP19SnapshotRead(t.Context(), other.Workspace.URLKey, member.ID, false)
+	_, legacyErr := f.ReadScaleSnapshot(t.Context(), other.Workspace.URLKey, member.ID, false)
+	cross, boundedErr := otherView.BeginSnapshotRead(t.Context(), other.Workspace.URLKey, member.ID, false)
 	if cross != nil || !errors.Is(legacyErr, ErrAuthForbidden) || !errors.Is(boundedErr, ErrAuthForbidden) {
 		t.Fatal("cross-workspace principal changed", legacyErr, boundedErr)
 	}
@@ -371,13 +371,13 @@ func TestScaleP21SW112P19SnapshotPrincipalDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
+func TestSnapshotStampPinAndOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw112-stamp-")
-	scaleP21SW112Seed(t, f, prefix, "excluded")
+	snapshotReadSeed(t, f, prefix, "excluded")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := time.Now()
-	want, err := f.ReadScaleP19Snapshot(t.Context(), workspace, "", true)
+	want, err := f.ReadScaleSnapshot(t.Context(), workspace, "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,19 +410,19 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 		if closeParent {
 			parent.Close()
 		}
-		read, err := view.BeginP19SnapshotRead(pinned, workspace, "", true)
+		read, err := view.BeginSnapshotRead(pinned, workspace, "", true)
 		if err != nil {
 			t.Fatal(closeParent, err)
 		}
 		defer read.Close()
-		scaleP21SW112Compare(t, want, read, started)
+		snapshotReadCompare(t, want, read, started)
 		read.Close()
 	}
 	caller := workspaceRead{database: view.db, workspace: workspace, metadata: domain.Bootstrap{Workspace: domain.Workspace{ID: "poison"}}}
 	legacyCaller := caller
 	legacyCaller.database = f.db
-	_, literalErr := f.ReadScaleP19Snapshot(context.WithValue(t.Context(), workspaceReadKey{}, legacyCaller), workspace, "", true)
-	callerRead, callerErr := view.BeginP19SnapshotRead(context.WithValue(t.Context(), workspaceReadKey{}, caller), workspace, "", true)
+	_, literalErr := f.ReadScaleSnapshot(context.WithValue(t.Context(), workspaceReadKey{}, legacyCaller), workspace, "", true)
+	callerRead, callerErr := view.BeginSnapshotRead(context.WithValue(t.Context(), workspaceReadKey{}, caller), workspace, "", true)
 	if callerRead != nil || literalErr == nil || callerErr == nil || literalErr.Error() != callerErr.Error() {
 		t.Fatal("caller SQL snapshot refusal changed", literalErr, callerErr)
 	}
@@ -437,7 +437,7 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 	}
 	wrong := stamp
 	wrong.revision++
-	read, err := view.p19SnapshotAt(t.Context(), workspace, "", true, tx, wrong)
+	read, err := view.snapshotAt(t.Context(), workspace, "", true, tx, wrong)
 	_ = tx.Rollback()
 	if read != nil || !errors.Is(err, ErrResourceAccessChanged) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("uncertified generation escaped or leaked", err)
@@ -447,7 +447,7 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 	f.forgetCopyRevisionLocked(workspace)
 	f.mu.Unlock()
 	started = time.Now()
-	want, err = f.ReadScaleP19Snapshot(t.Context(), workspace, "", true)
+	want, err = f.ReadScaleSnapshot(t.Context(), workspace, "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,23 +458,23 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 		t.Fatal(captureErr)
 	}
 	view.installMetadataLogicalSource(workspace, unknown)
-	read, err = view.BeginP19SnapshotRead(t.Context(), workspace, "", true)
+	read, err = view.BeginSnapshotRead(t.Context(), workspace, "", true)
 	if err != nil {
 		t.Fatal("unknown revision recovery", err)
 	}
 	defer read.Close()
-	scaleP21SW112Compare(t, want, read, started)
+	snapshotReadCompare(t, want, read, started)
 	read.Close()
 	var workers sync.WaitGroup
 	for range 3 {
 		workers.Go(func() {
-			read, err := view.BeginP19SnapshotRead(t.Context(), workspace, "", true)
+			read, err := view.BeginSnapshotRead(t.Context(), workspace, "", true)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			defer read.Close()
-			if !reflect.DeepEqual(scaleP21SW112Comparable(t, read.Snapshot, started), scaleP21SW112Comparable(t, want, started)) {
+			if !reflect.DeepEqual(snapshotReadComparable(t, read.Snapshot, started), snapshotReadComparable(t, want, started)) {
 				t.Error("concurrent independent P19 snapshot changed")
 			}
 		})
@@ -485,13 +485,13 @@ func TestScaleP21SW112P19SnapshotStampPinAndOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW112P19SnapshotBudgetCancellationAndVersionPreflight(t *testing.T) {
+func TestSnapshotBudgetCancellationAndVersionPreflight(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw112-budget-")
-	scaleP21SW112Seed(t, f, prefix, strings.Repeat("Legal excluded body. ", 20000))
+	snapshotReadSeed(t, f, prefix, strings.Repeat("Legal excluded body. ", 20000))
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -499,18 +499,18 @@ func TestScaleP21SW112P19SnapshotBudgetCancellationAndVersionPreflight(t *testin
 	defer view.releaseMetadataLogicalSources()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if read, err := view.BeginP19SnapshotRead(ctx, workspace, "", true); read != nil || !errors.Is(err, context.Canceled) {
+	if read, err := view.BeginSnapshotRead(ctx, workspace, "", true); read != nil || !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled snapshot escaped", err)
 	}
 	budget, limit := view.metadataResidency.work, view.metadataResidency.work.limit
 	budget.limit = 1
-	read, err := view.BeginP19SnapshotRead(t.Context(), workspace, "", true)
+	read, err := view.BeginSnapshotRead(t.Context(), workspace, "", true)
 	budget.limit = limit
 	if read != nil || !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("unadmitted summary escaped or leaked", err)
 	}
 	ctx, cancel = context.WithCancel(t.Context())
-	read, err = view.BeginP19SnapshotRead(ctx, workspace, "", true)
+	read, err = view.BeginSnapshotRead(ctx, workspace, "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,8 +524,8 @@ func TestScaleP21SW112P19SnapshotBudgetCancellationAndVersionPreflight(t *testin
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	probe := &P19SnapshotRead{owner: &ResourceRead{store: view}, work: p19SnapshotMaxWork - 1,
-		Snapshot: ScaleP19Snapshot{Versions: map[string]map[string]string{"projects": {}, "initiatives": {}}}}
+	probe := &SnapshotRead{owner: &ResourceRead{store: view}, work: snapshotMaxWork - 1,
+		Snapshot: ScaleSnapshot{Versions: map[string]map[string]string{"projects": {}, "initiatives": {}}}}
 	rowsRead := false
 	observed := WithSQLStatementObserver(t.Context(), func(query string) {
 		if strings.Contains(query, "SELECT field,record_key,version FROM record_versions") {
@@ -546,7 +546,7 @@ func TestScaleP21SW112P19SnapshotBudgetCancellationAndVersionPreflight(t *testin
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 		t.Fatal(err)
 	}
-	read, err = view.BeginP19SnapshotRead(t.Context(), workspace, "", true)
+	read, err = view.BeginSnapshotRead(t.Context(), workspace, "", true)
 	if read != nil || !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("oversized complete auxiliary graph escaped fixed ceiling or leaked", err)
 	}

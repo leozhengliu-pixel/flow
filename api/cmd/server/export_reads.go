@@ -31,7 +31,7 @@ func (s *server) boundedExportJobAccess(r *http.Request) (string, string, store.
 	return workspace, access.PrincipalID, access, read, nil
 }
 
-func scaleP21SW24ExportReadError(w http.ResponseWriter, err error) {
+func exportReadError(w http.ResponseWriter, err error) {
 	if errors.Is(err, store.ErrMetadataPageBudget) || errors.Is(err, store.ErrMetadataWorkBudget) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return

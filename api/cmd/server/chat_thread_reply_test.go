@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
+func TestChatThreadReplyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	prefix := idgen.New("sw176-")
 	actor := database.register(t, "Thread reply member")
@@ -45,7 +45,7 @@ func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlFixture := scaleP21SW10Fixture{reader: database}
+	sqlFixture := notificationsFixture{reader: database}
 	sqlFixture.data.Workspace.URLKey = workspace
 	platform := f.threadPlatform(t)
 	rootMessage := prefix + "root"
@@ -179,7 +179,7 @@ func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
 				f.s.store = source
 				f.sent, f.patched, f.responseIDs = nil, nil, map[string]string{}
 				platform.calls = nil
-				before := scaleP21SW59SQL(t, sqlFixture)
+				before := discussionWriteSql(t, sqlFixture)
 				prior, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -188,18 +188,18 @@ func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
 				for _, event := range prior {
 					priorIDs[event.ID] = true
 				}
-				got := scaleP21SW59Outcome{}
+				got := discussionWriteOutcome{}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 					if event.ActorID != actor.ID || len(event.Snapshot) == 0 {
 						t.Error("actual comment webhook lost the linked actor or full snapshot")
 					}
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 						"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 						"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot, "createdAt": event.CreatedAt,
 					}))
 				})
 				captureRealtime := func(_ string, event domain.RealtimeEvent) {
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 				}
 				source.SetRealtimeSink(captureRealtime)
 				if source != repo {
@@ -240,7 +240,7 @@ func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
 				repo.SetRealtimeSink(nil)
-				got.Rows = scaleP21SW59SQL(t, sqlFixture)
+				got.Rows = discussionWriteSql(t, sqlFixture)
 				after, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -350,10 +350,10 @@ func TestScaleP21SW176ChatThreadReplyDifferential(t *testing.T) {
 				if test.name == "member-comment" {
 					t.Logf("actual_thread_reply bounded=%t observed_SQL=%d", source.BoundedMetadataEnabled(), statements)
 				}
-				outcomes = append(outcomes, scaleP21SW59Normalized(t, got, before, started, finished))
+				outcomes = append(outcomes, discussionWriteNormalized(t, got, before, started, finished))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("actual thread reply/comment/platform differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("actual thread reply/comment/platform differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 			pairs++
 		})

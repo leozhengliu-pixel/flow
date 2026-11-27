@@ -9,10 +9,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW23ResidentPolicyOrderCanonical(t *testing.T) {
+func TestResidentPolicyOrderCanonical(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {

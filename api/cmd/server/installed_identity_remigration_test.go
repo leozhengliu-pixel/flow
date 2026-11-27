@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW24IdentityRequest(user domain.User, key *domain.APIKey, workspace, path string) *http.Request {
+func installedIdentityRequest(user domain.User, key *domain.APIKey, workspace, path string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	r.Header.Set("X-Workspace-Key", workspace)
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
@@ -25,17 +25,17 @@ func scaleP21SW24IdentityRequest(user domain.User, key *domain.APIKey, workspace
 	return r.WithContext(ctx)
 }
 
-func scaleP21SW24IdentityOutcome(w *httptest.ResponseRecorder) any {
+func installedIdentityOutcome(w *httptest.ResponseRecorder) any {
 	return []any{w.Code, w.Body.String(), w.Header().Get("X-Total-Count"), w.Header().Get("X-Next-Cursor")}
 }
 
-func TestScaleP21SW24InstalledDefaultTaskSourceDifferential(t *testing.T) {
+func TestInstalledDefaultTaskSourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		if driver := scaleP03DatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
 			t.Skip("PostgreSQL text columns cannot retain a physical NUL key")
 		}
 		physical := idgen.New("sw24-default-remigration-") + "\x00tail"
@@ -70,8 +70,8 @@ func TestScaleP21SW24InstalledDefaultTaskSourceDifferential(t *testing.T) {
 				for _, binding := range []string{physical, ""} {
 					for _, id := range []string{task.ID, task.ID + "-missing"} {
 						for _, editing := range []bool{false, true} {
-							r := scaleP21SW24IdentityRequest(actor, nil, binding, "/api/application-agent-tasks")
-							left, leftData, leftErr := service.scaleP21SW24OldAuthorizedAgentTask(r, id, editing)
+							r := installedIdentityRequest(actor, nil, binding, "/api/application-agent-tasks")
+							left, leftData, leftErr := service.legacyAuthorizedAgentTask(r, id, editing)
 							right, rightData, rightErr := service.authorizedAgentTask(r, id, editing)
 							message := func(err error) string {
 								if err != nil {
@@ -82,20 +82,20 @@ func TestScaleP21SW24InstalledDefaultTaskSourceDifferential(t *testing.T) {
 							old := []any{left, leftData.Workspace.URLKey, leftData.Viewer.ID, leftData.ViewerRole, message(leftErr)}
 							current := []any{right, rightData.Workspace.URLKey, rightData.Viewer.ID, rightData.ViewerRole, message(rightErr)}
 							if !reflect.DeepEqual(old, current) {
-								t.Fatalf("default identity differs stage=%s bounded=%v binding=%q: %s", stage, source.BoundedMetadataEnabled(), binding, scaleP21M2Diff(old, current))
+								t.Fatalf("default identity differs stage=%s bounded=%v binding=%q: %s", stage, source.BoundedMetadataEnabled(), binding, policyFirstDifference(old, current))
 							}
 						}
 					}
 					for _, archived := range []bool{false, true} {
-						r := scaleP21SW24IdentityRequest(actor, nil, binding, "/api/application-agent-tasks")
+						r := installedIdentityRequest(actor, nil, binding, "/api/application-agent-tasks")
 						if archived {
 							r.URL.RawQuery = "includeArchived=true"
 						}
 						left, right := httptest.NewRecorder(), httptest.NewRecorder()
-						service.scaleP21SW24OldListApplicationAgentTasks(left, r)
+						service.legacyListApplicationAgentTasks(left, r)
 						service.listApplicationAgentTasks(right, r)
-						if !reflect.DeepEqual(scaleP21SW24IdentityOutcome(left), scaleP21SW24IdentityOutcome(right)) {
-							t.Fatalf("task list differs stage=%s bounded=%v binding=%q: old=%v new=%v", stage, source.BoundedMetadataEnabled(), binding, scaleP21SW24IdentityOutcome(left), scaleP21SW24IdentityOutcome(right))
+						if !reflect.DeepEqual(installedIdentityOutcome(left), installedIdentityOutcome(right)) {
+							t.Fatalf("task list differs stage=%s bounded=%v binding=%q: old=%v new=%v", stage, source.BoundedMetadataEnabled(), binding, installedIdentityOutcome(left), installedIdentityOutcome(right))
 						}
 					}
 				}
@@ -106,13 +106,13 @@ func TestScaleP21SW24InstalledDefaultTaskSourceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24InstalledExportNamespaceDifferential(t *testing.T) {
+func TestInstalledExportNamespaceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		if driver := scaleP03DatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
 			t.Skip("PostgreSQL text columns cannot retain a physical NUL key")
 		}
 		physical, id := idgen.New("sw24-export-remigration-")+"\x00tail", idgen.New("sw24-job-")
@@ -146,14 +146,14 @@ func TestScaleP21SW24InstalledExportNamespaceDifferential(t *testing.T) {
 							var outcomes []any
 							for _, source := range []*store.SQLiteStore{repo, probe} {
 								service := &server{store: source, authDisabled: development}
-								r := scaleP21SW24IdentityRequest(f.data.Viewer, key, binding, "/api/exports")
+								r := installedIdentityRequest(f.data.Viewer, key, binding, "/api/exports")
 								r.SetPathValue("id", id)
 								w := httptest.NewRecorder()
 								operation(service, w, r)
-								outcomes = append(outcomes, scaleP21SW24IdentityOutcome(w))
+								outcomes = append(outcomes, installedIdentityOutcome(w))
 							}
 							if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-								t.Fatalf("export namespace differs stage=%s development=%v binding=%q: %s", stage, development, binding, scaleP21M2Diff(outcomes[0], outcomes[1]))
+								t.Fatalf("export namespace differs stage=%s development=%v binding=%q: %s", stage, development, binding, policyFirstDifference(outcomes[0], outcomes[1]))
 							}
 						}
 					}
@@ -163,18 +163,18 @@ func TestScaleP21SW24InstalledExportNamespaceDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24InstalledExportIdentityLifetime(t *testing.T) {
+func TestInstalledExportIdentityLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
 		service := &server{store: probe, authDisabled: true}
-		r := scaleP21SW24IdentityRequest(f.data.Viewer, nil, f.data.Workspace.URLKey, "/api/exports")
+		r := installedIdentityRequest(f.data.Viewer, nil, f.data.Workspace.URLKey, "/api/exports")
 		workspace, _, _, read, err := service.boundedExportJobAccess(r)
 		if err != nil || read == nil || workspace != f.data.Workspace.URLKey || read.Identity.RegistryKey != workspace {
 			t.Fatal("identity lifetime was not transferred to the caller", err)
@@ -194,13 +194,13 @@ func TestScaleP21SW24InstalledExportIdentityLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ExportCompletionSourceHold(t *testing.T) {
+func TestExportCompletionSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		if driver := scaleP03DatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; driver == "postgres" || driver == "postgresql" {
 			t.Skip("PostgreSQL text columns cannot retain a physical NUL key")
 		}
 		physical, id := idgen.New("sw24-export-completion-")+"\x00tail", idgen.New("sw24-job-")
@@ -223,7 +223,7 @@ func TestScaleP21SW24ExportCompletionSourceHold(t *testing.T) {
 			var names []string
 			for _, source := range []*store.SQLiteStore{repo, probe} {
 				service := &server{store: source, authDisabled: true}
-				r := scaleP21SW24IdentityRequest(f.data.Viewer, nil, physical, "/api/exports")
+				r := installedIdentityRequest(f.data.Viewer, nil, physical, "/api/exports")
 				r.SetPathValue("id", id)
 				w := httptest.NewRecorder()
 				var jobs []domain.ExportJob
@@ -252,9 +252,9 @@ func TestScaleP21SW24ExportCompletionSourceHold(t *testing.T) {
 	}
 }
 
-// These two oracles retain the literal pre-SW20 methods' default selection.
+// These two oracles retain the literal pre-installed viewer and team lifecycle methods' default selection.
 // Their downstream permission code is unchanged by this patch.
-func (s *server) scaleP21SW24OldAuthorizedAgentTask(r *http.Request, id string, editing bool) (domain.AgentTask, domain.Bootstrap, error) {
+func (s *server) legacyAuthorizedAgentTask(r *http.Request, id string, editing bool) (domain.AgentTask, domain.Bootstrap, error) {
 	workspace := workspaceKey(r)
 	if workspace == "" {
 		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
@@ -278,7 +278,7 @@ func (s *server) scaleP21SW24OldAuthorizedAgentTask(r *http.Request, id string, 
 	return task, data, nil
 }
 
-func (s *server) scaleP21SW24OldListApplicationAgentTasks(w http.ResponseWriter, r *http.Request) {
+func (s *server) legacyListApplicationAgentTasks(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	issueID := r.URL.Query().Get("issueId")
 	resourceType := r.URL.Query().Get("resourceType")
@@ -319,7 +319,7 @@ func (s *server) scaleP21SW24OldListApplicationAgentTasks(w http.ResponseWriter,
 	}
 	visible := []domain.AgentTask{}
 	for _, task := range tasks {
-		if _, _, err := s.scaleP21SW24OldAuthorizedAgentTask(r, task.ID, false); err == nil {
+		if _, _, err := s.legacyAuthorizedAgentTask(r, task.ID, false); err == nil {
 			task.DeriveTimedState(time.Now())
 			visible = append(visible, task)
 		}

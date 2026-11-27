@@ -11,13 +11,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW3IntegrationProbeWithoutConnectionDifferential(t *testing.T) {
+func TestIntegrationProbeWithoutConnectionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	host := newFakeGitLab(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, test := range []struct {
 				name, provider, token string
@@ -58,7 +58,7 @@ func TestScaleP21SW3IntegrationProbeWithoutConnectionDifferential(t *testing.T) 
 						outcomes = append(outcomes, []any{w.Code, response})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("no-connection probe differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("no-connection probe differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}

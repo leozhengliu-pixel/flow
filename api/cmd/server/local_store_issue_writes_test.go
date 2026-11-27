@@ -14,9 +14,9 @@ import (
 
 func TestLocalStoreIssueWriteReplay(t *testing.T) {
 	enableLocalStoreShadowTest(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			origin, _ := url.Parse(f.host.URL)
 			created := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]string{
@@ -67,7 +67,7 @@ func TestLocalStoreIssueWriteReplay(t *testing.T) {
 			legacy := f.host.Config.Handler
 			send(t, legacy, viewer, "expired", "", "Expired authority", created.Version, http.StatusForbidden)
 			send(t, legacy, "wrong-viewer", access.AuthzEpoch, "", "Other account", created.Version, http.StatusForbidden)
-			token := scaleP03Key(t, f, []string{"read", "write"}, []string{f.data.Teams[0].ID})
+			token := scaleKey(t, f, []string{"read", "write"}, []string{f.data.Teams[0].ID})
 			send(t, legacy, viewer, access.AuthzEpoch, token, "Key cannot replay", created.Version, http.StatusForbidden)
 			// Issuance can change the access epoch.
 			access, err = repo.ResolveAccess(t.Context(), workspace, viewer, nil)

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21ApplicationSweepHooks(data domain.Bootstrap, resource string) []domain.Webhook {
+func scaleApplicationSweepHooks(data domain.Bootstrap, resource string) []domain.Webhook {
 	var result []domain.Webhook
 	for _, hook := range data.Webhooks {
 		if !hook.Enabled || !slices.Contains(hook.ResourceTypes, resource) ||
@@ -31,7 +31,7 @@ func scaleP21ApplicationSweepHooks(data domain.Bootstrap, resource string) []dom
 	return result
 }
 
-func TestScaleP21ApplicationWebhookSweepNative(t *testing.T) {
+func TestScaleApplicationWebhookSweepNative(t *testing.T) {
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("native", 7*3600+123))
 	first := domain.IssueSLA{ID: "duplicate", IssueID: "first-issue", RuleID: "first-rule", Status: "active", StartedAt: now.Add(-4 * time.Hour), DueAt: now.Add(time.Minute)}
 	last := domain.IssueSLA{ID: "duplicate", IssueID: "last-issue", RuleID: "last-rule", Status: "completed", StartedAt: now.Add(-time.Hour), DueAt: now.Add(time.Hour)}
@@ -62,12 +62,12 @@ func TestScaleP21ApplicationWebhookSweepNative(t *testing.T) {
 		Users:     []domain.User{{ID: "unused", JobTitle: wide}},
 		Documents: []domain.Document{{ID: "unused", Content: wide}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, workspace := range []string{"physical", ""} {
 		for _, resource := range []string{"app_user_notifications", "issue_sla"} {
 			read, found, err := view.BeginApplicationWebhookSweepRead(t.Context(), workspace, resource)
-			if err != nil || !found || !reflect.DeepEqual(read.Data.Webhooks, scaleP21ApplicationSweepHooks(data, resource)) || read.Data.Workspace.ID != data.Workspace.ID {
+			if err != nil || !found || !reflect.DeepEqual(read.Data.Webhooks, scaleApplicationSweepHooks(data, resource)) || read.Data.Workspace.ID != data.Workspace.ID {
 				t.Fatal("sweep hook eligibility/native values changed", workspace, resource, found, err)
 			}
 			if read.Data.Users != nil || read.Data.Documents != nil || view.metadataResidency.work.used == 0 {
@@ -107,10 +107,10 @@ func TestScaleP21ApplicationWebhookSweepNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationWebhookSweepCapturedAndFailure(t *testing.T) {
+func TestScaleApplicationWebhookSweepCapturedAndFailure(t *testing.T) {
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "old"}, SLAEvents: []domain.SLAEvent{{ID: "old", Type: "started", CreatedAt: now}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -171,10 +171,10 @@ func TestScaleP21ApplicationWebhookSweepCapturedAndFailure(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationWebhookSweepWarmReloadBodyBound(t *testing.T) {
+func TestScaleApplicationWebhookSweepWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -206,7 +206,7 @@ func TestScaleP21ApplicationWebhookSweepWarmReloadBodyBound(t *testing.T) {
 			sql := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { sql++ })
 			hooks, found, err := view.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
-			if err != nil || !found || !reflect.DeepEqual(hooks.Data.Webhooks, scaleP21ApplicationSweepHooks(before, "app_user_notifications")) {
+			if err != nil || !found || !reflect.DeepEqual(hooks.Data.Webhooks, scaleApplicationSweepHooks(before, "app_user_notifications")) {
 				t.Fatal("warm/reloaded hook header changed", scale, reload, found, err)
 			}
 			events, found, err := view.BeginApplicationSLAEventRead(ctx, workspace, now)

@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW49CommentPolicy(data domain.Bootstrap) any {
+func commentPolicy(data domain.Bootstrap) any {
 	result := struct {
 		HIPAA, PreventGuestAgents bool
 		Flags                     map[string]bool
@@ -32,10 +32,10 @@ func scaleP21SW49CommentPolicy(data domain.Bootstrap) any {
 	return result
 }
 
-func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
+func TestIssueAuthorizationCommentPolicy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 	for _, test := range []struct {
 		name       string
@@ -55,7 +55,7 @@ func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
 			}
 			for _, reload := range []bool{false, true} {
 				t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
-					view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, reload)
+					view := scaleIssueAuthorizationView(t, f.scaleFixture, reload)
 					want, err := f.PagedWorkspaceMetadata(t.Context(), workspace, userID)
 					if err != nil {
 						t.Fatal(err)
@@ -71,7 +71,7 @@ func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer read.Close()
-					if before, after := scaleP21SW49CommentPolicy(want), scaleP21SW49CommentPolicy(read.Data); !reflect.DeepEqual(before, after) {
+					if before, after := commentPolicy(want), commentPolicy(read.Data); !reflect.DeepEqual(before, after) {
 						t.Fatalf("comment policy differs:\nlegacy=%+v\nbounded=%+v", before, after)
 					}
 					if settings := read.Data.UserSettings[userID]; settings.UserID != "" || settings.AgentEnabled != test.preference.AgentEnabled ||
@@ -84,7 +84,7 @@ func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
 		})
 	}
 	t.Run("borrowed-caller-fallback", func(t *testing.T) {
-		view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+		view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 		caller, found := f.WorkspaceMetadata(workspace)
 		if !found {
 			t.Fatal("missing caller metadata")
@@ -115,7 +115,7 @@ func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer read.Close()
-		if before, after := scaleP21SW49CommentPolicy(want), scaleP21SW49CommentPolicy(read.Data); !reflect.DeepEqual(before, after) {
+		if before, after := commentPolicy(want), commentPolicy(read.Data); !reflect.DeepEqual(before, after) {
 			t.Fatalf("borrowed fallback differs:\nlegacy=%+v\nbounded=%+v", before, after)
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT 1`); err != nil {
@@ -124,12 +124,12 @@ func TestScaleP21SW49IssueAuthorizationCommentPolicy(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW49CurrentCommentActionSettings(t *testing.T) {
+func TestCurrentCommentActionSettings(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
-	view := scaleP21IssueAuthorizationView(t, f.scaleP09Fixture, false)
+	view := scaleIssueAuthorizationView(t, f.scaleFixture, false)
 	_, access, err := f.IssueQueryAccess(t.Context(), workspace, userID)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestScaleP21SW49CurrentCommentActionSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	snapshot := scaleP21SW49CommentPolicy(read.Data)
+	snapshot := commentPolicy(read.Data)
 	bound, err := read.Context(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -191,8 +191,8 @@ func TestScaleP21SW49CurrentCommentActionSettings(t *testing.T) {
 			if saved && settings.UserID != "" {
 				got.UserSettings = map[string]domain.UserSettings{userID: settings}
 			}
-			if !reflect.DeepEqual(scaleP21SW49CommentPolicy(want), scaleP21SW49CommentPolicy(got)) ||
-				!reflect.DeepEqual(snapshot, scaleP21SW49CommentPolicy(read.Data)) {
+			if !reflect.DeepEqual(commentPolicy(want), commentPolicy(got)) ||
+				!reflect.DeepEqual(snapshot, commentPolicy(read.Data)) {
 				t.Fatal("current override changed snapshot or empty/missing fallback")
 			}
 		})

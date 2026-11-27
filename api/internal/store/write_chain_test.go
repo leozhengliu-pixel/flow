@@ -14,19 +14,19 @@ import (
 	"flow/api/internal/domain"
 )
 
-// scaleP21SW293Logical returns the JSON of the named fields of the view's
+// logical returns the JSON of the named fields of the view's
 // installed logical generation of workspace, with its stamp.
-func scaleP21SW293Logical(t *testing.T, view *SQLiteStore, workspace string, fields ...string) (map[string]string, copyStamp) {
+func writeChainLogical(t *testing.T, view *SQLiteStore, workspace string, fields ...string) (map[string]string, copyStamp) {
 	t.Helper()
 	source, err := view.retainMetadataLogicalSource(metadataLogicalUnpinnedContext(t.Context()), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer source.Release()
-	return scaleP21SW293Fields(t, scaleP21SW28DecodeLogicalSource(t, source), fields...), source.Stamp()
+	return writeChainFields(t, decodeLogicalSource(t, source), fields...), source.Stamp()
 }
 
-func scaleP21SW293Fields(t *testing.T, data domain.Bootstrap, fields ...string) map[string]string {
+func writeChainFields(t *testing.T, data domain.Bootstrap, fields ...string) map[string]string {
 	t.Helper()
 	result := map[string]string{}
 	value := reflect.ValueOf(data)
@@ -44,7 +44,7 @@ func scaleP21SW293Fields(t *testing.T, data domain.Bootstrap, fields ...string) 
 	return result
 }
 
-func scaleP21SW293Policy(t *testing.T, view *SQLiteStore, workspace string) string {
+func writeChainPolicy(t *testing.T, view *SQLiteStore, workspace string) string {
 	t.Helper()
 	view.mu.RLock()
 	data := view.workspaces[workspace]
@@ -56,7 +56,7 @@ func scaleP21SW293Policy(t *testing.T, view *SQLiteStore, workspace string) stri
 	return string(raw)
 }
 
-func scaleP21SW293Row(t *testing.T, f scaleP09Fixture, workspace, field, key string) []byte {
+func writeChainRow(t *testing.T, f scaleFixture, workspace, field, key string) []byte {
 	t.Helper()
 	var raw []byte
 	err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, field, key).Scan(&raw)
@@ -69,17 +69,17 @@ func scaleP21SW293Row(t *testing.T, f scaleP09Fixture, workspace, field, key str
 	return raw
 }
 
-// TestScaleP21SW293APIKeyUseDifferential compares API key telemetry on the
+// TestAPIKeyUseDifferential compares API key telemetry on the
 // legacy store (patched resident copy) with a bounded store (patched logical
 // generation, policy copy untouched): warm state, canonical rows and the
 // state reloaded from SQL must be identical, including revoked records, key
 // or grant only, absent ids, duplicate ids stored inline (only the first is
 // patched, no row changes) and rows whose minute predicate skips the SQL
 // update while the resident copy still takes the use.
-func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
+func TestAPIKeyUseDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 	recent, past := at.Add(-30*time.Second), at.Add(-time.Hour)
@@ -128,10 +128,10 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 					t.Fatal(err)
 				}
 				data, _ := f.WorkspaceMetadata(workspace)
-				return scaleP21SW293Fields(t, data, fields...)
+				return writeChainFields(t, data, fields...)
 			}
 			rows := func() [][]byte {
-				return [][]byte{scaleP21SW293Row(t, f, workspace, "apiKeys", "sw293-key"), scaleP21SW293Row(t, f, workspace, "oauthAuthorizations", "sw293-grant")}
+				return [][]byte{writeChainRow(t, f, workspace, "apiKeys", "sw293-key"), writeChainRow(t, f, workspace, "oauthAuthorizations", "sw293-grant")}
 			}
 			reloaded := func() map[string]string {
 				t.Helper()
@@ -139,7 +139,7 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 					t.Fatal(err)
 				}
 				data, _ := f.WorkspaceMetadata(workspace)
-				return scaleP21SW293Fields(t, data, fields...)
+				return writeChainFields(t, data, fields...)
 			}
 
 			// Bounded: the logical generation takes the use, the policy copy
@@ -150,17 +150,17 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer view.releaseMetadataLogicalSources()
-			policy := scaleP21SW293Policy(t, view, workspace)
-			before, beforeStamp := scaleP21SW293Logical(t, view, workspace, fields...)
+			policy := writeChainPolicy(t, view, workspace)
+			before, beforeStamp := writeChainLogical(t, view, workspace, fields...)
 			if !reflect.DeepEqual(before, seeded) {
 				t.Fatalf("bounded view does not start from the seed: %v want %v", before, seeded)
 			}
 			if err := view.writeAPIKeyUse(t.Context(), test.use); err != nil {
 				t.Fatal(err)
 			}
-			boundedWarm, stamp := scaleP21SW293Logical(t, view, workspace, fields...)
+			boundedWarm, stamp := writeChainLogical(t, view, workspace, fields...)
 			boundedRows := rows()
-			if scaleP21SW293Policy(t, view, workspace) != policy || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
+			if writeChainPolicy(t, view, workspace) != policy || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
 				t.Fatal("bounded telemetry changed the policy copy, decoded the workspace or leaked work admission")
 			}
 			if test.changed != !reflect.DeepEqual(boundedWarm, before) {
@@ -178,7 +178,7 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer fresh.releaseMetadataLogicalSources()
-			freshLogical, _ := scaleP21SW293Logical(t, fresh, workspace, fields...)
+			freshLogical, _ := writeChainLogical(t, fresh, workspace, fields...)
 			if !reflect.DeepEqual(freshLogical, boundedSQL) {
 				t.Fatalf("bounded SQL-reloaded generation differs from the stored state:\n%v\n%v", freshLogical, boundedSQL)
 			}
@@ -191,7 +191,7 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			legacy, _ := f.WorkspaceMetadata(workspace)
-			legacyWarm, legacyRows := scaleP21SW293Fields(t, legacy, fields...), rows()
+			legacyWarm, legacyRows := writeChainFields(t, legacy, fields...), rows()
 			legacySQL := reloaded()
 
 			if !reflect.DeepEqual(legacyWarm, boundedWarm) {
@@ -214,10 +214,10 @@ func TestScaleP21SW293APIKeyUseDifferential(t *testing.T) {
 	}
 }
 
-// scaleP21SW293PeerEdit rewrites one stored record as another server would.
-func scaleP21SW293PeerEdit(t *testing.T, f scaleP09Fixture, workspace, field, key string, edit func(map[string]any)) {
+// peerEdit rewrites one stored record as another server would.
+func peerEdit(t *testing.T, f scaleFixture, workspace, field, key string, edit func(map[string]any)) {
 	t.Helper()
-	raw := scaleP21SW293Row(t, f, workspace, field, key)
+	raw := writeChainRow(t, f, workspace, field, key)
 	if raw == nil {
 		t.Fatalf("no stored %s %s", field, key)
 	}
@@ -241,9 +241,9 @@ func scaleP21SW293PeerEdit(t *testing.T, f scaleP09Fixture, workspace, field, ke
 	}
 }
 
-func scaleP21SW293PeerEditRaw(t *testing.T, f scaleP09Fixture, workspace, field, key string, edit func([]byte) []byte) {
+func peerEditRaw(t *testing.T, f scaleFixture, workspace, field, key string, edit func([]byte) []byte) {
 	t.Helper()
-	raw := scaleP21SW293Row(t, f, workspace, field, key)
+	raw := writeChainRow(t, f, workspace, field, key)
 	if raw == nil {
 		t.Fatalf("no stored %s %s", field, key)
 	}
@@ -252,7 +252,7 @@ func scaleP21SW293PeerEditRaw(t *testing.T, f scaleP09Fixture, workspace, field,
 	}
 }
 
-// TestScaleP21SW293ConflictRefreshDifferential compares the conflict refresh
+// TestConflictRefreshDifferential compares the conflict refresh
 // (refreshConflictedMetadata) and the record refresh (RefreshMetadataRecord)
 // of the legacy store with a bounded store after another server changed,
 // deleted or renamed records: projects, a policy team, an agent session, a
@@ -260,10 +260,10 @@ func scaleP21SW293PeerEditRaw(t *testing.T, f scaleP09Fixture, workspace, field,
 // bounded store refreshes its logical generation (unknown stamp) and its
 // policy copy only through the policy projection; it never copies records
 // into the policy copy and never decodes the workspace.
-func TestScaleP21SW293ConflictRefreshDifferential(t *testing.T) {
+func TestConflictRefreshDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 	team := f.data.Teams[0]
@@ -288,7 +288,7 @@ func TestScaleP21SW293ConflictRefreshDifferential(t *testing.T) {
 	}
 	defer view.releaseMetadataLogicalSources()
 	legacyBefore, _ := f.WorkspaceMetadata(workspace)
-	if before, _ := scaleP21SW293Logical(t, view, workspace, fields...); !reflect.DeepEqual(before, scaleP21SW293Fields(t, legacyBefore, fields...)) {
+	if before, _ := writeChainLogical(t, view, workspace, fields...); !reflect.DeepEqual(before, writeChainFields(t, legacyBefore, fields...)) {
 		t.Fatal("bounded view does not start from the legacy copy")
 	}
 	// The stored state is what a legacy reload reads (after the legacy
@@ -299,15 +299,15 @@ func TestScaleP21SW293ConflictRefreshDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		data, _ := f.WorkspaceMetadata(workspace)
-		return scaleP21SW293Fields(t, data, fields...)
+		return writeChainFields(t, data, fields...)
 	}
 
-	scaleP21SW293PeerEdit(t, f, workspace, "projects", "sw293-project-1", func(record map[string]any) { record["name"] = "Peer renamed" })
-	scaleP21SW293PeerEdit(t, f, workspace, "projects", "sw293-project-2", nil)
-	scaleP21SW293PeerEdit(t, f, workspace, "teams", team.ID, func(record map[string]any) { record["name"] = "Peer team" })
-	scaleP21SW293PeerEdit(t, f, workspace, "agentSessions", "sw293-session", func(record map[string]any) { record["title"] = "Peer title" })
+	peerEdit(t, f, workspace, "projects", "sw293-project-1", func(record map[string]any) { record["name"] = "Peer renamed" })
+	peerEdit(t, f, workspace, "projects", "sw293-project-2", nil)
+	peerEdit(t, f, workspace, "teams", team.ID, func(record map[string]any) { record["name"] = "Peer team" })
+	peerEdit(t, f, workspace, "agentSessions", "sw293-session", func(record map[string]any) { record["title"] = "Peer title" })
 	updateKey := metadataRecordKeyFor("projectUpdates", "sw293-project-1", "sw293-update")
-	scaleP21SW293PeerEditRaw(t, f, workspace, "projectUpdates", updateKey, func(raw []byte) []byte { return bytes.Replace(raw, []byte("Original"), []byte("Peer body"), 1) })
+	peerEditRaw(t, f, workspace, "projectUpdates", updateKey, func(raw []byte) []byte { return bytes.Replace(raw, []byte("Original"), []byte("Peer body"), 1) })
 	conflict := &metadataConflictError{keys: []metadataRecordKey{
 		{"projects", "sw293-project-1"}, {"projects", "sw293-project-2"}, {"teams", team.ID},
 		{"projectUpdates", updateKey}, {"sw293Unknown", "x"}, {"agentSessions", "sw293-session"}, {"projects", "sw293-missing"},
@@ -325,8 +325,8 @@ func TestScaleP21SW293ConflictRefreshDifferential(t *testing.T) {
 		}
 	}
 	legacy, _ := f.WorkspaceMetadata(workspace)
-	legacyFields := scaleP21SW293Fields(t, legacy, fields...)
-	boundedFields, stamp := scaleP21SW293Logical(t, view, workspace, fields...)
+	legacyFields := writeChainFields(t, legacy, fields...)
+	boundedFields, stamp := writeChainLogical(t, view, workspace, fields...)
 	if !reflect.DeepEqual(legacyFields, boundedFields) {
 		t.Fatalf("refreshed records differ\nlegacy=%v\nbounded=%v", legacyFields, boundedFields)
 	}
@@ -353,29 +353,29 @@ func TestScaleP21SW293ConflictRefreshDifferential(t *testing.T) {
 	}
 
 	// A single-record refresh (another server undid an agent reply).
-	scaleP21SW293PeerEdit(t, f, workspace, "agentSessions", "sw293-session", func(record map[string]any) { record["title"] = "Peer again" })
+	peerEdit(t, f, workspace, "agentSessions", "sw293-session", func(record map[string]any) { record["title"] = "Peer again" })
 	for _, repo := range []*SQLiteStore{f.SQLiteStore, view} {
 		if err := repo.RefreshMetadataRecord(t.Context(), workspace, "agentSessions", "sw293-session"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	legacy, _ = f.WorkspaceMetadata(workspace)
-	boundedFields, _ = scaleP21SW293Logical(t, view, workspace, fields...)
-	if got, want := boundedFields["agentSessions"], scaleP21SW293Fields(t, legacy, "agentSessions")["agentSessions"]; got != want || got != stored()["agentSessions"] {
+	boundedFields, _ = writeChainLogical(t, view, workspace, fields...)
+	if got, want := boundedFields["agentSessions"], writeChainFields(t, legacy, "agentSessions")["agentSessions"]; got != want || got != stored()["agentSessions"] {
 		t.Fatalf("record refresh differs\nbounded=%s\nlegacy=%s", got, want)
 	}
 }
 
-// TestScaleP21SW293IssueUpdateConflictRetry runs a HOT issue update whose
+// TestIssueUpdateConflictRetry runs a HOT issue update whose
 // first attempt conflicts on a project another server renamed, on the legacy
 // store and on a bounded store: both rerun once on the stored project and
 // return the same issue; the bounded store's retry base is its refreshed
 // logical generation, never a policy copy with records patched in.
-func TestScaleP21SW293IssueUpdateConflictRetry(t *testing.T) {
+func TestIssueUpdateConflictRetry(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 	var issues []domain.Issue
@@ -396,12 +396,12 @@ func TestScaleP21SW293IssueUpdateConflictRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
-	policy := scaleP21SW293Policy(t, view, workspace)
+	policy := writeChainPolicy(t, view, workspace)
 	input := domain.IssueUpdateInput{Title: new("Retried")}
 	var outputs []domain.Issue
 	for index, repo := range []*SQLiteStore{f.SQLiteStore, view} {
 		name := fmt.Sprint("Peer renamed ", index)
-		scaleP21SW293PeerEdit(t, f, workspace, "projects", "sw293-retry-project", func(record map[string]any) { record["name"] = name })
+		peerEdit(t, f, workspace, "projects", "sw293-retry-project", func(record map[string]any) { record["name"] = name })
 		attempts := 0
 		output, err := repo.UpdateIssueRecord(t.Context(), workspace, issues[index].ID, &issues[index].Version, IssueMutationScope{Payload: input}, func(data *domain.Bootstrap, current *domain.Issue) error {
 			attempts++
@@ -418,9 +418,9 @@ func TestScaleP21SW293IssueUpdateConflictRetry(t *testing.T) {
 		var projects string
 		if index == 0 {
 			legacy, _ := f.WorkspaceMetadata(workspace)
-			projects = scaleP21SW293Fields(t, legacy, "projects")["projects"]
+			projects = writeChainFields(t, legacy, "projects")["projects"]
 		} else {
-			logical, _ := scaleP21SW293Logical(t, view, workspace, "projects")
+			logical, _ := writeChainLogical(t, view, workspace, "projects")
 			projects = logical["projects"]
 		}
 		if !bytes.Contains([]byte(projects), []byte(`"name":"`+name+`"`)) {
@@ -432,7 +432,7 @@ func TestScaleP21SW293IssueUpdateConflictRetry(t *testing.T) {
 	if !reflect.DeepEqual(outputs[0], outputs[1]) {
 		t.Fatalf("legacy and bounded retries differ\n%+v\n%+v", outputs[0], outputs[1])
 	}
-	if scaleP21SW293Policy(t, view, workspace) != policy || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
+	if writeChainPolicy(t, view, workspace) != policy || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
 		t.Fatal("bounded retry changed the policy copy, decoded the workspace or leaked work admission")
 	}
 }

@@ -14,35 +14,35 @@ import (
 	"flow/api/internal/domain"
 )
 
-type p06SQLConnector struct {
+type sqlConnector struct {
 	base  driver.Driver
 	path  string
 	count *atomic.Int64
 }
 
-func (c p06SQLConnector) Driver() driver.Driver { return c.base }
-func (c p06SQLConnector) Connect(context.Context) (driver.Conn, error) {
+func (c sqlConnector) Driver() driver.Driver { return c.base }
+func (c sqlConnector) Connect(context.Context) (driver.Conn, error) {
 	conn, err := c.base.Open(c.path)
 	if err != nil {
 		return nil, err
 	}
-	return p06SQLConn{conn, c.count}, nil
+	return sqlConn{conn, c.count}, nil
 }
 
-type p06SQLConn struct {
+type sqlConn struct {
 	driver.Conn
 	count *atomic.Int64
 }
 
-func (c p06SQLConn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
+func (c sqlConn) QueryContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
 	c.count.Add(1)
 	return c.Conn.(driver.QueryerContext).QueryContext(ctx, q, args)
 }
-func (c p06SQLConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
+func (c sqlConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
 	c.count.Add(1)
 	return c.Conn.(driver.ExecerContext).ExecContext(ctx, q, args)
 }
-func (c p06SQLConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
+func (c sqlConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
 	c.count.Add(1)
 	var tx driver.Tx
 	var err error
@@ -54,18 +54,18 @@ func (c p06SQLConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx,
 	if err != nil {
 		return nil, err
 	}
-	return p06SQLTx{tx, c.count}, nil
+	return pagingSqlTx{tx, c.count}, nil
 }
 
-type p06SQLTx struct {
+type pagingSqlTx struct {
 	driver.Tx
 	count *atomic.Int64
 }
 
-func (tx p06SQLTx) Commit() error   { tx.count.Add(1); return tx.Tx.Commit() }
-func (tx p06SQLTx) Rollback() error { tx.count.Add(1); return tx.Tx.Rollback() }
+func (tx pagingSqlTx) Commit() error   { tx.count.Add(1); return tx.Tx.Commit() }
+func (tx pagingSqlTx) Rollback() error { tx.count.Add(1); return tx.Tx.Rollback() }
 
-func TestScaleP06Replay500SQLBudget(t *testing.T) {
+func TestScaleReplay500SQLBudget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "counts.db")
 	fixture, err := OpenSQLiteTestFixture(path)
 	if err != nil {
@@ -76,7 +76,7 @@ func TestScaleP06Replay500SQLBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	var statements atomic.Int64
-	db := sql.OpenDB(p06SQLConnector{base, path, &statements})
+	db := sql.OpenDB(sqlConnector{base, path, &statements})
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	repo := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: "sqlite"}, dialect: "sqlite"}
@@ -129,7 +129,7 @@ func TestScaleP06Replay500SQLBudget(t *testing.T) {
 	t.Logf("500-event replay SQL statements: before=%d after=%d", before, after)
 }
 
-func TestScaleP06CollaborationPagesRestartOnCompaction(t *testing.T) {
+func TestScaleCollaborationPagesRestartOnCompaction(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "recovery.db"))
 	if err != nil {
 		t.Fatal(err)

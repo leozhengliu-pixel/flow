@@ -23,8 +23,8 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
-	config := scaleP03DatabaseConfig(t)
+func TestScaleRecipientPermissionDifferential(t *testing.T) {
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	if config.Driver == "sqlite" {
 		config.MaxOpenConns = 1
 	}
@@ -35,7 +35,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 	t.Cleanup(func() { _ = repo.Close() })
 	for driver, repo := range map[string]*store.SQLiteStore{config.Driver: repo} {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			private, child := idgen.New("p14-private-"), idgen.New("p14-child-")
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -63,11 +63,11 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 				{"admin-private-outsider", "admin", nil}, {"member-private-outsider", "member", nil},
 				{"guest-explicit-grant", "guest", []string{private}}, {"sub-team-inheritance", "member", []string{child}},
 			} {
-				client, user := scaleP03Join(t, f, item.name, idgen.New("p14-")+"@example.test", item.role, item.teams...)
+				client, user := resourceAccessScaleJoin(t, f, item.name, idgen.New("p14-")+"@example.test", item.role, item.teams...)
 				principals = append(principals, principal{name: item.name, client: client, user: user})
 			}
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{private})
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{private})
 			empty := idgen.New("p14-empty-")
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p14.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: idgen.New("p14-key-"), SecretHash: secretHash(empty), CreatorID: f.data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -84,8 +84,8 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 			}
 			for _, p := range principals {
 				t.Run(p.name, func(t *testing.T) {
-					legacy := scaleP03Read(t, f, p.client, p.token, http.MethodGet, "/api/notifications?limit=1", workspace)
-					next := scaleP14StateRequest(t, f, p.client, p.token, workspace)
+					legacy := resourceAccessScaleRead(t, f, p.client, p.token, http.MethodGet, "/api/notifications?limit=1", workspace)
+					next := scaleStateRequest(t, f, p.client, p.token, workspace)
 					if next.Code != legacy.Code {
 						t.Fatalf("status changed: legacy=%d state=%d body=%s", legacy.Code, next.Code, next.Body)
 					}
@@ -120,7 +120,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.resources.workspaces = append(f.resources.workspaces, other.Workspace.URLKey)
-			outside := scaleP14StateRequest(t, f, principals[1].client, "", other.Workspace.URLKey)
+			outside := scaleStateRequest(t, f, principals[1].client, "", other.Workspace.URLKey)
 			if outside.Code != http.StatusForbidden {
 				t.Fatalf("cross-workspace read=%d", outside.Code)
 			}
@@ -173,7 +173,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 				if visible || err == nil {
 					t.Fatalf("old credential projection survived revocation: %v %v", visible, err)
 				}
-				if got := scaleP14StateRequest(t, f, nil, selected, workspace).Code; got != http.StatusUnauthorized {
+				if got := scaleStateRequest(t, f, nil, selected, workspace).Code; got != http.StatusUnauthorized {
 					t.Fatalf("revoked credential GET = %d", got)
 				}
 			})
@@ -201,11 +201,11 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 	}
 }
 
-func scaleP14StateRequest(t *testing.T, f scaleP03PlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
-	return scaleP14StateRequestContext(t, t.Context(), f, client, bearer, workspace)
+func scaleStateRequest(t *testing.T, f scalePlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
+	return scaleStateRequestContext(t, t.Context(), f, client, bearer, workspace)
 }
 
-func scaleP14StateRequestContext(t *testing.T, ctx context.Context, f scaleP03PlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
+func scaleStateRequestContext(t *testing.T, ctx context.Context, f scalePlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/api/notifications/state?recipientId=someone-else", nil).WithContext(ctx)
 	r.Header.Set("X-Workspace-Key", workspace)
@@ -226,7 +226,7 @@ func scaleP14StateRequestContext(t *testing.T, ctx context.Context, f scaleP03Pl
 // Every producer of notification records and every in-place lifecycle edit is
 // listed, including the indirect mention, Agent reply and bulk producers.
 // New producers fail this inventory until their writer path is reviewed.
-func TestScaleP14BusinessWriterInventory(t *testing.T) {
+func TestScaleBusinessWriterInventory(t *testing.T) {
 	expected := []string{
 		"disableFailingWebhook", "applyCodeReviewEvent", "slackWebhook", "notifyUpdateAuthor", "trashIssue", "restoreIssueLinks",
 		"appendProjectUpdateReminders", "archiveProjectUpdateReminders", "notifyApprovers", "appendDocumentNotifications", "appendAgentReplyNotifications",
@@ -279,7 +279,7 @@ func TestScaleP14BusinessWriterInventory(t *testing.T) {
 	}
 }
 
-func TestScaleP14NotificationStateWire(t *testing.T) {
+func TestScaleNotificationStateWire(t *testing.T) {
 	state := store.NotificationState{Revision: "9007199254740993", UnreadCount: 3}
 	event := notificationStateRealtimeEvent("event", "recipient", state)
 	if event.Type != store.NotificationStateEvent || event.AggregateID != "recipient" || event.ActorID != "" {

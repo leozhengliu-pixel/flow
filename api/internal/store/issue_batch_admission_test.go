@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW184IssueBatchEncodingOwnership(t *testing.T) {
+func TestIssueBatchEncodingOwnership(t *testing.T) {
 	s := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	issue := domain.Issue{ID: "sw184", Description: strings.Repeat("\x00<&", 8192)}
 	check := func(t *testing.T, reserve func(context.Context) (func(), error)) {
@@ -71,9 +71,9 @@ func TestScaleP21SW184IssueBatchEncodingOwnership(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW184IssueBatchEncodingFlush(t *testing.T) {
+func TestIssueBatchEncodingFlush(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	prefix := idgen.New("sw184-flush-")
 	var issues []domain.Issue

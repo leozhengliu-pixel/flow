@@ -159,7 +159,7 @@ func metadataRetryDocumentStruct(ctx context.Context, s *SQLiteStore, frames *me
 type metadataRetryDocumentRevisions struct {
 	store   *SQLiteStore
 	frames  *metadataLogicalBuilder
-	stage   *sw26MigrationStage
+	stage   *migrationStage
 	owner   *ResourceRead
 	length  int
 	present bool
@@ -192,7 +192,7 @@ func (r *metadataRetryDocumentRevisions) initialize(ctx context.Context) error {
 		return err
 	}
 	var err error
-	r.stage, err = sw26NewMigrationStage(ctx)
+	r.stage, err = newMigrationStage(ctx)
 	if err != nil {
 		return err
 	}

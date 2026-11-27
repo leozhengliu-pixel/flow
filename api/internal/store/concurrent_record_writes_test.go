@@ -68,7 +68,7 @@ func peerStoreSets(t *testing.T) map[string][2]*SQLiteStore {
 // issue-record transaction, as POST /api/issues does.
 func createPeerIssue(t *testing.T, repo *SQLiteStore, workspace, id string, template domain.Issue) domain.Issue {
 	t.Helper()
-	ctx := WithIssueRecordMutations(scaleP21ResourceOutputContext(t))
+	ctx := WithIssueRecordMutations(scaleResourceOutputContext(t))
 	input := domain.IssueCreateInput{
 		TeamID: template.Team.ID, Title: template.Title, Description: template.Description,
 	}

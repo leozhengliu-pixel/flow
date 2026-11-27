@@ -20,9 +20,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW164Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW145Fixture {
+func generalBootstrapSeed(t *testing.T, repo *store.SQLiteStore) issueBootstrapRoutesFixture {
 	t.Helper()
-	f := scaleP21SW145Seed(t, repo)
+	f := issueBootstrapRoutesSeed(t, repo)
 	at := time.Date(2026, 11, 15, 12, 13, 14, 123456789, time.UTC)
 	restore := store.ForceFullMutationsForTesting(true)
 	err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw164_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -78,29 +78,29 @@ func scaleP21SW164Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW145Fixtu
 	return f
 }
 
-type scaleP21SW164Case struct {
-	scaleP21SW145Case
+type generalBootstrapCase struct {
+	issueBootstrapRoutesCase
 	cancelBefore, cancelAtHeader bool
 	synthesizedMembers           bool
 	sourceClass                  string
 	atHeader                     func()
 }
 
-type scaleP21SW164Trace struct {
-	scaleP21SW145Trace
+type generalBootstrapTrace struct {
+	issueBootstrapRoutesTrace
 	headerSeen, aborted         bool
 	contentBefore, contentAfter int
 	issueAfter, statements      int
 	started, ended              time.Time
 }
 
-type scaleP21SW164Producer struct {
-	*scaleP21SW145Producer
-	trace *scaleP21SW164Trace
+type generalBootstrapProducer struct {
+	*issueBootstrapRoutesProducer
+	trace *generalBootstrapTrace
 	hook  func()
 }
 
-func (w *scaleP21SW164Producer) WriteHeader(code int) {
+func (w *generalBootstrapProducer) WriteHeader(code int) {
 	if code == http.StatusOK && !w.trace.headerSeen {
 		if w.hook != nil && w.trace.contentBefore != 0 {
 			w.t.Fatal("snapshot/cancel hook followed a content-body query")
@@ -110,23 +110,23 @@ func (w *scaleP21SW164Producer) WriteHeader(code int) {
 			w.hook()
 		}
 	}
-	w.scaleP21SW145Producer.WriteHeader(code)
+	w.issueBootstrapRoutesProducer.WriteHeader(code)
 }
 
-type scaleP21SW164Network struct {
-	*scaleP21SW145Network
+type generalBootstrapNetwork struct {
+	*issueBootstrapRoutesNetwork
 	t      *testing.T
 	source *store.SQLiteStore
 }
 
-func (w *scaleP21SW164Network) Write(raw []byte) (int, error) {
+func (w *generalBootstrapNetwork) Write(raw []byte) (int, error) {
 	if w.trace.producerDone && w.source.BoundedMetadataEnabled() && w.source.MetadataWorkUsedForTesting() != 0 {
 		w.t.Fatal("bootstrap transport replay retained producer metadata")
 	}
-	return w.scaleP21SW145Network.Write(raw)
+	return w.issueBootstrapRoutesNetwork.Write(raw)
 }
 
-func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLiteStore, test scaleP21SW164Case) (scaleP21SW145Response, scaleP21SW164Trace) {
+func generalBootstrapServe(t *testing.T, f issueBootstrapRoutesFixture, source *store.SQLiteStore, test generalBootstrapCase) (issueBootstrapRoutesResponse, generalBootstrapTrace) {
 	t.Helper()
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(test.spool))
 	directory := t.TempDir()
@@ -143,7 +143,7 @@ func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	}
 	ctx, cancel := context.WithCancel(request.Context())
 	defer cancel()
-	trace := scaleP21SW164Trace{}
+	trace := generalBootstrapTrace{}
 	ctx = store.WithSQLStatementObserver(ctx, func(query string) {
 		trace.statements++
 		if strings.Contains(query, "workspace_content_records") {
@@ -160,9 +160,9 @@ func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	request, closeOutput := beginRequestResourceReads(request.WithContext(ctx))
 	defer closeOutput()
 	trace.scope, _ = request.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
-	writer := &scaleP21SW164Network{
-		scaleP21SW145Network: &scaleP21SW145Network{ResponseRecorder: httptest.NewRecorder(), trace: &trace.scaleP21SW145Trace},
-		t:                    t, source: source,
+	writer := &generalBootstrapNetwork{
+		issueBootstrapRoutesNetwork: &issueBootstrapRoutesNetwork{ResponseRecorder: httptest.NewRecorder(), trace: &trace.issueBootstrapRoutesTrace},
+		t:                           t, source: source,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/bootstrap", serializeLegacyBootstrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -176,9 +176,9 @@ func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 		if test.cancelAtHeader {
 			hook = cancel
 		}
-		producer := &scaleP21SW164Producer{
-			scaleP21SW145Producer: &scaleP21SW145Producer{ResponseWriter: w, t: t, source: source, trace: &trace.scaleP21SW145Trace},
-			trace:                 &trace, hook: hook,
+		producer := &generalBootstrapProducer{
+			issueBootstrapRoutesProducer: &issueBootstrapRoutesProducer{ResponseWriter: w, t: t, source: source, trace: &trace.issueBootstrapRoutesTrace},
+			trace:                        &trace, hook: hook,
 		}
 		defer func() { trace.producerDone = true }()
 		service.bootstrap(producer, r)
@@ -218,12 +218,12 @@ func scaleP21SW164Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	}
 	header := writer.Header().Clone()
 	for index, value := range header["Server-Timing"] {
-		header["Server-Timing"][index] = scaleP21SW145TimingDuration.ReplaceAllString(value, "${1}<duration>")
+		header["Server-Timing"][index] = timingDuration.ReplaceAllString(value, "${1}<duration>")
 	}
-	return scaleP21SW145Response{writer.Code, header, bytes.Clone(writer.Body.Bytes())}, trace
+	return issueBootstrapRoutesResponse{writer.Code, header, bytes.Clone(writer.Body.Bytes())}, trace
 }
 
-func scaleP21SW164Decode(t *testing.T, raw []byte) any {
+func generalBootstrapDecode(t *testing.T, raw []byte) any {
 	t.Helper()
 	if len(raw) == 0 {
 		return nil
@@ -240,7 +240,7 @@ func scaleP21SW164Decode(t *testing.T, raw []byte) any {
 	return value
 }
 
-func scaleP21SW164DevelopmentClock(t *testing.T, value any, trace scaleP21SW164Trace) {
+func developmentClock(t *testing.T, value any, trace generalBootstrapTrace) {
 	t.Helper()
 	root := value.(map[string]any)
 	viewerID := root["viewer"].(map[string]any)["id"]
@@ -269,7 +269,7 @@ func scaleP21SW164DevelopmentClock(t *testing.T, value any, trace scaleP21SW164T
 	}
 }
 
-func scaleP21SW164Members(t *testing.T, repo, view *store.SQLiteStore, workspace string, synthesized bool) {
+func generalBootstrapMembers(t *testing.T, repo, view *store.SQLiteStore, workspace string, synthesized bool) {
 	t.Helper()
 	restore := store.ForceFullMutationsForTesting(true)
 	err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw164_members", "", nil, func(data *domain.Bootstrap) error {
@@ -296,18 +296,18 @@ func scaleP21SW164Members(t *testing.T, repo, view *store.SQLiteStore, workspace
 	}
 }
 
-func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
+func TestGeneralBootstrapHTTP(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "sw164-fixed-signing-fixture")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21SW164Seed(t, repo)
+	f := generalBootstrapSeed(t, repo)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -316,12 +316,12 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	compare := func(t *testing.T, test scaleP21SW164Case) (scaleP21SW145Response, scaleP21SW164Trace) {
+	compare := func(t *testing.T, test generalBootstrapCase) (issueBootstrapRoutesResponse, generalBootstrapTrace) {
 		t.Helper()
 		legacyCase := test
 		legacyCase.atHeader = nil
-		old, oldTrace := scaleP21SW164Serve(t, f, repo, legacyCase)
-		bounded, boundedTrace := scaleP21SW164Serve(t, f, view, test)
+		old, oldTrace := generalBootstrapServe(t, f, repo, legacyCase)
+		bounded, boundedTrace := generalBootstrapServe(t, f, view, test)
 		if old.status != bounded.status || !reflect.DeepEqual(old.header, bounded.header) || oldTrace.aborted != boundedTrace.aborted {
 			t.Fatalf("actual /api/bootstrap status/headers/error differ: status=%d/%d headers=%v/%v aborted=%t/%t legacy_prefix=%s bounded_prefix=%s",
 				old.status, bounded.status, old.header, bounded.header, oldTrace.aborted, boundedTrace.aborted,
@@ -332,14 +332,14 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 				t.Fatalf("canceled bootstrap output/error prefix differs: legacy=%s bounded=%s", old.body[:min(300, len(old.body))], bounded.body[:min(300, len(bounded.body))])
 			}
 		} else {
-			oldJSON, boundedJSON := scaleP21SW164Decode(t, old.body), scaleP21SW164Decode(t, bounded.body)
+			oldJSON, boundedJSON := generalBootstrapDecode(t, old.body), generalBootstrapDecode(t, bounded.body)
 			if test.synthesizedMembers {
-				scaleP21SW164DevelopmentClock(t, oldJSON, oldTrace)
-				scaleP21SW164DevelopmentClock(t, boundedJSON, boundedTrace)
+				developmentClock(t, oldJSON, oldTrace)
+				developmentClock(t, boundedJSON, boundedTrace)
 				t.Log("development synthesis: only viewer member.LastSeenAt is request-interval validated before substitution; all other fields and timestamps compare exactly")
 			}
 			if !reflect.DeepEqual(oldJSON, boundedJSON) {
-				t.Fatal("complete decoded bootstrap/error output differs", scaleP21M2Diff(oldJSON, boundedJSON))
+				t.Fatal("complete decoded bootstrap/error output differs", policyFirstDifference(oldJSON, boundedJSON))
 			}
 		}
 		if test.cancelBefore || test.cancelAtHeader || strings.HasSuffix(test.workspace, "-missing") {
@@ -403,7 +403,7 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 	f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 		for _, projection := range []string{"", "lean"} {
 			t.Run("projection="+projection, func(t *testing.T) {
-				compare(t, scaleP21SW164Case{scaleP21SW145Case: scaleP21SW145Case{workspace: workspace, projection: projection, user: user, key: key, spool: 32 << 20}, sourceClass: "initial-unknown-stamp-canonical-fallback"})
+				compare(t, generalBootstrapCase{issueBootstrapRoutesCase: issueBootstrapRoutesCase{workspace: workspace, projection: projection, user: user, key: key, spool: 32 << 20}, sourceClass: "initial-unknown-stamp-canonical-fallback"})
 			})
 		}
 	})
@@ -412,7 +412,7 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 			t.Run(mode+"/projection="+projection, func(t *testing.T) {
 				development := mode == "development" || mode == "development-synthesis"
 				if development {
-					scaleP21SW164Members(t, repo, view, workspace, mode == "development-synthesis")
+					generalBootstrapMembers(t, repo, view, workspace, mode == "development-synthesis")
 				}
 				if mode == "reloaded" {
 					if err := repo.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
@@ -425,7 +425,7 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				test := scaleP21SW164Case{scaleP21SW145Case: scaleP21SW145Case{workspace: workspace, projection: projection, user: f.data.Viewer, spool: 32 << 20, development: development, signed: mode == "signed"}, synthesizedMembers: mode == "development-synthesis", sourceClass: "fixture-current"}
+				test := generalBootstrapCase{issueBootstrapRoutesCase: issueBootstrapRoutesCase{workspace: workspace, projection: projection, user: f.data.Viewer, spool: 32 << 20, development: development, signed: mode == "signed"}, synthesizedMembers: mode == "development-synthesis", sourceClass: "fixture-current"}
 				if development {
 					test.user = domain.User{}
 				}
@@ -441,12 +441,12 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 	}
 	for _, spool := range []int{0, 1024} {
 		t.Run(fmt.Sprintf("signed-spool-%d", spool), func(t *testing.T) {
-			compare(t, scaleP21SW164Case{scaleP21SW145Case: scaleP21SW145Case{workspace: workspace, user: f.data.Viewer, signed: true, spool: spool}})
+			compare(t, generalBootstrapCase{issueBootstrapRoutesCase: issueBootstrapRoutesCase{workspace: workspace, user: f.data.Viewer, signed: true, spool: spool}})
 		})
 	}
 	for _, mode := range []string{"missing-workspace", "cancel-before", "cancel-at-header"} {
 		t.Run(mode, func(t *testing.T) {
-			test := scaleP21SW164Case{scaleP21SW145Case: scaleP21SW145Case{workspace: workspace, user: f.data.Viewer, spool: 0}, cancelBefore: mode == "cancel-before", cancelAtHeader: mode == "cancel-at-header"}
+			test := generalBootstrapCase{issueBootstrapRoutesCase: issueBootstrapRoutesCase{workspace: workspace, user: f.data.Viewer, spool: 0}, cancelBefore: mode == "cancel-before", cancelAtHeader: mode == "cancel-at-header"}
 			if mode == "missing-workspace" {
 				test.workspace += "-missing"
 			}
@@ -463,7 +463,7 @@ func TestScaleP21SW164GeneralBootstrapHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		changed := false
-		test := scaleP21SW164Case{scaleP21SW145Case: scaleP21SW145Case{workspace: workspace, user: f.data.Viewer, spool: 0}}
+		test := generalBootstrapCase{issueBootstrapRoutesCase: issueBootstrapRoutesCase{workspace: workspace, user: f.data.Viewer, spool: 0}}
 		test.atHeader = func() {
 			changed = true
 			restore := store.ForceFullMutationsForTesting(true)

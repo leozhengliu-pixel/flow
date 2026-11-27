@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// The SW292 guard closes the legacy write/install/refresh chain of the
+// This guard closes the legacy write/install/refresh chain of the
 // resident workspace copy: installWrittenWorkspaceLocked, refreshWorkspaceCopy,
 // refreshWorkspaceCopyLocked, setWorkspaceLocked (metadata_copy_revision.go)
 // and refreshMetadataRecords (metadata_record_merge.go). They stay the literal
@@ -28,8 +28,7 @@ import (
 // execute them with FLOW_BOUNDED_METADATA on. Cold hooks are not evidence:
 // only the flag-on reference graph is.
 //
-// The walker is the SW286 store-wrapper walker (review/scale-p21-store-
-// bootstrap-wrappers), copied under this test's prefix so that the two
+// The store-wrapper walker is copied under this test's prefix so that the two
 // guards land independently. Both packages are parsed (non-test files only)
 // and type-checked with go/types: internal/store first, then cmd/server
 // against that exact store package, so s.store.X resolves to the one
@@ -69,7 +68,7 @@ import (
 // if s.metadataResidency != nil { return ... } is flag-off-only.
 //
 // For each target the guard walks every flag-on reference backwards,
-// stopping at route registrations, at the pinned scaleP21SW292Boundaries and
+// stopping at route registrations, at the pinned writeChainBoundaryBoundaries and
 // at allow-listed consumers. Every inventory consumer it meets whose
 // temperature is hot is a HOT reacher, except the closed consumers (HOT
 // inventory entries that nothing references with the flag on, proven here
@@ -80,16 +79,16 @@ import (
 // shrinks as the migrations land. A target is reviewed in the inventory
 // exactly when no allow-list entry names it.
 
-var scaleP21SW292Root = "."
+var writeChainBoundaryRoot = "."
 
-type scaleP21SW292Func struct {
+type writeChainBoundaryFunc struct {
 	key, pkg, file string
 	decl           *ast.FuncDecl
 	imports        map[string]bool // the file's import names
 	scope          *types.Scope    // the package scope
 }
 
-type scaleP21SW292Ref struct {
+type writeChainBoundaryRef struct {
 	from, to, file string
 	line           int
 	kind           string // call, value or route
@@ -100,14 +99,14 @@ type scaleP21SW292Ref struct {
 	pattern        string
 }
 
-type scaleP21SW292Graph struct {
+type writeChainBoundaryGraph struct {
 	fset      *token.FileSet
 	info      *types.Info
 	pkgs      map[*types.Package]string // package -> server or store
-	funcs     map[string]*scaleP21SW292Func
+	funcs     map[string]*writeChainBoundaryFunc
 	byName    map[string][]string
 	named     []*types.Named
-	refs      []scaleP21SW292Ref
+	refs      []writeChainBoundaryRef
 	into      map[string][]int
 	pkgLevel  map[string][]string
 	onTrue    map[string]bool
@@ -124,17 +123,17 @@ type scaleP21SW292Graph struct {
 
 // enter makes fn the function whose identifiers are being resolved and
 // returns the restore of the previous one.
-func (g *scaleP21SW292Graph) enter(fn *scaleP21SW292Func) func() {
+func (g *writeChainBoundaryGraph) enter(fn *writeChainBoundaryFunc) func() {
 	imports, scope := g.imports, g.scope
 	g.imports, g.scope = fn.imports, fn.scope
 	return func() { g.imports, g.scope = imports, scope }
 }
 
-type scaleP21SW292Importer struct {
+type writeChainBoundaryImporter struct {
 	store *types.Package
 }
 
-func (importer scaleP21SW292Importer) Import(path string) (*types.Package, error) {
+func (importer writeChainBoundaryImporter) Import(path string) (*types.Package, error) {
 	if path == "flow/api/internal/store" && importer.store != nil {
 		return importer.store, nil
 	}
@@ -143,7 +142,7 @@ func (importer scaleP21SW292Importer) Import(path string) (*types.Package, error
 	return imported, nil
 }
 
-func scaleP21SW292Source(set *token.FileSet, node ast.Node) string {
+func writeChainBoundarySource(set *token.FileSet, node ast.Node) string {
 	var text bytes.Buffer
 	if err := format.Node(&text, set, node); err != nil {
 		return fmt.Sprintf("<%T>", node)
@@ -153,7 +152,7 @@ func scaleP21SW292Source(set *token.FileSet, node ast.Node) string {
 
 // key names a package function as server/name or store/name and a method as
 // server/Type.name or store/Type.name. Interface methods have no key.
-func (g *scaleP21SW292Graph) key(fn *types.Func) string {
+func (g *writeChainBoundaryGraph) key(fn *types.Func) string {
 	if fn == nil {
 		return ""
 	}
@@ -180,7 +179,7 @@ func (g *scaleP21SW292Graph) key(fn *types.Func) string {
 	return ""
 }
 
-func (g *scaleP21SW292Graph) parse(t *testing.T, dir string) []*ast.File {
+func (g *writeChainBoundaryGraph) parse(t *testing.T, dir string) []*ast.File {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
@@ -206,22 +205,22 @@ func (g *scaleP21SW292Graph) parse(t *testing.T, dir string) []*ast.File {
 	return files
 }
 
-func scaleP21SW292Load(t *testing.T) *scaleP21SW292Graph {
+func writeChainBoundaryLoad(t *testing.T) *writeChainBoundaryGraph {
 	t.Helper()
-	graph := &scaleP21SW292Graph{
-		fset: token.NewFileSet(), pkgs: map[*types.Package]string{}, funcs: map[string]*scaleP21SW292Func{},
+	graph := &writeChainBoundaryGraph{
+		fset: token.NewFileSet(), pkgs: map[*types.Package]string{}, funcs: map[string]*writeChainBoundaryFunc{},
 		byName: map[string][]string{}, into: map[string][]int{}, pkgLevel: map[string][]string{},
 		onTrue: map[string]bool{}, onTrueRun: map[string]bool{}, flagVars: map[types.Object][]types.Object{},
 		prepared: map[string]bool{}, single: map[string]map[types.Object]int{},
 		info: &types.Info{Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
 			Selections: map[*ast.SelectorExpr]*types.Selection{}, Types: map[ast.Expr]types.TypeAndValue{}},
 	}
-	storeFiles := graph.parse(t, filepath.Join(scaleP21SW292Root, "../../internal/store"))
-	storeConfig := types.Config{Importer: scaleP21SW292Importer{}, Error: func(error) {}}
+	storeFiles := graph.parse(t, filepath.Join(writeChainBoundaryRoot, "../../internal/store"))
+	storeConfig := types.Config{Importer: writeChainBoundaryImporter{}, Error: func(error) {}}
 	storePackage, _ := storeConfig.Check("flow/api/internal/store", graph.fset, storeFiles, graph.info)
 	graph.pkgs[storePackage] = "store"
-	serverFiles := graph.parse(t, scaleP21SW292Root)
-	serverConfig := types.Config{Importer: scaleP21SW292Importer{store: storePackage}, Error: func(error) {}}
+	serverFiles := graph.parse(t, writeChainBoundaryRoot)
+	serverConfig := types.Config{Importer: writeChainBoundaryImporter{store: storePackage}, Error: func(error) {}}
 	serverPackage, _ := serverConfig.Check("main", graph.fset, serverFiles, graph.info)
 	graph.pkgs[serverPackage] = "server"
 	for _, pkg := range []*types.Package{storePackage, serverPackage} {
@@ -256,7 +255,7 @@ func scaleP21SW292Load(t *testing.T) *scaleP21SW292Graph {
 				if key == "" || graph.funcs[key] != nil {
 					t.Fatalf("function %s in %s/%s has no unique key %q", fn.Name.Name, pkg, name, key)
 				}
-				graph.funcs[key] = &scaleP21SW292Func{key: key, pkg: pkg, file: name, decl: fn, imports: imports, scope: scopes[pkg]}
+				graph.funcs[key] = &writeChainBoundaryFunc{key: key, pkg: pkg, file: name, decl: fn, imports: imports, scope: scopes[pkg]}
 				if fn.Recv != nil {
 					graph.byName[fn.Name.Name] = append(graph.byName[fn.Name.Name], key)
 				}
@@ -288,7 +287,7 @@ func scaleP21SW292Load(t *testing.T) *scaleP21SW292Graph {
 	return graph
 }
 
-func (g *scaleP21SW292Graph) declKey(pkg, file string, fn *ast.FuncDecl) string {
+func (g *writeChainBoundaryGraph) declKey(pkg, file string, fn *ast.FuncDecl) string {
 	if fn.Name.Name == "init" && fn.Recv == nil {
 		return pkg + "/init@" + file
 	}
@@ -296,7 +295,7 @@ func (g *scaleP21SW292Graph) declKey(pkg, file string, fn *ast.FuncDecl) string 
 	return g.key(object)
 }
 
-func scaleP21SW292RouteCall(node ast.Node) bool {
+func writeChainBoundaryRouteCall(node ast.Node) bool {
 	call, ok := node.(*ast.CallExpr)
 	if !ok {
 		return false
@@ -307,7 +306,7 @@ func scaleP21SW292RouteCall(node ast.Node) bool {
 
 // implementers returns the package methods called method on every package
 // type whose method set names every method of iface.
-func (g *scaleP21SW292Graph) implementers(iface *types.Interface, method string) []string {
+func (g *writeChainBoundaryGraph) implementers(iface *types.Interface, method string) []string {
 	var names []string
 	for index := 0; index < iface.NumMethods(); index++ {
 		names = append(names, iface.Method(index).Name())
@@ -339,14 +338,14 @@ func (g *scaleP21SW292Graph) implementers(iface *types.Interface, method string)
 	return result
 }
 
-func (g *scaleP21SW292Graph) targets(node ast.Node, parent ast.Node) []string {
+func (g *writeChainBoundaryGraph) targets(node ast.Node, parent ast.Node) []string {
 	result, _ := g.resolve(node, parent)
 	return result
 }
 
 // resolve also reports whether the targets come from the conservative
 // by-name fallback for an unresolved receiver.
-func (g *scaleP21SW292Graph) resolve(node ast.Node, parent ast.Node) ([]string, bool) {
+func (g *writeChainBoundaryGraph) resolve(node ast.Node, parent ast.Node) ([]string, bool) {
 	switch expression := node.(type) {
 	case *ast.SelectorExpr:
 		if selection := g.info.Selections[expression]; selection != nil {
@@ -415,7 +414,7 @@ func (g *scaleP21SW292Graph) resolve(node ast.Node, parent ast.Node) ([]string, 
 	return nil, false
 }
 
-func (g *scaleP21SW292Graph) collect(owner *scaleP21SW292Func) {
+func (g *writeChainBoundaryGraph) collect(owner *writeChainBoundaryFunc) {
 	defer g.enter(owner)()
 	g.prepare(owner)
 	var ancestors []ast.Node
@@ -437,13 +436,13 @@ func (g *scaleP21SW292Graph) collect(owner *scaleP21SW292Func) {
 			kind = "call"
 		}
 		for index, ancestor := range ancestors[:len(ancestors)-1] {
-			if scaleP21SW292RouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
+			if writeChainBoundaryRouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
 				kind = "route"
 			}
 		}
 		pattern := ""
 		for index, ancestor := range ancestors[:len(ancestors)-1] {
-			if scaleP21SW292RouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
+			if writeChainBoundaryRouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
 				if literal, ok := ancestor.(*ast.CallExpr).Args[0].(*ast.BasicLit); ok {
 					pattern, _ = strconv.Unquote(literal.Value)
 				}
@@ -451,11 +450,11 @@ func (g *scaleP21SW292Graph) collect(owner *scaleP21SW292Func) {
 		}
 		offOnly := g.offOnly(ancestors) || kind == "value" && g.rebound(owner, ancestors)
 		async := backgroundReference(ancestors)
-		authOnly := scaleP21SW292AuthOnly(ancestors)
+		authOnly := writeChainBoundaryAuthOnly(ancestors)
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {
 			g.into[target] = append(g.into[target], len(g.refs))
-			g.refs = append(g.refs, scaleP21SW292Ref{from: owner.key, to: target, file: owner.pkg + "/" + owner.file, line: position.Line,
+			g.refs = append(g.refs, writeChainBoundaryRef{from: owner.key, to: target, file: owner.pkg + "/" + owner.file, line: position.Line,
 				kind: kind, offOnly: offOnly, async: async, byName: byName, authOnly: authOnly, pattern: pattern})
 		}
 		return true
@@ -471,7 +470,7 @@ func (g *scaleP21SW292Graph) collect(owner *scaleP21SW292Func) {
 //	}
 //
 // The local must have exactly these two assignments.
-func (g *scaleP21SW292Graph) rebound(owner *scaleP21SW292Func, ancestors []ast.Node) bool {
+func (g *writeChainBoundaryGraph) rebound(owner *writeChainBoundaryFunc, ancestors []ast.Node) bool {
 	if len(ancestors) < 3 {
 		return false
 	}
@@ -513,7 +512,7 @@ func (g *scaleP21SW292Graph) rebound(owner *scaleP21SW292Func, ancestors []ast.N
 //     which is the flag wherever every one of those locals is known true;
 //   - a result of a call whose every flag-on return yields true there
 //     (metadata, handled, err := s.chatCardMetadata(...)).
-func (g *scaleP21SW292Graph) prepare(fn *scaleP21SW292Func) {
+func (g *writeChainBoundaryGraph) prepare(fn *writeChainBoundaryFunc) {
 	if fn == nil || g.prepared[fn.key] {
 		return
 	}
@@ -586,7 +585,7 @@ func (g *scaleP21SW292Graph) prepare(fn *scaleP21SW292Func) {
 // conditionalFlag reports an expression that is true whenever the flag is on
 // and every returned local is true: a conjunction of plain locals and at
 // least one unconditional flag expression.
-func (g *scaleP21SW292Graph) conditionalFlag(expression ast.Expr) ([]types.Object, bool) {
+func (g *writeChainBoundaryGraph) conditionalFlag(expression ast.Expr) ([]types.Object, bool) {
 	if g.onImplied(expression, nil) {
 		return nil, true
 	}
@@ -619,7 +618,7 @@ func (g *scaleP21SW292Graph) conditionalFlag(expression ast.Expr) ([]types.Objec
 	return nil, false
 }
 
-func (g *scaleP21SW292Graph) flagReceiver(expression ast.Expr) bool {
+func (g *writeChainBoundaryGraph) flagReceiver(expression ast.Expr) bool {
 	switch receiver := expression.(type) {
 	case *ast.SelectorExpr:
 		return receiver.Sel.Name == "store"
@@ -639,7 +638,7 @@ func (g *scaleP21SW292Graph) flagReceiver(expression ast.Expr) bool {
 	return false
 }
 
-func (g *scaleP21SW292Graph) flagCall(expression ast.Expr) bool {
+func (g *writeChainBoundaryGraph) flagCall(expression ast.Expr) bool {
 	call, ok := expression.(*ast.CallExpr)
 	if !ok || len(call.Args) != 0 {
 		return false
@@ -650,7 +649,7 @@ func (g *scaleP21SW292Graph) flagCall(expression ast.Expr) bool {
 
 // residency reports s.metadataResidency compared with nil inside the store:
 // on is true for !=, false for ==.
-func (g *scaleP21SW292Graph) residency(expression *ast.BinaryExpr) (on, ok bool) {
+func (g *writeChainBoundaryGraph) residency(expression *ast.BinaryExpr) (on, ok bool) {
 	if expression.Op != token.NEQ && expression.Op != token.EQL {
 		return false, false
 	}
@@ -664,7 +663,7 @@ func (g *scaleP21SW292Graph) residency(expression *ast.BinaryExpr) (on, ok bool)
 
 // onImplied reports whether expression is true whenever the flag is on, given
 // the locals known true at that point.
-func (g *scaleP21SW292Graph) onImplied(expression ast.Expr, known map[types.Object]bool) bool {
+func (g *writeChainBoundaryGraph) onImplied(expression ast.Expr, known map[types.Object]bool) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.onImplied(value.X, known)
@@ -694,7 +693,7 @@ func (g *scaleP21SW292Graph) onImplied(expression ast.Expr, known map[types.Obje
 }
 
 // offImplied reports whether expression is false whenever the flag is on.
-func (g *scaleP21SW292Graph) offImplied(expression ast.Expr, known map[types.Object]bool) bool {
+func (g *writeChainBoundaryGraph) offImplied(expression ast.Expr, known map[types.Object]bool) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.offImplied(value.X, known)
@@ -717,7 +716,7 @@ func (g *scaleP21SW292Graph) offImplied(expression ast.Expr, known map[types.Obj
 // resultOnTrue reports whether result index of the arity-result function key
 // is the literal true in every return statement that can run with the flag
 // on (there is at least one, and no naked return).
-func (g *scaleP21SW292Graph) resultOnTrue(key string, index, arity int) bool {
+func (g *writeChainBoundaryGraph) resultOnTrue(key string, index, arity int) bool {
 	memo := fmt.Sprintf("%s#%d/%d", key, index, arity)
 	if done, ok := g.onTrue[memo]; ok {
 		return done
@@ -763,7 +762,7 @@ func (g *scaleP21SW292Graph) resultOnTrue(key string, index, arity int) bool {
 	return result
 }
 
-func scaleP21SW292Terminates(body *ast.BlockStmt) bool {
+func writeChainBoundaryTerminates(body *ast.BlockStmt) bool {
 	if len(body.List) == 0 {
 		return false
 	}
@@ -788,7 +787,7 @@ func scaleP21SW292Terminates(body *ast.BlockStmt) bool {
 // the flag on. ancestors[0] is the function body. Conditions are evaluated
 // from the outside in, each with the locals known true by the then-branches
 // enclosing it.
-func (g *scaleP21SW292Graph) offOnly(ancestors []ast.Node) bool {
+func (g *writeChainBoundaryGraph) offOnly(ancestors []ast.Node) bool {
 	known := map[types.Object]bool{}
 	for index := 0; index < len(ancestors)-1; index++ {
 		child := ancestors[index+1]
@@ -826,7 +825,7 @@ func (g *scaleP21SW292Graph) offOnly(ancestors []ast.Node) bool {
 
 // withConjuncts adds the plain single-assignment locals that are top-level
 // conjuncts of a then-branch condition.
-func (g *scaleP21SW292Graph) withConjuncts(known map[types.Object]bool, condition ast.Expr) map[types.Object]bool {
+func (g *writeChainBoundaryGraph) withConjuncts(known map[types.Object]bool, condition ast.Expr) map[types.Object]bool {
 	var locals []types.Object
 	var walk func(ast.Expr)
 	walk = func(expression ast.Expr) {
@@ -855,30 +854,30 @@ func (g *scaleP21SW292Graph) withConjuncts(known map[types.Object]bool, conditio
 	return result
 }
 
-func (g *scaleP21SW292Graph) dominatedByOnReturn(list []ast.Stmt, child ast.Node, known map[types.Object]bool) bool {
+func (g *writeChainBoundaryGraph) dominatedByOnReturn(list []ast.Stmt, child ast.Node, known map[types.Object]bool) bool {
 	for _, statement := range list {
 		if ast.Node(statement) == child {
 			return false
 		}
 		branch, ok := statement.(*ast.IfStmt)
-		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond, known) && scaleP21SW292Terminates(branch.Body) {
+		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond, known) && writeChainBoundaryTerminates(branch.Body) {
 			return true
 		}
 	}
 	return false
 }
 
-type scaleP21SW292Review struct {
+type writeChainBoundaryReview struct {
 	Status, Temperature, TemperatureReason, Reason string
 }
 
-// scaleP21SW292Inventory reads both inventories keyed server/<file>:<name>
+// writeChainBoundaryInventory reads both inventories keyed server/<file>:<name>
 // and store/<file>:<name>.
-func scaleP21SW292Inventory(t *testing.T) map[string]scaleP21SW292Review {
+func writeChainBoundaryInventory(t *testing.T) map[string]writeChainBoundaryReview {
 	t.Helper()
-	result := map[string]scaleP21SW292Review{}
+	result := map[string]writeChainBoundaryReview{}
 	for _, pkg := range []string{"server", "store"} {
-		paths, err := filepath.Glob(filepath.Join(scaleP21SW292Root, "../../internal/store/metadata_inventory", pkg, "*.json"))
+		paths, err := filepath.Glob(filepath.Join(writeChainBoundaryRoot, "../../internal/store/metadata_inventory", pkg, "*.json"))
 		if err != nil || len(paths) == 0 {
 			t.Fatalf("%s inventory missing: %v", pkg, err)
 		}
@@ -888,7 +887,7 @@ func scaleP21SW292Inventory(t *testing.T) map[string]scaleP21SW292Review {
 				t.Fatal(err)
 			}
 			var file struct {
-				Consumers map[string]scaleP21SW292Review `json:"consumers"`
+				Consumers map[string]writeChainBoundaryReview `json:"consumers"`
 			}
 			if err := json.Unmarshal(raw, &file); err != nil {
 				t.Fatal(err)
@@ -904,7 +903,7 @@ func scaleP21SW292Inventory(t *testing.T) map[string]scaleP21SW292Review {
 	return result
 }
 
-func (g *scaleP21SW292Graph) inventoryKey(key string) string {
+func (g *writeChainBoundaryGraph) inventoryKey(key string) string {
 	fn := g.funcs[key]
 	if fn == nil {
 		return ""
@@ -912,9 +911,9 @@ func (g *scaleP21SW292Graph) inventoryKey(key string) string {
 	return fn.pkg + "/" + fn.file + ":" + fn.decl.Name.Name
 }
 
-func scaleP21SW292AuthDisabled(expression ast.Expr) bool {
+func writeChainBoundaryAuthDisabled(expression ast.Expr) bool {
 	if paren, ok := expression.(*ast.ParenExpr); ok {
-		return scaleP21SW292AuthDisabled(paren.X)
+		return writeChainBoundaryAuthDisabled(paren.X)
 	}
 	selector, ok := expression.(*ast.SelectorExpr)
 	if !ok || selector.Sel.Name != "authDisabled" {
@@ -924,36 +923,36 @@ func scaleP21SW292AuthDisabled(expression ast.Expr) bool {
 	return ok && receiver.Name == "s"
 }
 
-func scaleP21SW292AuthEnabled(expression ast.Expr) bool {
+func writeChainBoundaryAuthEnabled(expression ast.Expr) bool {
 	unary, ok := expression.(*ast.UnaryExpr)
-	return ok && unary.Op == token.NOT && scaleP21SW292AuthDisabled(unary.X)
+	return ok && unary.Op == token.NOT && writeChainBoundaryAuthDisabled(unary.X)
 }
 
-func scaleP21SW292Conjuncts(expression ast.Expr) []ast.Expr {
+func writeChainBoundaryConjuncts(expression ast.Expr) []ast.Expr {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
-		return scaleP21SW292Conjuncts(value.X)
+		return writeChainBoundaryConjuncts(value.X)
 	case *ast.BinaryExpr:
 		if value.Op == token.LAND {
-			return append(scaleP21SW292Conjuncts(value.X), scaleP21SW292Conjuncts(value.Y)...)
+			return append(writeChainBoundaryConjuncts(value.X), writeChainBoundaryConjuncts(value.Y)...)
 		}
 	}
 	return []ast.Expr{expression}
 }
 
-// scaleP21SW292AuthOnly reports a node that runs only with authentication
+// writeChainBoundaryAuthOnly reports a node that runs only with authentication
 // disabled: in the then-branch of if s.authDisabled [&& ...], the else-branch
 // of if !s.authDisabled, or after if !s.authDisabled { ...; return }.
-func scaleP21SW292AuthOnly(ancestors []ast.Node) bool {
+func writeChainBoundaryAuthOnly(ancestors []ast.Node) bool {
 	for index := len(ancestors) - 2; index >= 0; index-- {
 		child := ancestors[index+1]
 		var list []ast.Stmt
 		switch parent := ancestors[index].(type) {
 		case *ast.IfStmt:
-			if child == parent.Body && slices.ContainsFunc(scaleP21SW292Conjuncts(parent.Cond), scaleP21SW292AuthDisabled) {
+			if child == parent.Body && slices.ContainsFunc(writeChainBoundaryConjuncts(parent.Cond), writeChainBoundaryAuthDisabled) {
 				return true
 			}
-			if parent.Else != nil && child == parent.Else && scaleP21SW292AuthEnabled(parent.Cond) {
+			if parent.Else != nil && child == parent.Else && writeChainBoundaryAuthEnabled(parent.Cond) {
 				return true
 			}
 		case *ast.BlockStmt:
@@ -966,7 +965,7 @@ func scaleP21SW292AuthOnly(ancestors []ast.Node) bool {
 				break
 			}
 			branch, ok := statement.(*ast.IfStmt)
-			if ok && branch.Init == nil && branch.Else == nil && scaleP21SW292AuthEnabled(branch.Cond) && scaleP21SW292Terminates(branch.Body) {
+			if ok && branch.Init == nil && branch.Else == nil && writeChainBoundaryAuthEnabled(branch.Cond) && writeChainBoundaryTerminates(branch.Body) {
 				return true
 			}
 		}
@@ -974,7 +973,7 @@ func scaleP21SW292AuthOnly(ancestors []ast.Node) bool {
 	return false
 }
 
-var scaleP21SW292Targets = []string{
+var writeChainBoundaryTargets = []string{
 	"store/SQLiteStore.installWrittenWorkspaceLocked",
 	"store/SQLiteStore.refreshWorkspaceCopy",
 	"store/SQLiteStore.refreshWorkspaceCopyLocked",
@@ -982,11 +981,11 @@ var scaleP21SW292Targets = []string{
 	"store/SQLiteStore.refreshMetadataRecords",
 }
 
-func scaleP21SW292Short(target string) string {
+func writeChainBoundaryShort(target string) string {
 	return target[strings.LastIndex(target, ".")+1:]
 }
 
-type scaleP21SW292Boundary struct {
+type writeChainBoundaryBoundary struct {
 	mode, reason string
 	// proof only:
 	test    string              // an existing test of cmd/server or internal/store that proves the edge
@@ -996,8 +995,8 @@ type scaleP21SW292Boundary struct {
 	results map[string]string   // function -> first result of each of its flag-on returns
 }
 
-// scaleP21SW292Boundaries are the edges at which the walk stops, besides
-// route registrations (the same edges SW286 pins for the store wrappers):
+// writeChainBoundaryBoundaries are the edges at which the walk stops, besides
+// route registrations (the same edges store wrapper pins for the store wrappers):
 //   - "async": every reference runs inside a go statement that hands an AI
 //     run to its worker after the HOT start boundary has committed;
 //   - "handler": an in-process dispatch to a route handler that is also
@@ -1007,7 +1006,7 @@ type scaleP21SW292Boundary struct {
 //     local that is nil with the flag on), pinned by the guard of every
 //     reference, every assignment of the local, the flag-on results of the
 //     function that produces it and the existing test that proves it.
-var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
+var writeChainBoundaryBoundaries = map[string]writeChainBoundaryBoundary{
 	"server/server.startLoopRun->server/server.executeLoopRun": {mode: "async",
 		reason: "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server/server.startBoundedLoopRun->server/server.executeLoopRun": {mode: "async",
@@ -1022,7 +1021,7 @@ var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
 		reason: "UpdateIssueRecord installs progressMetadata only when it is non-nil, and assigns it only from persistIssueMetadata, whose every flag-on return " +
 			"is nil (the bounded non-project hot path refuses progress and team-move changes instead of writing them); project inputs and team moves " +
 			"publish through persistSelectedIssueMetadata",
-		test:  "TestScaleP21SW278BoundedIssueMetadataRefusal",
+		test:  "TestBoundedIssueMetadataRefusal",
 		guard: "then:progressMetadata != nil",
 		assigns: map[string][]string{"progressMetadata": {
 			"progressMetadata, metadataWritten, written, affected = nil, false, nil, nil",
@@ -1033,23 +1032,23 @@ var scaleP21SW292Boundaries = map[string]scaleP21SW292Boundary{
 	},
 }
 
-func scaleP21SW292Cut(ref scaleP21SW292Ref) bool {
-	_, cut := scaleP21SW292Boundaries[ref.from+"->"+ref.to]
+func writeChainBoundaryCut(ref writeChainBoundaryRef) bool {
+	_, cut := writeChainBoundaryBoundaries[ref.from+"->"+ref.to]
 	return cut
 }
 
-// scaleP21SW292Closed are HOT inventory consumers that call a target
+// writeChainBoundaryClosed are HOT inventory consumers that call a target
 // directly but that nothing references with the flag on (no call, value,
 // route or package-level reference outside a flag-off-only branch). Each
 // names the existing callset test that pins its single flag-off entry.
-var scaleP21SW292Closed = map[string]string{
-	"store/SQLiteStore.mutateTeamMetadata": "TestScaleP21TeamMetadataCallset",
+var writeChainBoundaryClosed = map[string]string{
+	"store/SQLiteStore.mutateTeamMetadata": "TestScaleTeamMetadataCallset",
 }
 
-// scaleP21SW292Dispatches are the bounded dispatches in front of the chain:
+// dispatches are the bounded dispatches in front of the chain:
 // every reference from the first function to the second must be
 // flag-off-only (it follows if s.metadataResidency != nil { return ... }).
-var scaleP21SW292Dispatches = map[string]string{
+var writeChainBoundaryDispatches = map[string]string{
 	"store/SQLiteStore.writeAPIKeyUse->store/SQLiteStore.setWorkspaceLocked":                "API key telemetry installs into the logical generation (publishBoundedAPIKeyUse)",
 	"store/SQLiteStore.refreshConflictedMetadata->store/SQLiteStore.refreshMetadataRecords": "write conflicts refresh the logical generation (refreshConflictedLogicalRecords)",
 	"store/SQLiteStore.RefreshMetadataRecord->store/SQLiteStore.refreshMetadataRecords":     "a record refresh replaces the logical generation's record (refreshConflictedLogicalRecords)",
@@ -1059,18 +1058,18 @@ var scaleP21SW292Dispatches = map[string]string{
 	"store/SQLiteStore.ReloadWorkspace->store/SQLiteStore.setWorkspaceLocked":               "a bounded reload installs the resident policy instead",
 }
 
-type scaleP21SW292Allowance struct {
+type writeChainBoundaryAllowance struct {
 	targets       []string // short target names the consumer reaches with the flag on
 	owner, reason string
 }
 
-// scaleP21SW292Allowed names every consumer still migrating whose HOT paths
+// writeChainBoundaryAllowed names every consumer still migrating whose HOT paths
 // reach a target with the flag on. The walk does not pass them. An entry must
 // name exactly the targets it still reaches: the test fails when one no
 // longer reaches a target, so the list shrinks as the migrations land.
-var scaleP21SW292Allowed = map[string]scaleP21SW292Allowance{}
+var writeChainBoundaryAllowed = map[string]writeChainBoundaryAllowance{}
 
-type scaleP21SW292Reacher struct {
+type writeChainBoundaryReacher struct {
 	key, path string
 }
 
@@ -1078,7 +1077,7 @@ type scaleP21SW292Reacher struct {
 // HOT inventory consumers it meets (closed consumers excepted) with the
 // shortest path that reached each, and the allow-listed consumers in stop it
 // met (it does not pass them).
-func (g *scaleP21SW292Graph) reach(inventory map[string]scaleP21SW292Review, start string, stop map[string]bool) (reachers []scaleP21SW292Reacher, met, closed map[string]string) {
+func (g *writeChainBoundaryGraph) reach(inventory map[string]writeChainBoundaryReview, start string, stop map[string]bool) (reachers []writeChainBoundaryReacher, met, closed map[string]string) {
 	type step struct{ key, path string }
 	seen := map[string]bool{start: true}
 	queue := []step{{start, start}}
@@ -1088,7 +1087,7 @@ func (g *scaleP21SW292Graph) reach(inventory map[string]scaleP21SW292Review, sta
 		queue = queue[1:]
 		for _, index := range g.into[current.key] {
 			ref := g.refs[index]
-			if ref.offOnly || ref.kind == "route" || seen[ref.from] || scaleP21SW292Cut(ref) {
+			if ref.offOnly || ref.kind == "route" || seen[ref.from] || writeChainBoundaryCut(ref) {
 				continue
 			}
 			seen[ref.from] = true
@@ -1097,10 +1096,10 @@ func (g *scaleP21SW292Graph) reach(inventory map[string]scaleP21SW292Review, sta
 				met[ref.from] = path
 				continue
 			}
-			if scaleP21SW292Closed[ref.from] != "" {
+			if writeChainBoundaryClosed[ref.from] != "" {
 				closed[ref.from] = path
-			} else if review := inventory[g.inventoryKey(ref.from)]; review.Temperature == "hot" && !slices.Contains(scaleP21SW292Targets, ref.from) {
-				reachers = append(reachers, scaleP21SW292Reacher{ref.from, path})
+			} else if review := inventory[g.inventoryKey(ref.from)]; review.Temperature == "hot" && !slices.Contains(writeChainBoundaryTargets, ref.from) {
+				reachers = append(reachers, writeChainBoundaryReacher{ref.from, path})
 			}
 			queue = append(queue, step{ref.from, path})
 		}
@@ -1112,7 +1111,7 @@ func (g *scaleP21SW292Graph) reach(inventory map[string]scaleP21SW292Review, sta
 // unclassified walks flag-on references backwards from start through
 // functions the inventory gives no temperature, and returns every route
 // handler and startup root (main, init) it meets with its path.
-func (g *scaleP21SW292Graph) unclassified(inventory map[string]scaleP21SW292Review, start string, stop map[string]bool) []string {
+func (g *writeChainBoundaryGraph) unclassified(inventory map[string]writeChainBoundaryReview, start string, stop map[string]bool) []string {
 	paths := map[string]string{start: start}
 	queue := []string{start}
 	var result []string
@@ -1121,7 +1120,7 @@ func (g *scaleP21SW292Graph) unclassified(inventory map[string]scaleP21SW292Revi
 		queue = queue[1:]
 		for _, index := range g.into[current] {
 			ref := g.refs[index]
-			if ref.offOnly || scaleP21SW292Cut(ref) {
+			if ref.offOnly || writeChainBoundaryCut(ref) {
 				continue
 			}
 			if ref.kind == "route" {
@@ -1136,7 +1135,7 @@ func (g *scaleP21SW292Graph) unclassified(inventory map[string]scaleP21SW292Revi
 			}
 			paths[ref.from] = fmt.Sprintf("%s -(%s %s:%d)-> %s", ref.from, ref.kind, ref.file, ref.line, paths[current])
 			review := inventory[g.inventoryKey(ref.from)]
-			if review.Temperature != "" && !slices.Contains(scaleP21SW292Targets, ref.from) {
+			if review.Temperature != "" && !slices.Contains(writeChainBoundaryTargets, ref.from) {
 				continue
 			}
 			if ref.from == "server/main" || strings.Contains(ref.from, "/init@") {
@@ -1150,10 +1149,10 @@ func (g *scaleP21SW292Graph) unclassified(inventory map[string]scaleP21SW292Revi
 	return result
 }
 
-func scaleP21SW292TestExists(t *testing.T, name string) bool {
+func writeChainBoundaryTestExists(t *testing.T, name string) bool {
 	t.Helper()
 	var paths []string
-	for _, dir := range []string{scaleP21SW292Root, filepath.Join(scaleP21SW292Root, "../../internal/store")} {
+	for _, dir := range []string{writeChainBoundaryRoot, filepath.Join(writeChainBoundaryRoot, "../../internal/store")} {
 		found, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
 		if err != nil {
 			t.Fatal(err)
@@ -1172,7 +1171,7 @@ func scaleP21SW292TestExists(t *testing.T, name string) bool {
 	return false
 }
 
-func (g *scaleP21SW292Graph) refAncestors(ref scaleP21SW292Ref) [][]ast.Node {
+func (g *writeChainBoundaryGraph) refAncestors(ref writeChainBoundaryRef) [][]ast.Node {
 	fn := g.funcs[ref.from]
 	defer g.enter(fn)()
 	var result [][]ast.Node
@@ -1196,7 +1195,7 @@ func (g *scaleP21SW292Graph) refAncestors(ref scaleP21SW292Ref) [][]ast.Node {
 
 // statements returns the statements of fn whose source is text, each with
 // whether it runs only with the flag off.
-func (g *scaleP21SW292Graph) statements(key, text string) []bool {
+func (g *writeChainBoundaryGraph) statements(key, text string) []bool {
 	fn := g.funcs[key]
 	if fn == nil {
 		return nil
@@ -1210,7 +1209,7 @@ func (g *scaleP21SW292Graph) statements(key, text string) []bool {
 			return false
 		}
 		ancestors = append(ancestors, node)
-		if statement, ok := node.(ast.Stmt); ok && scaleP21SW292Source(g.fset, statement) == text {
+		if statement, ok := node.(ast.Stmt); ok && writeChainBoundarySource(g.fset, statement) == text {
 			result = append(result, g.offOnly(ancestors))
 		}
 		return true
@@ -1221,7 +1220,7 @@ func (g *scaleP21SW292Graph) statements(key, text string) []bool {
 // assignments returns the source of every statement of fn that can change
 // the local named name: an assignment to it (or an inc/dec), and any
 // expression that takes its address, which is reported as "&name".
-func (g *scaleP21SW292Graph) assignments(key, name string) []string {
+func (g *writeChainBoundaryGraph) assignments(key, name string) []string {
 	fn := g.funcs[key]
 	if fn == nil {
 		return []string{"<missing function>"}
@@ -1235,11 +1234,11 @@ func (g *scaleP21SW292Graph) assignments(key, name string) []string {
 		switch node := node.(type) {
 		case *ast.AssignStmt:
 			if slices.ContainsFunc(node.Lhs, named) {
-				result = append(result, scaleP21SW292Source(g.fset, node))
+				result = append(result, writeChainBoundarySource(g.fset, node))
 			}
 		case *ast.IncDecStmt:
 			if named(node.X) {
-				result = append(result, scaleP21SW292Source(g.fset, node))
+				result = append(result, writeChainBoundarySource(g.fset, node))
 			}
 		case *ast.UnaryExpr:
 			if node.Op == token.AND && named(node.X) {
@@ -1258,7 +1257,7 @@ func (g *scaleP21SW292Graph) assignments(key, name string) []string {
 // flagOnReturns returns the source of the first result of every return
 // statement of fn (outside function literals) that can run with the flag on.
 // A function with named results and a bare return is reported as "<bare>".
-func (g *scaleP21SW292Graph) flagOnReturns(key string) []string {
+func (g *writeChainBoundaryGraph) flagOnReturns(key string) []string {
 	fn := g.funcs[key]
 	if fn == nil {
 		return []string{"<missing function>"}
@@ -1282,16 +1281,16 @@ func (g *scaleP21SW292Graph) flagOnReturns(key string) []string {
 		if len(statement.Results) == 0 {
 			result = append(result, "<bare>")
 		} else {
-			result = append(result, scaleP21SW292Source(g.fset, statement.Results[0]))
+			result = append(result, writeChainBoundarySource(g.fset, statement.Results[0]))
 		}
 		return true
 	})
 	return result
 }
 
-func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
+func (g *writeChainBoundaryGraph) verifyPins(t *testing.T) {
 	t.Helper()
-	for edge, boundary := range scaleP21SW292Boundaries {
+	for edge, boundary := range writeChainBoundaryBoundaries {
 		from, to, _ := strings.Cut(edge, "->")
 		count, routed := 0, false
 		for _, index := range g.into[to] {
@@ -1325,7 +1324,7 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 					guarded := false
 					for depth := 0; depth+1 < len(ancestors); depth++ {
 						statement, ok := ancestors[depth].(*ast.IfStmt)
-						if !ok || scaleP21SW292Source(g.fset, statement.Cond) != condition {
+						if !ok || writeChainBoundarySource(g.fset, statement.Cond) != condition {
 							continue
 						}
 						if branch == "then" && ancestors[depth+1] == statement.Body || branch == "else" && statement.Else != nil && ancestors[depth+1] == statement.Else {
@@ -1349,7 +1348,7 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 		if boundary.mode != "proof" {
 			continue
 		}
-		if boundary.test == "" || !scaleP21SW292TestExists(t, boundary.test) {
+		if boundary.test == "" || !writeChainBoundaryTestExists(t, boundary.test) {
 			t.Errorf("boundary %s cites a missing test %q", edge, boundary.test)
 		}
 		if boundary.guard == "" || len(boundary.assigns) == 0 || len(boundary.results) == 0 {
@@ -1384,7 +1383,7 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 			}
 		}
 	}
-	for edge, reason := range scaleP21SW292Dispatches {
+	for edge, reason := range writeChainBoundaryDispatches {
 		from, to, _ := strings.Cut(edge, "->")
 		count := 0
 		for _, index := range g.into[to] {
@@ -1399,11 +1398,11 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 			t.Errorf("stale dispatch %s", edge)
 		}
 	}
-	for consumer, test := range scaleP21SW292Closed {
+	for consumer, test := range writeChainBoundaryClosed {
 		if g.funcs[consumer] == nil {
 			t.Errorf("closed consumer %s no longer exists", consumer)
 		}
-		if !scaleP21SW292TestExists(t, test) {
+		if !writeChainBoundaryTestExists(t, test) {
 			t.Errorf("closed consumer %s cites a missing test %q", consumer, test)
 		}
 		if files := g.pkgLevel[consumer]; len(files) != 0 {
@@ -1417,20 +1416,20 @@ func (g *scaleP21SW292Graph) verifyPins(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW292WriteChainHotBoundaries computes, for each target of the
+// TestWriteChainHotBoundaries computes, for each target of the
 // legacy write/install/refresh chain, every HOT inventory consumer that can
 // reach it with FLOW_BOUNDED_METADATA on, and fails on any not explained by
 // the named allow-list (and on any allow-list entry that no longer reaches
 // its target). A target is reviewed in the inventory exactly when no
 // allow-list entry names it, and a pending target's reason names every
 // remaining allow-listed consumer.
-func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
-	graph := scaleP21SW292Load(t)
-	inventory := scaleP21SW292Inventory(t)
+func TestWriteChainHotBoundaries(t *testing.T) {
+	graph := writeChainBoundaryLoad(t)
+	inventory := writeChainBoundaryInventory(t)
 	graph.verifyPins(t)
 	checkHotMutationDispatches(t, graph, inventory)
 	stop := map[string]bool{}
-	for consumer, allowance := range scaleP21SW292Allowed {
+	for consumer, allowance := range writeChainBoundaryAllowed {
 		if graph.funcs[consumer] == nil {
 			t.Errorf("allow-listed consumer %s no longer exists", consumer)
 		}
@@ -1441,8 +1440,8 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 	}
 	passedClosed := map[string]bool{}
 	pending := map[string][]string{}
-	for _, target := range scaleP21SW292Targets {
-		short := scaleP21SW292Short(target)
+	for _, target := range writeChainBoundaryTargets {
+		short := writeChainBoundaryShort(target)
 		if graph.funcs[target] == nil {
 			t.Fatalf("target %s missing", target)
 		}
@@ -1459,7 +1458,7 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 		for consumer := range closed {
 			passedClosed[consumer] = true
 		}
-		for consumer, allowance := range scaleP21SW292Allowed {
+		for consumer, allowance := range writeChainBoundaryAllowed {
 			listed := slices.Contains(allowance.targets, short)
 			path, reached := met[consumer]
 			switch {
@@ -1472,7 +1471,7 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 			}
 		}
 	}
-	for consumer := range scaleP21SW292Closed {
+	for consumer := range writeChainBoundaryClosed {
 		if review := inventory[graph.inventoryKey(consumer)]; review.Temperature != "hot" || review.Status != "reviewed" {
 			t.Errorf("closed consumer %s is not a reviewed HOT inventory consumer (%+v)", consumer, review)
 		}
@@ -1480,8 +1479,8 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 			t.Errorf("stale closed consumer %s: no target walk meets it", consumer)
 		}
 	}
-	for _, target := range scaleP21SW292Targets {
-		short := scaleP21SW292Short(target)
+	for _, target := range writeChainBoundaryTargets {
+		short := writeChainBoundaryShort(target)
 		key := graph.inventoryKey(target)
 		review, ok := inventory[key]
 		if !ok {
@@ -1504,14 +1503,14 @@ func TestScaleP21SW292WriteChainHotBoundaries(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW292GuardDetectsFlagOnReach runs the SW292 graph over a probe
+// TestGuardDetectsFlagOnReach runs the compatibility write chains graph over a probe
 // store and server: a refresh closure returned after a residency dispatch,
 // a telemetry tail after an early bounded return and a dispatch block that
 // always returns are flag-off-only; the same shapes without the dispatch, a
 // goroutine launch and a closure capture reach the target with the flag on,
 // and a HOT route through them is reported while an allow-listed or closed
 // consumer is not passed.
-func TestScaleP21SW292GuardDetectsFlagOnReach(t *testing.T) {
+func TestGuardDetectsFlagOnReach(t *testing.T) {
 	root := t.TempDir()
 	write := func(path, source string) {
 		t.Helper()
@@ -1570,10 +1569,10 @@ func (s *server) hot()     { s.store.Write() }
 func (s *server) closed()  { s.store.Dispatch() }
 func main()                {}
 `)
-	previous := scaleP21SW292Root
-	scaleP21SW292Root = filepath.Join(root, "cmd/server")
-	defer func() { scaleP21SW292Root = previous }()
-	graph := scaleP21SW292Load(t)
+	previous := writeChainBoundaryRoot
+	writeChainBoundaryRoot = filepath.Join(root, "cmd/server")
+	defer func() { writeChainBoundaryRoot = previous }()
+	graph := writeChainBoundaryLoad(t)
 	target := "store/SQLiteStore.setWorkspaceLocked"
 	direct := map[string]bool{}
 	for _, index := range graph.into[target] {
@@ -1590,7 +1589,7 @@ func main()                {}
 			t.Fatalf("the always-returning dispatch block does not dominate %s:%d", ref.file, ref.line)
 		}
 	}
-	inventory := map[string]scaleP21SW292Review{
+	inventory := map[string]writeChainBoundaryReview{
 		"server/main.go:hot":           {Status: "reviewed", Temperature: "hot"},
 		"store/store.go:legacy":        {Status: "reviewed", Temperature: "hot"},
 		"store/store.go:telemetryOpen": {Status: "reviewed", Temperature: "cold"},

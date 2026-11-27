@@ -152,7 +152,7 @@ func projectRecordJournalSummary(raw []byte, row *recordJournalProjection) error
 	if dates.ArchivedAt != nil {
 		row.Archived = 1
 	}
-	// Decode only present relations. The P05 extractor deliberately accepts
+	// Decode only present relations. The metadata catalog extractor deliberately accepts
 	// heterogeneous fields; invoking it on absent fields allocates an error
 	// for each possible relation on every small write.
 	for name, values := range recordJournalSummaryRelations(fields) {

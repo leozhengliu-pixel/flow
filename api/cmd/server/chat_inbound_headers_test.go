@@ -15,16 +15,16 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW175Request struct {
+type chatInboundHeadersRequest struct {
 	Method, Path string
 	Body         any
 }
 
-func TestScaleP21SW175ChatInboundWorkflowHeaderDifferential(t *testing.T) {
+func TestChatInboundWorkflowHeaderDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	prefix := idgen.New("sw175-")
 	if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "states", "teamSettings", "projects", "issueTemplates", "userSettings"), workspace, "team.settings_updated", f.binding.TeamID, nil, func(data *domain.Bootstrap) error {
@@ -56,7 +56,7 @@ func TestScaleP21SW175ChatInboundWorkflowHeaderDifferential(t *testing.T) {
 	}
 	transport := http.DefaultTransport
 	defer func() { http.DefaultTransport = transport }()
-	var requests []scaleP21SW175Request
+	var requests []chatInboundHeadersRequest
 	requireHeaders := false
 	http.DefaultTransport = chatWorkflowTransport(func(request *http.Request) (*http.Response, error) {
 		platform := request.URL.Hostname() == "open.feishu.cn" || request.URL.Hostname() == "open.larksuite.com"
@@ -74,7 +74,7 @@ func TestScaleP21SW175ChatInboundWorkflowHeaderDifferential(t *testing.T) {
 					}
 				}
 			}
-			requests = append(requests, scaleP21SW175Request{request.Method, request.URL.RequestURI(), payload})
+			requests = append(requests, chatInboundHeadersRequest{request.Method, request.URL.RequestURI(), payload})
 			if requireHeaders && f.s.store.BoundedMetadataEnabled() && f.s.store.MetadataWorkUsedForTesting() == 0 {
 				t.Error("workflow headers were released before actual platform request")
 			}
@@ -82,7 +82,7 @@ func TestScaleP21SW175ChatInboundWorkflowHeaderDifferential(t *testing.T) {
 		return transport.RoundTrip(request)
 	})
 	type outcome struct {
-		Requests []scaleP21SW175Request
+		Requests []chatInboundHeadersRequest
 		Action   *chatCardAction
 		Error    string
 	}
@@ -193,7 +193,7 @@ func TestScaleP21SW175ChatInboundWorkflowHeaderDifferential(t *testing.T) {
 				outcomes = append(outcomes, got)
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("actual inbound form differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("actual inbound form differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		})
 	}

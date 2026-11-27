@@ -16,11 +16,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW1ImplicitActorDifferential(t *testing.T) {
+func TestImplicitActorDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	beforeUserID, afterUserID := idgen.New("usr_sw1_before_"), idgen.New("usr_sw1_after_")
 	t.Cleanup(func() {
@@ -260,11 +260,11 @@ func TestScaleP21SW1ImplicitActorDifferential(t *testing.T) {
 	f.SetRealtimeSink(nil)
 }
 
-func TestScaleP21SW1ActorRetryIsolation(t *testing.T) {
+func TestActorRetryIsolation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	actor := f.data.Viewer
 	until := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

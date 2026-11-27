@@ -15,7 +15,7 @@ import (
 type metadataLogicalNormalizer struct {
 	store    *SQLiteStore
 	source   *metadataLogicalSource
-	stage    *sw26MigrationStage
+	stage    *migrationStage
 	base     domain.Bootstrap
 	work     *metadataLogicalNormalizeWork
 	baseWork int
@@ -72,7 +72,7 @@ func (s *SQLiteStore) normalizeMetadataLogicalSourceIn(ctx context.Context, sour
 // fields) and the cross-record index of source's index fields. It returns the
 // context the normalization runs in and the function that releases it all.
 func (s *SQLiteStore) newMetadataLogicalNormalizer(ctx context.Context, source *metadataLogicalSource) (_ *metadataLogicalNormalizer, _ context.Context, done func(), err error) {
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, ctx, nil, err
 	}

@@ -23,14 +23,14 @@ import (
 )
 
 var (
-	scaleP21SW260Clock   = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
-	scaleP21SW260Millis  = regexp.MustCompile(`"(createdAt|updatedAt|nextAttemptAt|heartbeatAt|leaseUntil|started|finishedAt)":(\d{13})`)
-	scaleP21SW260LeaseTT = time.Hour
+	loopRunStartClock  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+	loopRunStartMillis = regexp.MustCompile(`"(createdAt|updatedAt|nextAttemptAt|heartbeatAt|leaseUntil|started|finishedAt)":(\d{13})`)
+	leaseTT            = time.Hour
 )
 
-// scaleP21SW260Normalize replaces generated IDs and clocks in the encoded
+// loopRunStartNormalize replaces generated IDs and clocks in the encoded
 // effects, keeping every other byte (stored JSON keeps its own key order).
-func scaleP21SW260Normalize(raw []byte, ids map[string]string, started, finished time.Time) string {
+func loopRunStartNormalize(raw []byte, ids map[string]string, started, finished time.Time) string {
 	text := string(raw)
 	keys := make([]string, 0, len(ids))
 	for id := range ids {
@@ -42,7 +42,7 @@ func scaleP21SW260Normalize(raw []byte, ids map[string]string, started, finished
 	for _, id := range keys {
 		text = strings.ReplaceAll(text, id, ids[id])
 	}
-	text = scaleP21SW260Clock.ReplaceAllStringFunc(text, func(value string) string {
+	text = loopRunStartClock.ReplaceAllStringFunc(text, func(value string) string {
 		clock, err := time.Parse(time.RFC3339Nano, value)
 		if err != nil {
 			return value
@@ -50,13 +50,13 @@ func scaleP21SW260Normalize(raw []byte, ids map[string]string, started, finished
 		switch {
 		case !clock.Before(started) && !clock.After(finished):
 			return "<clock>"
-		case !clock.Add(-scaleP21SW260LeaseTT).Before(started) && !clock.Add(-scaleP21SW260LeaseTT).After(finished):
+		case !clock.Add(-leaseTT).Before(started) && !clock.Add(-leaseTT).After(finished):
 			return "<clock+lease>"
 		}
 		return value
 	})
-	return scaleP21SW260Millis.ReplaceAllStringFunc(text, func(value string) string {
-		match := scaleP21SW260Millis.FindStringSubmatch(value)
+	return loopRunStartMillis.ReplaceAllStringFunc(text, func(value string) string {
+		match := loopRunStartMillis.FindStringSubmatch(value)
 		millis, _ := strconv.ParseInt(match[2], 10, 64)
 		if millis >= started.UnixMilli() && millis <= finished.UnixMilli() {
 			return `"` + match[1] + `":"<ms>"`
@@ -65,7 +65,7 @@ func scaleP21SW260Normalize(raw []byte, ids map[string]string, started, finished
 	})
 }
 
-type scaleP21SW260Case struct {
+type loopRunStartCase struct {
 	name string
 	// mode is manual (startLoopRun), schedule (runDueLoops), event
 	// (dispatchLoopTriggers) or concurrent (two manual starts at once).
@@ -85,11 +85,11 @@ type scaleP21SW260Case struct {
 	wantVersion                 string
 }
 
-func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
+func TestLoopRunStartDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -97,17 +97,17 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 	t.Cleanup(func() { _ = repo.Close() })
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	fixtureService := &server{store: repo, uploadPath: t.TempDir()}
-	// SW260 drives its own clock. A live reconciler can renew the queued
+	// loop run start drives its own clock. A live reconciler can renew the queued
 	// runs' leases between a dispatch and the snapshot that checks it.
 	host := httptest.NewServer(newTestHandler(t, fixtureService))
 	t.Cleanup(host.Close)
-	f := scaleP03CreateFixture(t, repo, fixtureService, host)
+	f := scaleCreateFixture(t, repo, fixtureService, host)
 	workspace, public := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &scaleP04Database{config: config}
+	reader := &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
@@ -161,7 +161,7 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 		return item
 	}
 	projectLoop := func(id string, config map[string]any) domain.Loop { return loop(id, "project", config) }
-	cases := []scaleP21SW260Case{
+	cases := []loopRunStartCase{
 		{name: "manual-create-v1", mode: "manual", wantRuns: 1, wantVersion: target + "_v1"},
 		{name: "manual-current-version-ties", mode: "manual", wantRuns: 1, seed: func(data *domain.Bootstrap) {
 			data.LoopVersions = versions(target)
@@ -311,7 +311,7 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 						service.agent.Runtime, service.agent.WorkerSecret = "", ""
 					}
 					limits := testLoopLimits()
-					limits.MaxConcurrent, limits.MaxConcurrentPerWorkspace, limits.LeaseTTL = 0, 4, scaleP21SW260LeaseTT
+					limits.MaxConcurrent, limits.MaxConcurrentPerWorkspace, limits.LeaseTTL = 0, 4, leaseTT
 					if spec.localBudget {
 						limits.MaxConcurrentPerWorkspace = 1
 						registry := service.loopRunRegistry()
@@ -565,7 +565,7 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got := scaleP21SW260Normalize(encoded, ids, started, finished)
+					got := loopRunStartNormalize(encoded, ids, started, finished)
 					if !bounded {
 						want = got
 						total := 0
@@ -584,7 +584,7 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 						continue
 					}
 					if got != want {
-						t.Fatalf("bounded loop run start differs from the literal start\n%s", scaleP21SW260FirstDiff(want, got))
+						t.Fatalf("bounded loop run start differs from the literal start\n%s", firstDiff(want, got))
 					}
 					if used := source.MetadataWorkUsedForTesting(); used != 0 {
 						t.Fatalf("bounded start retained %d bytes of metadata work", used)
@@ -598,8 +598,8 @@ func TestScaleP21SW260LoopRunStartDifferential(t *testing.T) {
 	}
 }
 
-// scaleP21SW260FirstDiff shows both texts around their first difference.
-func scaleP21SW260FirstDiff(want, got string) string {
+// firstDiff shows both texts around their first difference.
+func firstDiff(want, got string) string {
 	index := 0
 	for index < len(want) && index < len(got) && want[index] == got[index] {
 		index++

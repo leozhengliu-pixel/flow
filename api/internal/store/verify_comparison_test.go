@@ -6,7 +6,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP16EqualCollectionsKeepGeneratedReferenceBindings(t *testing.T) {
+func TestScaleEqualCollectionsKeepGeneratedReferenceBindings(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	x, y, z := "p_1234567890123456789_abcdefghij", "p_2234567890123456789_abcdefghij", "p_3234567890123456789_abcdefghij"
 	result := func(reference string) mutationCallbackResult {

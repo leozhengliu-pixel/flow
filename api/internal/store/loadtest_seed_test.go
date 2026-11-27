@@ -17,15 +17,15 @@ import (
 	"flow/api/internal/domain"
 )
 
-var scaleP21SW276Clock = regexp.MustCompile(`\d{4}-\d\d-\d\dT[\d:.]+Z`)
+var loadtestSeedClock = regexp.MustCompile(`\d{4}-\d\d-\d\dT[\d:.]+Z`)
 
-type scaleP21SW276Outcome struct {
+type loadtestSeedOutcome struct {
 	records, content, events, realtime, tables []string
 	root, rawRoot                              string
 	sizes                                      map[string]int
 }
 
-func scaleP21SW276Query(t *testing.T, repo *SQLiteStore, query string, args ...any) []string {
+func loadtestSeedQuery(t *testing.T, repo *SQLiteStore, query string, args ...any) []string {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), query, args...)
 	if err != nil {
@@ -58,7 +58,7 @@ func scaleP21SW276Query(t *testing.T, repo *SQLiteStore, query string, args ...a
 	return result
 }
 
-func scaleP21SW276Fixture(t *testing.T) (*SQLiteStore, string, string) {
+func loadtestSeedFixture(t *testing.T) (*SQLiteStore, string, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "flow.db")
 	repo, err := OpenSQLiteTestFixture(path)
@@ -80,21 +80,21 @@ func scaleP21SW276Fixture(t *testing.T) (*SQLiteStore, string, string) {
 	return repo, workspace, path
 }
 
-func scaleP21SW276Capture(t *testing.T, owner *SQLiteStore, workspace string, realtime []string) scaleP21SW276Outcome {
+func loadtestSeedCapture(t *testing.T, owner *SQLiteStore, workspace string, realtime []string) loadtestSeedOutcome {
 	t.Helper()
-	result := scaleP21SW276Outcome{realtime: realtime}
-	result.records = scaleP21SW276Query(t, owner, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','trash','documents','aiConversations') AND (record_key LIKE 'lt-%' OR record_key LIKE 'sw276-%') ORDER BY field,collection_order,record_key`, workspace)
-	result.content = scaleP21SW276Query(t, owner, `SELECT kind,resource_id,id,record_version,data FROM workspace_content_records WHERE workspace_key=? AND id LIKE 'lt-%' ORDER BY kind,resource_id,id`, workspace)
+	result := loadtestSeedOutcome{realtime: realtime}
+	result.records = loadtestSeedQuery(t, owner, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('projects','trash','documents','aiConversations') AND (record_key LIKE 'lt-%' OR record_key LIKE 'sw276-%') ORDER BY field,collection_order,record_key`, workspace)
+	result.content = loadtestSeedQuery(t, owner, `SELECT kind,resource_id,id,record_version,data FROM workspace_content_records WHERE workspace_key=? AND id LIKE 'lt-%' ORDER BY kind,resource_id,id`, workspace)
 	// The fixture's own rows carry its opening clock; only their count is compared.
-	result.content = append(result.content, scaleP21SW276Query(t, owner, `SELECT kind,COUNT(*) FROM workspace_content_records WHERE workspace_key=? GROUP BY kind ORDER BY kind`, workspace)...)
-	result.content = append(result.content, scaleP21SW276Query(t, owner, `SELECT kind,SUM(revision) FROM workspace_cache_revisions WHERE workspace_key=? GROUP BY kind ORDER BY kind`, workspace)...)
-	result.content = append(result.content, scaleP21SW276Query(t, owner, `SELECT content FROM metadata_search_documents ORDER BY content`)...)
-	result.events = scaleP21SW276Query(t, owner, `SELECT event_type,aggregate_id,payload,COALESCE(previous_values,''),COALESCE(actor_id,'') FROM domain_events WHERE event_type='loadtest.seeded' ORDER BY created_at,rowid`)
-	if roots := scaleP21SW276Query(t, owner, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace); len(roots) == 1 {
+	result.content = append(result.content, loadtestSeedQuery(t, owner, `SELECT kind,COUNT(*) FROM workspace_content_records WHERE workspace_key=? GROUP BY kind ORDER BY kind`, workspace)...)
+	result.content = append(result.content, loadtestSeedQuery(t, owner, `SELECT kind,SUM(revision) FROM workspace_cache_revisions WHERE workspace_key=? GROUP BY kind ORDER BY kind`, workspace)...)
+	result.content = append(result.content, loadtestSeedQuery(t, owner, `SELECT content FROM metadata_search_documents ORDER BY content`)...)
+	result.events = loadtestSeedQuery(t, owner, `SELECT event_type,aggregate_id,payload,COALESCE(previous_values,''),COALESCE(actor_id,'') FROM domain_events WHERE event_type='loadtest.seeded' ORDER BY created_at,rowid`)
+	if roots := loadtestSeedQuery(t, owner, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace); len(roots) == 1 {
 		result.rawRoot = roots[0]
-		result.root = scaleP21SW276Clock.ReplaceAllString(roots[0], "T")
+		result.root = loadtestSeedClock.ReplaceAllString(roots[0], "T")
 	}
-	for _, table := range scaleP21SW276Query(t, owner, `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`) {
+	for _, table := range loadtestSeedQuery(t, owner, `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`) {
 		var count int
 		// FTS segment rows and random cache-revision shards are storage
 		// layout; their content and per-kind sums are compared above.
@@ -109,7 +109,7 @@ func scaleP21SW276Capture(t *testing.T, owner *SQLiteStore, workspace string, re
 	return result
 }
 
-// TestScaleP21SW276SyntheticSeedDifferential seeds the same synthetic
+// TestSyntheticSeedDifferential seeds the same synthetic
 // workspace through a legacy store and through a bounded store whose resident
 // copy is policy-only, with several batches per kind, existing records in the
 // appended collections and notifications for several users. Stored records
@@ -117,7 +117,7 @@ func scaleP21SW276Capture(t *testing.T, owner *SQLiteStore, workspace string, re
 // the workspace root, every table's row count and the reported state sizes
 // (warm and after a SQL reload) are identical; the bounded seed and measure
 // decode no workspace and release their work.
-func TestScaleP21SW276SyntheticSeedDifferential(t *testing.T) {
+func TestSyntheticSeedDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -126,9 +126,9 @@ func TestScaleP21SW276SyntheticSeedDifferential(t *testing.T) {
 	stamp := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	syntheticSeedClock = func() time.Time { return stamp }
 	syntheticSeedBatchBytes = 3000
-	var outcomes []scaleP21SW276Outcome
+	var outcomes []loadtestSeedOutcome
 	for _, bounded := range []bool{false, true} {
-		repo, workspace, path := scaleP21SW276Fixture(t)
+		repo, workspace, path := loadtestSeedFixture(t)
 		data, _ := repo.storedWorkspace(workspace)
 		users := []string{}
 		for _, user := range data.Users {
@@ -172,7 +172,7 @@ func TestScaleP21SW276SyntheticSeedDifferential(t *testing.T) {
 		}
 		target.SetRealtimeSink(nil)
 		repo.SetRealtimeSink(nil)
-		outcome := scaleP21SW276Capture(t, repo, workspace, realtime)
+		outcome := loadtestSeedCapture(t, repo, workspace, realtime)
 		measured := target
 		if !bounded {
 			// As the load harnesses do, measure on a peer that loads the

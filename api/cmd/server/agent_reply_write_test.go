@@ -19,20 +19,20 @@ import (
 // occurrence count), generated delivery replacement, email digest timing and
 // urgency, muted threads, thread subscribers, app and former-member
 // recipients, document access, a missing anchor and an inactive agent.
-func TestScaleP21AgentReplyNotificationsDifferential(t *testing.T) {
+func TestScaleAgentReplyNotificationsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, narrow := range []string{"off", "on"} {
 		t.Run("narrow-"+narrow, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", narrow)
-			scaleP21AgentReplyDifferential(t)
+			scaleAgentReplyDifferential(t)
 		})
 	}
 }
 
-func scaleP21AgentReplyDifferential(t *testing.T) {
-	f := scaleP21IssueUpdateSetup(t)
+func scaleAgentReplyDifferential(t *testing.T) {
+	f := scaleIssueUpdateSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -213,8 +213,8 @@ func scaleP21AgentReplyDifferential(t *testing.T) {
 			if seedKind == "missing" {
 				seedKind = "document"
 			}
-			f.scaleP21TriageWriterFixture.prepare = seed(seedKind, test.shape)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = seed(seedKind, test.shape)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			for _, activity := range []domain.AgentActivity{
 				{ID: "ar-activity", ActorID: app.UserID, Type: "response", Body: "**Done**: [fixed](https://example.test) it.\n\n```suggestions\nMore\n```"},
 				{ID: "ar-question", ActorID: app.UserID, Type: "elicitation", Body: "Which one?"},
@@ -224,7 +224,7 @@ func scaleP21AgentReplyDifferential(t *testing.T) {
 					return nil, nil
 				})
 				legacy := outcomes[0]
-				notifications := scaleP21WriterContent(legacy, "notification")
+				notifications := scaleWriterContent(legacy, "notification")
 				agent := slices.DeleteFunc(notifications, func(item map[string]any) bool { return item["type"] != agentReplyNotificationType })
 				switch {
 				case test.kind == "missing" || test.shape == "inactive-agent":

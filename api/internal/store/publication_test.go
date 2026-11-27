@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28AggregateLateCancellationRetainsPublicationWork(t *testing.T) {
+func TestAggregateLateCancellationRetainsPublicationWork(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("nested_sw28_publication_")
 	body := strings.Repeat("legal publication winner ", 18000)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings", "documents", "webhooks"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {

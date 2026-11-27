@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestScaleP06SlowConnectionsLoad(t *testing.T) {
+func TestScaleSlowConnectionsLoad(t *testing.T) {
 	if os.Getenv("FLOW_P06_LOAD") != "1" {
 		t.Skip("set FLOW_P06_LOAD=1 for the two-minute transport load")
 	}

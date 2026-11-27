@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW3PopulatedSettings(t *testing.T, settings domain.WorkspaceSettings) domain.WorkspaceSettings {
+func populatedSettings(t *testing.T, settings domain.WorkspaceSettings) domain.WorkspaceSettings {
 	t.Helper()
 	stamp := time.Unix(1700000000, 0).UTC()
 	value := reflect.ValueOf(&settings).Elem()
@@ -70,14 +70,14 @@ func scaleP21SW3PopulatedSettings(t *testing.T, settings domain.WorkspaceSetting
 	return settings
 }
 
-func TestScaleP21SW3SettingsPropertyBudgetDifferential(t *testing.T) {
+func TestSettingsPropertyBudgetDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		settings := scaleP21SW3PopulatedSettings(t, f.data.WorkspaceSettings)
+		settings := populatedSettings(t, f.data.WorkspaceSettings)
 		reset := func(manual, invite bool) {
 			t.Helper()
 			if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -154,10 +154,10 @@ func TestScaleP21SW3SettingsPropertyBudgetDifferential(t *testing.T) {
 						if rotated && (data.WorkspaceInviteLink.Token == "" || data.WorkspaceInviteLink.Token == "sw3-owned-invite") {
 							t.Fatal("invite rotation did not persist a replacement")
 						}
-						outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, rotated), scaleP21M2JSON(t, data.WorkspaceInviteLink, rotated)})
+						outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, rotated), normalizePolicyJSON(t, data.WorkspaceInviteLink, rotated)})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("%s changed: %s", operation, scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("%s changed: %s", operation, policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -236,10 +236,10 @@ func TestScaleP21SW3SettingsPropertyBudgetDifferential(t *testing.T) {
 						t.Fatal("SCIM authentication changed workspace settings")
 					}
 					issued.ID, issued.Secret, issued.CreatedAt = "<generated-id>", "<generated-secret>", time.Time{}
-					outcomes = append(outcomes, []any{w.Code, issued, gotWorkspace, gotID, authW.Code, missingW.Code, scaleP21M2Response(t, missingW, false), disabledW.Code, scaleP21M2Response(t, disabledW, false)})
+					outcomes = append(outcomes, []any{w.Code, issued, gotWorkspace, gotID, authW.Code, missingW.Code, policyDifferentialResponse(t, missingW, false), disabledW.Code, policyDifferentialResponse(t, disabledW, false)})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("%s changed: %s", operation, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("%s changed: %s", operation, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}

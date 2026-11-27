@@ -808,7 +808,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)
 	}
-	respondMutation(w, err, http.StatusOK, s.scaleP20DocumentResult(r, updated))
+	respondMutation(w, err, http.StatusOK, s.scaleDocumentResult(r, updated))
 }
 
 // jsonEqual compares two decoded JSON values.
@@ -1957,7 +1957,7 @@ func (s *server) deleteAsk(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) listProjectTemplates(w http.ResponseWriter, r *http.Request) {
 	if s.store.BoundedMetadataEnabled() {
-		s.scaleP21SW16ListProjectTemplates(w, r)
+		s.listBoundedProjectTemplates(w, r)
 		return
 	}
 	data, ok := s.store.BootstrapFor(workspaceKey(r))

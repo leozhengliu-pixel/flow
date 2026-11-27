@@ -348,7 +348,7 @@ func (s *SQLiteStore) prepareColdFullWrite(ctx context.Context, tx *sqlTx, works
 		// returns the write lock (coldLegacyWrite): from the records it
 		// changed, or reloaded from SQL, so the installed image is the one a
 		// reload produces. An image prepared here from the writer's own
-		// result would be its unnormalized values (SW561).
+		// result would be its unnormalized values.
 		return nil
 	}
 	if state.prepared != nil || state.source == nil {

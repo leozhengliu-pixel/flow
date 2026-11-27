@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
+func TestScaleOffPreservesLegacyCoordination(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, test := range []struct {
 		name, peerMode, journalAtOpen, journalMode string
@@ -35,7 +35,7 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
 			t.Setenv("FLOW_RECORD_JOURNAL", test.journalAtOpen)
-			f := scaleP11NewFixture(t, 1)
+			f := scaleNewFixture(t, 1)
 			t.Setenv("FLOW_RECORD_JOURNAL", test.journalMode)
 			t.Setenv("FLOW_RECORD_PEER_SYNC", test.peerMode)
 			for key, value := range map[string]string{"FLOW_RECORD_PEER_SYNC": test.peerMode, "FLOW_RECORD_JOURNAL": test.journalMode} {
@@ -68,7 +68,7 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 			writer := &server{store: f.writer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
 			local, stopLocal := writer.realtime.subscribe(f.workspace)
 			defer stopLocal()
-			event := scaleP11Rename(t, f, "legacy freshness")
+			event := scaleRename(t, f, "legacy freshness")
 			writer.publishRealtime(f.workspace, event)
 			writer.publishRealtime(f.workspace, event)
 			if got := drainRealtime(local); len(got) != 2 || got[0].ID != event.ID || got[1].ID != event.ID {
@@ -77,19 +77,19 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 			if version, err := f.service.sharedWorkspaceVersion(t.Context(), f.workspace); err != nil || version != 2 {
 				t.Fatalf("legacy Redis version = %d, want 2: %v", version, err)
 			}
-			if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "legacy freshness" {
+			if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "legacy freshness" {
 				t.Fatalf("legacy Redis freshness did not install the change: %v", err)
 			}
 
 			remote, stopRemote := f.service.realtime.subscribe(f.workspace)
 			defer stopRemote()
-			event = scaleP11Rename(t, f, "legacy peer reload")
+			event = scaleRename(t, f, "legacy peer reload")
 			event.ClientID = "legacy-client"
 			writer.publishRealtime(f.workspace, event)
 			f.service.receiveRemoteEvent(coordination.EventEnvelope{Workspace: f.workspace, Event: event})
 			select {
 			case got := <-remote:
-				if got.ID != event.ID || got.Seq != event.Seq || got.ClientID != event.ClientID || !bytes.Equal(got.Payload, event.Payload) || scaleP11Name(t, f) != "legacy peer reload" {
+				if got.ID != event.ID || got.Seq != event.Seq || got.ClientID != event.ClientID || !bytes.Equal(got.Payload, event.Payload) || scaleName(t, f) != "legacy peer reload" {
 					t.Fatal("off lost the legacy envelope or published before reloading")
 				}
 			case <-time.After(2 * time.Second):
@@ -105,13 +105,13 @@ func TestScaleP11OffPreservesLegacyCoordination(t *testing.T) {
 	}
 }
 
-func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
+func TestScaleLegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 
 	t.Run("current installed copy", func(t *testing.T) {
-		f := scaleP11NewFixture(t, 1)
+		f := scaleNewFixture(t, 1)
 		if err := f.service.store.ReloadWorkspace(t.Context(), f.workspace); err != nil {
 			t.Fatal(err)
 		}
@@ -136,7 +136,7 @@ func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
 	})
 
 	t.Run("stale installed copy", func(t *testing.T) {
-		f := scaleP11NewFixture(t, 1)
+		f := scaleNewFixture(t, 1)
 		f.service.workspaceVersions.record(f.workspace, 1)
 		writer := &server{store: f.writer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
 		f.writer.SetRealtimeSink(writer.publishRealtime)
@@ -158,7 +158,7 @@ func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
 		if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil {
 			t.Fatal(err)
 		}
-		if got := scaleP11Name(t, f); got != "legacy reload" {
+		if got := scaleName(t, f); got != "legacy reload" {
 			t.Fatalf("stale legacy copy was not reloaded: %q", got)
 		}
 		if got := f.service.workspaceVersions.current(f.workspace); got != 2 {
@@ -167,7 +167,7 @@ func TestScaleP11LegacyFreshnessChecksSQLBeforeReload(t *testing.T) {
 	})
 }
 
-func TestScaleP11OffKeepsLegacyQueue(t *testing.T) {
+func TestScaleOffKeepsLegacyQueue(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	var queue remoteEventQueue
 	event := domain.RealtimeEvent{ID: "legacy", Seq: 1, Type: "project.updated", Payload: bytes.Repeat([]byte("p"), remoteEventQueueMaxBytes)}
@@ -185,10 +185,10 @@ func TestScaleP11OffKeepsLegacyQueue(t *testing.T) {
 	}
 }
 
-func TestScaleP11OffFreshnessDuringRedisOutage(t *testing.T) {
+func TestScaleOffFreshnessDuringRedisOutage(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP11NewFixture(t, 1)
+	f := scaleNewFixture(t, 1)
 	f.redis.Close()
 	queries := 0
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
@@ -202,7 +202,7 @@ func TestScaleP11OffFreshnessDuringRedisOutage(t *testing.T) {
 	}
 }
 
-func TestScaleP11UnavailableJournalLogsOnce(t *testing.T) {
+func TestScaleUnavailableJournalLogsOnce(t *testing.T) {
 	var output bytes.Buffer
 	previous := log.Writer()
 	log.SetOutput(&output)

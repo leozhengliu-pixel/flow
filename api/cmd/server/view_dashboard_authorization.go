@@ -21,7 +21,7 @@ func (s *server) boundedProjectVisibleByID(r *http.Request, access store.AccessC
 }
 
 // boundedProjectAllowed is the literal projectAllowed (slug-ranked visible
-// project, then teamAllowed) through the reviewed SW255 point reader.
+// project, then teamAllowed) through the reviewed resource authorization point reader.
 func (s *server) boundedProjectAllowed(r *http.Request, access store.AccessContext, ref string) (bool, error) {
 	read, err := s.store.BeginResourceAuthorizationRead(r.Context(), access, "projects", ref)
 	if err != nil {
@@ -34,13 +34,13 @@ func (s *server) boundedProjectAllowed(r *http.Request, access store.AccessConte
 
 // boundedViewPredicate mirrors resourceAllowedLegacy's "views" case for a
 // saved-view point (ref != "") or the create root (create).
-func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedViewPredicate(r *http.Request, userID, ref string, create bool) recordPredicate {
 	return s.boundedViewMutationPredicate(r, userID, ref, create, func(input *domain.SavedViewMutationInput) bool {
 		return peekRequestJSON(r, input)
 	})
 }
 
-func (s *server) boundedViewMutationPredicate(r *http.Request, userID, ref string, create bool, readInput func(*domain.SavedViewMutationInput) bool) scaleP21RecordPredicate {
+func (s *server) boundedViewMutationPredicate(r *http.Request, userID, ref string, create bool, readInput func(*domain.SavedViewMutationInput) bool) recordPredicate {
 	return func(access store.AccessContext, data domain.Bootstrap) (permitted bool, err error) {
 		defer func() {
 			if permitted && err == nil && (create || r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
@@ -184,7 +184,7 @@ func boundedDashboardVisible(access store.AccessContext, userID, ref string, ite
 // boundedDashboardPredicate mirrors the "dashboards" case. The setting is
 // projected by the store's own settings filter and decoded by the literal
 // settingCollection; dashboardVisible sees the projected team rows.
-func (s *server) boundedDashboardPredicate(r *http.Request, userID, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedDashboardPredicate(r *http.Request, userID, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		role := access.ViewerRole()
 		if create {

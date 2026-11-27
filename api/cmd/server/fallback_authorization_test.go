@@ -7,16 +7,16 @@ import (
 	"testing"
 )
 
-// SW491 covers every bounded fallback decision class of the first closure:
+// fallback authorization covers every bounded fallback decision class of the first closure:
 // membership, non-guest roots, project/initiative points and relation IDs,
 // team rows/content and embedded review favorites.
-func TestScaleP21SW491FallbackAuthorizationDifferential(t *testing.T) {
-	fx := scaleP21SW491Setup(t, nil)
+func TestFallbackAuthorizationDifferential(t *testing.T) {
+	fx := harnessSetup(t, nil)
 	workspace, prefix, ids, foreign := fx.workspace, fx.prefix, fx.ids, fx.foreign
 	privateTeam, childTeam, publicKey := fx.privateTeam, fx.childTeam, fx.publicKey
 	f := struct{ public string }{fx.public}
 	esc := url.PathEscape
-	rows := []scaleP21SW491Row{
+	rows := []harnessRow{
 		// Membership: the literal default and collection roots.
 		{"default-settings-read", http.MethodGet, "GET /api/webhooks", "/api/webhooks", ""},
 		{"default-admin-write", http.MethodDelete, "DELETE /api/workspaces/{workspaceKey}/members/{userId}", "/api/workspaces/" + workspace + "/members/" + prefix + "member", ""},
@@ -82,7 +82,7 @@ func TestScaleP21SW491FallbackAuthorizationDifferential(t *testing.T) {
 		{"review-favorite-hidden", http.MethodPatch, "PATCH /api/reviews/{id}", "/api/reviews/" + prefix + "review-hidden", `{"favorite":true}`},
 		{"review-favorite-missing", http.MethodPatch, "PATCH /api/reviews/{id}", "/api/reviews/" + prefix + "missing", `{"favorite":true}`},
 	}
-	controls := []scaleP21SW491Control{
+	controls := []harnessControl{
 		{"default-settings-read/admin/session", true},
 		{"default-settings-read/member-private-outsider/session", false},
 		{"teams-root/member-private-outsider/session", true},

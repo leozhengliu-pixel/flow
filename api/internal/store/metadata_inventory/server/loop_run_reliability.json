@@ -5,7 +5,7 @@
     "listLoopRunEvents": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Identity-only WorkspaceMetadataFieldsScoped retains original loops-field read off mode; native LoopRun ID/loop binding and ordered event-log query do not use current loop bodies. TestScaleP21SW24LoopReadsDifferential compares full principal/key matrix, after cursors, exact native events/hidden references, wrong-loop/missing-run and foreign-workspace cases, queued/replayed revocation, unchanged canonical state and zero full decodes; legal oversized current/unrelated loops never enter this read.",
+      "reason": "Identity-only WorkspaceMetadataFieldsScoped retains original loops-field read off mode; native LoopRun ID/loop binding and ordered event-log query do not use current loop bodies. TestLoopReadsDifferential compares full principal/key matrix, after cursors, exact native events/hidden references, wrong-loop/missing-run and foreign-workspace cases, queued/replayed revocation, unchanged canonical state and zero full decodes; legal oversized current/unrelated loops never enter this read.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

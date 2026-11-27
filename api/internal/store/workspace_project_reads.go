@@ -10,7 +10,7 @@ import (
 // viewer projection (realtime authorizes per event and must stay cheap).
 func (s *SQLiteStore) ProjectByID(workspace, id string) (domain.Project, bool) {
 	if view, release, handled := s.coldAccessorView(context.Background(), "ProjectByID", workspace, []string{"projects"}); handled {
-		// Bounded: the image holds no projects (SW559).
+		// Bounded: the image holds no projects.
 		defer release()
 		if view == nil {
 			return domain.Project{}, false

@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW308ResourceAuthorizationDifferential(t *testing.T) {
+func TestResourceAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("sw308-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
@@ -170,11 +170,11 @@ func TestScaleP21SW308ResourceAuthorizationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW308ResourceAuthorizationNativeDuplicates(t *testing.T) {
+func TestResourceAuthorizationNativeDuplicates(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, team := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -211,11 +211,11 @@ func TestScaleP21SW308ResourceAuthorizationNativeDuplicates(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW308CanonicalHeadersAndLargeOwnership(t *testing.T) {
+func TestCanonicalHeadersAndLargeOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -291,11 +291,11 @@ func TestScaleP21SW308CanonicalHeadersAndLargeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW308ResourceAuthorizationReleaseAndAuthority(t *testing.T) {
+func TestResourceAuthorizationReleaseAndAuthority(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	target := idgen.New("sw308-owned-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.sw308.owned", "", nil, func(data *domain.Bootstrap) error {
@@ -361,13 +361,13 @@ func TestScaleP21SW308ResourceAuthorizationReleaseAndAuthority(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW308ResourceAuthorizationBorrowedSnapshot(t *testing.T) {
+func TestResourceAuthorizationBorrowedSnapshot(t *testing.T) {
 	for _, journal := range []string{"off", "on"} {
 		t.Run(journal, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", journal)
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, target := f.data.Workspace.URLKey, idgen.New("sw308-snapshot-")
 			if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21.sw308.snapshot", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = append(data.Projects, domain.Project{ID: target, TeamIDs: []string{data.Teams[0].ID}})

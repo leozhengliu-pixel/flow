@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21HotDocumentReadOwnershipAndFallback(t *testing.T) {
+func TestScaleHotDocumentReadOwnershipAndFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-document-")
 	at := time.Date(2025, 3, 4, 5, 6, 7, 8, time.UTC)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "teams", "documents", "projects"), workspace, "scale_p21.document_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -124,11 +124,11 @@ func TestScaleP21HotDocumentReadOwnershipAndFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadUnrelatedCount(t *testing.T) {
+func TestScaleHotDocumentReadUnrelatedCount(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-document-count-")
 	var held uint64
 	for _, count := range []int{100, 1000} {
@@ -162,11 +162,11 @@ func TestScaleP21HotDocumentReadUnrelatedCount(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadCallerSnapshotPoolOne(t *testing.T) {
+func TestScaleHotDocumentReadCallerSnapshotPoolOne(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-document-caller-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "documents"), workspace, "scale_p21.document_caller_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, domain.Document{ID: target, Title: "Caller snapshot", Content: strings.Repeat("body ", 70000), Creator: data.Viewer, CreatedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)})
@@ -228,11 +228,11 @@ func TestScaleP21HotDocumentReadCallerSnapshotPoolOne(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadInstalledApplication(t *testing.T) {
+func TestScaleHotDocumentReadInstalledApplication(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, client, target := f.data.Workspace.URLKey, idgen.New("flow_client_document_"), idgen.New("p21-document-app-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "oauthApplications"), workspace, "scale_p21.document_app_definition", "", nil, func(data *domain.Bootstrap) error {
 		data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: client + "-definition", ClientID: client, Name: "Global application name", LogoURL: "https://example.test/current-document-app.png", Scopes: []string{"read", "app:mentionable"}})
@@ -311,13 +311,13 @@ func TestScaleP21HotDocumentReadInstalledApplication(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadLiveProjectionAdmission(t *testing.T) {
+func TestScaleHotDocumentReadLiveProjectionAdmission(t *testing.T) {
 	for _, kind := range []string{"member", "identity", "team-member", "invitation", "departure", "inactive-app", "default-favorite", "favorite-override"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			if kind != "invitation" && f.dialect != "sqlite" {
 				t.Skip("large SQL VARCHAR scalar is legal on SQLite; invitation JSON is tested on every dialect")
 			}
@@ -420,13 +420,13 @@ func TestScaleP21HotDocumentReadLiveProjectionAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDocumentReadQueuedRevocation(t *testing.T) {
+func TestScaleHotDocumentReadQueuedRevocation(t *testing.T) {
 	for _, credential := range []string{"session", "selected-key"} {
 		t.Run(credential, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 			var key *domain.APIKey
 			if credential == "selected-key" {
@@ -477,11 +477,11 @@ func TestScaleP21HotDocumentReadQueuedRevocation(t *testing.T) {
 
 // The detail read leaves out the projects that list the document: the same
 // document and policy, no Projects, and no scan of the other projects.
-func TestScaleP21DocumentReadSkipProjects(t *testing.T) {
+func TestScaleDocumentReadSkipProjects(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-document-skip-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.document_skip", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = []domain.Document{{ID: target, Title: "Skip", Content: "body", Creator: data.Viewer, ProjectIDs: []string{target + "-linked"}}}

@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW331EscapedLegacyIssueAuthorization(t *testing.T) {
+func TestEscapedLegacyIssueAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -31,8 +31,8 @@ func TestScaleP21SW331EscapedLegacyIssueAuthorization(t *testing.T) {
 			{http.MethodGet, "/api/issues/a%2Fcomment-actions/permissions", "permissions", "a", 5},
 		} {
 			request := httptest.NewRequest(row.method, row.path, nil)
-			parts, matched := scaleP21EscapedRouteParts(request, "/api/issues/{id}/"+row.tail)
-			if !matched || len(parts) != row.parts || parts[2] != row.ref || !scaleP21SW318EmptyLegacyIssueRequest(request) {
+			parts, matched := scaleEscapedRouteParts(request, "/api/issues/{id}/"+row.tail)
+			if !matched || len(parts) != row.parts || parts[2] != row.ref || !emptyLegacyIssueRequest(request) {
 				t.Fatal("escaped shape lost literal trimmed/decoded precedence", row, parts, matched)
 			}
 		}
@@ -48,7 +48,7 @@ func TestScaleP21SW331EscapedLegacyIssueAuthorization(t *testing.T) {
 			{http.MethodGet, "/api/issues%2Fa/b/permissions"},
 			{http.MethodGet, "/api/issue-suggestions/a%2Fb"},
 		} {
-			if scaleP21SW318EmptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
+			if emptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
 				t.Fatal("escaped selector captured another source/method/route contract", row)
 			}
 		}
@@ -58,12 +58,12 @@ func TestScaleP21SW331EscapedLegacyIssueAuthorization(t *testing.T) {
 		Status        int
 		Body, Pattern string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			// Reuse SW318's small, real borrowed-source fixture. M2's unrelated
+			// Reuse borrowed source origin's small, real borrowed-source fixture. M2's unrelated
 			// large metadata witnesses remain unchanged.
-			small := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			small := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			public := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 				map[string]any{"title": "SW331 escaped issue", "teamId": f.public}, workspace, http.StatusCreated)
@@ -231,7 +231,7 @@ func TestScaleP21SW331EscapedLegacyIssueAuthorization(t *testing.T) {
 									}
 									startSQL := statements
 									shortcut, handled := service.boundedEmptyLegacyIssueDenial(r, selectedWorkspace)
-									expectedHandled := source.BoundedMetadataEnabled() && scaleP21SW318EmptyLegacyIssueRequest(r) && !native
+									expectedHandled := source.BoundedMetadataEnabled() && emptyLegacyIssueRequest(r) && !native
 									if shortcut || handled != expectedHandled || statements != startSQL {
 										t.Fatal("pure escaped denial changed source/flag/native boundary", shortcut, handled, expectedHandled)
 									}

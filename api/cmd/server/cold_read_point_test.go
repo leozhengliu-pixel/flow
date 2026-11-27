@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW4PointDeletesDifferential(t *testing.T) {
+func TestPointDeletesDifferential(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
-			name: "sw4-project-template-delete", kind: "projectTemplates", id: "sw4-template",
+			name: "project-template-delete", kind: "projectTemplates", id: "sw4-template",
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				data.ProjectTemplates = []domain.ProjectTemplate{
 					{ID: "sw4-template", Name: "Target", Creator: actor, CreatedAt: now, UpdatedAt: now},
@@ -28,7 +28,7 @@ func TestScaleP21SW4PointDeletesDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "projectTemplates", ID: "sw4-other-template"}},
 		},
 		{
-			name: "sw4-draft-delete", kind: "drafts", id: "sw4-draft",
+			name: "draft-delete", kind: "drafts", id: "sw4-draft",
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				data.Drafts = []domain.Draft{
 					{ID: "sw4-draft", UserID: actor.ID, Type: "issue", Body: "Target", CreatedAt: now, UpdatedAt: now},
@@ -39,7 +39,7 @@ func TestScaleP21SW4PointDeletesDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "drafts", ID: "sw4-other-draft"}},
 		},
 		{
-			name: "sw4-request-attachment-delete", kind: "customerRequests", id: "sw4-request",
+			name: "request-attachment-delete", kind: "customerRequests", id: "sw4-request",
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				data.CustomerRequests = []domain.CustomerRequest{
 					{ID: "sw4-request", Body: "Target", Creator: actor, Attachments: []domain.Attachment{
@@ -76,12 +76,12 @@ func TestScaleP21SW4PointDeletesDifferential(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW4ForeignDraftAndPointBudgets(t *testing.T) {
+func TestForeignDraftAndPointBudgets(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		foreignID := idgen.New("sw4-foreign-owner-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw4.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -91,16 +91,16 @@ func TestScaleP21SW4ForeignDraftAndPointBudgets(t *testing.T) {
 			t.Fatal(err)
 		}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-			before := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "drafts", ID: "sw4-foreign"})
+			before := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "drafts", ID: "sw4-foreign"})
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				r, w := f.request(user, key, nil), httptest.NewRecorder()
 				r.SetPathValue("id", "sw4-foreign")
-				scaleP21M3Call(&server{store: source}, w, r, (*server).deleteDraft)
+				callPointSettingsHandler(&server{store: source}, w, r, (*server).deleteDraft)
 				if w.Code != http.StatusNotFound {
 					t.Fatalf("foreign draft status=%d", w.Code)
 				}
 			}
-			if after := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "drafts", ID: "sw4-foreign"}); !reflect.DeepEqual(before, after) {
+			if after := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "drafts", ID: "sw4-foreign"}); !reflect.DeepEqual(before, after) {
 				t.Fatal("foreign draft deletion changed canonical data")
 			}
 		})
@@ -121,15 +121,15 @@ func TestScaleP21SW4ForeignDraftAndPointBudgets(t *testing.T) {
 			{"projectTemplates", "sw4-large-template", (*server).deleteProjectTemplate},
 			{"customerRequests", "sw4-large-request", (*server).deleteCustomerRequestAttachment},
 		} {
-			before := scaleP21M3Fingerprint(t, f.probe, workspace, operation.kind)
+			before := pointRecordFingerprint(t, f.probe, workspace, operation.kind)
 			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", operation.id)
 			r.SetPathValue("attachmentId", "sw4-large-attachment")
-			scaleP21M3Call(&server{store: f.probe}, w, r, operation.handler)
+			callPointSettingsHandler(&server{store: f.probe}, w, r, operation.handler)
 			if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) {
 				t.Fatalf("%s oversized target status=%d body=%s", operation.kind, w.Code, w.Body.String())
 			}
-			if scaleP21M3Fingerprint(t, f.probe, workspace, operation.kind) != before {
+			if pointRecordFingerprint(t, f.probe, workspace, operation.kind) != before {
 				t.Fatalf("%s budget failure changed canonical data", operation.kind)
 			}
 		}

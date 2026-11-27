@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW354IntegrationSpoolTransfer(t *testing.T) {
+func TestIntegrationSpoolTransfer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
-	repo := scaleP21ResidentProbe(f.SQLiteStore)
+	f := journalScaleDatabase(t)
+	repo := scaleResidentProbe(f.SQLiteStore)
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	defer func() {
 		if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors ||

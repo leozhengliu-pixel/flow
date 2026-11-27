@@ -9,8 +9,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW236InlineRootWriterTwoCapturesDifferential(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestInlineRootWriterTwoCapturesDifferential(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	if len(before.Users) < 2 || before.Users[1].ID == "" {
 		t.Fatal("SW217 fixture lacks its split fast-row user")
 	}
@@ -22,19 +22,19 @@ func TestScaleP21SW236InlineRootWriterTwoCapturesDifferential(t *testing.T) {
 	target.Asks[0].Title = "Changed <>&"
 	target.Users[1].Name = "SW236 changed fast row"
 	workspace := before.Workspace.URLKey
-	tx, ctx := scaleP21SW77Begin(t, f, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 	want := cloneBootstrap(target)
 	if _, err := f.writeWorkspaceMetadataDelta(ctx, tx, workspace, before, &want); err != nil {
 		t.Fatal("literal SW217 inline/fast-row delta", err)
 	}
-	expected := scaleP21SW76MetadataImage(t, tx, workspace)
+	expected := metadataImage(t, tx, workspace)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
 
-	tx, ctx = scaleP21SW77Begin(t, f, before)
+	tx, ctx = legacyDeltaBudgetBegin(t, f, before)
 	defer tx.Rollback()
-	rootBytes, shapes := scaleP21SW217Shapes(t, ctx, tx, workspace)
+	rootBytes, shapes := inlineFieldsShapes(t, ctx, tx, workspace)
 	if rootBytes <= MetadataRecordPageMaxBytes || shapes["asks"] != "" || shapes["users"] != "array" {
 		t.Fatal("fixture lost its large inline root and split fast row", rootBytes, shapes)
 	}
@@ -53,7 +53,7 @@ func TestScaleP21SW236InlineRootWriterTwoCapturesDifferential(t *testing.T) {
 		if strings.HasPrefix(lower, "select substr(") && strings.Contains(lower, "from workspace_states") {
 			rootReads++
 		}
-		row, root := scaleP21SW83MetadataWrite(query)
+		row, root := isLegacyMetadataWriteStatement(query)
 		if row && !root {
 			rowWrites++
 		}
@@ -90,7 +90,7 @@ func TestScaleP21SW236InlineRootWriterTwoCapturesDifferential(t *testing.T) {
 	if !reflect.DeepEqual(native.Users, want.Users) || !reflect.DeepEqual(native.Asks, want.Asks) {
 		t.Fatal("generic writer changed exact native fast-row or inline occurrences")
 	}
-	actual := scaleP21SW76MetadataImage(t, tx, workspace)
+	actual := metadataImage(t, tx, workspace)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatal("conservative fresh capture changed literal root or canonical rows")
 	}

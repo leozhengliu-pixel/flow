@@ -14,18 +14,18 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW23TeamProjectionStrings = 256 << 10
-const scaleP21SW23TeamProjectionWork = 4 << 20
+const teamProjectionStrings = 256 << 10
+const teamProjectionWork = 4 << 20
 
 // Team and its selected strings/timestamps remain owned by this handle until
 // Close. Generic encoded responses need their own separately sized allowance.
-type scaleP21SW23TeamProjectionRead struct {
+type teamProjectionRead struct {
 	Team    domain.Team
 	release func()
 	once    sync.Once
 }
 
-func (r *scaleP21SW23TeamProjectionRead) Close() {
+func (r *teamProjectionRead) Close() {
 	if r != nil {
 		r.once.Do(func() {
 			r.Team = domain.Team{}
@@ -36,12 +36,12 @@ func (r *scaleP21SW23TeamProjectionRead) Close() {
 	}
 }
 
-type scaleP21SW23TeamField struct {
+type teamField struct {
 	name, kind string
 	retain     bool
 }
 
-var scaleP21SW23TeamFields = []scaleP21SW23TeamField{
+var teamFields = []teamField{
 	{"id", "string", true},
 	{"name", "string", false},
 	{"key", "string", true},
@@ -56,12 +56,12 @@ var scaleP21SW23TeamFields = []scaleP21SW23TeamField{
 	{"updatedAt", "time", false},
 }
 
-var scaleP21SW23TeamSchema = sync.OnceValue(func() error {
+var teamSchema = sync.OnceValue(func() error {
 	kind := reflect.TypeFor[domain.Team]()
-	if kind.NumField() != len(scaleP21SW23TeamFields) || reflect.PointerTo(kind).Implements(reflect.TypeFor[json.Unmarshaler]()) {
+	if kind.NumField() != len(teamFields) || reflect.PointerTo(kind).Implements(reflect.TypeFor[json.Unmarshaler]()) {
 		return fmt.Errorf("%w: Team projection schema changed", ErrBoundedMetadataCoverage)
 	}
-	for index, expected := range scaleP21SW23TeamFields {
+	for index, expected := range teamFields {
 		field := kind.Field(index)
 		tag := expected.name
 		if index >= 4 {
@@ -79,15 +79,15 @@ var scaleP21SW23TeamSchema = sync.OnceValue(func() error {
 
 // Project one trusted canonical Team row without selecting a lifecycle source
 // or authorizing a caller.
-func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, record MetadataArrayRecord) (_ *scaleP21SW23TeamProjectionRead, err error) {
-	if err := scaleP21SW23TeamSchema(); err != nil {
+func (s *SQLiteStore) beginTeamProjection(ctx context.Context, record MetadataArrayRecord) (_ *teamProjectionRead, err error) {
+	if err := teamSchema(); err != nil {
 		return nil, err
 	}
-	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW23TeamProjectionWork)
+	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, teamProjectionWork)
 	if err != nil {
 		return nil, err
 	}
-	result := &scaleP21SW23TeamProjectionRead{release: release}
+	result := &teamProjectionRead{release: release}
 	defer func() {
 		if err != nil {
 			result.Close()
@@ -114,7 +114,7 @@ func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, recor
 	if first != '{' {
 		return nil, ErrMetadataRecordQuery
 	}
-	remaining := scaleP21SW23TeamProjectionStrings
+	remaining := teamProjectionStrings
 	err = scanner.object(func(keyRange, valueRange metadataCollectionRange) error {
 		// Every spelling folding to a known ASCII tag fits six JSON bytes
 		// per rune. A giant unknown property never becomes a Go string.
@@ -126,14 +126,14 @@ func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, recor
 			return err
 		}
 		index := -1
-		for candidate, field := range scaleP21SW23TeamFields {
+		for candidate, field := range teamFields {
 			if field.name == name {
 				index = candidate
 				break
 			}
 		}
 		if index < 0 {
-			for candidate, field := range scaleP21SW23TeamFields {
+			for candidate, field := range teamFields {
 				if strings.EqualFold(field.name, name) {
 					index = candidate
 					break
@@ -143,7 +143,7 @@ func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, recor
 		if index < 0 {
 			return nil
 		}
-		field := scaleP21SW23TeamFields[index]
+		field := teamFields[index]
 		part := io.NewSectionReader(reader, valueRange.offset, valueRange.size)
 		switch field.kind {
 		case "string":
@@ -182,7 +182,7 @@ func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, recor
 				return err
 			}
 		case "time":
-			value, err := scaleP21SW23TeamTime(ctx, part)
+			value, err := teamTime(ctx, part)
 			if err != nil {
 				return fmt.Errorf("Team.%s: %w", field.name, err)
 			}
@@ -210,7 +210,7 @@ func (s *SQLiteStore) scaleP21SW23BeginTeamProjection(ctx context.Context, recor
 // after nine digits. Preserve its raw quoting/escape behavior, retaining only
 // those digits before delegating all remaining RFC3339 rules to that decoder.
 // The input is an exact scanner token range, excluding surrounding whitespace.
-func scaleP21SW23TeamTime(ctx context.Context, input io.Reader) (*time.Time, error) {
+func teamTime(ctx context.Context, input io.Reader) (*time.Time, error) {
 	reader := bufio.NewReaderSize(input, 4096)
 	var raw [128]byte
 	used, fractionDigits := 0, 0

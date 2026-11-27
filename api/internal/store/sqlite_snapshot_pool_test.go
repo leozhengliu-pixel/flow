@@ -12,14 +12,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW591: with bounded metadata on, SQLite read-only transactions run on the
+// With bounded metadata on, SQLite read-only transactions run on the
 // snapshot pool. A read snapshot (a reload's, a legacy view's, an
 // authorization's) no longer waits for, or holds up, the one write
 // connection: it runs while a write transaction is open there and sees
 // exactly the commits made before it began, as it did on that connection.
 // A legacy view decoded from the snapshot pool equals the flag-off store's
 // answer. Flag off, and for an in-memory database, there is no pool.
-func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
+func TestSQLiteSnapshotPool(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SQLITE_SNAPSHOT_POOL", "on")
@@ -62,7 +62,7 @@ func TestScaleP21SW591SQLiteSnapshotPool(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := scaleP21SW557CompleteCatalog(ctx, legacy); err != nil {
+	if err := completeCatalog(ctx, legacy); err != nil {
 		t.Fatal(err)
 	}
 	if err := legacy.Close(); err != nil {

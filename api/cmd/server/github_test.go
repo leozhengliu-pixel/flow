@@ -21,7 +21,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW24GitHub(t *testing.T, repo *store.SQLiteStore) (*server, *atomic.Int64) {
+func gitHub(t *testing.T, repo *store.SQLiteStore) (*server, *atomic.Int64) {
 	t.Helper()
 	calls := &atomic.Int64{}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,9 +61,9 @@ func scaleP21SW24GitHub(t *testing.T, repo *store.SQLiteStore) (*server, *atomic
 	return service, calls
 }
 
-func scaleP21SW24GitHubResponse(t *testing.T, service *server, w *httptest.ResponseRecorder, kind string) any {
+func gitHubResponse(t *testing.T, service *server, w *httptest.ResponseRecorder, kind string) any {
 	t.Helper()
-	response := scaleP21M3JSON(t, w.Body.Bytes())
+	response := normalizeSettingsPointJSON(t, w.Body.Bytes())
 	if w.Code != http.StatusOK || kind != "install" && kind != "authorize" {
 		return response
 	}
@@ -105,15 +105,15 @@ func scaleP21SW24GitHubResponse(t *testing.T, service *server, w *httptest.Respo
 	return response
 }
 
-func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
+func TestGitHubIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	enableConnectorSecrets(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		base, calls := scaleP21SW24GitHub(t, repo)
+		base, calls := gitHub(t, repo)
 		for _, principal := range f.principals {
 			account, err := repo.UpsertCodeHostAccount(t.Context(), domain.CodeHostAccount{
 				ID: idgen.New("sw24-codehost-"), UserID: principal.user.ID, CodeHost: domain.CodeHostGitHub,
@@ -138,7 +138,7 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before := pointRecordFingerprint(t, repo, workspace, "loops")
 		reset := func(linked bool) {
 			t.Helper()
 			if _, err := repo.UnlinkCodeHostInstallation(t.Context(), workspace, domain.CodeHostGitHub, "42"); err != nil {
@@ -180,7 +180,7 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 						service := &server{store: source, coding: base.coding}
 						r, w := f.request(user, key, map[string]string{"installationId": "42"}), httptest.NewRecorder()
 						r.SetPathValue("id", "42")
-						scaleP21M3Call(service, w, r, operation.handler)
+						callPointSettingsHandler(service, w, r, operation.handler)
 						want := operation.want
 						if operation.admin && !workspaceAdminRole(role) {
 							want = http.StatusForbidden
@@ -195,10 +195,10 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 						for i := range rows {
 							rows[i].CreatedAt, rows[i].UpdatedAt = time.Time{}, time.Time{}
 						}
-						outcomes = append(outcomes, []any{w.Code, scaleP21SW24GitHubResponse(t, service, w, operation.name), rows})
+						outcomes = append(outcomes, []any{w.Code, gitHubResponse(t, service, w, operation.name), rows})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("GitHub identity differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("GitHub identity differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -214,7 +214,7 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					beforeCalls := calls.Load()
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source, coding: base.coding}, w, queued, operation.handler)
+					callPointSettingsHandler(&server{store: source, coding: base.coding}, w, queued, operation.handler)
 					if w.Code != http.StatusForbidden || beforeCalls != calls.Load() {
 						t.Fatalf("%s GitHub call reused revoked authority", phase)
 					}
@@ -240,7 +240,7 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 			r.Header.Set("X-Workspace-Key", foreign.Workspace.URLKey)
 			r.SetPathValue("workspaceKey", foreign.Workspace.URLKey)
 			r.SetPathValue("id", "42")
-			scaleP21M3Call(service, w, r, (*server).removeGitHubAppInstallation)
+			callPointSettingsHandler(service, w, r, (*server).removeGitHubAppInstallation)
 			if w.Code != http.StatusNotFound {
 				t.Fatal("foreign workspace removed another installation")
 			}
@@ -264,7 +264,7 @@ func TestScaleP21SW24GitHubIdentityDifferential(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatal("GitHub read after cancellation did not recover")
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("GitHub identity read changed unrelated metadata or decoded all metadata")
 		}
 	}

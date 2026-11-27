@@ -18,7 +18,7 @@ import (
 // carries the peer's change and its publication equals a fresh reload.
 func TestColdFacadeCopyRevisionSkipsCurrentReload(t *testing.T) {
 	f, view, workspace := coldIncrementalFixture(t)
-	view.coordinator = scaleP21ColdWriteCoordinator(func(_ context.Context, _ string, apply func() error) error { return apply() })
+	view.coordinator = scaleColdWriteCoordinator(func(_ context.Context, _ string, apply func() error) error { return apply() })
 	at := time.Date(2026, 11, 19, 13, 0, 0, 0, time.UTC)
 	var loads atomic.Int64
 	observe := func(ctx context.Context) context.Context {
@@ -61,7 +61,7 @@ func TestColdFacadeCopyRevisionSkipsCurrentReload(t *testing.T) {
 	if reloads := write("after a peer commit", 1); reloads != 0 {
 		t.Fatalf("a COLD write over a peer's commit reloaded the complete workspace %d times", reloads)
 	}
-	got := scaleP21ColdTeamNative(t, view, workspace)
+	got := scaleColdTeamNative(t, view, workspace)
 	if got.APIKeys[0].Name != "peer rename" {
 		t.Fatalf("the peer's change is missing: %q", got.APIKeys[0].Name)
 	}

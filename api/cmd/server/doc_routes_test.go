@@ -13,15 +13,15 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21DocRoutesOutcome struct {
+type scaleDocRoutesOutcome struct {
 	code int
 	body string
 }
 
-// scaleP21DocRoutesServe runs one request through the real authentication and
+// scaleDocRoutesServe runs one request through the real authentication and
 // workspace authorization (a session cookie, or an API key) and the mux, as
 // the server does.
-func scaleP21DocRoutesServe(f scaleP21M2Fixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, method, path string, body any) scaleP21DocRoutesOutcome {
+func scaleDocRoutesServe(f policyDifferentialFixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, method, path string, body any) scaleDocRoutesOutcome {
 	service := &server{store: source, realtime: newRealtimeHub(), uploadPath: f.testingT.TempDir()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/documents/{id}", service.getDocument)
@@ -50,7 +50,7 @@ func scaleP21DocRoutesServe(f scaleP21M2Fixture, source *store.SQLiteStore, toke
 			}
 		})).ServeHTTP(w, r)
 	}
-	return scaleP21DocRoutesOutcome{w.Code, normalizeDocRoutesBody(w.Body.String())}
+	return scaleDocRoutesOutcome{w.Code, normalizeDocRoutesBody(w.Body.String())}
 }
 
 // normalizeDocRoutesBody drops the request id and the clock fields of a
@@ -83,18 +83,18 @@ func normalizeDocRoutesBody(raw string) string {
 	return string(out)
 }
 
-// TestScaleP21DocRoutesDifferential compares GET /api/documents/{id},
+// TestScaleDocRoutesDifferential compares GET /api/documents/{id},
 // PATCH /api/documents/{id} (allowed, refused, conflicting, missing) and
 // PATCH /api/projects/{id} with the flag on against the literal flag-off
 // answer for every principal and credential: same status and same body. A
 // refused edit must also write nothing.
-func TestScaleP21DocRoutesDifferential(t *testing.T) {
+func TestScaleDocRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("docroutes-")
 		var private string
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.doc_routes_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -132,8 +132,8 @@ func TestScaleP21DocRoutesDifferential(t *testing.T) {
 			}
 			tokens[principal.user.ID] = token
 		}
-		serve := func(source *store.SQLiteStore, user domain.User, key *domain.APIKey, method, path string, body any) scaleP21DocRoutesOutcome {
-			return scaleP21DocRoutesServe(f, source, tokens[user.ID], user, key, method, path, body)
+		serve := func(source *store.SQLiteStore, user domain.User, key *domain.APIKey, method, path string, body any) scaleDocRoutesOutcome {
+			return scaleDocRoutesServe(f, source, tokens[user.ID], user, key, method, path, body)
 		}
 		keys := []*domain.APIKey{nil,
 			{ID: prefix + "all", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"},
@@ -143,7 +143,7 @@ func TestScaleP21DocRoutesDifferential(t *testing.T) {
 		}
 		refs := []string{"team", "editor", "private", "workspace", "inherited", "missing"}
 		cases, refused := 0, 0
-		compare := func(label string, user domain.User, key *domain.APIKey, method, path string, body any) scaleP21DocRoutesOutcome {
+		compare := func(label string, user domain.User, key *domain.APIKey, method, path string, body any) scaleDocRoutesOutcome {
 			t.Helper()
 			want := serve(repo, user, key, method, path, body)
 			got := serve(f.probe, user, key, method, path, body)

@@ -14,13 +14,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW0ResidentScannerReader struct {
+type residentScannerReader struct {
 	tx      *sqlTx
 	queries int
 	details int
 }
 
-func (r *scaleP21SW0ResidentScannerReader) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+func (r *residentScannerReader) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	r.queries++
 	if strings.Contains(query, "CASE WHEN") {
 		r.details++
@@ -28,12 +28,12 @@ func (r *scaleP21SW0ResidentScannerReader) QueryContext(ctx context.Context, que
 	return r.tx.QueryContext(ctx, query, args...)
 }
 
-func scaleP21SW0ResidentScannerFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *sqlTx) {
+func residentScannerFixture(t *testing.T) (scaleFixture, *SQLiteStore, *sqlTx) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	f.db.SetMaxOpenConns(1)
 	options := *metadataReadOptions(f.dialect)
 	options.ReadOnly = false
@@ -50,8 +50,8 @@ func scaleP21SW0ResidentScannerFixture(t *testing.T) (scaleP09Fixture, *SQLiteSt
 	return f, view, tx
 }
 
-func TestScaleP21SW0ResidentScannerMixedStorageOracle(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentScannerFixture(t)
+func TestResidentScannerMixedStorageOracle(t *testing.T) {
+	f, view, tx := residentScannerFixture(t)
 	workspace := f.data.Workspace.URLKey
 	expectedKeys := make([]string, 0, 73)
 	for index := range 73 {
@@ -99,7 +99,7 @@ func TestScaleP21SW0ResidentScannerMixedStorageOracle(t *testing.T) {
 		t.Fatal(err)
 	}
 	for pass := range 2 {
-		trace := &scaleP21SW0ResidentScannerReader{tx: tx}
+		trace := &residentScannerReader{tx: tx}
 		var actualRows []metadataCacheRow
 		var actualKeys []string
 		pages := 0
@@ -151,8 +151,8 @@ func TestScaleP21SW0ResidentScannerMixedStorageOracle(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResidentScannerUnicodeBudgetAndCancellation(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentScannerFixture(t)
+func TestResidentScannerUnicodeBudgetAndCancellation(t *testing.T) {
+	f, view, tx := residentScannerFixture(t)
 	workspace := f.data.Workspace.URLKey
 	raw := `{"id":"oversized","name":"` + strings.Repeat("名", MetadataRecordPageMaxBytes/2) + `"}`
 	var stored any = []byte(raw)
@@ -166,7 +166,7 @@ func TestScaleP21SW0ResidentScannerUnicodeBudgetAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trace := &scaleP21SW0ResidentScannerReader{tx: tx}
+	trace := &residentScannerReader{tx: tx}
 	if err := view.scanResidentMetadataField(t.Context(), trace, workspace, "teams", stamp, func([]metadataCacheRow) error {
 		t.Fatal("oversized encoded row reached the visitor")
 		return nil
@@ -175,7 +175,7 @@ func TestScaleP21SW0ResidentScannerUnicodeBudgetAndCancellation(t *testing.T) {
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	trace = &scaleP21SW0ResidentScannerReader{tx: tx}
+	trace = &residentScannerReader{tx: tx}
 	if err := view.scanResidentMetadataField(cancelled, trace, workspace, "teams", stamp, func([]metadataCacheRow) error { return nil }); !errors.Is(err, context.Canceled) || trace.queries != 0 {
 		t.Fatalf("cancelled scanner queried SQL: error=%v queries=%d", err, trace.queries)
 	}

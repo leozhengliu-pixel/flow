@@ -322,7 +322,7 @@ func (r *issueEditorLookups) collaborationUpdates(documentID string) (_ [][]byte
 	if err := r.reserve(uint64(len(updates))*128 + size*2 + 4096); err != nil {
 		return nil, r.failure(err)
 	}
-	// P04 executes independent callbacks. Give each its own mutable blobs,
+	// record verification executes independent callbacks. Give each its own mutable blobs,
 	// while keeping the retained transaction result private.
 	result := slices.Clone(updates)
 	for index := range result {

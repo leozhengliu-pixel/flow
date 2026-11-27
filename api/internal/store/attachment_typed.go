@@ -11,26 +11,26 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW16AttachmentHeader struct {
+type attachmentHeader struct {
 	id   string
 	size int64
 }
 
-type scaleP21SW16AttachmentBatch struct {
+type attachmentBatch struct {
 	store    *SQLiteStore
 	ids      []string
 	rows     [][]string
 	releases []func()
 }
 
-func (b *scaleP21SW16AttachmentBatch) close() {
+func (b *attachmentBatch) close() {
 	for _, release := range b.releases {
 		release()
 	}
 	b.releases = nil
 }
 
-func (s *SQLiteStore) scaleP21SW16AttachmentBytes(column string) string {
+func (s *SQLiteStore) attachmentBytes(column string) string {
 	if s.dialect == "sqlite" {
 		return "LENGTH(CAST(" + column + " AS BLOB))"
 	}
@@ -40,7 +40,7 @@ func (s *SQLiteStore) scaleP21SW16AttachmentBytes(column string) string {
 // Bounded headers and one complete typed Issue are hydrated at a time.
 // Sparse IDs/hashes stay admitted until the original index-difference writer
 // and decoded-ID checkpoint commit together.
-func (s *SQLiteStore) scaleP21SW16MigrateTypedAttachmentIndex(ctx context.Context) error {
+func (s *SQLiteStore) migrateTypedAttachmentIndex(ctx context.Context) error {
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func (s *SQLiteStore) scaleP21SW16MigrateTypedAttachmentIndex(ctx context.Contex
 			return err
 		}
 		for {
-			done, err := s.scaleP21SW16TypedAttachmentStep(ctx, workspace)
+			done, err := s.typedAttachmentStep(ctx, workspace)
 			if err != nil {
 				return err
 			}
@@ -89,8 +89,8 @@ func (s *SQLiteStore) scaleP21SW16MigrateTypedAttachmentIndex(ctx context.Contex
 	return nil
 }
 
-func (s *SQLiteStore) scaleP21SW16TypedAttachmentStep(ctx context.Context, workspace string) (bool, error) {
-	last, complete, releaseCheckpoint, err := s.scaleP21SW16AttachmentCheckpoint(ctx, workspace)
+func (s *SQLiteStore) typedAttachmentStep(ctx context.Context, workspace string) (bool, error) {
+	last, complete, releaseCheckpoint, err := s.attachmentCheckpoint(ctx, workspace)
 	if err != nil {
 		return false, err
 	}
@@ -105,15 +105,15 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentStep(ctx context.Context, works
 		return false, err
 	}
 	defer tx.Rollback()
-	headers, releaseHeaders, err := s.scaleP21SW16TypedAttachmentHeaders(ctx, tx, workspace, last)
+	headers, releaseHeaders, err := s.typedAttachmentHeaders(ctx, tx, workspace, last)
 	if err != nil {
 		return false, err
 	}
 	defer releaseHeaders()
-	batch := scaleP21SW16AttachmentBatch{store: s}
+	batch := attachmentBatch{store: s}
 	defer batch.close()
 	for _, header := range headers {
-		if err := s.scaleP21SW16ReadAttachmentIssue(ctx, tx, workspace, header, batch.add); err != nil {
+		if err := s.readAttachmentIssue(ctx, tx, workspace, header, batch.add); err != nil {
 			return false, err
 		}
 	}
@@ -137,7 +137,7 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentStep(ctx context.Context, works
 	return complete != 0, nil
 }
 
-func (s *SQLiteStore) scaleP21SW16AttachmentCheckpoint(ctx context.Context, workspace string) (string, int, func(), error) {
+func (s *SQLiteStore) attachmentCheckpoint(ctx context.Context, workspace string) (string, int, func(), error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return "", 0, nil, err
@@ -145,7 +145,7 @@ func (s *SQLiteStore) scaleP21SW16AttachmentCheckpoint(ctx context.Context, work
 	defer tx.Rollback()
 	var size int64
 	var complete int
-	if err := tx.QueryRowContext(ctx, "SELECT "+s.scaleP21SW16AttachmentBytes("last_id")+",complete FROM issue_attachment_migrations WHERE workspace_key=?", workspace).Scan(&size, &complete); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT "+s.attachmentBytes("last_id")+",complete FROM issue_attachment_migrations WHERE workspace_key=?", workspace).Scan(&size, &complete); err != nil {
 		return "", 0, nil, err
 	}
 	if complete != 0 {
@@ -159,7 +159,7 @@ func (s *SQLiteStore) scaleP21SW16AttachmentCheckpoint(ctx context.Context, work
 		return "", 0, nil, err
 	}
 	var last sql.NullString
-	err = tx.QueryRowContext(readCtx, "SELECT CASE WHEN "+s.scaleP21SW16AttachmentBytes("last_id")+"<=? THEN last_id ELSE NULL END FROM issue_attachment_migrations WHERE workspace_key=?", size, workspace).Scan(&last)
+	err = tx.QueryRowContext(readCtx, "SELECT CASE WHEN "+s.attachmentBytes("last_id")+"<=? THEN last_id ELSE NULL END FROM issue_attachment_migrations WHERE workspace_key=?", size, workspace).Scan(&last)
 	if err != nil || !last.Valid {
 		release()
 		if err == nil {
@@ -170,10 +170,10 @@ func (s *SQLiteStore) scaleP21SW16AttachmentCheckpoint(ctx context.Context, work
 	return last.String, complete, release, nil
 }
 
-func (s *SQLiteStore) scaleP21SW16TypedAttachmentHeaders(ctx context.Context, tx *sqlTx, workspace, last string) ([]scaleP21SW16AttachmentHeader, func(), error) {
+func (s *SQLiteStore) typedAttachmentHeaders(ctx context.Context, tx *sqlTx, workspace, last string) ([]attachmentHeader, func(), error) {
 	page := " FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT 64"
 	var count, bytes int64
-	query := "SELECT COUNT(*),COALESCE(SUM(id_bytes),0) FROM (SELECT " + s.scaleP21SW16AttachmentBytes("id") + " id_bytes" + page + ") sw16_headers"
+	query := "SELECT COUNT(*),COALESCE(SUM(id_bytes),0) FROM (SELECT " + s.attachmentBytes("id") + " id_bytes" + page + ") sw16_headers"
 	if err := tx.QueryRowContext(ctx, query, workspace, last).Scan(&count, &bytes); err != nil {
 		return nil, nil, err
 	}
@@ -184,14 +184,14 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentHeaders(ctx context.Context, tx
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := tx.QueryContext(headerCtx, "SELECT id,"+s.scaleP21SW16AttachmentBytes("data")+page, workspace, last)
+	rows, err := tx.QueryContext(headerCtx, "SELECT id,"+s.attachmentBytes("data")+page, workspace, last)
 	if err != nil {
 		release()
 		return nil, nil, err
 	}
-	headers := make([]scaleP21SW16AttachmentHeader, 0, int(count))
+	headers := make([]attachmentHeader, 0, int(count))
 	for rows.Next() {
-		var header scaleP21SW16AttachmentHeader
+		var header attachmentHeader
 		if err := rows.Scan(&header.id, &header.size); err != nil {
 			rows.Close()
 			release()
@@ -215,7 +215,7 @@ func (s *SQLiteStore) scaleP21SW16TypedAttachmentHeaders(ctx context.Context, tx
 	return headers, release, nil
 }
 
-func (s *SQLiteStore) scaleP21SW16ReadAttachmentIssue(ctx context.Context, tx *sqlTx, workspace string, header scaleP21SW16AttachmentHeader, visit func(context.Context, domain.Issue) error) error {
+func (s *SQLiteStore) readAttachmentIssue(ctx context.Context, tx *sqlTx, workspace string, header attachmentHeader, visit func(context.Context, domain.Issue) error) error {
 	if header.size < 0 || header.size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
@@ -225,7 +225,7 @@ func (s *SQLiteStore) scaleP21SW16ReadAttachmentIssue(ctx context.Context, tx *s
 	}
 	defer releaseRaw()
 	var raw []byte
-	query := "SELECT CASE WHEN " + s.scaleP21SW16AttachmentBytes("data") + "<=? THEN data ELSE NULL END FROM issue_records WHERE workspace_key=? AND " + s.metadataRecordKeyEquals("id", "?")
+	query := "SELECT CASE WHEN " + s.attachmentBytes("data") + "<=? THEN data ELSE NULL END FROM issue_records WHERE workspace_key=? AND " + s.metadataRecordKeyEquals("id", "?")
 	if err := tx.QueryRowContext(rawCtx, query, header.size, workspace, header.id).Scan(&raw); err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (s *SQLiteStore) scaleP21SW16ReadAttachmentIssue(ctx context.Context, tx *s
 	return visit(typedCtx, issue)
 }
 
-func (b *scaleP21SW16AttachmentBatch) add(ctx context.Context, issue domain.Issue) error {
+func (b *attachmentBatch) add(ctx context.Context, issue domain.Issue) error {
 	// syncIssueIndexRows serializes composite keys and owns maps for both
 	// desired and prior rows; charge those temporary representations too.
 	cost := int64(len(issue.ID))*22 + 1024
@@ -270,12 +270,12 @@ func (b *scaleP21SW16AttachmentBatch) add(ctx context.Context, issue domain.Issu
 	return nil
 }
 
-func (b *scaleP21SW16AttachmentBatch) write(ctx context.Context, tx *sqlTx, workspace string) error {
+func (b *attachmentBatch) write(ctx context.Context, tx *sqlTx, workspace string) error {
 	if len(b.ids) == 0 {
 		return nil
 	}
 	where, ids := bindList("issue_id", b.ids)
-	length := b.store.scaleP21SW16AttachmentBytes("issue_id") + "+" + b.store.scaleP21SW16AttachmentBytes("url_hash")
+	length := b.store.attachmentBytes("issue_id") + "+" + b.store.attachmentBytes("url_hash")
 	var count, bytes int64
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM("+length+"),0) FROM issue_attachment_records WHERE workspace_key=? AND "+where, append([]any{workspace}, ids...)...).Scan(&count, &bytes); err != nil {
 		return err

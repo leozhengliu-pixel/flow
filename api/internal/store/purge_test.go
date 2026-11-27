@@ -16,19 +16,19 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW17DeletionCoordinator struct{}
+type deletionCoordinator struct{}
 
-func (scaleP21SW17DeletionCoordinator) WithWorkspaceLock(ctx context.Context, _ string, action func() error) error {
+func (deletionCoordinator) WithWorkspaceLock(ctx context.Context, _ string, action func() error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return action()
 }
 
-func TestScaleP21SW17PurgeMeasurement(t *testing.T) {
+func TestPurgeMeasurement(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21_sw17.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Issues = append(data.Issues, domain.Issue{ID: idgen.New("issue_sw17_"), Title: "Retained issue", Description: strings.Repeat("unrelated issue body ", 65000)})
 		return nil
@@ -58,10 +58,10 @@ func TestScaleP21SW17PurgeMeasurement(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17PurgeLifecycleDifferential(t *testing.T) {
+func TestPurgeLifecycleDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx := ContextWithActor(t.Context(), f.data.Viewer)
 	primary := f.data.Workspace.URLKey
 	var primaryRoot []byte
@@ -142,7 +142,7 @@ func TestScaleP21SW17PurgeLifecycleDifferential(t *testing.T) {
 					}
 				}
 				if coordinated {
-					source.coordinator = scaleP21SW17DeletionCoordinator{}
+					source.coordinator = deletionCoordinator{}
 				}
 				if bounded {
 					source.metadataResidency.cacheRow(metadataResidentCacheKey{workspace: target.Key, field: "projects", key: "owned"}, metadataCacheRow{Data: []byte(`{"id":"owned"}`)})
@@ -249,10 +249,10 @@ func TestScaleP21SW17PurgeLifecycleDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17PurgeMissingAndCancellation(t *testing.T) {
+func TestPurgeMissingAndCancellation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	bounded, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

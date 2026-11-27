@@ -17,9 +17,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW5OAuthJSON(t *testing.T, value any) any {
+func oAuthJSON(t *testing.T, value any) any {
 	t.Helper()
-	result := scaleP21M2JSON(t, value, false)
+	result := normalizePolicyJSON(t, value, false)
 	var normalize func(any)
 	normalize = func(value any) {
 		switch item := value.(type) {
@@ -41,13 +41,13 @@ func scaleP21SW5OAuthJSON(t *testing.T, value any) any {
 	return result
 }
 
-func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
+func TestIntegrationOAuthDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	enableConnectorSecrets(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		target, other := idgen.New("sw5-oauth-"), idgen.New("sw5-other-oauth-")
 		var mu sync.Mutex
@@ -89,7 +89,7 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 			_, _ = w.Write([]byte(`{"access_token":"sw5-refreshed","refresh_token":"sw5-rotated","expires_in":60}`))
 		}))
 		t.Cleanup(provider.Close)
-		unrelated := scaleP21M3Fingerprint(t, repo, workspace, "projects")
+		unrelated := pointRecordFingerprint(t, repo, workspace, "projects")
 		type outcome struct {
 			Response, Canonical any
 			Tokens              store.IntegrationOAuthTokens
@@ -143,7 +143,7 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				if err := repo.PutIntegrationOAuthTokens(t.Context(), workspace, target, initial); err != nil {
 					t.Fatal(err)
 				}
-				otherBefore := scaleP21M3Fingerprint(t, repo, workspace, "settings")
+				otherBefore := pointRecordFingerprint(t, repo, workspace, "settings")
 				mu.Lock()
 				mode, action, providerErr, calls = operation+"-"+variant, nil, nil, nil
 				if variant == "concurrent-token" {
@@ -171,10 +171,10 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				mu.Unlock()
 				got := outcome{}
 				webhook := func(_ string, event domain.DomainEvent) {
-					got.Events = append(got.Events, scaleP21SW5OAuthJSON(t, []any{"webhook", event.Type, event.AggregateID, event.Payload, event.PreviousValues}))
+					got.Events = append(got.Events, oAuthJSON(t, []any{"webhook", event.Type, event.AggregateID, event.Payload, event.PreviousValues}))
 				}
 				realtime := func(_ string, event domain.RealtimeEvent) {
-					got.Events = append(got.Events, scaleP21SW5OAuthJSON(t, []any{"realtime", event.Type, event.AggregateID, event.ActorID, event.Payload}))
+					got.Events = append(got.Events, oAuthJSON(t, []any{"realtime", event.Type, event.AggregateID, event.ActorID, event.Payload}))
 				}
 				repo.SetWebhookSink(webhook)
 				repo.SetRealtimeSink(realtime)
@@ -192,9 +192,9 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				service := &server{store: source, authDisabled: true}
 				started := time.Now().UTC()
 				if operation == "refresh" {
-					scaleP21M3Call(service, w, r, (*server).refreshIntegrationOAuth)
+					callPointSettingsHandler(service, w, r, (*server).refreshIntegrationOAuth)
 				} else {
-					scaleP21M3Call(service, w, r, (*server).revokeIntegrationOAuth)
+					callPointSettingsHandler(service, w, r, (*server).revokeIntegrationOAuth)
 				}
 				if w.Code != expected {
 					t.Fatalf("%s/%s status=%d want=%d body=%s", operation, variant, w.Code, expected, w.Body.String())
@@ -211,8 +211,8 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				got.Response = []any{w.Code, scaleP21SW5OAuthJSON(t, scaleP21M2Response(t, w, false))}
-				got.Canonical = scaleP21SW5OAuthJSON(t, scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "integrationConnections", ID: target}))
+				got.Response = []any{w.Code, oAuthJSON(t, policyDifferentialResponse(t, w, false))}
+				got.Canonical = oAuthJSON(t, policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "integrationConnections", ID: target}))
 				got.Tokens, got.Found, err = repo.IntegrationOAuthTokens(t.Context(), workspace, target)
 				if err != nil {
 					t.Fatal(err)
@@ -240,13 +240,13 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				if operation == "refresh" && variant == "disconnected" && got.Found {
 					t.Fatal("disconnected refresh retained replacement tokens")
 				}
-				if scaleP21M3Fingerprint(t, repo, workspace, "settings") != otherBefore || scaleP21M3Fingerprint(t, repo, workspace, "projects") != unrelated {
+				if pointRecordFingerprint(t, repo, workspace, "settings") != otherBefore || pointRecordFingerprint(t, repo, workspace, "projects") != unrelated {
 					t.Fatal("integration OAuth changed unrelated metadata")
 				}
 				outcomes = append(outcomes, got)
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("%s/%s differs: %s", operation, variant, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("%s/%s differs: %s", operation, variant, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
@@ -299,7 +299,7 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 					r, w := f.request(member, nil, nil), httptest.NewRecorder()
 					r.SetPathValue("id", target)
 					r.SetPathValue("provider", "slack")
-					scaleP21M3Call(&server{store: source, authDisabled: true}, w, r, operation)
+					callPointSettingsHandler(&server{store: source, authDisabled: true}, w, r, operation)
 					if w.Code != http.StatusForbidden {
 						t.Fatalf("%s did not revalidate membership: %d", phase, w.Code)
 					}

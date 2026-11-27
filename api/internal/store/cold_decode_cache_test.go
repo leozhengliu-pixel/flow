@@ -40,7 +40,7 @@ func coldDecodeReference(t *testing.T, source *metadataLogicalSource) domain.Boo
 
 // coldDecodeFixture is the COLD incremental fixture with a projects
 // collection large enough for the per-record memo.
-func coldDecodeFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func coldDecodeFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	f, _, workspace := coldIncrementalFixture(t)
 	at := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
@@ -54,7 +54,7 @@ func coldDecodeFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21CompleteWorkspaceCatalog(t, f, workspace)
+	scaleCompleteWorkspaceCatalog(t, f, workspace)
 	view := coldIncrementalReloadedView(t, f, workspace)
 	return f, view, workspace
 }
@@ -390,7 +390,7 @@ func TestColdImageCopyReusePreservesIsolation(t *testing.T) {
 }
 
 // A facade lock held by a panicking COLD callback cannot be acquired during
-// scope cleanup. Keep the pooled arrays leased in that SW554 case so they
+// scope cleanup. Keep the pooled arrays leased in that COLD panic recovery case so they
 // cannot be reused while the abandoned facade still points at them.
 func TestColdScopeCloseDefersCopyReuseWhenViewLocked(t *testing.T) {
 	data := domain.Bootstrap{Projects: make([]domain.Project, 16384)}

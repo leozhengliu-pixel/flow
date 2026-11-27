@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP14Store(t *testing.T) (*SQLiteStore, domain.Bootstrap) {
+func notificationStateScaleStore(t *testing.T) (*SQLiteStore, domain.Bootstrap) {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -63,7 +63,7 @@ func scaleP14Store(t *testing.T) (*SQLiteStore, domain.Bootstrap) {
 	return repo, data
 }
 
-func scaleP14Notifications(t *testing.T, repo *SQLiteStore, data domain.Bootstrap) []domain.Notification {
+func scaleNotifications(t *testing.T, repo *SQLiteStore, data domain.Bootstrap) []domain.Notification {
 	t.Helper()
 	now := time.Now().UTC()
 	past, future := now.Add(-time.Hour), now.Add(time.Hour)
@@ -92,9 +92,9 @@ func scaleP14Notifications(t *testing.T, repo *SQLiteStore, data domain.Bootstra
 	return items
 }
 
-func TestScaleP14BaselineUnreadQuery(t *testing.T) {
-	repo, data := scaleP14Store(t)
-	scaleP14Notifications(t, repo, data)
+func TestScaleBaselineUnreadQuery(t *testing.T) {
+	repo, data := notificationStateScaleStore(t)
+	scaleNotifications(t, repo, data)
 	var queries []string
 	ctx := WithSQLStatementObserver(t.Context(), func(query string) { queries = append(queries, query) })
 	started := time.Now()
@@ -114,9 +114,9 @@ func TestScaleP14BaselineUnreadQuery(t *testing.T) {
 	}
 }
 
-func TestScaleP14StateMatchesLegacyLifecycle(t *testing.T) {
-	repo, data := scaleP14Store(t)
-	items := scaleP14Notifications(t, repo, data)
+func TestScaleStateMatchesLegacyLifecycle(t *testing.T) {
+	repo, data := notificationStateScaleStore(t)
+	items := scaleNotifications(t, repo, data)
 	workspace, recipient := data.Workspace.URLKey, data.Viewer.ID
 	compare := func(t *testing.T) {
 		t.Helper()
@@ -181,9 +181,9 @@ func TestScaleP14StateMatchesLegacyLifecycle(t *testing.T) {
 	}
 }
 
-func TestScaleP14CommitRollbackAndRecipientCoalescing(t *testing.T) {
-	repo, data := scaleP14Store(t)
-	items := scaleP14Notifications(t, repo, data)
+func TestScaleCommitRollbackAndRecipientCoalescing(t *testing.T) {
+	repo, data := notificationStateScaleStore(t)
+	items := scaleNotifications(t, repo, data)
 	workspace, recipient := data.Workspace.URLKey, data.Viewer.ID
 	changes := []NotificationStateChange{
 		{WorkspaceKey: workspace, RecipientID: recipient, ChangedIDs: []string{items[0].ID}},
@@ -210,7 +210,7 @@ func TestScaleP14CommitRollbackAndRecipientCoalescing(t *testing.T) {
 	if err != nil || state.Revision != "0" || state.UnreadCount != 2 {
 		t.Fatalf("rollback leaked revision: %+v %v", state, err)
 	}
-	commit := scaleP14Prepare(t, repo, changes)
+	commit := scalePrepare(t, repo, changes)
 	var recipients []string
 	var reads int
 	ctx := WithSQLStatementObserver(t.Context(), func(string) { reads++ })
@@ -230,7 +230,7 @@ func TestScaleP14CommitRollbackAndRecipientCoalescing(t *testing.T) {
 	}
 }
 
-func scaleP14Prepare(t *testing.T, repo *SQLiteStore, changes []NotificationStateChange) NotificationStateCommit {
+func scalePrepare(t *testing.T, repo *SQLiteStore, changes []NotificationStateChange) NotificationStateCommit {
 	t.Helper()
 	tx, err := repo.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -247,12 +247,12 @@ func scaleP14Prepare(t *testing.T, repo *SQLiteStore, changes []NotificationStat
 	return commit
 }
 
-func TestScaleP14LatePublishAndBoundedChanges(t *testing.T) {
-	repo, data := scaleP14Store(t)
-	items := scaleP14Notifications(t, repo, data)
+func TestScaleLatePublishAndBoundedChanges(t *testing.T) {
+	repo, data := notificationStateScaleStore(t)
+	items := scaleNotifications(t, repo, data)
 	change := NotificationStateChange{WorkspaceKey: data.Workspace.URLKey, RecipientID: data.Viewer.ID, ChangedIDs: []string{items[0].ID}}
-	first := scaleP14Prepare(t, repo, []NotificationStateChange{change})
-	second := scaleP14Prepare(t, repo, []NotificationStateChange{change})
+	first := scalePrepare(t, repo, []NotificationStateChange{change})
+	second := scalePrepare(t, repo, []NotificationStateChange{change})
 	if err := first.Publish(t.Context(), func(_, _ string, state NotificationState) {
 		if state.Revision != "2" || !state.Invalidated || len(state.ChangedIDs) != 0 {
 			t.Errorf("late publisher silently skipped changes: %+v", state)
@@ -270,7 +270,7 @@ func TestScaleP14LatePublishAndBoundedChanges(t *testing.T) {
 	for i := range 1000 {
 		change.ChangedIDs = append(change.ChangedIDs, "notification-"+strconv.Itoa(i))
 	}
-	batch := scaleP14Prepare(t, repo, []NotificationStateChange{change})
+	batch := scalePrepare(t, repo, []NotificationStateChange{change})
 	if err := batch.Publish(t.Context(), func(_, _ string, state NotificationState) {
 		if !state.Invalidated || len(state.ChangedIDs) != 0 {
 			t.Errorf("oversized batch retained ids: %+v", state)
@@ -280,7 +280,7 @@ func TestScaleP14LatePublishAndBoundedChanges(t *testing.T) {
 	}
 }
 
-func TestScaleP14RecordChangesRetainRemovedOwners(t *testing.T) {
+func TestScaleRecordChangesRetainRemovedOwners(t *testing.T) {
 	before := domain.Notification{ID: "old", RecipientID: "old-owner"}
 	after := domain.Notification{ID: "new", RecipientID: "new-owner"}
 	if len(NotificationStateChanges("workspace", &before, &before)) != 0 || len(NotificationStateChanges("workspace", nil, nil)) != 0 {
@@ -295,8 +295,8 @@ func TestScaleP14RecordChangesRetainRemovedOwners(t *testing.T) {
 	}
 }
 
-func TestScaleP14NotificationCredentialBinding(t *testing.T) {
-	repo, data := scaleP14Store(t)
+func TestScaleNotificationCredentialBinding(t *testing.T) {
+	repo, data := notificationStateScaleStore(t)
 	key := &domain.APIKey{ID: "p14-key", Actor: "user", SecretHash: "not-exported", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{data.Teams[0].ID}}
 	access, err := repo.ResolveAccess(t.Context(), data.Workspace.URLKey, data.Viewer.ID, key)
 	if err != nil {
@@ -319,7 +319,7 @@ func TestScaleP14NotificationCredentialBinding(t *testing.T) {
 
 // Enumerate every canonical SQL notification writer, including generic writers
 // and lifecycle operations. Business producers below all reach these writers.
-func TestScaleP14WriterCoverage(t *testing.T) {
+func TestScaleWriterCoverageNotificationState(t *testing.T) {
 	writers := map[string]string{
 		"writeContentRecord": "content_records.go", "writeContentRecordRows": "content_records.go", "syncContentRecordsFrom": "content_records.go", "persistWorkspaceTx": "sqlite.go", "UpdateNotificationRecord": "notification_record_mutation.go",
 		"BatchNotificationRecords": "notification_batch.go", "ErasePersonFromWorkspace": "personal_data.go", "scrubPersonCopies": "personal_data.go",

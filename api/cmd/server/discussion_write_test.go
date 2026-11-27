@@ -18,28 +18,28 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW59Content struct {
+type discussionWriteContent struct {
 	Kind, Resource, ID, CreatedAt, Owner, Parent, Status, NextAttemptAt string
 	Data                                                                json.RawMessage
 }
 
-type scaleP21SW59Rows struct {
+type discussionWriteRows struct {
 	Issues        []any
-	Content       []scaleP21SW59Content
+	Content       []discussionWriteContent
 	Subscriptions []any
 }
 
-type scaleP21SW59Outcome struct {
+type discussionWriteOutcome struct {
 	Code     int
 	Header   http.Header
 	Response json.RawMessage
-	Rows     scaleP21SW59Rows
+	Rows     discussionWriteRows
 	Events   []domain.DomainEvent
 	Webhooks []any
 	Realtime []any
 }
 
-type scaleP21SW59ResponseWriter struct {
+type responseWriter struct {
 	*httptest.ResponseRecorder
 	t           *testing.T
 	source      *store.SQLiteStore
@@ -47,7 +47,7 @@ type scaleP21SW59ResponseWriter struct {
 	sampleWork  func()
 }
 
-func (w *scaleP21SW59ResponseWriter) checkOwner() {
+func (w *responseWriter) checkOwner() {
 	w.t.Helper()
 	if w.sampleWork != nil {
 		w.sampleWork()
@@ -57,20 +57,20 @@ func (w *scaleP21SW59ResponseWriter) checkOwner() {
 	}
 }
 
-func (w *scaleP21SW59ResponseWriter) WriteHeader(code int) {
+func (w *responseWriter) WriteHeader(code int) {
 	w.checkOwner()
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW59ResponseWriter) Write(body []byte) (int, error) {
+func (w *responseWriter) Write(body []byte) (int, error) {
 	w.checkOwner()
 	return w.ResponseRecorder.Write(body)
 }
 
-func scaleP21SW59SQL(t *testing.T, f scaleP21SW10Fixture) scaleP21SW59Rows {
+func discussionWriteSql(t *testing.T, f notificationsFixture) discussionWriteRows {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	result := scaleP21SW59Rows{}
+	result := discussionWriteRows{}
 	rows := f.reader.query(t, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, workspace)
 	for rows.Next() {
 		var id string
@@ -89,7 +89,7 @@ func scaleP21SW59SQL(t *testing.T, f scaleP21SW10Fixture) scaleP21SW59Rows {
 	// revisions are not part of the response or publication contract.
 	rows = f.reader.query(t, `SELECT kind,resource_id,id,created_at,owner_id,parent_id,status,next_attempt_at,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id`, workspace)
 	for rows.Next() {
-		var item scaleP21SW59Content
+		var item discussionWriteContent
 		var raw []byte
 		if err := rows.Scan(&item.Kind, &item.Resource, &item.ID, &item.CreatedAt, &item.Owner, &item.Parent, &item.Status, &item.NextAttemptAt, &raw); err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func scaleP21SW59SQL(t *testing.T, f scaleP21SW10Fixture) scaleP21SW59Rows {
 	return result
 }
 
-func scaleP21SW59GeneratedDigestTime(due, started, finished time.Time) bool {
+func generatedDigestTime(due, started, finished time.Time) bool {
 	inRequest := func(clock time.Time) bool {
 		return !clock.Before(started) && !clock.After(finished)
 	}
@@ -136,7 +136,7 @@ func scaleP21SW59GeneratedDigestTime(due, started, finished time.Time) bool {
 		due.After(finished.Add(time.Hour)) && !due.After(finished.Add(time.Hour+4*24*time.Hour))
 }
 
-func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before scaleP21SW59Rows, started, finished time.Time) any {
+func discussionWriteNormalized(t *testing.T, result discussionWriteOutcome, before discussionWriteRows, started, finished time.Time) any {
 	t.Helper()
 	existing := map[string]bool{}
 	for _, row := range before.Content {
@@ -216,7 +216,7 @@ func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before sca
 					if !clock.Before(started) && !clock.After(finished) {
 						return "<generated-clock>"
 					}
-					if strings.EqualFold(field, "nextattemptat") && scaleP21SW59GeneratedDigestTime(clock, started, finished) {
+					if strings.EqualFold(field, "nextattemptat") && generatedDigestTime(clock, started, finished) {
 						return "<generated-clock+1h>"
 					}
 				}
@@ -276,11 +276,11 @@ func scaleP21SW59Normalized(t *testing.T, result scaleP21SW59Outcome, before sca
 	return normalized
 }
 
-func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
+func TestNativeDiscussionWriteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 		map[string]any{"title": "SW59 grant parent", "teamId": privateTeam}, workspace, http.StatusCreated)
 	child := authRequest[domain.Issue](t, privateAdmin, http.MethodPost, f.host.URL+"/api/issue-records",
 		map[string]any{"title": "SW59 inherited discussion", "teamId": privateTeam, "parentId": parent.ID}, workspace, http.StatusCreated)
-	_, former := scaleP03Join(t, f.scaleP03PlatformFixture, "SW59 former", prefix+"former@example.test", "member", f.public)
+	_, former := resourceAccessScaleJoin(t, f.scalePlatformFixture, "SW59 former", prefix+"former@example.test", "member", f.public)
 	if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, former.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 		for _, test := range tests {
 			t.Run(fmt.Sprintf("reload=%t/%s", reload, test.name), func(t *testing.T) {
 				var outcomes []any
-				var baselines []scaleP21SW59Rows
+				var baselines []discussionWriteRows
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(test, reload)
 					target := public.ID
@@ -483,7 +483,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 						target = child.ID
 					}
 					var key *domain.APIKey
-					for _, credential := range scaleP21M3Credentials() {
+					for _, credential := range pointSettingsCredentialCases() {
 						if credential.name == test.credential {
 							key = credential.key
 							if key != nil && test.credential == "selected-set" {
@@ -566,7 +566,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 							r = makeRequest()
 						}
 					}
-					before := scaleP21SW59SQL(t, f)
+					before := discussionWriteSql(t, f)
 					baselines = append(baselines, before)
 					prior, err := repo.Events(t.Context(), target)
 					if err != nil {
@@ -576,7 +576,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 					for _, event := range prior {
 						priorIDs[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					statements, observedPeakWork := 0, 0
 					sampleWork := func() { observedPeakWork = max(observedPeakWork, source.MetadataWorkUsedForTesting()) }
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
@@ -624,7 +624,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 						restore := store.ForceFullMutationsForTesting(source == repo)
 						defer restore()
 						service := &server{store: source}
-						w := &scaleP21SW59ResponseWriter{
+						w := &responseWriter{
 							ResponseRecorder: httptest.NewRecorder(), t: t, source: source,
 							requireHeld: test.code < http.StatusBadRequest || test.code == http.StatusConflict,
 							sampleWork:  sampleWork,
@@ -653,7 +653,7 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 					source.SetRealtimeSink(nil)
 					repo.SetRealtimeSink(nil)
 					t.Logf("bounded=%t request_SQL=%d observed_peak_work=%d", source.BoundedMetadataEnabled(), statements, observedPeakWork)
-					got.Rows = scaleP21SW59SQL(t, f)
+					got.Rows = discussionWriteSql(t, f)
 					events, err := repo.Events(t.Context(), target)
 					if err != nil {
 						t.Fatal(err)
@@ -691,13 +691,13 @@ func TestScaleP21SW59NativeDiscussionWriteDifferential(t *testing.T) {
 					if source == f.probe && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("native discussion write leaked work or decoded complete workspace metadata")
 					}
-					outcomes = append(outcomes, scaleP21SW59Normalized(t, got, before, started, time.Now().UTC()))
+					outcomes = append(outcomes, discussionWriteNormalized(t, got, before, started, time.Now().UTC()))
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 					if !reflect.DeepEqual(baselines[0], baselines[1]) {
-						t.Log("fixture reset SQL preimages differ", scaleP21M2Diff(baselines[0], baselines[1]))
+						t.Log("fixture reset SQL preimages differ", policyFirstDifference(baselines[0], baselines[1]))
 					}
-					t.Fatal("actual native discussion response/SQL/publication differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatal("actual native discussion response/SQL/publication differential", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}

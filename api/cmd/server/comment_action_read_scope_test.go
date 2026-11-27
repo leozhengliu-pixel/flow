@@ -20,11 +20,11 @@ import (
 
 // Supply a principal as authentication would, then exercise authorization and
 // alias dispatch before ServeMux populates the path values.
-func scaleP21SW240Handler(s *server, gate *metadataReadGate, original bool) http.Handler {
+func commentActionReadScopeHandler(s *server, gate *metadataReadGate, original bool) http.Handler {
 	mux := http.NewServeMux()
 	list := s.listCommentActions
 	if original {
-		list = s.scaleP21SW240OriginalList
+		list = s.originalList
 	}
 	mux.HandleFunc("GET /api/issue-records/{id}/comment-actions", s.issueRecordAlias(list))
 	return boundedLegacyIssueWrites(gate.holdProjections(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +63,7 @@ func scaleP21SW240Handler(s *server, gate *metadataReadGate, original bool) http
 	})))
 }
 
-func (s *server) scaleP21SW240OriginalList(w http.ResponseWriter, r *http.Request) {
+func (s *server) originalList(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	data.Viewer = requestActor(s, r)
 	if _, settings, ok := s.accountCollections(r.Context(), data.Workspace.URLKey, data.Viewer.ID, false); ok && settings.UserID != "" {
@@ -93,7 +93,7 @@ func (s *server) scaleP21SW240OriginalList(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, result)
 }
 
-func scaleP21SW240Request(workspace, path string, user domain.User, key *domain.APIKey) *http.Request {
+func commentActionReadScopeRequest(workspace, path string, user domain.User, key *domain.APIKey) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	r.Header.Set("X-Workspace-Key", workspace)
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
@@ -103,7 +103,7 @@ func scaleP21SW240Request(workspace, path string, user domain.User, key *domain.
 	return r.WithContext(store.ContextWithActor(ctx, user))
 }
 
-func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
+func TestLegacyCommentActionReadAllocations(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -112,7 +112,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, owner := f.data.Workspace.URLKey, f.data.Viewer
 	team := f.data.Teams[0].ID
 	issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
@@ -120,7 +120,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 	service := &server{store: repo, agent: appconfig.AgentConfig{Enabled: true, ToolsEnabled: true, WriteTools: true}}
 	path := "/api/issue-records/" + issue.ID + "/comment-actions"
 	gate := newMetadataReadGate(1, 0, time.Second, 0)
-	handlers := []http.Handler{scaleP21SW240Handler(service, gate, true), scaleP21SW240Handler(service, gate, false)}
+	handlers := []http.Handler{commentActionReadScopeHandler(service, gate, true), commentActionReadScopeHandler(service, gate, false)}
 	var allocated [2][2]int64
 	var escapedAllocs [2]float64
 	for i, count := range []int{0, 100} {
@@ -142,7 +142,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 			result := testing.Benchmark(func(b *testing.B) {
 				for b.Loop() {
 					response := httptest.NewRecorder()
-					handler.ServeHTTP(response, scaleP21SW240Request(workspace, path, owner, nil))
+					handler.ServeHTTP(response, commentActionReadScopeRequest(workspace, path, owner, nil))
 					if response.Code != http.StatusOK || response.Body.String() != "[]\n" {
 						b.Fatal(response.Code, response.Body.String())
 					}
@@ -155,7 +155,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 		escapedPath := "/api/issue-records/" + issue.ID + "%2Fmissing/comment-actions"
 		escapedAllocs[i] = testing.AllocsPerRun(20, func() {
 			response := httptest.NewRecorder()
-			handlers[1].ServeHTTP(response, scaleP21SW240Request(workspace, escapedPath, owner, nil))
+			handlers[1].ServeHTTP(response, commentActionReadScopeRequest(workspace, escapedPath, owner, nil))
 			if response.Code != http.StatusNotFound {
 				t.Fatalf("escaped issue reference: HTTP %d (%s)", response.Code, response.Body.String())
 			}
@@ -185,7 +185,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 		t.Fatal("could not set up shared projection budget")
 	}
 	defer fallbackGate.projectionBudget.used.Release(1)
-	authenticated := scaleP21SW240Handler(service, fallbackGate, false)
+	authenticated := commentActionReadScopeHandler(service, fallbackGate, false)
 	for _, test := range []struct {
 		name, method, path, body string
 		handler                  http.Handler
@@ -194,7 +194,7 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 		{name: "release filter", method: http.MethodGet, path: path + "?releaseId=missing-release", handler: authenticated},
 		{name: "extra issue IDs", method: http.MethodGet, path: path, body: `{"issueIds":["another-issue"]}`, handler: authenticated},
 	} {
-		request := scaleP21SW240Request(workspace, test.path, owner, nil)
+		request := commentActionReadScopeRequest(workspace, test.path, owner, nil)
 		request.Method = test.method
 		if test.body != "" {
 			request = httptest.NewRequestWithContext(request.Context(), test.method, test.path, strings.NewReader(test.body))
@@ -209,11 +209,11 @@ func TestScaleP21SW240LegacyCommentActionReadAllocations(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW240CommentActionReadDifferential(t *testing.T) {
+func TestCommentActionReadDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	outsider, admin := f.principals[0].user, f.principals[1].user
 	member, guest, teammate := f.principals[2].user, f.principals[3].user, f.principals[4].user
@@ -280,9 +280,9 @@ func TestScaleP21SW240CommentActionReadDifferential(t *testing.T) {
 	bounded := &server{store: f.probe, agent: legacy.agent}
 	gate := newMetadataReadGate(1, 0, time.Second, 0)
 	handlers := []http.Handler{
-		scaleP21SW240Handler(legacy, gate, true),
-		scaleP21SW240Handler(legacy, gate, false),
-		scaleP21SW240Handler(bounded, gate, false),
+		commentActionReadScopeHandler(legacy, gate, true),
+		commentActionReadScopeHandler(legacy, gate, false),
+		commentActionReadScopeHandler(bounded, gate, false),
 	}
 	for _, test := range []struct {
 		name, ref, query string
@@ -310,7 +310,7 @@ func TestScaleP21SW240CommentActionReadDifferential(t *testing.T) {
 				var original *httptest.ResponseRecorder
 				for mode, handler := range handlers {
 					w := httptest.NewRecorder()
-					handler.ServeHTTP(w, scaleP21SW240Request(workspace, path, test.user, test.key))
+					handler.ServeHTTP(w, commentActionReadScopeRequest(workspace, path, test.user, test.key))
 					code := http.StatusForbidden
 					if test.allowed {
 						code = http.StatusOK

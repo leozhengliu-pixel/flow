@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28InstalledProjectionPermissionMatrix(t *testing.T) {
+func TestInstalledProjectionPermissionMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	public, private, child := idgen.New("team_sw28_public_"), idgen.New("team_sw28_private_"), idgen.New("team_sw28_child_")
 	emojiID := idgen.New("emoji_sw28_matrix_")

@@ -442,7 +442,7 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 }
 
 func boundedDiscussionMetadataScope(before, next domain.Bootstrap) (MetadataRecordScope, error) {
-	changes, _, err := scaleP16RecordChanges(before, next)
+	changes, _, err := scaleRecordChanges(before, next)
 	if err != nil {
 		return MetadataRecordScope{}, err
 	}

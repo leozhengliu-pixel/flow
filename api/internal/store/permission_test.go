@@ -15,7 +15,7 @@ import (
 
 // This baseline also runs without loadtest, including the shared CI dialect
 // commands. Compare full and metadata-only projections on the same records.
-func TestScaleP01ReadProjectionBaseline(t *testing.T) {
+func TestScaleReadProjectionBaseline(t *testing.T) {
 	configs := map[string]DatabaseConfig{"sqlite": {Driver: "sqlite", Path: filepath.Join(t.TempDir(), "p01-projection.db"), MaxOpenConns: 1}}
 	if dialect := strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_TEST_DATABASE_DRIVER"))); dialect != "" {
 		if os.Getenv("FLOW_TEST_DATABASE_URL") == "" {

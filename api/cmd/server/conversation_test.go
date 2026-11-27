@@ -11,10 +11,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP18LargeAIContextKeepsCompatibility(t *testing.T) {
+func TestScaleLargeAIContextKeepsCompatibility(t *testing.T) {
 	// Exercise the legacy writer and its record-scoped fallback independently.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	repo, actor, ctx := scaleP18Fixture(t)
+	repo, actor, ctx := costScaleFixture(t)
 	service := &server{store: repo}
 	long := strings.Repeat("x", 3<<20)
 	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -37,10 +37,10 @@ func TestScaleP18LargeAIContextKeepsCompatibility(t *testing.T) {
 	}
 }
 
-func TestScaleP18ConversationSlugAndWorkerIDCompatibility(t *testing.T) {
+func TestScaleConversationSlugAndWorkerIDCompatibility(t *testing.T) {
 	// This compares the two legacy conversation readers directly.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	repo, actor, ctx := scaleP18Fixture(t)
+	repo, actor, ctx := costScaleFixture(t)
 	service := &server{store: repo}
 	deleted := time.Now().UTC()
 	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {

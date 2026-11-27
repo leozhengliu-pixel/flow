@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21WebhookRoutingProjection(data domain.Bootstrap) []domain.Webhook {
+func scaleWebhookRoutingProjection(data domain.Bootstrap) []domain.Webhook {
 	var result []domain.Webhook
 	for _, hook := range data.Webhooks {
 		if !hook.Enabled || hook.AuditLog || hook.URL == "" {
@@ -28,7 +28,7 @@ func scaleP21WebhookRoutingProjection(data domain.Bootstrap) []domain.Webhook {
 	return result
 }
 
-func TestScaleP21HotWebhookDeliveryNativeProjection(t *testing.T) {
+func TestScaleHotWebhookDeliveryNativeProjection(t *testing.T) {
 	until := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("native-zone", 7*3600+123))
 	wide := strings.Repeat("unrelated webhook metadata ", 200000)
 	data := domain.Bootstrap{
@@ -49,7 +49,7 @@ func TestScaleP21HotWebhookDeliveryNativeProjection(t *testing.T) {
 		},
 		Documents: []domain.Document{{ID: "ignored", Content: wide}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, key := range []string{"physical", ""} {
 		sql := 0
@@ -57,7 +57,7 @@ func TestScaleP21HotWebhookDeliveryNativeProjection(t *testing.T) {
 		if err != nil || !found {
 			t.Fatal("native routing read failed", key, found, err)
 		}
-		if !reflect.DeepEqual(read.Data.Webhooks, scaleP21WebhookRoutingProjection(data)) || read.Data.Workspace.ID != data.Workspace.ID || read.Data.Workspace.URLKey != data.Workspace.URLKey || read.Data.Workspace.Name != "" {
+		if !reflect.DeepEqual(read.Data.Webhooks, scaleWebhookRoutingProjection(data)) || read.Data.Workspace.ID != data.Workspace.ID || read.Data.Workspace.URLKey != data.Workspace.URLKey || read.Data.Workspace.Name != "" {
 			t.Fatal("routing/identity projection changed", read.Data.Webhooks)
 		}
 		if err := read.LoadUsers(t.Context(), "actor", "subject", true); err != nil {
@@ -106,10 +106,10 @@ func TestScaleP21HotWebhookDeliveryNativeProjection(t *testing.T) {
 	view.metadataResidency.work.limit = oldLimit
 }
 
-func TestScaleP21HotWebhookDeliveryWarmReloadBodyBound(t *testing.T) {
+func TestScaleHotWebhookDeliveryWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestScaleP21HotWebhookDeliveryWarmReloadBodyBound(t *testing.T) {
 			sql := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { sql++ })
 			routing, found, err := view.BeginWebhookDeliveryRead(ctx, workspace, true)
-			if err != nil || !found || !reflect.DeepEqual(routing.Data.Webhooks, scaleP21WebhookRoutingProjection(want)) {
+			if err != nil || !found || !reflect.DeepEqual(routing.Data.Webhooks, scaleWebhookRoutingProjection(want)) {
 				t.Fatal("warm/reloaded routing changed", reload, found, err)
 			}
 			actor, found, err := view.BeginWebhookDeliveryRead(ctx, workspace, false)

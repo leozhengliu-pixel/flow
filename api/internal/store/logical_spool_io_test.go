@@ -38,7 +38,7 @@ func (s *metadataLogicalStorage) settleForTesting() error {
 // past the end) and reads of every size, compared with a model after every
 // operation and with the file once flushed. A spool that stays within its
 // buffer creates no file.
-func TestScaleP21LogicalSpoolIOMatchesFile(t *testing.T) {
+func TestScaleLogicalSpoolIOMatchesFile(t *testing.T) {
 	for _, seed := range []uint64{7, 19, 23} {
 		directory := t.TempDir()
 		storage := &metadataLogicalStorage{directory: directory, refs: 1}
@@ -155,7 +155,7 @@ func TestScaleP21LogicalSpoolIOMatchesFile(t *testing.T) {
 // buffered bytes and with appends. A read that starts after a patch returned
 // sees the patched byte (never a cached older block), and appended frames
 // read back exactly once their header patch returned. Run under -race.
-func TestScaleP21LogicalSpoolIOConcurrentReadPatch(t *testing.T) {
+func TestScaleLogicalSpoolIOConcurrentReadPatch(t *testing.T) {
 	storage := &metadataLogicalStorage{directory: t.TempDir(), refs: 1}
 	defer storage.discard()
 	// The flushed region holds one-byte counters every 61 bytes; each is
@@ -321,7 +321,7 @@ func TestScaleP21LogicalSpoolIOConcurrentReadPatch(t *testing.T) {
 // overlapping a patch, whether the read began during the patch or the patch
 // ran while the read was in flight, never leaves a block that serves the
 // bytes from before the patch to a read that starts after it returned.
-func TestScaleP21LogicalSpoolIOPatchDuringBlockRead(t *testing.T) {
+func TestScaleLogicalSpoolIOPatchDuringBlockRead(t *testing.T) {
 	for _, readFirst := range []bool{false, true} {
 		storage := &metadataLogicalStorage{directory: t.TempDir(), refs: 1}
 		if err := storage.append(make([]byte, 64<<10)); err != nil {

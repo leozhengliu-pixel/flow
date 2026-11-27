@@ -16,9 +16,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func apiKeyScopeFixture(t *testing.T, repo *store.SQLiteStore) scaleP03PlatformFixture {
+func apiKeyScopeFixture(t *testing.T, repo *store.SQLiteStore) scalePlatformFixture {
 	t.Helper()
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), f.data.Viewer)), f.data.Workspace.URLKey, "test.scope_fixture", "", nil, func(data *domain.Bootstrap) error {
 		public := domain.Team{ID: "scope-public", Key: "SCP", Name: "Public"}
 		private := domain.Team{ID: "scope-private", Key: "SCH", Name: "Private", Private: true}
@@ -86,14 +86,14 @@ func apiKeyScopeFixture(t *testing.T, repo *store.SQLiteStore) scaleP03PlatformF
 	return f
 }
 
-func apiKeyScopeCredential(t *testing.T, f scaleP03PlatformFixture, actor, restriction string, teams, scopes []string) (string, domain.APIKey) {
+func apiKeyScopeCredential(t *testing.T, f scalePlatformFixture, actor, restriction string, teams, scopes []string) (string, domain.APIKey) {
 	t.Helper()
 	secret := idgen.New("scope-test-token-")
 	key := domain.APIKey{ID: idgen.New("scope-key-"), Name: "Scope test", CreatorID: f.data.Viewer.ID, Actor: actor, SecretHash: secretHash(secret), TeamRestriction: restriction, TeamIDs: teams, Scopes: scopes}
 	if actor == "app" {
 		installation := domain.ApplicationInstallation{ClientID: idgen.New("scope-app-"), Name: "Scope app", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{"scope-public", "scope-private"}, Scopes: scopes}
 		var app domain.ApplicationInstallation
-		err := scaleP03RetryWrite(t.Context(), func() error {
+		err := scaleRetryWrite(t.Context(), func() error {
 			var err error
 			app, err = f.repository.InstallApplication(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, installation, "")
 			return err
@@ -163,19 +163,19 @@ func assertAPIKeyScopeProject(t *testing.T, item domain.Project, restricted, ini
 	}
 }
 
-func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleAPIKeyTeamScopeReferencesAndCounts(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			f := apiKeyScopeFixture(t, repo)
 			read := func(token, path string, target any) {
 				t.Helper()
-				response := scaleP03Read(t, f, nil, token, http.MethodGet, path, f.data.Workspace.URLKey)
+				response := resourceAccessScaleRead(t, f, nil, token, http.MethodGet, path, f.data.Workspace.URLKey)
 				if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), target) != nil {
 					t.Fatalf("GET %s: status=%d", path, response.Code)
 				}
 			}
-			ownerBefore := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/projects/scope-project", f.data.Workspace.URLKey)
-			ownerIssueBefore := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/issue-records/scope-issue", f.data.Workspace.URLKey)
+			ownerBefore := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/projects/scope-project", f.data.Workspace.URLKey)
+			ownerIssueBefore := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/issue-records/scope-issue", f.data.Workspace.URLKey)
 			for _, spec := range []struct {
 				name, actor, restriction       string
 				teams                          []string
@@ -231,7 +231,7 @@ func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
 								assertAPIKeyScopeProject(t, project, spec.restricted, spec.initiatives, count)
 							}
 							for _, path := range []string{"/api/projects/scope-project", "/api/projects/scope-old-project", "/api/projects/stale-0123456789ab"} {
-								response := scaleP03Read(t, f, nil, secret, http.MethodGet, path, f.data.Workspace.URLKey)
+								response := resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, path, f.data.Workspace.URLKey)
 								if spec.empty {
 									if response.Code != http.StatusForbidden && response.Code != http.StatusNotFound {
 										t.Fatal("selected-empty reads a project")
@@ -419,11 +419,11 @@ func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
 					}
 				})
 			}
-			ownerAfter := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/projects/scope-project", f.data.Workspace.URLKey)
+			ownerAfter := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/projects/scope-project", f.data.Workspace.URLKey)
 			if ownerBefore.Code != ownerAfter.Code || ownerBefore.Body.String() != ownerAfter.Body.String() {
 				t.Error("credential reads changed the owner's projection")
 			}
-			ownerIssueAfter := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/issue-records/scope-issue", f.data.Workspace.URLKey)
+			ownerIssueAfter := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/issue-records/scope-issue", f.data.Workspace.URLKey)
 			if ownerIssueBefore.Code != ownerIssueAfter.Code || ownerIssueBefore.Body.String() != ownerIssueAfter.Body.String() {
 				t.Error("credential reads changed the owner's issue")
 			}
@@ -431,8 +431,8 @@ func TestScaleP03APIKeyTeamScopeReferencesAndCounts(t *testing.T) {
 	}
 }
 
-func TestScaleP03APIKeyTeamScopeWebhookReads(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleAPIKeyTeamScopeWebhookReads(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			f := apiKeyScopeFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
@@ -468,12 +468,12 @@ func TestScaleP03APIKeyTeamScopeWebhookReads(t *testing.T) {
 			} {
 				t.Run(spec.name, func(t *testing.T) {
 					secret, _ := apiKeyScopeCredential(t, f, "user", spec.restriction, spec.teams, []string{"read", "admin"})
-					response := scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/webhooks?first=100", workspace)
+					response := resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/webhooks?first=100", workspace)
 					var hooks connection[domain.Webhook]
 					if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &hooks) != nil || len(hooks.Nodes) != spec.count {
 						t.Fatalf("webhook list status=%d count=%d", response.Code, len(hooks.Nodes))
 					}
-					response = scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/webhooks/scope-hook/deliveries/"+deliveryID, workspace)
+					response = resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/webhooks/scope-hook/deliveries/"+deliveryID, workspace)
 					if spec.count == 0 {
 						if response.Code != http.StatusNotFound {
 							t.Fatalf("empty key delivery status=%d", response.Code)
@@ -490,7 +490,7 @@ func TestScaleP03APIKeyTeamScopeWebhookReads(t *testing.T) {
 						t.Error("delivery lost an allowed dependency")
 					}
 					for _, hook := range []string{"scope-shared-hook", "scope-global-hook"} {
-						response = scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/webhooks/"+hook+"/deliveries", workspace)
+						response = resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/webhooks/"+hook+"/deliveries", workspace)
 						if (response.Code == http.StatusOK) != (spec.restriction == "all") {
 							t.Error("delivery log reaches a subscription outside the key's teams")
 						}

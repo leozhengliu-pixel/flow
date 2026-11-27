@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW352PublicationStoredFrame(t *testing.T) {
+func TestPublicationStoredFrame(t *testing.T) {
 	issues := []domain.Issue{{ID: "sw352", CreatedAt: time.Date(2026, 11, 17, 4, 5, 6, 123456789, time.FixedZone("sw352", 9*3600+30*60))}}
 	values := map[string]any{
 		"large-raw":               json.RawMessage(` {"body":"` + strings.Repeat("x", 300<<10) + `"} `),
@@ -94,7 +94,7 @@ func TestScaleP21SW352PublicationStoredFrame(t *testing.T) {
 					}
 					t.Fatal("stored publication differs from the original encoder", gotErr)
 				}
-				charge := scaleP21SW205ByteCharge(len(raw))
+				charge := byteCharge(len(raw))
 				if probe.MetadataWorkUsedForTesting() != base+charge {
 					release()
 					t.Fatal("publication retained frame/scratch work beyond its result lease")
@@ -139,7 +139,7 @@ func TestScaleP21SW352PublicationStoredFrame(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			var work context.Context = ctx
 			if during {
-				work = &scaleP21SW205CancelContext{Context: ctx, cancel: cancel, at: 3}
+				work = &aggregatePublicationCancelContext{Context: ctx, cancel: cancel, at: 3}
 			} else {
 				cancel()
 			}

@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW47IssueHeader struct {
+type issueHeader struct {
 	ID, Identifier, Creator, Team, Parent, Role string
 	Private                                     bool
 	CommentActions                              bool
@@ -26,17 +26,17 @@ type scaleP21SW47IssueHeader struct {
 	Relations                                   []domain.IssueRelation
 }
 
-type scaleP21SW47Outcome struct {
+type issueChildAuthorizationOutcome struct {
 	Allowed bool
 	Path    string
-	Headers []scaleP21SW47IssueHeader
+	Headers []issueHeader
 	Comment [2]string
 }
 
-func scaleP21SW47Headers(service *server, data domain.Bootstrap) []scaleP21SW47IssueHeader {
-	var result []scaleP21SW47IssueHeader
+func issueChildAuthorizationHeaders(service *server, data domain.Bootstrap) []issueHeader {
+	var result []issueHeader
 	for _, issue := range data.Issues {
-		item := scaleP21SW47IssueHeader{
+		item := issueHeader{
 			ID: issue.ID, Identifier: issue.Identifier, Creator: issue.Creator.ID,
 			Team: issue.Team.ID, Private: issue.Team.Private, Role: issueRole(service, data, issue),
 			Previous:       slices.Clone(issue.PreviousIdentifiers),
@@ -56,7 +56,7 @@ func scaleP21SW47Headers(service *server, data domain.Bootstrap) []scaleP21SW47I
 	return result
 }
 
-func scaleP21SW47Request(f scaleP21M2Fixture, user domain.User, key *domain.APIKey, method, path, ref, comment string, body any) *http.Request {
+func issueChildAuthorizationRequest(f policyDifferentialFixture, user domain.User, key *domain.APIKey, method, path, ref, comment string, body any) *http.Request {
 	r := f.literalRequest(user, key, body)
 	r.Method, r.URL.Path = method, path
 	r.Header.Set("Content-Type", "application/json")
@@ -70,7 +70,7 @@ func scaleP21SW47Request(f scaleP21M2Fixture, user domain.User, key *domain.APIK
 	return r
 }
 
-func scaleP21SW47Call(t *testing.T, source *store.SQLiteStore, request *http.Request, workspace string, user domain.User, commentID string) (scaleP21SW47Outcome, func()) {
+func issueChildAuthorizationCall(t *testing.T, source *store.SQLiteStore, request *http.Request, workspace string, user domain.User, commentID string) (issueChildAuthorizationOutcome, func()) {
 	t.Helper()
 	scoped, closeScope := beginRequestResourceReads(request)
 	*request = *scoped
@@ -86,7 +86,7 @@ func scaleP21SW47Call(t *testing.T, source *store.SQLiteStore, request *http.Req
 	if _, resolved, _, ok := issuePathReference(request.URL.Path); ok {
 		request.SetPathValue("id", resolved)
 	}
-	result := scaleP21SW47Outcome{Allowed: service.resourceAllowedLegacy(request, workspace, user.ID), Path: request.URL.Path}
+	result := issueChildAuthorizationOutcome{Allowed: service.resourceAllowedLegacy(request, workspace, user.ID), Path: request.URL.Path}
 	cached, found := request.Context().Value(issueRecordAuthorizationKey{}).(*issueRecordAuthorization)
 	if !found {
 		if result.Allowed {
@@ -102,7 +102,7 @@ func scaleP21SW47Call(t *testing.T, source *store.SQLiteStore, request *http.Req
 	if err != nil || statements != beforeTake || !cached.taken.Load() || !reflect.DeepEqual(cached.data, domain.Bootstrap{}) {
 		t.Fatal("child handoff reloaded, failed or remained shareable", err, beforeTake, statements)
 	}
-	result.Headers = scaleP21SW47Headers(service, data)
+	result.Headers = issueChildAuthorizationHeaders(service, data)
 	if commentID != "" {
 		for _, comment := range data.Comments[request.PathValue("id")] {
 			if comment.ID == commentID {
@@ -152,7 +152,7 @@ func scaleP21SW47Call(t *testing.T, source *store.SQLiteStore, request *http.Req
 				t.Fatal("legacy child callback lost its complete snapshot context")
 			}
 		}
-		if statements == beforeTake || !reflect.DeepEqual(result.Headers, scaleP21SW47Headers(service, again)) {
+		if statements == beforeTake || !reflect.DeepEqual(result.Headers, issueChildAuthorizationHeaders(service, again)) {
 			t.Fatal("second child consumer reused or changed the first handoff")
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -174,11 +174,11 @@ func scaleP21SW47Call(t *testing.T, source *store.SQLiteStore, request *http.Req
 	return result, closeOutput
 }
 
-func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
+func TestIssueChildAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		metadata, found := repo.WorkspaceMetadata(workspace)
 		if !found {
@@ -255,14 +255,14 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 					for _, test := range tests {
 						path := "/api/issue-records/" + test.ref + test.tail
-						oldRequest := scaleP21SW47Request(f, user, key, test.method, path, test.ref, test.comment, test.body)
-						newRequest := scaleP21SW47Request(f, user, key, test.method, path, test.ref, test.comment, test.body)
+						oldRequest := issueChildAuthorizationRequest(f, user, key, test.method, path, test.ref, test.comment, test.body)
+						newRequest := issueChildAuthorizationRequest(f, user, key, test.method, path, test.ref, test.comment, test.body)
 						if !reload && user.ID == f.data.Viewer.ID && key == nil && test.name == "public-comment" {
 							oldRequest.Header.Set("X-SW47-Measure", "owner-comment")
 							newRequest.Header.Set("X-SW47-Measure", "owner-comment")
 						}
-						old, closeOld := scaleP21SW47Call(t, repo, oldRequest, workspace, user, test.comment)
-						bounded, closeNew := scaleP21SW47Call(t, f.probe, newRequest, workspace, user, test.comment)
+						old, closeOld := issueChildAuthorizationCall(t, repo, oldRequest, workspace, user, test.comment)
+						bounded, closeNew := issueChildAuthorizationCall(t, f.probe, newRequest, workspace, user, test.comment)
 						if !reflect.DeepEqual(old, bounded) {
 							t.Fatalf("%s child decision/authorization handoff differs: old=%+v bounded=%+v", test.name, old, bounded)
 						}
@@ -280,16 +280,16 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 		// operation's one-shot authorization data.
 		path := "/api/issue-records/" + child.ID + "/comments"
 		queued := []*http.Request{
-			scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}),
-			scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}),
+			issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}),
+			issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}),
 		}
 		setGrant("")
 		for index, source := range []*store.SQLiteStore{repo, f.probe} {
-			denied, closeDenied := scaleP21SW47Call(t, source, queued[index], workspace, guest, "")
+			denied, closeDenied := issueChildAuthorizationCall(t, source, queued[index], workspace, guest, "")
 			if denied.Allowed {
 				t.Fatal("queued/replayed child request kept its removed ancestor grant")
 			}
-			replay, closeReplay := scaleP21SW47Call(t, source, scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}), workspace, guest, "")
+			replay, closeReplay := issueChildAuthorizationCall(t, source, issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}), workspace, guest, "")
 			if !reflect.DeepEqual(denied, replay) {
 				t.Fatal("new replay request reused an earlier authorization")
 			}
@@ -298,7 +298,7 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 		}
 		setGrant("commenter")
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
-			allowed, closeAllowed := scaleP21SW47Call(t, source, scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}), workspace, guest, "")
+			allowed, closeAllowed := issueChildAuthorizationCall(t, source, issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "queued"}), workspace, guest, "")
 			if !allowed.Allowed {
 				t.Fatal("restored inherited commenter grant was not observed")
 			}
@@ -306,7 +306,7 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 		}
 		// Closing a request that never hands its data to the child must also
 		// drop the cached projection. Cancellation cannot turn it into success.
-		request := scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "owned"})
+		request := issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "owned"})
 		request, closeScope := beginRequestResourceReads(request)
 		service := &server{store: f.probe}
 		if !service.resourceAllowedLegacy(request, workspace, guest.ID) || f.probe.MetadataWorkUsedForTesting() == 0 {
@@ -319,7 +319,7 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 		}
 		canceled, cancel := context.WithCancel(t.Context())
 		cancel()
-		request = scaleP21SW47Request(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "canceled"}).WithContext(canceled)
+		request = issueChildAuthorizationRequest(f, guest, nil, http.MethodPost, path, child.ID, "", map[string]any{"body": "canceled"}).WithContext(canceled)
 		request = request.WithContext(context.WithValue(request.Context(), authUserContextKey{}, guest))
 		request, closeScope = beginRequestResourceReads(request)
 		if service.resourceAllowedLegacy(request, workspace, guest.ID) {
@@ -337,7 +337,7 @@ func TestScaleP21SW47IssueChildAuthorization(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		request.SetPathValue("id", child.ID)
 		request.Body = io.NopCloser(bytes.NewReader(body))
-		_, closeBody := scaleP21SW47Call(t, f.probe, request, workspace, guest, "")
+		_, closeBody := issueChildAuthorizationCall(t, f.probe, request, workspace, guest, "")
 		after, err := io.ReadAll(request.Body)
 		if err != nil || !json.Valid(after) || !bytes.Equal(body, after) {
 			t.Fatal("authorization consumed or rewrote the callback body", err)

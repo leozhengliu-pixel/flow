@@ -32,7 +32,7 @@ func (s *SQLiteStore) TeamRecordForAccess(ctx context.Context, access AccessCont
 		return domain.Team{}, err
 	}
 	p := access.policy
-	if _, err := s.scaleP21SW22TeamStamp(ctx, s.db, p.workspace); errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.teamStamp(ctx, s.db, p.workspace); errors.Is(err, sql.ErrNoRows) {
 		return domain.Team{}, ErrAuthForbidden
 	} else if err != nil {
 		return domain.Team{}, err
@@ -43,7 +43,7 @@ func (s *SQLiteStore) TeamRecordForAccess(ctx context.Context, access AccessCont
 	visible := func(team domain.Team) bool {
 		return p.teams.Teams[team.ID] && (!p.selected() || slices.Contains(p.key.TeamIDs, team.ID))
 	}
-	id := scaleP21SW22TeamReference(p.metadata.Teams, ref, visible)
+	id := teamReference(p.metadata.Teams, ref, visible)
 	if id == "" {
 		if err := s.ValidateAccess(ctx, access); err != nil {
 			return domain.Team{}, err
@@ -55,7 +55,7 @@ func (s *SQLiteStore) TeamRecordForAccess(ctx context.Context, access AccessCont
 		return domain.Team{}, err
 	}
 	defer tx.Rollback()
-	stamp, err := s.scaleP21SW22TeamStamp(ctx, tx, p.workspace)
+	stamp, err := s.teamStamp(ctx, tx, p.workspace)
 	if err != nil {
 		return domain.Team{}, err
 	}
@@ -73,7 +73,7 @@ func (s *SQLiteStore) TeamRecordForAccess(ctx context.Context, access AccessCont
 	} else if stamp != p.stamp {
 		return domain.Team{}, errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
 	}
-	item, err := s.scaleP21SW22ReadTeam(ctx, tx, p.workspace, id)
+	item, err := s.readTeam(ctx, tx, p.workspace, id)
 	if err != nil {
 		return domain.Team{}, err
 	}
@@ -109,7 +109,7 @@ func (s *SQLiteStore) TeamRecordForWorkspace(ctx context.Context, workspace, ref
 		return domain.Team{}, false, err
 	}
 	defer tx.Rollback()
-	stamp, err := s.scaleP21SW22TeamStamp(ctx, tx, workspace)
+	stamp, err := s.teamStamp(ctx, tx, workspace)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Team{}, false, nil
 	} else if err != nil {
@@ -130,7 +130,7 @@ func (s *SQLiteStore) TeamRecordForWorkspace(ctx context.Context, workspace, ref
 			current = known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
 		}
 		if current {
-			id = scaleP21SW22TeamReference(source.Teams, ref, func(domain.Team) bool { return true })
+			id = teamReference(source.Teams, ref, func(domain.Team) bool { return true })
 		}
 	}
 	s.mu.RUnlock()
@@ -144,20 +144,20 @@ func (s *SQLiteStore) TeamRecordForWorkspace(ctx context.Context, workspace, ref
 			return domain.Team{}, true, err
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			id, err = s.scaleP21SW22TeamKey(ctx, tx, workspace, ref)
+			id, err = s.teamReadTeamKey(ctx, tx, workspace, ref)
 			if err != nil {
 				return domain.Team{}, true, err
 			}
 		}
 	}
-	item, err := s.scaleP21SW22ReadTeam(ctx, tx, workspace, id)
+	item, err := s.readTeam(ctx, tx, workspace, id)
 	if err != nil {
 		return domain.Team{}, true, err
 	}
 	return item, true, tx.Commit()
 }
 
-func scaleP21SW22TeamReference(teams []domain.Team, ref string, visible func(domain.Team) bool) string {
+func teamReference(teams []domain.Team, ref string, visible func(domain.Team) bool) string {
 	for _, team := range teams {
 		if visible(team) && team.ID == ref {
 			return team.ID
@@ -171,13 +171,13 @@ func scaleP21SW22TeamReference(teams []domain.Team, ref string, visible func(dom
 	return ""
 }
 
-func (s *SQLiteStore) scaleP21SW22TeamStamp(ctx context.Context, reader metadataRowReader, workspace string) (copyStamp, error) {
+func (s *SQLiteStore) teamStamp(ctx context.Context, reader metadataRowReader, workspace string) (copyStamp, error) {
 	var stamp copyStamp
 	err := reader.QueryRowContext(ctx, `SELECT `+metadataStampColumns+` FROM workspace_states WHERE `+s.metadataRecordKeyEquals("workspace_key", "?"), workspace, cacheKindMetadata, workspace).Scan(&stamp.workspaceID, &stamp.revision)
 	return stamp, err
 }
 
-func (s *SQLiteStore) scaleP21SW22ReadTeam(ctx context.Context, reader metadataRowReader, workspace, id string) (domain.Team, error) {
+func (s *SQLiteStore) readTeam(ctx context.Context, reader metadataRowReader, workspace, id string) (domain.Team, error) {
 	var size int
 	var raw []byte
 	err := reader.QueryRowContext(ctx, `SELECT LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END
@@ -202,7 +202,7 @@ func (s *SQLiteStore) scaleP21SW22ReadTeam(ctx context.Context, reader metadataR
 	return item, nil
 }
 
-func (s *SQLiteStore) scaleP21SW22TeamKey(ctx context.Context, tx *sqlTx, workspace, ref string) (string, error) {
+func (s *SQLiteStore) teamReadTeamKey(ctx context.Context, tx *sqlTx, workspace, ref string) (string, error) {
 	var lastOrder int
 	lastID, started := "", false
 	for {

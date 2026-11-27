@@ -16,8 +16,8 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ActivationConcurrentCatalogMutations(t *testing.T) {
-	peers, fixture, issue, project := scaleP21ActivationHTTPPeers(t, "full")
+func TestScaleActivationConcurrentCatalogMutations(t *testing.T) {
+	peers, fixture, issue, project := scaleActivationHTTPPeers(t, "full")
 	workspace := fixture.data.Workspace.URLKey
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -102,8 +102,8 @@ func TestScaleP21ActivationConcurrentCatalogMutations(t *testing.T) {
 	}
 }
 
-func TestScaleP21ActivationIssueDeleteStaleAuthorization(t *testing.T) {
-	peers, fixture, issue, project := scaleP21ActivationHTTPPeers(t, "full")
+func TestScaleActivationIssueDeleteStaleAuthorization(t *testing.T) {
+	peers, fixture, issue, project := scaleActivationHTTPPeers(t, "full")
 	workspace := fixture.data.Workspace.URLKey
 	before := loadErrorsEventCount(t, peers[0].service.store, "issue.deleted")
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -163,7 +163,7 @@ func TestScaleP21ActivationIssueDeleteStaleAuthorization(t *testing.T) {
 	}
 	close(resume)
 	<-done
-	if scaleP03DatabaseConfig(t).Driver == "sqlite" {
+	if platformDatabaseFixtureScaleDatabaseConfig(t).Driver == "sqlite" {
 		// A SQLite cookie session rebuilds its authorization when the policy
 		// epoch moves, so the deletion commits only after a fresh live check.
 		if w.Code != http.StatusNoContent || loadErrorsEventCount(t, peers[0].service.store, "issue.deleted") != before+1 {

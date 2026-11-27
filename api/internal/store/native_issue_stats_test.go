@@ -13,10 +13,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW19NativeIssueStatsMigration(t *testing.T) {
+func TestNativeIssueStatsMigration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	if err := f.MutateWorkspace(WithoutIssueRecordMutations(t.Context()), workspace, "scale_p21_sw19.stats_seed", "", nil, func(data *domain.Bootstrap) error {

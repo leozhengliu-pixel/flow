@@ -10,9 +10,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW29LogicalWebhookPredicates(t *testing.T) {
+func TestLogicalWebhookPredicates(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	for _, item := range []struct {
 		name string
@@ -53,11 +53,11 @@ func TestScaleP21SW29LogicalWebhookPredicates(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalWebhookWarmLoopProducer(t *testing.T) {
+func TestLogicalWebhookWarmLoopProducer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target, loopID := f.data.Workspace.URLKey, idgen.New("sw29-target_"), idgen.New("loop_")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings", "loops"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Settings[target] = map[string]any{"id": target, "name": "before"}

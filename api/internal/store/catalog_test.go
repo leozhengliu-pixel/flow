@@ -17,13 +17,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP05Database(t *testing.T) (*SQLiteStore, string) {
+func catalogScaleDatabase(t *testing.T) (*SQLiteStore, string) {
 	t.Helper()
 	driver, dsn := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if driver == "" {
 		driver, dsn = "sqlite", sqliteDSN(filepath.Join(t.TempDir(), "catalog.db"))
 	}
-	s := scaleP05Connect(t, driver, dsn)
+	s := scaleConnect(t, driver, dsn)
 	workspace := fmt.Sprintf("scale-p05-%d", time.Now().UnixNano())
 	t.Cleanup(func() {
 		for _, table := range []string{"metadata_catalog_relations", "metadata_catalog", "metadata_catalog_collections", "workspace_metadata_records"} {
@@ -36,7 +36,7 @@ func scaleP05Database(t *testing.T) (*SQLiteStore, string) {
 	return s, workspace
 }
 
-func scaleP05Connect(t *testing.T, dialect, dsn string) *SQLiteStore {
+func scaleConnect(t *testing.T, dialect, dsn string) *SQLiteStore {
 	t.Helper()
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	driver := dialect
@@ -67,7 +67,7 @@ func scaleP05Connect(t *testing.T, dialect, dsn string) *SQLiteStore {
 	return s
 }
 
-func scaleP05Put(t *testing.T, s *SQLiteStore, workspace, kind, id string, order int, value any) []byte {
+func catalogScalePut(t *testing.T, s *SQLiteStore, workspace, kind, id string, order int, value any) []byte {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -80,7 +80,7 @@ func scaleP05Put(t *testing.T, s *SQLiteStore, workspace, kind, id string, order
 	return raw
 }
 
-func scaleP05Finish(t *testing.T, s *SQLiteStore, workspace, kind string) {
+func scaleFinish(t *testing.T, s *SQLiteStore, workspace, kind string) {
 	t.Helper()
 	for range 100 {
 		progress, err := s.BackfillMetadataCatalog(t.Context(), workspace, kind)
@@ -97,7 +97,7 @@ func scaleP05Finish(t *testing.T, s *SQLiteStore, workspace, kind string) {
 	t.Fatal("backfill did not finish")
 }
 
-func scaleP05Projects(t *testing.T, s *SQLiteStore, workspace string, count int) []domain.Project {
+func scaleProjects(t *testing.T, s *SQLiteStore, workspace string, count int) []domain.Project {
 	t.Helper()
 	projects := make([]domain.Project, 0, count)
 	for i := range count {
@@ -133,13 +133,13 @@ func scaleP05Projects(t *testing.T, s *SQLiteStore, workspace string, count int)
 		if i%7 == 0 {
 			project.UpdatedAt = time.Time{}
 		}
-		scaleP05Put(t, s, workspace, "projects", project.ID, i/2, project)
+		catalogScalePut(t, s, workspace, "projects", project.ID, i/2, project)
 		projects = append(projects, project)
 	}
 	return projects
 }
 
-func scaleP05ReadPages(t *testing.T, s *SQLiteStore, workspace string, q PageRequest) []domain.Project {
+func scaleReadPages(t *testing.T, s *SQLiteStore, workspace string, q PageRequest) []domain.Project {
 	t.Helper()
 	all := []domain.Project{}
 	for range 100 {
@@ -170,10 +170,10 @@ func scaleP05ReadPages(t *testing.T, s *SQLiteStore, workspace string, q PageReq
 	return nil
 }
 
-func TestScaleP05CatalogDifferentialFiltersOrdersAndSlugs(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	projects := scaleP05Projects(t, s, workspace, 141)
-	scaleP05Finish(t, s, workspace, "projects")
+func TestScaleCatalogDifferentialFiltersOrdersAndSlugs(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	projects := scaleProjects(t, s, workspace, 141)
+	scaleFinish(t, s, workspace, "projects")
 	queries := []ProjectRecordQuery{
 		{Archived: "all", Admin: true}, {Admin: true}, {Archived: "true", Admin: true},
 		{AllowedTeamIDs: []string{}}, {AllowedTeamIDs: []string{"public"}}, {TeamIDs: []string{"child"}, Admin: true},
@@ -204,7 +204,7 @@ func TestScaleP05CatalogDifferentialFiltersOrdersAndSlugs(t *testing.T) {
 				query.Cursor = ""
 			}
 			filter, _ := json.Marshal(query)
-			actual := scaleP05ReadPages(t, s, workspace, PageRequest{Kind: "projects", Filter: string(filter), Limit: 7})
+			actual := scaleReadPages(t, s, workspace, PageRequest{Kind: "projects", Filter: string(filter), Limit: 7})
 			wantJSON, _ := json.Marshal(expected)
 			gotJSON, _ := json.Marshal(actual)
 			if !reflect.DeepEqual(wantJSON, gotJSON) {
@@ -213,7 +213,7 @@ func TestScaleP05CatalogDifferentialFiltersOrdersAndSlugs(t *testing.T) {
 		})
 	}
 	for _, order := range []string{"createdAt", "updatedAt"} {
-		actual := scaleP05ReadPages(t, s, workspace, PageRequest{Kind: "projects", Filter: `{"Archived":"all","Admin":true}`, Order: order, Limit: 13})
+		actual := scaleReadPages(t, s, workspace, PageRequest{Kind: "projects", Filter: `{"Archived":"all","Admin":true}`, Order: order, Limit: 13})
 		expected := slices.Clone(projects)
 		slices.SortFunc(expected, func(a, b domain.Project) int {
 			left, right := a.CreatedAt, b.CreatedAt
@@ -238,9 +238,9 @@ func TestScaleP05CatalogDifferentialFiltersOrdersAndSlugs(t *testing.T) {
 	}
 }
 
-func TestScaleP05ResumeDeleteAndHalfBackfill(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Projects(t, s, workspace, 257)
+func TestScaleResumeDeleteAndHalfBackfill(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	scaleProjects(t, s, workspace, 257)
 	first, err := s.BackfillMetadataCatalog(t.Context(), workspace, "projects")
 	if err != nil || first.Processed != 128 || first.Complete {
 		t.Fatalf("first batch=%+v err=%v", first, err)
@@ -265,30 +265,30 @@ func TestScaleP05ResumeDeleteAndHalfBackfill(t *testing.T) {
 		if err := s.db.QueryRowContext(t.Context(), `PRAGMA database_list`).Scan(&sequence, &name, &path); err != nil {
 			t.Fatal(err)
 		}
-		second = scaleP05Connect(t, "sqlite", sqliteDSN(path))
+		second = scaleConnect(t, "sqlite", sqliteDSN(path))
 	} else {
-		second = scaleP05Connect(t, s.dialect, os.Getenv("FLOW_TEST_DATABASE_URL"))
+		second = scaleConnect(t, s.dialect, os.Getenv("FLOW_TEST_DATABASE_URL"))
 	}
 	defer second.Close()
 	progress, err := second.BackfillMetadataCatalog(t.Context(), workspace, "projects")
 	if err != nil || progress.Processed != 128 || progress.Cursor != "p-255" {
 		t.Fatalf("resumed batch=%+v err=%v", progress, err)
 	}
-	scaleP05Finish(t, second, workspace, "projects")
+	scaleFinish(t, second, workspace, "projects")
 	status, err := second.MetadataCatalogStatus(t.Context(), workspace, "projects")
 	if err != nil || !status.Complete || !status.Shadow || status.Ready || status.Revision == "" {
 		t.Fatalf("unsafe coverage: %+v %v", status, err)
 	}
 	// Old-writer edits below the cursor and deletes are repaired on the next
 	// pass. Until then the sidecar remains explicitly non-authoritative.
-	scaleP05Put(t, s, workspace, "projects", "p-000", 0, domain.Project{ID: "p-000", Name: "Renamed", SlugID: "new-123456789abc", PreviousSlugIDs: []string{"legacy"}})
+	catalogScalePut(t, s, workspace, "projects", "p-000", 0, domain.Project{ID: "p-000", Name: "Renamed", SlugID: "new-123456789abc", PreviousSlugIDs: []string{"legacy"}})
 	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key='p-001'`, workspace); err != nil {
 		t.Fatal(err)
 	}
 	if err := second.ResetMetadataCatalogBackfill(t.Context(), workspace, "projects"); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Finish(t, second, workspace, "projects")
+	scaleFinish(t, second, workspace, "projects")
 	var count int
 	for _, table := range []string{"metadata_catalog", "metadata_catalog_relations"} {
 		if err := s.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM `+table+` WHERE workspace_key=? AND field='projects' AND record_key='p-001'`, workspace).Scan(&count); err != nil || count != 0 {
@@ -301,10 +301,10 @@ func TestScaleP05ResumeDeleteAndHalfBackfill(t *testing.T) {
 	}
 }
 
-func TestScaleP05CustomerFilterDifferential(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	projects := scaleP05Projects(t, s, workspace, 5)
-	scaleP05Finish(t, s, workspace, "projects")
+func TestScaleCustomerFilterDifferential(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	projects := scaleProjects(t, s, workspace, 5)
+	scaleFinish(t, s, workspace, "projects")
 	customers := map[string]*ProjectCustomerSummary{
 		"p-001": {Customers: []ProjectCustomer{{ID: "c1", OwnerID: "owner", Status: "active", Tier: "tier", Revenue: 100, Size: 20, Important: true}}},
 		"p-002": {UnknownCustomer: true},
@@ -332,9 +332,9 @@ func TestScaleP05CustomerFilterDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP05FailedBatchRollsBackCheckpointAndRelations(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Projects(t, s, workspace, 3)
+func TestScaleFailedBatchRollsBackCheckpointAndRelations(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	scaleProjects(t, s, workspace, 3)
 	if _, err := s.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'projects','z-bad',4,?)`, workspace, []byte(`{"id":"z-bad","createdAt":"private-record-value"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +357,7 @@ func TestScaleP05FailedBatchRollsBackCheckpointAndRelations(t *testing.T) {
 			t.Fatalf("failed batch left %s rows=%d err=%v", table, count, err)
 		}
 	}
-	scaleP05Put(t, s, workspace, "projects", "z-bad", 4, domain.Project{ID: "z-bad"})
+	catalogScalePut(t, s, workspace, "projects", "z-bad", 4, domain.Project{ID: "z-bad"})
 	hooks := commitHooks{beforeCommit: func(tx *sqlTx) { _ = tx.Tx.Rollback() }}
 	s.db.commitHooks.Store(&hooks)
 	if _, err := s.BackfillMetadataCatalog(t.Context(), workspace, "projects"); !errors.Is(err, sql.ErrTxDone) {
@@ -370,5 +370,5 @@ func TestScaleP05FailedBatchRollsBackCheckpointAndRelations(t *testing.T) {
 			t.Fatalf("commit fault left %s rows=%d err=%v", table, count, err)
 		}
 	}
-	scaleP05Finish(t, s, workspace, "projects")
+	scaleFinish(t, s, workspace, "projects")
 }

@@ -16,15 +16,15 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotWebhookDeliveryRoutingAndActors(t *testing.T) {
+func TestScaleHotWebhookDeliveryRoutingAndActors(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, public := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -151,15 +151,15 @@ func TestScaleP21HotWebhookDeliveryRoutingAndActors(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotWebhookDeliveryHealthAggregateCollision(t *testing.T) {
+func TestScaleHotWebhookDeliveryHealthAggregateCollision(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("hot-webhook-health-")
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

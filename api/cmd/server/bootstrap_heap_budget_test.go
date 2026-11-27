@@ -28,7 +28,7 @@ import (
 
 // Run in a fresh process per mode. The fixture remains resident; blocked
 // socket writes expose producer retention without retaining response bytes.
-func TestScaleP15HeapConcurrent10x(t *testing.T) {
+func TestScaleHeapConcurrent10x(t *testing.T) {
 	if os.Getenv("FLOW_P15_HEAP_MEASURE") != "on" {
 		t.Skip("set FLOW_P15_HEAP_MEASURE=on for the 10x retained-heap probe")
 	}
@@ -115,7 +115,7 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 			began := time.Now()
 			first := true
 			digest := sha256.New()
-			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+			w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 				if first {
 					first = false
 					// Let the other encoders reach their first socket write.
@@ -160,7 +160,7 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 				}
 				writeStreamedJSON(r.Context(), out, http.StatusOK, owned)
 				runtime.KeepAlive(snapshots)
-			})).ServeHTTP(scaleP15HeapHashWriter{w, digest}, r)
+			})).ServeHTTP(scaleHeapHashWriter{w, digest}, r)
 			latencies[i], outputs[i] = time.Since(began), w.bytes
 			digests[i] = fmt.Sprintf("%x", digest.Sum(nil))
 		}()
@@ -194,18 +194,18 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 	}
 }
 
-type scaleP15HeapHashWriter struct {
+type scaleHeapHashWriter struct {
 	http.ResponseWriter
 	digest interface{ Write([]byte) (int, error) }
 }
 
-func (w scaleP15HeapHashWriter) Write(p []byte) (int, error) {
+func (w scaleHeapHashWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
 	_, _ = w.digest.Write(p[:n])
 	return n, err
 }
 
-func TestScaleP15HeapDownloadsShareAdmission(t *testing.T) {
+func TestScaleHeapDownloadsShareAdmission(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15-heap-test-key")
 	for _, spoolBytes := range []string{"0", "32768", "268435456"} {
@@ -232,7 +232,7 @@ func TestScaleP15HeapDownloadsShareAdmission(t *testing.T) {
 			go func() {
 				defer close(done)
 				held := false
-				w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+				w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 					if !held {
 						held = true
 						close(blocked)
@@ -286,7 +286,7 @@ func TestScaleP15HeapDownloadsShareAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP15HeapAdmissionOffKeepsConcurrentProducers(t *testing.T) {
+func TestScaleHeapAdmissionOffKeepsConcurrentProducers(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	entered, release := make(chan struct{}, 2), make(chan struct{})
 	var readers sync.WaitGroup
@@ -313,10 +313,10 @@ func TestScaleP15HeapAdmissionOffKeepsConcurrentProducers(t *testing.T) {
 	}
 }
 
-func TestScaleP15HeapAdmissionReleasesAfterPanic(t *testing.T) {
+func TestScaleHeapAdmissionReleasesAfterPanic(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	r := httptest.NewRequest(http.MethodGet, "/api/issue-records/bootstrap", nil)
-	scaleP15ExpectAbort(t, func() {
+	scaleExpectAbort(t, func() {
 		boundHydratedLegacyDownloads(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 			panic(http.ErrAbortHandler)
 		})).ServeHTTP(httptest.NewRecorder(), r)
@@ -332,7 +332,7 @@ func TestScaleP15HeapAdmissionReleasesAfterPanic(t *testing.T) {
 	}
 }
 
-func TestScaleP15HeapAdmissionSharesAByteBudget(t *testing.T) {
+func TestScaleHeapAdmissionSharesAByteBudget(t *testing.T) {
 	gate := hydratedLegacyAdmission{changed: make(chan struct{})}
 	var releases []func()
 	for range 4 {
@@ -367,13 +367,13 @@ func TestScaleP15HeapAdmissionSharesAByteBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP15HeapDetachedStreamReleasesSnapshotBuffers(t *testing.T) {
+func TestScaleHeapDetachedStreamReleasesSnapshotBuffers(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir())
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
 	data.Projects[0].ID = "owned-before-encoding"
 	var owned domain.Bootstrap
-	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+	w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 		if owned.Projects[0].ID != "" {
 			t.Error("a detached socket write retained the producer's snapshot references")
 		}
@@ -388,28 +388,28 @@ func TestScaleP15HeapDetachedStreamReleasesSnapshotBuffers(t *testing.T) {
 	}
 }
 
-type scaleP15HeapCustomInt int64
+type scaleHeapCustomInt int64
 
-func (scaleP15HeapCustomInt) MarshalJSON() ([]byte, error) { return []byte(`"custom"`), nil }
+func (scaleHeapCustomInt) MarshalJSON() ([]byte, error) { return []byte(`"custom"`), nil }
 
-type scaleP15HeapPointerInt int64
+type scaleHeapPointerInt int64
 
-func (*scaleP15HeapPointerInt) MarshalJSON() ([]byte, error) { return []byte(`"pointer"`), nil }
+func (*scaleHeapPointerInt) MarshalJSON() ([]byte, error) { return []byte(`"pointer"`), nil }
 
-func TestScaleP15HeapScalarJSONDifferential(t *testing.T) {
+func TestScaleHeapScalarJSONDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	values := []any{
 		struct {
-			Signed   []int64                  `json:"signed"`
-			Unsigned []uint64                 `json:"unsigned"`
-			Bool     []bool                   `json:"bool"`
-			Time     []time.Time              `json:"time"`
-			Custom   []scaleP15HeapCustomInt  `json:"custom"`
-			Pointer  []scaleP15HeapPointerInt `json:"pointer"`
+			Signed   []int64               `json:"signed"`
+			Unsigned []uint64              `json:"unsigned"`
+			Bool     []bool                `json:"bool"`
+			Time     []time.Time           `json:"time"`
+			Custom   []scaleHeapCustomInt  `json:"custom"`
+			Pointer  []scaleHeapPointerInt `json:"pointer"`
 		}{
 			Signed: []int64{0, -1, 1<<63 - 1, -1 << 63}, Unsigned: []uint64{0, 1, 1<<64 - 1}, Bool: []bool{false, true},
 			Time:   []time.Time{{}, time.Date(1, 1, 1, 0, 0, 0, 1, time.UTC), time.Date(9999, 12, 31, 23, 59, 59, 123456789, time.FixedZone("test", -7*3600))},
-			Custom: []scaleP15HeapCustomInt{42}, Pointer: []scaleP15HeapPointerInt{42},
+			Custom: []scaleHeapCustomInt{42}, Pointer: []scaleHeapPointerInt{42},
 		},
 		struct {
 			Numbers map[string]any `json:"numbers"`
@@ -436,7 +436,7 @@ func TestScaleP15HeapScalarJSONDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP15ParallelProjectEncodingDifferential(t *testing.T) {
+func TestScaleParallelProjectEncodingDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	admitted := context.WithValue(t.Context(), hydratedLegacyDownloadKey{}, true)
 	data := domain.Bootstrap{Projects: make([]domain.Project, 129)}
@@ -455,7 +455,7 @@ func TestScaleP15ParallelProjectEncodingDifferential(t *testing.T) {
 	if !bytes.Equal(w.Body.Bytes(), append(want, '\n')) {
 		t.Fatal("ordered project pages or large-page fallback changed the wire bytes")
 	}
-	counted := &scaleP15CountingWriter{header: make(http.Header)}
+	counted := &scaleCountingWriter{header: make(http.Header)}
 	writeStreamedJSON(admitted, counted, http.StatusOK, data)
 	if counted.max > 64<<10 || counted.bytes != len(want)+1 {
 		t.Fatalf("project page chunks=%d bytes=%d want=%d", counted.max, counted.bytes, len(want)+1)
@@ -473,14 +473,14 @@ func TestScaleP15ParallelProjectEncodingDifferential(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(admitted)
 	cancel()
-	scaleP15ExpectAbort(t, func() { writeStreamedJSON(ctx, httptest.NewRecorder(), http.StatusOK, data) })
+	scaleExpectAbort(t, func() { writeStreamedJSON(ctx, httptest.NewRecorder(), http.StatusOK, data) })
 	ctx, cancel = context.WithCancel(admitted)
 	defer cancel()
-	interrupted := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+	interrupted := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 		cancel()
 		return ctx.Err()
 	}}
-	scaleP15ExpectAbort(t, func() { writeStreamedJSON(ctx, interrupted, http.StatusOK, data) })
+	scaleExpectAbort(t, func() { writeStreamedJSON(ctx, interrupted, http.StatusOK, data) })
 	page := &hydratedEncodingPage{}
 	if _, err := page.WriteString(strings.Repeat("x", 256<<10+1)); err != errHydratedEncodingPage || page.Len() != 0 {
 		t.Fatal("page string writes exceeded the encoding budget")

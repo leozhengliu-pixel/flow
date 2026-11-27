@@ -18,14 +18,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP19Options(t *testing.T) {
+func scaleOptions(t *testing.T) {
 	t.Helper()
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{19}, 32)))
 	for _, flag := range []string{"FLOW_INDEXED_READS", "FLOW_SYNC_MANIFEST", "FLOW_SYNC_V2", "FLOW_RECORD_JOURNAL"} {
 		t.Setenv(flag, "on")
 	}
 }
-func scaleP19Path(kind string, query scaleP19Query, cursor string, limit int) string {
+func scalePath(kind string, query scaleQuery, cursor string, limit int) string {
 	raw, _ := json.Marshal(query)
 	values := url.Values{"kind": {kind}, "window": {string(raw)}, "limit": {fmt.Sprint(limit)}}
 	if cursor != "" {
@@ -33,15 +33,15 @@ func scaleP19Path(kind string, query scaleP19Query, cursor string, limit int) st
 	}
 	return "/api/sync/records?" + values.Encode()
 }
-func scaleP19ProjectQuery() scaleP19Query {
-	return scaleP19Query{Schema: 1, Locale: "en-US", Now: "2026-11-12T12:00:00Z", ShowTeamInitiatives: true, ShowContributing: true, ShowNested: true, ShowParents: true, Display: scaleP19Display{Layout: "list", Grouping: "No grouping", SubGrouping: "No grouping", Ordering: "Manual", ShowClosed: "All"}}
+func scaleProjectQuery() scaleQuery {
+	return scaleQuery{Schema: 1, Locale: "en-US", Now: "2026-11-12T12:00:00Z", ShowTeamInitiatives: true, ShowContributing: true, ShowNested: true, ShowParents: true, Display: scaleDisplay{Layout: "list", Grouping: "No grouping", SubGrouping: "No grouping", Ordering: "Manual", ShowClosed: "All"}}
 }
 
-func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
-	scaleP19Options(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleEnableWindowsAndCursorContract(t *testing.T) {
+	scaleOptions(t)
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.Projects = nil
@@ -67,17 +67,17 @@ func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			query := scaleP19ProjectQuery()
+			query := scaleProjectQuery()
 			query.Display.Ordering = "Name"
-			read := func(kind string, q scaleP19Query, cursor string, limit int) (scaleP19WindowPage, []domain.Project) {
-				w := scaleP03Read(t, f, f.admin, "", http.MethodGet, scaleP19Path(kind, q, cursor, limit), workspace)
+			read := func(kind string, q scaleQuery, cursor string, limit int) (scaleWindowPage, []domain.Project) {
+				w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, scalePath(kind, q, cursor, limit), workspace)
 				if w.Code != 200 {
 					t.Fatalf("%s status %d %.500s", kind, w.Code, w.Body.String())
 				}
 				if w.Body.Len() > 256<<10 {
 					t.Fatal("unbounded page")
 				}
-				var page scaleP19WindowPage
+				var page scaleWindowPage
 				if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
 					t.Fatal(err)
 				}
@@ -101,7 +101,7 @@ func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
 			}
 			changed := query
 			changed.Display.OrderingDirection = "desc"
-			if w := scaleP03Read(t, f, f.admin, "", http.MethodGet, scaleP19Path("projects", changed, page.NextCursor, 100), workspace); w.Code != 409 {
+			if w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, scalePath("projects", changed, page.NextCursor, 100), workspace); w.Code != 409 {
 				t.Fatal("cursor not bound to ordering", w.Code)
 			}
 			query.Display.Grouping = "Priority"
@@ -115,7 +115,7 @@ func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
 			if page.Total != 41 {
 				t.Fatal("filter total differs", page.Total)
 			}
-			query = scaleP19ProjectQuery()
+			query = scaleProjectQuery()
 			query.View = "active"
 			page, _ = read("initiatives", query, "", 100)
 			if len(page.Entries) != 3 || page.Entries[1].Depth != 1 || page.Aggregates["p19-i-0"].Projects != 137 {
@@ -126,45 +126,45 @@ func TestScaleP19EnableWindowsAndCursorContract(t *testing.T) {
 			if page.Total != 2 {
 				t.Fatal("collapse did not change total", page.Total)
 			}
-			manifest := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest?surface=initiatives-page", workspace)
-			if manifest.Code != 200 || manifest.Body.Len() > 256<<10 || !strings.Contains(manifest.Body.String(), scaleP19Capability) {
+			manifest := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest?surface=initiatives-page", workspace)
+			if manifest.Code != 200 || manifest.Body.Len() > 256<<10 || !strings.Contains(manifest.Body.String(), scaleCapability) {
 				t.Fatalf("surface manifest %d %.500s", manifest.Code, manifest.Body.String())
 			}
 			t.Setenv("FLOW_CONNECTOR_SECRET_KEY", "")
-			if got := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest?surface=projects-page", workspace); got.Code != http.StatusNotImplemented {
+			if got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest?surface=projects-page", workspace); got.Code != http.StatusNotImplemented {
 				t.Fatal("manifest advertised cursors without a shared key", got.Code)
 			}
 		})
 	}
 }
 
-func TestScaleP19EnableBrowserCalendarMonth(t *testing.T) {
+func TestScaleEnableBrowserCalendarMonth(t *testing.T) {
 	target := "2026-10-31"
-	values := scaleP19InitiativeValues(domain.Initiative{TargetDate: &target}, scaleP19Query{Now: "2026-11-01T00:30:00Z", LocalMonth: "2026-10"})
+	values := scaleInitiativeValues(domain.Initiative{TargetDate: &target}, scaleQuery{Now: "2026-11-01T00:30:00Z", LocalMonth: "2026-10"})
 	if !slices.Contains(values["date"], "targetMonth") {
 		t.Fatal("UTC month replaced the browser's calendar month")
 	}
 }
 
-func TestScaleP19EnableRemovedAndReplacedStatuses(t *testing.T) {
+func TestScaleEnableRemovedAndReplacedStatuses(t *testing.T) {
 	current := domain.ProjectStatus{ID: "current", Name: "Awaiting", Type: "planned"}
 	data := domain.Bootstrap{ProjectStatuses: []domain.ProjectStatus{current}}
 	replaced := domain.Project{ID: "replaced", Status: domain.ProjectStatus{ID: "previous", Name: "Awaiting", Type: "planned"}}
 	removed := domain.Project{ID: "removed", Status: domain.ProjectStatus{ID: "removed-status", Name: "Removed", Type: "backlog"}}
-	query := scaleP19ProjectQuery()
+	query := scaleProjectQuery()
 	query.Display.Ordering = "Status"
 	projects := []domain.Project{removed, replaced}
-	scaleP19SortProjects(projects, query, data, nil, nil)
+	scaleSortProjects(projects, query, data, nil, nil)
 	if projects[0].ID != replaced.ID {
 		t.Fatal("a removed status sorted ahead of the current status catalogue")
 	}
-	id, name := scaleP19ProjectDescriptor(replaced, "Status", data)
+	id, name := scaleProjectDescriptor(replaced, "Status", data)
 	if id != "status-current" || name != "Awaiting" {
 		t.Fatal("status name fallback differs from the legacy view", id, name)
 	}
 }
 
-func TestScaleP19EnableLargeInitiativeAggregate(t *testing.T) {
+func TestScaleEnableLargeInitiativeAggregate(t *testing.T) {
 	data := domain.Bootstrap{ProjectUpdates: map[string][]domain.ProjectUpdate{}}
 	ids := make([]string, 23210)
 	for i := range ids {
@@ -179,7 +179,7 @@ func TestScaleP19EnableLargeInitiativeAggregate(t *testing.T) {
 		{ID: "parent", ProjectIDs: ids, Status: "active", Health: "noUpdate"},
 		{ID: "child", ProjectIDs: ids[:100], ParentInitiativeIDs: []string{"parent"}, Status: "active", Health: "noUpdate"},
 	}
-	page, err := scaleP19Initiatives(data, scaleP19ProjectQuery(), scaleP19WindowPage{}, 0, 100)
+	page, err := scaleInitiatives(data, scaleProjectQuery(), scaleWindowPage{}, 0, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,15 +200,15 @@ func TestScaleP19EnableLargeInitiativeAggregate(t *testing.T) {
 	}
 }
 
-func TestScaleP19EnableUpdateCursorRejectsChangedValuesAtSameHead(t *testing.T) {
+func TestScaleEnableUpdateCursorRejectsChangedValuesAtSameHead(t *testing.T) {
 	first := domain.ProjectUpdate{ID: "first", Body: "Original"}
 	second := domain.ProjectUpdate{ID: "second", Body: "Second"}
 	binding := func(values ...domain.ProjectUpdate) string {
-		records := make([]scaleP19UpdateRecord, len(values))
+		records := make([]scaleUpdateRecord, len(values))
 		for i, value := range values {
-			records[i] = scaleP19UpdateRecord{id: value.ID, value: value}
+			records[i] = scaleUpdateRecord{id: value.ID, value: value}
 		}
-		result, err := scaleP19UpdateBinding("projects", "project", "unchanged-head", records)
+		result, err := scaleUpdateBinding("projects", "project", "unchanged-head", records)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -221,11 +221,11 @@ func TestScaleP19EnableUpdateCursorRejectsChangedValuesAtSameHead(t *testing.T) 
 	}
 }
 
-func TestScaleP19EnableUpdateTransferAndLegacyBytes(t *testing.T) {
-	scaleP19Options(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleEnableUpdateTransferAndLegacyBytes(t *testing.T) {
+	scaleOptions(t)
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			id := "p19-updates"
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -243,7 +243,7 @@ func TestScaleP19EnableUpdateTransferAndLegacyBytes(t *testing.T) {
 			}
 			path := "/api/projects/" + id + "/updates"
 			read := func(path string) []byte {
-				w := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+				w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 				if w.Code != 200 {
 					t.Fatalf("%s %d %.500s", path, w.Code, w.Body.String())
 				}
@@ -265,7 +265,7 @@ func TestScaleP19EnableUpdateTransferAndLegacyBytes(t *testing.T) {
 					t.Fatal("nonterminating update cursor")
 				}
 				raw := read(path + "?window=1&limit=20&cursor=" + url.QueryEscape(cursor))
-				var page scaleP19UpdatePage
+				var page scaleUpdatePage
 				if err := json.Unmarshal(raw, &page); err != nil {
 					t.Fatal(err)
 				}
@@ -324,11 +324,11 @@ func TestScaleP19EnableUpdateTransferAndLegacyBytes(t *testing.T) {
 	}
 }
 
-func TestScaleP19EnablePermissionDifferential(t *testing.T) {
-	scaleP19Options(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleEnablePermissionDifferential(t *testing.T) {
+	scaleOptions(t)
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			suffix := idgen.New("p19-")
 			private, child := suffix+"private", suffix+"child"
@@ -346,12 +346,12 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, private, f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			member, _ := scaleP03Join(t, f, "P19 member", suffix+"member@example.test", "member", public)
-			outside, _ := scaleP03Join(t, f, "P19 outside admin", suffix+"admin@example.test", "admin", public)
-			guest, _ := scaleP03Join(t, f, "P19 guest", suffix+"guest@example.test", "guest", public, private)
-			inherited, _ := scaleP03Join(t, f, "P19 inherited", suffix+"inherited@example.test", "member", private)
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
+			member, _ := resourceAccessScaleJoin(t, f, "P19 member", suffix+"member@example.test", "member", public)
+			outside, _ := resourceAccessScaleJoin(t, f, "P19 outside admin", suffix+"admin@example.test", "admin", public)
+			guest, _ := resourceAccessScaleJoin(t, f, "P19 guest", suffix+"guest@example.test", "guest", public, private)
+			inherited, _ := resourceAccessScaleJoin(t, f, "P19 inherited", suffix+"inherited@example.test", "member", private)
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{public})
 			empty := suffix + "empty"
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p19.key", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: suffix + "empty-key", Name: "Selected empty", CreatorID: f.data.Viewer.ID, SecretHash: secretHash(empty), Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -366,14 +366,14 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 			}{{"admin", f.admin, ""}, {"admin-private-outsider", outside, ""}, {"member-private-outsider", member, ""}, {"guest-explicit-grants", guest, ""}, {"subteam-inheritance", inherited, ""}, {"key-unrestricted", nil, unrestricted}, {"key-selected-set", nil, selected}, {"key-selected-empty", nil, empty}}
 			for _, principal := range principals {
 				t.Run(principal.name, func(t *testing.T) {
-					legacy := scaleP03Read(t, f, principal.client, principal.token, http.MethodGet, "/api/bootstrap?issues=none", workspace)
+					legacy := resourceAccessScaleRead(t, f, principal.client, principal.token, http.MethodGet, "/api/bootstrap?issues=none", workspace)
 					if legacy.Code != 200 {
 						t.Fatalf("legacy %d %.200s", legacy.Code, legacy.Body.String())
 					}
 					var data domain.Bootstrap
 					_ = json.Unmarshal(legacy.Body.Bytes(), &data)
-					q := scaleP19ProjectQuery()
-					w := scaleP03Read(t, f, principal.client, principal.token, http.MethodGet, scaleP19Path("projects", q, "", 100), workspace)
+					q := scaleProjectQuery()
+					w := resourceAccessScaleRead(t, f, principal.client, principal.token, http.MethodGet, scalePath("projects", q, "", 100), workspace)
 					if w.Code != 200 {
 						t.Fatalf("window %d %.300s", w.Code, w.Body.String())
 					}
@@ -389,13 +389,13 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 					if page.Total != len(want) || !reflect.DeepEqual(page.Items, want) {
 						t.Fatalf("project fields/count/reference differ: got=%+v want=%+v", page.Items, want)
 					}
-					w = scaleP03Read(t, f, principal.client, principal.token, http.MethodGet, scaleP19Path("initiatives", q, "", 100), workspace)
+					w = resourceAccessScaleRead(t, f, principal.client, principal.token, http.MethodGet, scalePath("initiatives", q, "", 100), workspace)
 					if w.Code != 200 {
 						t.Fatalf("initiative window %d %.300s", w.Code, w.Body.String())
 					}
 					var ip struct {
-						Items      []domain.Initiative          `json:"items"`
-						Aggregates map[string]scaleP19Aggregate `json:"aggregates"`
+						Items      []domain.Initiative       `json:"items"`
+						Aggregates map[string]scaleAggregate `json:"aggregates"`
 					}
 					_ = json.Unmarshal(w.Body.Bytes(), &ip)
 					for _, item := range ip.Items {
@@ -421,26 +421,26 @@ func TestScaleP19EnablePermissionDifferential(t *testing.T) {
 					}
 				})
 			}
-			q := scaleP19ProjectQuery()
+			q := scaleProjectQuery()
 			q.Filters = []store.ProjectDirectoryFilter{{Field: "project", Operator: "is", Values: []string{"old-p19"}}}
 			// Old-slug matching remains the legacy UI's exact-id predicate; REST
 			// slug reads continue through the existing resource handler unchanged.
-			if w := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/projects/old-p19", workspace); w.Code != 200 {
+			if w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/projects/old-p19", workspace); w.Code != 200 {
 				t.Fatal("old slug stopped resolving", w.Code)
 			}
-			other := scaleP03Fixture(t, repo)
-			if w := scaleP03Read(t, f, member, "", http.MethodGet, scaleP19Path("projects", scaleP19ProjectQuery(), "", 1), other.data.Workspace.URLKey); w.Code != 403 {
+			other := resourceAccessScaleFixture(t, repo)
+			if w := resourceAccessScaleRead(t, f, member, "", http.MethodGet, scalePath("projects", scaleProjectQuery(), "", 1), other.data.Workspace.URLKey); w.Code != 403 {
 				t.Fatal("cross-workspace read accepted", w.Code)
 			}
-			first := scaleP03Read(t, f, f.admin, "", http.MethodGet, scaleP19Path("projects", scaleP19ProjectQuery(), "", 1), workspace)
-			var page scaleP19WindowPage
+			first := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, scalePath("projects", scaleProjectQuery(), "", 1), workspace)
+			var page scaleWindowPage
 			_ = json.Unmarshal(first.Body.Bytes(), &page)
 			if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, private, f.data.Viewer.ID, "member", false); err != nil {
 				t.Fatal(err)
 			}
 			for _, batch := range []string{"queued", "replay"} {
 				t.Run(batch, func(t *testing.T) {
-					w := scaleP03Read(t, f, f.admin, "", http.MethodGet, scaleP19Path("projects", scaleP19ProjectQuery(), page.NextCursor, 1), workspace)
+					w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, scalePath("projects", scaleProjectQuery(), page.NextCursor, 1), workspace)
 					if w.Code != 409 && w.Code != 403 {
 						t.Fatal("revoked cursor replayed", w.Code)
 					}

@@ -228,10 +228,10 @@ func TestIssueActivityPrivateRelationDelivery(t *testing.T) {
 			setActivityMutationMode(t, mode)
 			// The fixture's cleanup needs the store open: it closes last.
 			var repo *store.SQLiteStore
-			for _, opened := range scaleP03ServerTestStores(t) {
+			for _, opened := range scaleServerTestStores(t) {
 				repo = opened
 			}
-			f := newScaleP12Fixture(t, repo)
+			f := newScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			insider := f.principals[4]
 			ageIssueForActivityTest(t, repo, workspace, f.secret)

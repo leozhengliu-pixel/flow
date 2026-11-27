@@ -12,14 +12,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP18Fixture(t *testing.T) (*store.SQLiteStore, mcpActor, context.Context) {
+func costScaleFixture(t *testing.T) (*store.SQLiteStore, mcpActor, context.Context) {
 	t.Helper()
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	resources := scaleP03TrackResources(t, repo)
+	resources := platformDatabaseFixtureScaleTrackResources(t, repo)
 	user, token, err := repo.Register(t.Context(), "P18 owner", idgen.New("p18-")+"@example.test", "p18-fixture-password")
 	if err != nil {
 		t.Fatal(err)
@@ -41,13 +41,13 @@ func scaleP18Fixture(t *testing.T) (*store.SQLiteStore, mcpActor, context.Contex
 	return repo, actor, ctx
 }
 
-func TestScaleP18ReadCosts(t *testing.T) {
+func TestScaleReadCosts(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P18_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P18_MEASURE=1 for the before/after allocation measurement")
 	}
 	for _, count := range []int{100, 1000} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
-			repo, actor, ctx := scaleP18Fixture(t)
+			repo, actor, ctx := costScaleFixture(t)
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 				for i := range count {
 					data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p18-project-%04d", i), Name: fmt.Sprintf("Project %04d", i), Description: strings.Repeat("body ", 1600), TeamIDs: []string{data.Teams[0].ID}, Resources: []domain.ProjectResource{{ID: "resource", Title: "Context"}}})

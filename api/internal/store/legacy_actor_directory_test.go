@@ -12,27 +12,27 @@ import (
 	"testing"
 )
 
-type scaleP21SW101Outcome struct {
+type legacyActorDirectoryOutcome struct {
 	Role    string
 	Teams   []string
 	Applied bool
 }
 
-func scaleP21SW101Literal(ctx context.Context, repository *SQLiteStore, workspaceID, userID string) scaleP21SW101Outcome {
+func legacyActorDirectoryLiteral(ctx context.Context, repository *SQLiteStore, workspaceID, userID string) legacyActorDirectoryOutcome {
 	role, status, err := repository.WorkspaceRole(ctx, workspaceID, userID)
 	if err != nil || status != "active" {
-		return scaleP21SW101Outcome{}
+		return legacyActorDirectoryOutcome{}
 	}
 	teams, _ := repository.actorTeamIDs(ctx, workspaceID, userID)
-	return scaleP21SW101Outcome{Role: role, Teams: teams, Applied: true}
+	return legacyActorDirectoryOutcome{Role: role, Teams: teams, Applied: true}
 }
 
-func scaleP21SW101Compare(t *testing.T, ctx context.Context, legacy, bounded *SQLiteStore, workspaceID, userID string) {
+func legacyActorDirectoryCompare(t *testing.T, ctx context.Context, legacy, bounded *SQLiteStore, workspaceID, userID string) {
 	t.Helper()
-	want := scaleP21SW101Literal(ctx, legacy, workspaceID, userID)
+	want := legacyActorDirectoryLiteral(ctx, legacy, workspaceID, userID)
 	owner := &ResourceRead{store: bounded}
 	role, teams, applied, err := bounded.boundedLegacyActorDirectory(ctx, workspaceID, userID, owner)
-	got := scaleP21SW101Outcome{Role: role, Teams: teams, Applied: applied}
+	got := legacyActorDirectoryOutcome{Role: role, Teams: teams, Applied: applied}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		owner.Close()
 		t.Fatalf("best-effort actor directory changed: got=%#v want=%#v err=%v", got, want, err)
@@ -48,11 +48,11 @@ func scaleP21SW101Compare(t *testing.T, ctx context.Context, legacy, bounded *SQ
 	}
 }
 
-func TestScaleP21SW101LegacyActorDirectoryDatabase(t *testing.T) {
+func TestLegacyActorDirectoryDatabase(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	bounded, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestScaleP21SW101LegacyActorDirectoryDatabase(t *testing.T) {
 				}
 			}
 			ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: f.data.Workspace.URLKey, reader: tx})
-			scaleP21SW101Compare(t, ctx, f.SQLiteStore, bounded, workspaceID, userID)
+			legacyActorDirectoryCompare(t, ctx, f.SQLiteStore, bounded, workspaceID, userID)
 			var one int
 			if err := tx.QueryRowContext(t.Context(), `SELECT 1`).Scan(&one); err != nil || one != 1 {
 				t.Fatal("actor directory consumed borrowed transaction", err)
@@ -98,7 +98,7 @@ func TestScaleP21SW101LegacyActorDirectoryDatabase(t *testing.T) {
 		})
 	}
 	for _, pair := range [][2]string{{workspaceID + "-foreign", userID}, {workspaceID, userID + "-missing"}, {"", userID}, {workspaceID, ""}} {
-		scaleP21SW101Compare(t, t.Context(), f.SQLiteStore, bounded, pair[0], pair[1])
+		legacyActorDirectoryCompare(t, t.Context(), f.SQLiteStore, bounded, pair[0], pair[1])
 	}
 	closed, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -108,40 +108,40 @@ func TestScaleP21SW101LegacyActorDirectoryDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	failed := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, reader: closed})
-	scaleP21SW101Compare(t, failed, f.SQLiteStore, bounded, workspaceID, userID)
+	legacyActorDirectoryCompare(t, failed, f.SQLiteStore, bounded, workspaceID, userID)
 }
 
-type scaleP21SW101Script struct {
+type legacyActorDirectoryScript struct {
 	role, status                  driver.Value
 	roleError, teamError, teamEOF error
 	missing                       bool
 	teams                         []driver.Value
 }
 
-type scaleP21SW101Connector struct{ script scaleP21SW101Script }
+type legacyActorDirectoryConnector struct{ script legacyActorDirectoryScript }
 
-func (c scaleP21SW101Connector) Driver() driver.Driver { return c }
-func (c scaleP21SW101Connector) Open(string) (driver.Conn, error) {
+func (c legacyActorDirectoryConnector) Driver() driver.Driver { return c }
+func (c legacyActorDirectoryConnector) Open(string) (driver.Conn, error) {
 	return c.Connect(context.Background())
 }
-func (c scaleP21SW101Connector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c legacyActorDirectoryConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &scaleP21SW101Connection{script: c.script}, nil
+	return &legacyActorDirectoryConnection{script: c.script}, nil
 }
 
-type scaleP21SW101Connection struct{ script scaleP21SW101Script }
+type legacyActorDirectoryConnection struct{ script legacyActorDirectoryScript }
 
-func (*scaleP21SW101Connection) Close() error { return nil }
-func (*scaleP21SW101Connection) Begin() (driver.Tx, error) {
+func (*legacyActorDirectoryConnection) Close() error { return nil }
+func (*legacyActorDirectoryConnection) Begin() (driver.Tx, error) {
 	return nil, errors.New("unexpected actor-directory transaction")
 }
-func (*scaleP21SW101Connection) Prepare(string) (driver.Stmt, error) {
+func (*legacyActorDirectoryConnection) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected actor-directory prepare")
 }
 
-func scaleP21SW101Length(value driver.Value) driver.Value {
+func legacyActorDirectoryLength(value driver.Value) driver.Value {
 	switch value := value.(type) {
 	case nil:
 		return nil
@@ -154,7 +154,7 @@ func scaleP21SW101Length(value driver.Value) driver.Value {
 	}
 }
 
-func (c *scaleP21SW101Connection) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c *legacyActorDirectoryConnection) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (c *scaleP21SW101Connection) QueryContext(ctx context.Context, query string
 			return nil, c.script.roleError
 		}
 		guarded := strings.Contains(query, "CASE WHEN")
-		rows := &scaleP21SW101Rows{columns: []string{"role", "status"}}
+		rows := &legacyActorDirectoryRows{columns: []string{"role", "status"}}
 		if guarded {
 			rows.columns = []string{"size", "role", "status"}
 		}
@@ -173,7 +173,7 @@ func (c *scaleP21SW101Connection) QueryContext(ctx context.Context, query string
 		values := []driver.Value{c.script.role, c.script.status}
 		if guarded {
 			var size driver.Value
-			left, right := scaleP21SW101Length(c.script.role), scaleP21SW101Length(c.script.status)
+			left, right := legacyActorDirectoryLength(c.script.role), legacyActorDirectoryLength(c.script.status)
 			if left != nil && right != nil {
 				size = left.(int64) + right.(int64)
 			}
@@ -190,14 +190,14 @@ func (c *scaleP21SW101Connection) QueryContext(ctx context.Context, query string
 			return nil, c.script.teamError
 		}
 		guarded := strings.Contains(query, "CASE WHEN")
-		rows := &scaleP21SW101Rows{columns: []string{"team_id"}, endError: c.script.teamEOF}
+		rows := &legacyActorDirectoryRows{columns: []string{"team_id"}, endError: c.script.teamEOF}
 		if guarded {
 			rows.columns = []string{"size", "team_id"}
 		}
 		for _, id := range c.script.teams {
 			values := []driver.Value{id}
 			if guarded {
-				size := scaleP21SW101Length(id)
+				size := legacyActorDirectoryLength(id)
 				if size != nil && size.(int64) > MetadataRecordPageMaxBytes {
 					values = []driver.Value{nil}
 				}
@@ -210,16 +210,16 @@ func (c *scaleP21SW101Connection) QueryContext(ctx context.Context, query string
 	return nil, fmt.Errorf("unexpected actor-directory query")
 }
 
-type scaleP21SW101Rows struct {
+type legacyActorDirectoryRows struct {
 	columns  []string
 	values   [][]driver.Value
 	position int
 	endError error
 }
 
-func (r *scaleP21SW101Rows) Columns() []string { return r.columns }
-func (*scaleP21SW101Rows) Close() error        { return nil }
-func (r *scaleP21SW101Rows) Next(target []driver.Value) error {
+func (r *legacyActorDirectoryRows) Columns() []string { return r.columns }
+func (*legacyActorDirectoryRows) Close() error        { return nil }
+func (r *legacyActorDirectoryRows) Next(target []driver.Value) error {
 	if r.position >= len(r.values) {
 		if r.endError != nil {
 			return r.endError
@@ -231,41 +231,41 @@ func (r *scaleP21SW101Rows) Next(target []driver.Value) error {
 	return nil
 }
 
-func scaleP21SW101Stores(t *testing.T, script scaleP21SW101Script) (*SQLiteStore, *SQLiteStore) {
+func legacyActorDirectoryStores(t *testing.T, script legacyActorDirectoryScript) (*SQLiteStore, *SQLiteStore) {
 	t.Helper()
-	database := sql.OpenDB(scaleP21SW101Connector{script: script})
+	database := sql.OpenDB(legacyActorDirectoryConnector{script: script})
 	t.Cleanup(func() { _ = database.Close() })
 	wrapped := &sqlDatabase{DB: database, dialect: "sqlite"}
 	return &SQLiteStore{db: wrapped, dialect: "sqlite"}, &SQLiteStore{db: wrapped, dialect: "sqlite", metadataResidency: newMetadataResidency()}
 }
 
-func TestScaleP21SW101LegacyActorDirectoryBestEffort(t *testing.T) {
+func TestLegacyActorDirectoryBestEffort(t *testing.T) {
 	failure := errors.New("ordinary membership driver failure")
 	for _, fixture := range []struct {
 		name   string
-		script scaleP21SW101Script
+		script legacyActorDirectoryScript
 	}{
-		{"empty-teams", scaleP21SW101Script{role: "member", status: "active"}},
-		{"ordered-duplicates-empty-null", scaleP21SW101Script{role: "guest", status: "active", teams: []driver.Value{"z", "a", "z", "", nil, []byte("bytes")}}},
-		{"empty-role", scaleP21SW101Script{role: "", status: "active", teams: []driver.Value{"team"}}},
-		{"native-role", scaleP21SW101Script{role: "管理员", status: "active", teams: []driver.Value{"私有", "public"}}},
-		{"inactive", scaleP21SW101Script{role: "member", status: "inactive", teams: []driver.Value{"unused"}}},
-		{"missing", scaleP21SW101Script{missing: true}},
-		{"null-role-scan", scaleP21SW101Script{role: nil, status: "active"}},
-		{"null-status-scan", scaleP21SW101Script{role: "member", status: nil}},
-		{"role-query-error", scaleP21SW101Script{roleError: failure}},
-		{"team-query-error", scaleP21SW101Script{role: "member", status: "active", teamError: failure}},
-		{"team-eof-error", scaleP21SW101Script{role: "member", status: "active", teams: []driver.Value{"discard-partial"}, teamEOF: failure}},
+		{"empty-teams", legacyActorDirectoryScript{role: "member", status: "active"}},
+		{"ordered-duplicates-empty-null", legacyActorDirectoryScript{role: "guest", status: "active", teams: []driver.Value{"z", "a", "z", "", nil, []byte("bytes")}}},
+		{"empty-role", legacyActorDirectoryScript{role: "", status: "active", teams: []driver.Value{"team"}}},
+		{"native-role", legacyActorDirectoryScript{role: "管理员", status: "active", teams: []driver.Value{"私有", "public"}}},
+		{"inactive", legacyActorDirectoryScript{role: "member", status: "inactive", teams: []driver.Value{"unused"}}},
+		{"missing", legacyActorDirectoryScript{missing: true}},
+		{"null-role-scan", legacyActorDirectoryScript{role: nil, status: "active"}},
+		{"null-status-scan", legacyActorDirectoryScript{role: "member", status: nil}},
+		{"role-query-error", legacyActorDirectoryScript{roleError: failure}},
+		{"team-query-error", legacyActorDirectoryScript{role: "member", status: "active", teamError: failure}},
+		{"team-eof-error", legacyActorDirectoryScript{role: "member", status: "active", teams: []driver.Value{"discard-partial"}, teamEOF: failure}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			legacy, bounded := scaleP21SW101Stores(t, fixture.script)
-			scaleP21SW101Compare(t, t.Context(), legacy, bounded, "workspace", "actor")
+			legacy, bounded := legacyActorDirectoryStores(t, fixture.script)
+			legacyActorDirectoryCompare(t, t.Context(), legacy, bounded, "workspace", "actor")
 		})
 	}
 }
 
-func TestScaleP21SW101LegacyActorDirectoryCancellationAndAdmission(t *testing.T) {
-	_, bounded := scaleP21SW101Stores(t, scaleP21SW101Script{role: "member", status: "active", teams: []driver.Value{"one", "two", "one"}})
+func TestLegacyActorDirectoryCancellationAndAdmission(t *testing.T) {
+	_, bounded := legacyActorDirectoryStores(t, legacyActorDirectoryScript{role: "member", status: "active", teams: []driver.Value{"one", "two", "one"}})
 	for _, stage := range []string{"before", "role-query", "team-query"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -323,14 +323,14 @@ func TestScaleP21SW101LegacyActorDirectoryCancellationAndAdmission(t *testing.T)
 	if bounded.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("independent actor outputs retained work")
 	}
-	_, tooLarge := scaleP21SW101Stores(t, scaleP21SW101Script{role: strings.Repeat("role", MetadataRecordPageMaxBytes/4+1), status: "active"})
+	_, tooLarge := legacyActorDirectoryStores(t, legacyActorDirectoryScript{role: strings.Repeat("role", MetadataRecordPageMaxBytes/4+1), status: "active"})
 	owner := &ResourceRead{store: tooLarge}
 	_, _, _, err = tooLarge.boundedLegacyActorDirectory(t.Context(), "workspace", "actor", owner)
 	owner.Close()
 	if !errors.Is(err, ErrMetadataWorkBudget) || tooLarge.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("oversized role escaped actual-row admission", err)
 	}
-	_, tooLarge = scaleP21SW101Stores(t, scaleP21SW101Script{role: "member", status: "active", teams: []driver.Value{strings.Repeat("team", MetadataRecordPageMaxBytes/4+1)}})
+	_, tooLarge = legacyActorDirectoryStores(t, legacyActorDirectoryScript{role: "member", status: "active", teams: []driver.Value{strings.Repeat("team", MetadataRecordPageMaxBytes/4+1)}})
 	owner = &ResourceRead{store: tooLarge}
 	_, _, _, err = tooLarge.boundedLegacyActorDirectory(t.Context(), "workspace", "actor", owner)
 	owner.Close()

@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M1CoreReadsDifferential(t *testing.T) {
+func TestScaleCoreReadsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		public, private, child := idgen.New("m1-public-"), idgen.New("m1-private-"), idgen.New("m1-child-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -47,15 +47,15 @@ func TestScaleP21M1CoreReadsDifferential(t *testing.T) {
 			{"guest-explicit", "guest", []string{public}},
 			{"inherited", "member", []string{private}},
 		} {
-			_, user := scaleP03Join(t, f, spec.name, idgen.New("m1-core-")+"@example.test", spec.role, spec.teams...)
+			_, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("m1-core-")+"@example.test", spec.role, spec.teams...)
 			principals = append(principals, user)
 		}
-		foreign := scaleP03Fixture(t, repo)
+		foreign := resourceAccessScaleFixture(t, repo)
 		principals = append(principals, foreign.data.Viewer)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.keys", "", nil, func(data *domain.Bootstrap) error {
 			for _, principal := range principals {
 				for _, restriction := range []string{"all", "selected-empty", "selected-set"} {
-					data.APIKeys = append(data.APIKeys, *scaleP21M1CoreKey(principal.ID, restriction, public))
+					data.APIKeys = append(data.APIKeys, *coreAccessKeyFixture(principal.ID, restriction, public))
 				}
 			}
 			return nil
@@ -71,7 +71,7 @@ func TestScaleP21M1CoreReadsDifferential(t *testing.T) {
 			for _, restriction := range []string{"session", "all", "selected-empty", "selected-set"} {
 				t.Run(principal.ID+"/"+restriction, func(t *testing.T) {
 					ctx := context.WithValue(t.Context(), authUserContextKey{}, principal)
-					key := scaleP21M1CoreKey(principal.ID, restriction, public)
+					key := coreAccessKeyFixture(principal.ID, restriction, public)
 					if key != nil {
 						ctx = context.WithValue(ctx, apiKeyContextKey{}, *key)
 					}
@@ -256,7 +256,7 @@ func TestScaleP21M1CoreReadsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21M1CoreKey(userID, restriction, public string) *domain.APIKey {
+func coreAccessKeyFixture(userID, restriction, public string) *domain.APIKey {
 	if restriction == "session" {
 		return nil
 	}

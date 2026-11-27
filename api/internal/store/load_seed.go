@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP01SyntheticSpec(spec SyntheticMetadata) (SyntheticMetadata, error) {
+func scaleSyntheticSpec(spec SyntheticMetadata) (SyntheticMetadata, error) {
 	if spec.CountScale == 0 {
 		spec.CountScale = 1
 	}
@@ -41,7 +41,7 @@ func scaleP01SyntheticSpec(spec SyntheticMetadata) (SyntheticMetadata, error) {
 	return spec, nil
 }
 
-func scaleP01SyntheticProject(creator domain.User, spec SyntheticMetadata, i int, now time.Time) domain.Project {
+func scaleSyntheticProject(creator domain.User, spec SyntheticMetadata, i int, now time.Time) domain.Project {
 	project := syntheticProject(creator, spec, i, now)
 	if spec.Relations {
 		if len(spec.UserIDs) > 0 {
@@ -55,7 +55,7 @@ func scaleP01SyntheticProject(creator domain.User, spec SyntheticMetadata, i int
 	return project
 }
 
-func scaleP01SyntheticDocument(creator domain.User, spec SyntheticMetadata, i int, now time.Time) domain.Document {
+func scaleSyntheticDocument(creator domain.User, spec SyntheticMetadata, i int, now time.Time) domain.Document {
 	document := syntheticDocument(creator, spec, i, now)
 	if spec.Relations {
 		if spec.Projects > 0 {
@@ -66,19 +66,19 @@ func scaleP01SyntheticDocument(creator domain.User, spec SyntheticMetadata, i in
 	return document
 }
 
-type ScaleP01Principal struct {
+type ScalePrincipal struct {
 	User    domain.User
 	Token   string
 	Role    string
 	TeamIDs []string
 }
 
-// SeedScaleP01Principals bypasses registration throttling and password hashing
+// SeedScalePrincipals bypasses registration throttling and password hashing
 // per user, not request authentication. Each principal has a real session,
 // membership and credential context. It is only available with -tags=loadtest.
 // The first two teams are public; any remaining teams are private. Unique
 // permissions require eleven private teams to represent 2,000 combinations.
-func (s *SQLiteStore) SeedScaleP01Principals(ctx context.Context, workspace string, teams []string, count int, uniquePermissions bool) ([]ScaleP01Principal, error) {
+func (s *SQLiteStore) SeedScalePrincipals(ctx context.Context, workspace string, teams []string, count int, uniquePermissions bool) ([]ScalePrincipal, error) {
 	data, ok := s.WorkspaceSettingsMetadata(workspace)
 	if !ok || len(teams) < 2 || count < 1 || count > 10000 || uniquePermissions && len(teams) < 13 {
 		return nil, fmt.Errorf("invalid P01 principal fixture")
@@ -87,7 +87,7 @@ func (s *SQLiteStore) SeedScaleP01Principals(ctx context.Context, workspace stri
 	if err != nil {
 		return nil, err
 	}
-	people := make([]ScaleP01Principal, 0, count)
+	people := make([]ScalePrincipal, 0, count)
 	stamp := formatStoredTime(time.Now())
 	for start := 0; start < count; start += 128 {
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -133,7 +133,7 @@ func (s *SQLiteStore) SeedScaleP01Principals(ctx context.Context, workspace stri
 				if _, err := tx.ExecContext(ctx, `INSERT INTO auth_session_security(token_hash,provider,issuer,mfa_verified_at) VALUES(?,?,?,?)`, tokenHash(token), "password", "", nil); err != nil {
 					return err
 				}
-				people = append(people, ScaleP01Principal{User: user, Token: token, Role: role, TeamIDs: joined})
+				people = append(people, ScalePrincipal{User: user, Token: token, Role: role, TeamIDs: joined})
 			}
 			return tx.Commit()
 		}()

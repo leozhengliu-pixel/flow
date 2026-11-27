@@ -13,20 +13,20 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW422: setIssueReleases on releases at the literal writer's maxima (a
+// SetIssueReleases on releases at the literal writer's maxima (a
 // release with 300,000 linked issues, descriptions up to the size the
 // literal transaction accepts and just above it), on both issue routes,
 // against the literal writer byte for byte (response, release rows, root,
 // issue rows, activities, events, webhooks and realtime), warm and
 // SQL-reloaded, including a peer that commits to the large release row
 // after the copies were installed (merged, or conflicting and retried).
-func scaleP21SW422Run(t *testing.T, names ...string) {
+func largeIssueReleasesRun(t *testing.T, names ...string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f, seed := scaleP21SW200Setup(t)
+	f, seed := issueReleasesSetup(t)
 	owner := f.principals[0].user
 	issue := f.triage.ID
 	workspace := f.data.Workspace.URLKey
@@ -50,7 +50,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 	}
 	writeLarge := func(t *testing.T, raw []byte) {
 		t.Helper()
-		scaleP21SW201Exec(t, f.reader, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`, raw, workspace, large)
+		metadataReloadSourceExec(t, f.reader, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='releases' AND record_key=?`, raw, workspace, large)
 	}
 	// The peer rewrites the row after both copies were installed.
 	peer := func(edit func(*domain.Release)) func(*testing.T) {
@@ -64,7 +64,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 			}
 		}
 	}
-	type sw422Case struct {
+	type largeIssueReleasesCase struct {
 		name                    string
 		description, links, raw int
 		linked, plain           bool
@@ -72,7 +72,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 		ids                     []string
 		code                    int
 	}
-	cases := []sw422Case{
+	cases := []largeIssueReleasesCase{
 		{name: "add-to-many-issues", description: 64 << 10, links: 300_000, ids: []string{large}, code: http.StatusOK},
 		{name: "remove-from-many-issues", description: 64 << 10, links: 300_000, linked: true, ids: []string{}, code: http.StatusOK},
 		{name: "add-large-description-7mib", description: 7 << 20, links: 1000, ids: []string{large, seed.id("add")}, code: http.StatusOK},
@@ -86,7 +86,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 			peer: peer(func(release *domain.Release) { release.Name = "Peer renamed release" })},
 	}
 	for _, name := range names {
-		index := slices.IndexFunc(cases, func(test sw422Case) bool { return test.name == name })
+		index := slices.IndexFunc(cases, func(test largeIssueReleasesCase) bool { return test.name == name })
 		if index < 0 {
 			t.Fatal("unknown SW422 case", name)
 		}
@@ -96,7 +96,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 			if test.plain {
 				description = strings.Repeat("plain release notes ", test.description/20)
 			} else {
-				description = scaleP21SW421Body("legal release notes", test.description)
+				description = loopNextRunBody("legal release notes", test.description)
 			}
 			links := make([]string, test.links)
 			for number := range links {
@@ -167,7 +167,7 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 				f.prepare = func(t *testing.T) {
 					if raw == nil {
 						raw = largeRow(t, func(release *domain.Release) {
-							release.Description = scaleP21SW421Body("legal release notes", test.raw)
+							release.Description = loopNextRunBody("legal release notes", test.raw)
 						})
 					}
 					writeLarge(t, raw)
@@ -178,13 +178,13 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 			}
 			for _, alias := range []bool{true, false} {
 				t.Run(fmt.Sprintf("alias=%t", alias), func(t *testing.T) {
-					outcomes := f.sw200Differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
+					outcomes := f.issueReleasesDifferential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 						if test.peer != nil {
 							test.peer(t)
 						}
 						service.authDisabled = !alias
-						stopPeak := scaleP21SW421Peak(service.store)
-						w := scaleP21SW200Request(t, &f, service, owner, nil, issue, test.ids, alias, false)
+						stopPeak := loopNextRunPeak(service.store)
+						w := issueReleasesRequest(t, &f, service, owner, nil, issue, test.ids, alias, false)
 						t.Logf("%s alias=%t bounded=%t status=%d peak_work=%d", test.name, alias, service.store.BoundedMetadataEnabled(), w.Code, stopPeak())
 						return w
 					})
@@ -204,34 +204,34 @@ func scaleP21SW422Run(t *testing.T, names ...string) {
 
 // Separate the large indexes and description sizes so CI can shard them.
 // Each fixture still exercises both routes in all three store modes.
-func TestScaleP21SW422LargeIssueReleasesDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-to-many-issues")
+func TestLargeIssueReleasesDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "add-to-many-issues")
 }
 
-func TestScaleP21SW422LargeIssueReleasesRemoveDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "remove-from-many-issues")
+func TestLargeIssueReleasesRemoveDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "remove-from-many-issues")
 }
 
-func TestScaleP21SW422LargeIssueReleasesDescriptionDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-large-description-7mib")
+func TestLargeIssueReleasesDescriptionDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "add-large-description-7mib")
 }
 
-func TestScaleP21SW422LargeIssueReleasesDescriptionAtMaxDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-large-description-at-max")
+func TestLargeIssueReleasesDescriptionAtMaxDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "add-large-description-at-max")
 }
 
-func TestScaleP21SW422LargeIssueReleasesRemoveDescriptionAtMaxDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "remove-large-description-at-max")
+func TestLargeIssueReleasesRemoveDescriptionAtMaxDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "remove-large-description-at-max")
 }
 
-func TestScaleP21SW422LargeIssueReleasesPlainDescriptionDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-plain-description-14mb")
+func TestLargeIssueReleasesPlainDescriptionDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "add-plain-description-14mb")
 }
 
-func TestScaleP21SW422LargeIssueReleasesOverLimitDescriptionDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "add-large-description-over")
+func TestLargeIssueReleasesOverLimitDescriptionDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "add-large-description-over")
 }
 
-func TestScaleP21SW422LargeIssueReleasesPeerDifferential(t *testing.T) {
-	scaleP21SW422Run(t, "peer-added-issue", "peer-renamed")
+func TestLargeIssueReleasesPeerDifferential(t *testing.T) {
+	largeIssueReleasesRun(t, "peer-added-issue", "peer-renamed")
 }

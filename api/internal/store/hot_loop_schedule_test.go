@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21LoopTickEqual(got, want []domain.Loop) bool {
+func scaleLoopTickEqual(got, want []domain.Loop) bool {
 	left, leftErr := json.Marshal(got)
 	right, rightErr := json.Marshal(want)
 	if leftErr != nil || rightErr != nil || !bytes.Equal(left, right) || len(got) != len(want) {
@@ -34,7 +34,7 @@ func scaleP21LoopTickEqual(got, want []domain.Loop) bool {
 	return reflect.DeepEqual(got, want)
 }
 
-func scaleP21LoopTickProjection(data domain.Bootstrap, mode string) []domain.Loop {
+func scaleLoopTickProjection(data domain.Bootstrap, mode string) []domain.Loop {
 	var result []domain.Loop
 	for _, item := range data.Loops {
 		if !item.Enabled || item.Status == "draft" || (item.TriggerType == "schedule") != (mode == "schedule") {
@@ -61,7 +61,7 @@ func scaleP21LoopTickProjection(data domain.Bootstrap, mode string) []domain.Loo
 	return result
 }
 
-func TestScaleP21HotLoopScheduleInstalledProjection(t *testing.T) {
+func TestScaleHotLoopScheduleInstalledProjection(t *testing.T) {
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("native", 7*3600+123))
 	wide := strings.Repeat("ignored loop body ", 300000)
 	data := domain.Bootstrap{
@@ -89,7 +89,7 @@ func TestScaleP21HotLoopScheduleInstalledProjection(t *testing.T) {
 		Asks:              []domain.Ask{{IssueID: "other", Source: wide}, {IssueID: "issue", Source: "web"}, {IssueID: "issue", Source: "slack"}},
 		Members:           []domain.WorkspaceMember{{User: domain.User{ID: "creator", Name: wide}, Role: "app"}, {User: domain.User{ID: "other", Name: wide}}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, key := range []string{"physical", ""} {
 		for _, mode := range []string{"schedule", "event"} {
@@ -98,7 +98,7 @@ func TestScaleP21HotLoopScheduleInstalledProjection(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal("installed loop selection failed", key, mode, found, err)
 			}
-			if !scaleP21LoopTickEqual(read.Data.Loops, scaleP21LoopTickProjection(data, mode)) {
+			if !scaleLoopTickEqual(read.Data.Loops, scaleLoopTickProjection(data, mode)) {
 				t.Fatal("native loop fields/order/config values changed", mode, read.Data.Loops)
 			}
 			if mode == "event" {
@@ -165,10 +165,10 @@ func TestScaleP21HotLoopScheduleInstalledProjection(t *testing.T) {
 	view.metadataResidency.work.limit = oldLimit
 }
 
-func TestScaleP21HotLoopScheduleWarmReloadBodyBound(t *testing.T) {
+func TestScaleHotLoopScheduleWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -198,7 +198,7 @@ func TestScaleP21HotLoopScheduleWarmReloadBodyBound(t *testing.T) {
 			want, _ := f.WorkspaceMetadataFields(workspace, "loops")
 			queries := 0
 			read, found, err := view.BeginLoopScheduleRead(WithSQLStatementObserver(t.Context(), func(string) { queries++ }), workspace, "schedule")
-			if err != nil || !found || !scaleP21LoopTickEqual(read.Data.Loops, scaleP21LoopTickProjection(want, "schedule")) {
+			if err != nil || !found || !scaleLoopTickEqual(read.Data.Loops, scaleLoopTickProjection(want, "schedule")) {
 				t.Fatal("warm/reloaded scalar inputs changed", reload, found, err)
 			}
 			held := view.metadataResidency.work.used

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW179Result struct {
+type collaborationDocumentReadResult struct {
 	Error    string
 	Found    bool
 	Conflict bool
@@ -22,7 +22,7 @@ type scaleP21SW179Result struct {
 	Document domain.Document
 }
 
-func scaleP21SW179Error(err error) string {
+func collaborationDocumentReadError(err error) string {
 	switch {
 	case err == nil:
 		return ""
@@ -37,7 +37,7 @@ func scaleP21SW179Error(err error) string {
 	}
 }
 
-func scaleP21SW179Header(document domain.Document) domain.Document {
+func collaborationDocumentReadHeader(document domain.Document) domain.Document {
 	header := domain.Document{
 		ID: document.ID, SlugID: document.SlugID, CollaborationID: document.CollaborationID,
 		Creator: domain.User{ID: document.Creator.ID}, TeamIDs: slices.Clone(document.TeamIDs),
@@ -54,7 +54,7 @@ func scaleP21SW179Header(document domain.Document) domain.Document {
 	return header
 }
 
-func scaleP21SW179Legacy(t *testing.T, f scaleP21M2Fixture, ctx context.Context, workspace, userID, ref string, key *domain.APIKey) scaleP21SW179Result {
+func collaborationDocumentReadLegacy(t *testing.T, f policyDifferentialFixture, ctx context.Context, workspace, userID, ref string, key *domain.APIKey) collaborationDocumentReadResult {
 	t.Helper()
 	var data domain.Bootstrap
 	var err error
@@ -75,7 +75,7 @@ func scaleP21SW179Legacy(t *testing.T, f scaleP21M2Fixture, ctx context.Context,
 			filterBootstrapForAPIKey(&data, request.WithContext(credentialContext))
 		}
 	}
-	result := scaleP21SW179Result{Error: scaleP21SW179Error(err)}
+	result := collaborationDocumentReadResult{Error: collaborationDocumentReadError(err)}
 	if err != nil {
 		return result
 	}
@@ -87,16 +87,16 @@ func scaleP21SW179Legacy(t *testing.T, f scaleP21M2Fixture, ctx context.Context,
 		t.Fatal(err)
 	}
 	result.Found, result.Conflict = true, conflict
-	result.Document = scaleP21SW179Header(document)
+	result.Document = collaborationDocumentReadHeader(document)
 	result.Role = documentRole(&server{store: f.repository, authDisabled: userID == ""}, data, document)
 	return result
 }
 
-func scaleP21SW179Pair(t *testing.T, f scaleP21M2Fixture, ctx context.Context, workspace, userID, ref string, key *domain.APIKey) scaleP21SW179Result {
+func collaborationDocumentReadPair(t *testing.T, f policyDifferentialFixture, ctx context.Context, workspace, userID, ref string, key *domain.APIKey) collaborationDocumentReadResult {
 	t.Helper()
-	want := scaleP21SW179Legacy(t, f, ctx, workspace, userID, ref, key)
+	want := collaborationDocumentReadLegacy(t, f, ctx, workspace, userID, ref, key)
 	read, err := f.probe.BeginCollaborationDocumentRead(ctx, workspace, userID, ref, key)
-	got := scaleP21SW179Result{Error: scaleP21SW179Error(err)}
+	got := collaborationDocumentReadResult{Error: collaborationDocumentReadError(err)}
 	if err != nil {
 		if read != nil || f.probe.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("refused collaboration read retained partial headers/work", err)
@@ -118,10 +118,10 @@ func scaleP21SW179Pair(t *testing.T, f scaleP21M2Fixture, ctx context.Context, w
 			if len(read.Data.Documents) != 1 || !reflect.DeepEqual(read.Data.Documents[0], read.Document) {
 				t.Fatal("selected document and role input disagree")
 			}
-			if !reflect.DeepEqual(read.Document, scaleP21SW179Header(read.Document)) {
+			if !reflect.DeepEqual(read.Document, collaborationDocumentReadHeader(read.Document)) {
 				t.Fatal("collaboration reader materialized undeclared document fields")
 			}
-			got.Document = scaleP21SW179Header(read.Document)
+			got.Document = collaborationDocumentReadHeader(read.Document)
 			got.Role = documentRole(&server{store: f.probe, authDisabled: userID == ""}, read.Data, read.Document)
 		} else if len(read.Data.Documents) != 0 || !reflect.DeepEqual(read.Document, domain.Document{}) {
 			t.Fatal("absent collaboration target returned a document")
@@ -145,12 +145,12 @@ func scaleP21SW179Pair(t *testing.T, f scaleP21M2Fixture, ctx context.Context, w
 	return got
 }
 
-func scaleP21SW179Setup(t *testing.T) (scaleP21SW10Fixture, string, []string) {
+func collaborationDocumentReadSetup(t *testing.T) (notificationsFixture, string, []string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -214,19 +214,19 @@ func scaleP21SW179Setup(t *testing.T) (scaleP21SW10Fixture, string, []string) {
 	return f, prefix, refs
 }
 
-func TestScaleP21SW179CollaborationDocumentSelectionMatrix(t *testing.T) {
-	f, prefix, refs := scaleP21SW179Setup(t)
+func TestCollaborationDocumentSelectionMatrix(t *testing.T) {
+	f, prefix, refs := collaborationDocumentReadSetup(t)
 	workspace := f.data.Workspace.URLKey
-	nilACL := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"nil", nil)
-	emptyACL := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"empty", nil)
+	nilACL := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"nil", nil)
+	emptyACL := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"empty", nil)
 	if nilACL.Document.Permissions != nil || emptyACL.Document.Permissions == nil || nilACL.Document.TeamIDs != nil || emptyACL.Document.TeamIDs == nil {
 		t.Fatal("native nil/empty header shapes were collapsed")
 	}
-	grant := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.principals[3].user.ID, prefix+"user-grant", nil)
+	grant := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.principals[3].user.ID, prefix+"user-grant", nil)
 	if !grant.Found || grant.Role != "editor" {
 		t.Fatal("explicit guest ACL witness did not survive inherited private scope", grant)
 	}
-	teamGrant := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.principals[2].user.ID, prefix+"team-grant", nil)
+	teamGrant := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.principals[2].user.ID, prefix+"team-grant", nil)
 	if !teamGrant.Found || teamGrant.Role != "editor" || len(teamGrant.Document.Permissions) != 3 ||
 		teamGrant.Document.Permissions[0].Role != "editor" || teamGrant.Document.Permissions[2].Role != "commenter" {
 		t.Fatal("ordered native team grants were not exercised", teamGrant)
@@ -243,11 +243,11 @@ func TestScaleP21SW179CollaborationDocumentSelectionMatrix(t *testing.T) {
 			}
 			f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 				for _, ref := range refs {
-					scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, user.ID, ref, key)
+					collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, user.ID, ref, key)
 				}
 			})
 			for _, ref := range refs {
-				scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, "", ref, nil)
+				collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, "", ref, nil)
 			}
 		})
 	}
@@ -265,29 +265,29 @@ func TestScaleP21SW179CollaborationDocumentSelectionMatrix(t *testing.T) {
 		{"old", "", false, false},
 		{"collision", "collision", true, true},
 	} {
-		result := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.data.Viewer.ID, prefix+spec.ref, nil)
+		result := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.data.Viewer.ID, prefix+spec.ref, nil)
 		if result.Found != spec.found || result.Conflict != spec.conflict || spec.found && result.Document.ID != prefix+spec.id {
 			t.Fatal("nonempty generation/order witness did not reach its branch", spec, result)
 		}
 	}
 	member := f.principals[2].user
-	hidden := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, member.ID, prefix+"hidden-first", nil)
+	hidden := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, member.ID, prefix+"hidden-first", nil)
 	if !hidden.Found || hidden.Document.ID != prefix+"public-second" || hidden.Conflict {
 		t.Fatal("hidden earlier occurrence suppressed later visible generation", hidden)
 	}
 }
 
-func TestScaleP21SW179CollaborationDocumentGrowthAndSource(t *testing.T) {
+func TestCollaborationDocumentGrowthAndSource(t *testing.T) {
 	for _, reloaded := range []bool{false, true} {
 		t.Run(fmt.Sprint("reloaded=", reloaded), func(t *testing.T) {
-			scaleP21SW179GrowthAndSource(t, reloaded)
+			growthAndSource(t, reloaded)
 		})
 	}
 }
 
-func scaleP21SW179GrowthAndSource(t *testing.T, reloaded bool) {
+func growthAndSource(t *testing.T, reloaded bool) {
 	t.Helper()
-	f, prefix, _ := scaleP21SW179Setup(t)
+	f, prefix, _ := collaborationDocumentReadSetup(t)
 	workspace, held := f.data.Workspace.URLKey, 0
 	for _, copies := range []int{1000, 10000} {
 		body := strings.Repeat("Unused legal selected/unrelated body <>&. ", copies)
@@ -329,12 +329,12 @@ func scaleP21SW179GrowthAndSource(t *testing.T, reloaded bool) {
 		} else if work != held {
 			t.Fatal("10x selected body/directory growth increased retained work", held, work)
 		}
-		if !read.Found || len(read.Data.Documents) != 1 || !reflect.DeepEqual(read.Document, scaleP21SW179Header(read.Document)) {
+		if !read.Found || len(read.Data.Documents) != 1 || !reflect.DeepEqual(read.Document, collaborationDocumentReadHeader(read.Document)) {
 			t.Fatal("growth read retained bodies or lost its selected header")
 		}
 		t.Logf("body_copies=%d reloaded=%t admitted_work=%d", copies, reloaded, work)
 		read.Close()
-		scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"generation", nil)
+		collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"generation", nil)
 	}
 	// Keep the probe's old installed generation. Open the literal SQL snapshot
 	// after the write so no write needs to upgrade an existing read transaction.
@@ -352,7 +352,7 @@ func scaleP21SW179GrowthAndSource(t *testing.T, reloaded bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := scaleP21SW179Pair(t, f.scaleP21M2Fixture, ctx, workspace, f.data.Viewer.ID, prefix+"handed-generation", nil)
+	result := collaborationDocumentReadPair(t, f.policyDifferentialFixture, ctx, workspace, f.data.Viewer.ID, prefix+"handed-generation", nil)
 	if !result.Found || result.Document.ID != prefix+"rotated" {
 		t.Fatal("handed generation was replaced by stale installed metadata")
 	}
@@ -363,11 +363,11 @@ func scaleP21SW179GrowthAndSource(t *testing.T, reloaded bool) {
 	if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), f.repository, workspace); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"handed-generation", nil)
+	collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, f.data.Viewer.ID, prefix+"handed-generation", nil)
 }
 
-func TestScaleP21SW179CollaborationDocumentHiddenMatchSQL(t *testing.T) {
-	f, prefix, _ := scaleP21SW179Setup(t)
+func TestCollaborationDocumentHiddenMatchSQL(t *testing.T) {
+	f, prefix, _ := collaborationDocumentReadSetup(t)
 	workspace, member := f.data.Workspace.URLKey, f.principals[2].user
 	private := ""
 	if data, found := f.repository.WorkspaceMetadataFields(workspace, "projects"); found {
@@ -382,7 +382,7 @@ func TestScaleP21SW179CollaborationDocumentHiddenMatchSQL(t *testing.T) {
 	}
 	key := &domain.APIKey{ID: prefix + "sql-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	ref, baselineSQL, baselineWork := prefix+"sql-generation", 0, 0
-	var baseline scaleP21SW179Result
+	var baseline collaborationDocumentReadResult
 	for _, hidden := range []int{1, 100} {
 		if err := f.repository.MutateWorkspace(t.Context(), workspace, "scale_p21.sw179_hidden_matches", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
@@ -406,15 +406,15 @@ func TestScaleP21SW179CollaborationDocumentHiddenMatchSQL(t *testing.T) {
 		}
 		legacyQueries := 0
 		legacyContext := store.WithSQLStatementObserver(t.Context(), func(string) { legacyQueries++ })
-		want := scaleP21SW179Legacy(t, f.scaleP21M2Fixture, legacyContext, workspace, member.ID, ref, key)
+		want := collaborationDocumentReadLegacy(t, f.policyDifferentialFixture, legacyContext, workspace, member.ID, ref, key)
 		queries := 0
 		ctx := store.WithSQLStatementObserver(t.Context(), func(string) { queries++ })
 		read, err := f.probe.BeginCollaborationDocumentRead(ctx, workspace, member.ID, ref, key)
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := scaleP21SW179Result{
-			Found: read.Found, Conflict: read.Conflict, Document: scaleP21SW179Header(read.Document),
+		got := collaborationDocumentReadResult{
+			Found: read.Found, Conflict: read.Conflict, Document: collaborationDocumentReadHeader(read.Document),
 			Role: documentRole(&server{store: f.probe}, read.Data, read.Document),
 		}
 		work := f.probe.MetadataWorkUsedForTesting()
@@ -434,8 +434,8 @@ func TestScaleP21SW179CollaborationDocumentHiddenMatchSQL(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW179CollaborationDocumentAuthorityAndLifetime(t *testing.T) {
-	f, prefix, _ := scaleP21SW179Setup(t)
+func TestCollaborationDocumentAuthorityAndLifetime(t *testing.T) {
+	f, prefix, _ := collaborationDocumentReadSetup(t)
 	workspace, member := f.data.Workspace.URLKey, f.principals[2].user
 	app, err := f.repository.InstallApplication(store.ContextWithActor(t.Context(), f.data.Viewer), workspace, domain.ApplicationInstallation{
 		ClientID: idgen.New("sw179-app-"), Name: "Collaboration reader application", Active: true,
@@ -454,33 +454,33 @@ func TestScaleP21SW179CollaborationDocumentAuthorityAndLifetime(t *testing.T) {
 		{ID: prefix + "empty-app-key", Actor: "app", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}},
 	} {
 		for _, ref := range []string{"legacy", "generation", "inherited", "team-grant"} {
-			scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, app.UserID, prefix+ref, key)
+			collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, app.UserID, prefix+ref, key)
 		}
 	}
-	appVisible := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, app.UserID, prefix+"generation", nil)
+	appVisible := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, app.UserID, prefix+"generation", nil)
 	if !appVisible.Found || appVisible.Role == "none" {
 		t.Fatal("installed application team visibility witness was empty", appVisible)
 	}
 	if err := f.repository.SuspendMember(t.Context(), f.data.Workspace.ID, member.ID); err != nil {
 		t.Fatal(err)
 	}
-	result := scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, member.ID, prefix+"generation", nil)
+	result := collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, member.ID, prefix+"generation", nil)
 	if result.Error == "" {
 		t.Fatal("stale installed viewer survived live membership suspension")
 	}
 	if err := f.repository.ResumeMember(t.Context(), f.data.Workspace.ID, member.ID); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, member.ID, prefix+"generation", nil)
+	collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, member.ID, prefix+"generation", nil)
 	if _, err := f.repository.UninstallApplication(store.ContextWithActor(t.Context(), f.data.Viewer), workspace, app.ID); err != nil {
 		t.Fatal(err)
 	}
-	result = scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, app.UserID, prefix+"generation", nil)
+	result = collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, app.UserID, prefix+"generation", nil)
 	if result.Error == "" {
 		t.Fatal("stale installed application survived live uninstall")
 	}
-	scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace+"-missing", f.data.Viewer.ID, prefix+"generation", nil)
-	scaleP21SW179Pair(t, f.scaleP21M2Fixture, t.Context(), workspace, prefix+"missing-user", prefix+"generation", nil)
+	collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace+"-missing", f.data.Viewer.ID, prefix+"generation", nil)
+	collaborationDocumentReadPair(t, f.policyDifferentialFixture, t.Context(), workspace, prefix+"missing-user", prefix+"generation", nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if read, err := f.probe.BeginCollaborationDocumentRead(ctx, workspace, f.data.Viewer.ID, prefix+"generation", nil); read != nil ||

@@ -13,7 +13,7 @@ import { useI18n } from '@/i18n/i18n'
 import { PersonHover } from './person-info'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
 import './virtual-property-options.css'
-import { useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
+import { useResourcePeople } from '@/hooks/resource-pickers'
 
 /**
  * A searchable people list for dropdown/context menus. `assignee` makes it the reference app's assignee list: "Assign to…" search,

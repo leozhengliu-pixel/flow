@@ -25,16 +25,16 @@ import (
 // A Bootstrap-only field walk cannot see concrete values assigned to interfaces.
 // Existing transport-only decoders are separately identified below; they are
 // never allowances for codecs encountered in the metadata type walk.
-type scaleP21ProducerCodec struct {
+type scaleProducerCodec struct {
 	receiver, signature string
 }
 
-func scaleP21ProducerCodecKey(pkg, receiver, method string) string {
+func scaleProducerCodecKey(pkg, receiver, method string) string {
 	return pkg + "." + receiver + "." + method
 }
 
-func scaleP21ProducerSourceCodecs(path string, file *ast.File) []scaleP21ProducerCodec {
-	var result []scaleP21ProducerCodec
+func scaleProducerSourceCodecs(path string, file *ast.File) []scaleProducerCodec {
+	var result []scaleProducerCodec
 	for _, declaration := range file.Decls {
 		method, ok := declaration.(*ast.FuncDecl)
 		if !ok || method.Recv == nil || len(method.Recv.List) != 1 ||
@@ -61,15 +61,15 @@ func scaleP21ProducerSourceCodecs(path string, file *ast.File) []scaleP21Produce
 		signature.Params, signature.Results = normalize(signature.Params), normalize(signature.Results)
 		var rendered bytes.Buffer
 		_ = format.Node(&rendered, token.NewFileSet(), &signature)
-		result = append(result, scaleP21ProducerCodec{
-			receiver:  scaleP21ProducerCodecKey(filepath.ToSlash(filepath.Dir(path)), receiver.String(), method.Name.Name),
+		result = append(result, scaleProducerCodec{
+			receiver:  scaleProducerCodecKey(filepath.ToSlash(filepath.Dir(path)), receiver.String(), method.Name.Name),
 			signature: rendered.String(),
 		})
 	}
 	return result
 }
 
-func scaleP21ProducerSourceProblems(codecs []scaleP21ProducerCodec, allowed map[string]string) []string {
+func scaleProducerSourceProblems(codecs []scaleProducerCodec, allowed map[string]string) []string {
 	var problems []string
 	for _, codec := range codecs {
 		want, ok := allowed[codec.receiver]
@@ -85,7 +85,7 @@ func scaleP21ProducerSourceProblems(codecs []scaleP21ProducerCodec, allowed map[
 // original identity; a new defined type or embedding with promoted codecs must
 // earn its own review. Follow function results as well as ordinary fields so
 // callback-valued metadata fields cannot hide statically named payload types.
-func scaleP21ProducerTypeProblems(roots []reflect.Type, allowed map[reflect.Type]bool) ([]string, map[reflect.Type]bool) {
+func scaleProducerTypeProblems(roots []reflect.Type, allowed map[reflect.Type]bool) ([]string, map[reflect.Type]bool) {
 	seen := map[reflect.Type]bool{}
 	var problems []string
 	var visit func(reflect.Type)
@@ -140,15 +140,15 @@ func scaleP21ProducerTypeProblems(roots []reflect.Type, allowed map[reflect.Type
 	return problems, seen
 }
 
-type scaleP21ProducerUnsupported struct{ Hidden string }
+type scaleProducerUnsupported struct{ Hidden string }
 
-func (scaleP21ProducerUnsupported) MarshalJSON() ([]byte, error) { return []byte(`"opaque"`), nil }
+func (scaleProducerUnsupported) MarshalJSON() ([]byte, error) { return []byte(`"opaque"`), nil }
 
-type scaleP21ProducerUnsupportedDecode struct{ Hidden string }
+type scaleProducerUnsupportedDecode struct{ Hidden string }
 
-func (*scaleP21ProducerUnsupportedDecode) UnmarshalJSON([]byte) error { return nil }
+func (*scaleProducerUnsupportedDecode) UnmarshalJSON([]byte) error { return nil }
 
-func TestScaleP21SupportedProducerCodecs(t *testing.T) {
+func TestScaleSupportedProducerCodecs(t *testing.T) {
 	const marshal = "func() ([]byte, error)"
 	const unmarshal = "func([]byte) error"
 	allowedSource := map[string]string{
@@ -186,7 +186,7 @@ func TestScaleP21SupportedProducerCodecs(t *testing.T) {
 		// Relative to the package directory, independently of the checkout name.
 		root := filepath.Join("..", "..")
 		found := map[string]bool{}
-		var codecs []scaleP21ProducerCodec
+		var codecs []scaleProducerCodec
 		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -208,7 +208,7 @@ func TestScaleP21SupportedProducerCodecs(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			for _, codec := range scaleP21ProducerSourceCodecs(relative, file) {
+			for _, codec := range scaleProducerSourceCodecs(relative, file) {
 				found[codec.receiver] = true
 				codecs = append(codecs, codec)
 			}
@@ -217,7 +217,7 @@ func TestScaleP21SupportedProducerCodecs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if problems := scaleP21ProducerSourceProblems(codecs, allowedSource); len(problems) != 0 {
+		if problems := scaleProducerSourceProblems(codecs, allowedSource); len(problems) != 0 {
 			t.Fatalf("review new producer codecs against the bounded logical reader (do not blanket-allow):\n%s", strings.Join(problems, "\n"))
 		}
 		for key := range allowedSource {
@@ -228,7 +228,7 @@ func TestScaleP21SupportedProducerCodecs(t *testing.T) {
 	})
 
 	t.Run("metadata type closure", func(t *testing.T) {
-		problems, seen := scaleP21ProducerTypeProblems([]reflect.Type{reflect.TypeFor[domain.Bootstrap]()}, allowedTypes)
+		problems, seen := scaleProducerTypeProblems([]reflect.Type{reflect.TypeFor[domain.Bootstrap]()}, allowedTypes)
 		if len(problems) != 0 {
 			t.Fatalf("unsupported reachable metadata codecs:\n%s", strings.Join(problems, "\n"))
 		}
@@ -256,22 +256,22 @@ func TestScaleP21SupportedProducerCodecs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			codecs := scaleP21ProducerSourceCodecs("internal/domain/synthetic.go", file)
-			if len(codecs) != 1 || len(scaleP21ProducerSourceProblems(codecs, allowedSource)) != 1 {
+			codecs := scaleProducerSourceCodecs("internal/domain/synthetic.go", file)
+			if len(codecs) != 1 || len(scaleProducerSourceProblems(codecs, allowedSource)) != 1 {
 				t.Errorf("guard accepted synthetic codec: %s", declaration)
 			}
 		}
 	})
 
 	t.Run("synthetic aliases nesting embedding and callbacks", func(t *testing.T) {
-		type alias = scaleP21ProducerUnsupported
+		type alias = scaleProducerUnsupported
 		type nested struct{ Values map[string][]*alias }
-		type embedded struct{ scaleP21ProducerUnsupported }
+		type embedded struct{ scaleProducerUnsupported }
 		for _, typ := range []reflect.Type{
 			reflect.TypeFor[nested](), reflect.TypeFor[embedded](),
-			reflect.TypeFor[func() *scaleP21ProducerUnsupportedDecode](),
+			reflect.TypeFor[func() *scaleProducerUnsupportedDecode](),
 		} {
-			if problems, _ := scaleP21ProducerTypeProblems([]reflect.Type{typ}, allowedTypes); len(problems) == 0 {
+			if problems, _ := scaleProducerTypeProblems([]reflect.Type{typ}, allowedTypes); len(problems) == 0 {
 				t.Errorf("guard accepted unsupported codec through %v", typ)
 			}
 		}

@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW132Gzip(t *testing.T, raw []byte) []byte {
+func retainedUploadReadGzip(t *testing.T, raw []byte) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
 	writer := gzip.NewWriter(&buffer)
@@ -29,7 +29,7 @@ func scaleP21SW132Gzip(t *testing.T, raw []byte) []byte {
 	return buffer.Bytes()
 }
 
-func scaleP21SW132Expected(repo *SQLiteStore, workspace string, names []string) []string {
+func retainedUploadReadExpected(repo *SQLiteStore, workspace string, names []string) []string {
 	data, found := repo.WorkspaceMetadataFields(workspace, "trash")
 	if !found {
 		return slices.Clone(names)
@@ -43,7 +43,7 @@ func scaleP21SW132Expected(repo *SQLiteStore, workspace string, names []string) 
 	return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return retained[name] })
 }
 
-func TestScaleP21SW132RetainedUploadNativeDifferential(t *testing.T) {
+func TestRetainedUploadNativeDifferential(t *testing.T) {
 	raws := [][]byte{
 		nil, {}, []byte(`null`), []byte(`"/uploads/direct.pdf?token=yes#page"`),
 		[]byte(`{"a":"/uploads/first.pdf","a":"/uploads/second.pdf"}`),
@@ -54,10 +54,10 @@ func TestScaleP21SW132RetainedUploadNativeDifferential(t *testing.T) {
 		[]byte(`{"pulseSummary":{"text":"/uploads/pulse.pdf"}}`),
 		[]byte(`{"url":"/uploads/trailing.pdf"} trailing ignored`),
 		[]byte(`{"url":"/uploads/malformed.pdf",`),
-		scaleP21SW132Gzip(t, []byte(`{"url":"/uploads/gzip.pdf"}`)),
+		retainedUploadReadGzip(t, []byte(`{"url":"/uploads/gzip.pdf"}`)),
 		{0x1f, 0x8b, 0},
 	}
-	broken := scaleP21SW132Gzip(t, []byte(`{"url":"/uploads/broken.pdf"}`))
+	broken := retainedUploadReadGzip(t, []byte(`{"url":"/uploads/broken.pdf"}`))
 	broken[len(broken)-1] ^= 1
 	raws = append(raws, broken)
 	data := domain.Bootstrap{Trash: []domain.TrashEntry{}}
@@ -68,11 +68,11 @@ func TestScaleP21SW132RetainedUploadNativeDifferential(t *testing.T) {
 		data.Trash = append(data.Trash, domain.TrashEntry{ID: fmt.Sprint(i), Payload: raw, Title: strings.Repeat("ignored header", 500)})
 	}
 	literal := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}, lastWorkspaceKey: "physical"}
-	view := scaleP21HotLogoStore(t, literal.workspaces)
+	view := scaleHotLogoStore(t, literal.workspaces)
 	view.lastWorkspaceKey = "physical"
 	for _, workspace := range []string{"physical", "", "missing"} {
 		for _, input := range [][]string{nil, {}, names} {
-			want := scaleP21SW132Expected(literal, workspace, input)
+			want := retainedUploadReadExpected(literal, workspace, input)
 			before := slices.Clone(input)
 			read, err := view.BeginRetainedUploadRead(t.Context(), workspace, input)
 			if err != nil || !reflect.DeepEqual(read.Names, want) {
@@ -106,7 +106,7 @@ func TestScaleP21SW132RetainedUploadNativeDifferential(t *testing.T) {
 				return
 			}
 			defer read.Close()
-			if !reflect.DeepEqual(read.Names, scaleP21SW132Expected(literal, "", names)) {
+			if !reflect.DeepEqual(read.Names, retainedUploadReadExpected(literal, "", names)) {
 				t.Error("concurrent candidate filtering differs")
 			}
 		})
@@ -117,11 +117,11 @@ func TestScaleP21SW132RetainedUploadNativeDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW132RetainedUploadWarmReloadBound(t *testing.T) {
+func TestRetainedUploadWarmReloadBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestScaleP21SW132RetainedUploadWarmReloadBound(t *testing.T) {
 			if err != nil {
 				t.Fatal("per-row scan exceeded fixed work bound", count, reload, err)
 			}
-			want := scaleP21SW132Expected(f.SQLiteStore, workspace, names)
+			want := retainedUploadReadExpected(f.SQLiteStore, workspace, names)
 			if !reflect.DeepEqual(read.Names, want) {
 				t.Fatal("warm/reloaded installed payload differs", count, reload, read.Names, want)
 			}
@@ -179,7 +179,7 @@ func TestScaleP21SW132RetainedUploadWarmReloadBound(t *testing.T) {
 			}
 		}
 	}
-	want := scaleP21SW132Expected(f.SQLiteStore, workspace, names)
+	want := retainedUploadReadExpected(f.SQLiteStore, workspace, names)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "trash"), workspace, "scale_p21.sw132_drift", "", nil, func(data *domain.Bootstrap) error {
 		data.Trash = nil
 		return nil
@@ -193,10 +193,10 @@ func TestScaleP21SW132RetainedUploadWarmReloadBound(t *testing.T) {
 	read.Close()
 }
 
-func TestScaleP21SW132RetainedUploadCurrentGeneration(t *testing.T) {
+func TestRetainedUploadCurrentGeneration(t *testing.T) {
 	before := domain.Bootstrap{Trash: []domain.TrashEntry{{Payload: json.RawMessage(`"/uploads/old.pdf"`)}}}
 	after := domain.Bootstrap{Trash: []domain.TrashEntry{{Payload: json.RawMessage(`"/uploads/new.pdf"`)}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
 	parent, found, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -226,10 +226,10 @@ func TestScaleP21SW132RetainedUploadCurrentGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW132RetainedUploadLargeAndFailures(t *testing.T) {
+func TestRetainedUploadLargeAndFailures(t *testing.T) {
 	large := []byte(`{"url":"/uploads/large.pdf?query=` + strings.Repeat("x", 500000) + `","body":"` + strings.Repeat("legal large payload ", 100000) + `"}`)
-	for _, raw := range [][]byte{large, scaleP21SW132Gzip(t, large)} {
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {Trash: []domain.TrashEntry{{Payload: raw}}}})
+	for _, raw := range [][]byte{large, retainedUploadReadGzip(t, large)} {
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {Trash: []domain.TrashEntry{{Payload: raw}}}})
 		read, err := view.BeginRetainedUploadRead(t.Context(), "physical", []string{"large.pdf", "free.pdf"})
 		if err != nil || !reflect.DeepEqual(read.Names, []string{"free.pdf"}) {
 			t.Fatal("legal large payload rejected or differs", len(raw), err)
@@ -251,15 +251,15 @@ func TestScaleP21SW132RetainedUploadLargeAndFailures(t *testing.T) {
 			t.Fatal("partial admission/cancellation leaked")
 		}
 	}
-	raw := scaleP21SW132Gzip(t, []byte(strings.Repeat("x", metadataWorkBytes()/16+1)))
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {Trash: []domain.TrashEntry{{Payload: raw}}}})
+	raw := retainedUploadReadGzip(t, []byte(strings.Repeat("x", metadataWorkBytes()/16+1)))
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {Trash: []domain.TrashEntry{{Payload: raw}}}})
 	if read, err := view.BeginRetainedUploadRead(t.Context(), "physical", []string{"free.pdf"}); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("gzip expansion exceeded work bound", read, err)
 	}
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("gzip work rejection leaked")
 	}
-	missing := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+	missing := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	missing.releaseMetadataLogicalSources()
 	if read, err := missing.BeginRetainedUploadRead(t.Context(), "physical", []string{"free.pdf"}); read != nil || !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("missing installed generation did not fail closed", read, err)

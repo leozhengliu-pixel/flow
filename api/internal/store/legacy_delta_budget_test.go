@@ -15,15 +15,15 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW77SQLImage struct {
+type sqlImage struct {
 	WorkspaceID string
 	Root        string
 	Rows        map[metadataRecordKey]metadataRecord
 }
 
-func scaleP21SW77Image(t *testing.T, tx *sqlTx, workspace string) scaleP21SW77SQLImage {
+func legacyDeltaBudgetImage(t *testing.T, tx *sqlTx, workspace string) sqlImage {
 	t.Helper()
-	image := scaleP21SW77SQLImage{Rows: map[metadataRecordKey]metadataRecord{}}
+	image := sqlImage{Rows: map[metadataRecordKey]metadataRecord{}}
 	var root []byte
 	if err := tx.QueryRowContext(t.Context(), `SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&image.WorkspaceID, &root); err != nil {
 		t.Fatal(err)
@@ -48,12 +48,12 @@ func scaleP21SW77Image(t *testing.T, tx *sqlTx, workspace string) scaleP21SW77SQ
 	return image
 }
 
-func scaleP21SW77Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, domain.Bootstrap) {
+func legacyDeltaBudgetFixture(t *testing.T) (scaleFixture, *SQLiteStore, domain.Bootstrap) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func scaleP21SW77Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, domain.Bo
 	return f, view, before
 }
 
-func scaleP21SW77Begin(t *testing.T, f scaleP09Fixture, before domain.Bootstrap) (*sqlTx, context.Context) {
+func legacyDeltaBudgetBegin(t *testing.T, f scaleFixture, before domain.Bootstrap) (*sqlTx, context.Context) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -86,7 +86,7 @@ func scaleP21SW77Begin(t *testing.T, f scaleP09Fixture, before domain.Bootstrap)
 	return tx, ctx
 }
 
-func scaleP21SW77Put(t *testing.T, tx *sqlTx, workspace, key string, user domain.User, order int) []byte {
+func legacyDeltaBudgetPut(t *testing.T, tx *sqlTx, workspace, key string, user domain.User, order int) []byte {
 	t.Helper()
 	raw, err := json.Marshal(user)
 	if err != nil {
@@ -98,7 +98,7 @@ func scaleP21SW77Put(t *testing.T, tx *sqlTx, workspace, key string, user domain
 	return raw
 }
 
-func scaleP21SW77Usable(t *testing.T, tx *sqlTx) {
+func legacyDeltaBudgetUsable(t *testing.T, tx *sqlTx) {
 	t.Helper()
 	var one int
 	if err := tx.QueryRowContext(t.Context(), `SELECT 1`).Scan(&one); err != nil || one != 1 {
@@ -106,30 +106,30 @@ func scaleP21SW77Usable(t *testing.T, tx *sqlTx) {
 	}
 }
 
-func TestScaleP21SW77LegacyDeltaParity(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestLegacyDeltaParity(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	workspace := before.Workspace.URLKey
 	for _, variant := range []string{"sparse-headers", "append", "reorder-sync", "canonical-peer", "unknown-canonical", "deleted-canonical"} {
 		t.Run(variant, func(t *testing.T) {
 			type outcome struct {
 				Written bool
 				Native  domain.Bootstrap
-				SQL     scaleP21SW77SQLImage
+				SQL     sqlImage
 			}
 			var outcomes []outcome
 			for _, guarded := range []bool{false, true} {
-				tx, ctx := scaleP21SW77Begin(t, f, before)
+				tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 				peer := before.Users[1]
 				peer.Name, peer.JobTitle = "Canonical second", "Canonical private field"
-				scaleP21SW77Put(t, tx, workspace, peer.ID, peer, 41)
+				legacyDeltaBudgetPut(t, tx, workspace, peer.ID, peer, 41)
 				if variant == "canonical-peer" {
 					peer := before.Users[0]
 					peer.JobTitle = "Peer-only field"
-					scaleP21SW77Put(t, tx, workspace, peer.ID, peer, 19)
+					legacyDeltaBudgetPut(t, tx, workspace, peer.ID, peer, 19)
 				}
 				unknown := "sw77-unknown"
 				if variant == "unknown-canonical" {
-					scaleP21SW77Put(t, tx, workspace, unknown, domain.User{ID: unknown, Name: "Unknown canonical row", JobTitle: strings.Repeat("unknown raw ", 1000)}, 103)
+					legacyDeltaBudgetPut(t, tx, workspace, unknown, domain.User{ID: unknown, Name: "Unknown canonical row", JobTitle: strings.Repeat("unknown raw ", 1000)}, 103)
 				}
 				if variant == "deleted-canonical" {
 					if err := deleteMetadataRecordRow(ctx, tx, workspace, metadataRecordKey{"users", before.Users[1].ID}); err != nil {
@@ -175,7 +175,7 @@ func TestScaleP21SW77LegacyDeltaParity(t *testing.T) {
 				if guarded && variant == "append" && arrayHeaders == 0 {
 					t.Fatal("array delta did not guard actual order-header reads")
 				}
-				image := scaleP21SW77Image(t, tx, workspace)
+				image := legacyDeltaBudgetImage(t, tx, workspace)
 				if variant == "unknown-canonical" && !bytes.Contains(image.Rows[metadataRecordKey{"users", unknown}].data, []byte("Unknown canonical row")) {
 					t.Fatal("unknown canonical row was discarded")
 				}
@@ -184,7 +184,7 @@ func TestScaleP21SW77LegacyDeltaParity(t *testing.T) {
 				if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 					t.Fatal("metadata delta leaked guard work or decoded complete metadata")
 				}
-				scaleP21SW77Usable(t, tx)
+				legacyDeltaBudgetUsable(t, tx)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
@@ -196,13 +196,13 @@ func TestScaleP21SW77LegacyDeltaParity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW77LegacyDeltaSelectedLocks(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestLegacyDeltaSelectedLocks(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	workspace := before.Workspace.URLKey
-	tx, ctx := scaleP21SW77Begin(t, f, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 	first := before.Users[0]
-	scaleP21SW77Put(t, tx, workspace, first.ID, first, 73)
-	scaleP21SW77Put(t, tx, workspace, "sw77-unselected", domain.User{ID: "sw77-unselected", JobTitle: "Not selected"}, 91)
+	legacyDeltaBudgetPut(t, tx, workspace, first.ID, first, 73)
+	legacyDeltaBudgetPut(t, tx, workspace, "sw77-unselected", domain.User{ID: "sw77-unselected", JobTitle: "Not selected"}, 91)
 	for _, keys := range [][]string{nil, {"missing"}, {first.ID}, {before.Users[1].ID, first.ID, first.ID}} {
 		tx.journalOrder = recordJournalOrder{}
 		want, err := lockMetadataRecords(ctx, tx, workspace, "users", keys)
@@ -235,23 +235,23 @@ func TestScaleP21SW77LegacyDeltaSelectedLocks(t *testing.T) {
 			t.Fatal("selected locking read retained work after owner close")
 		}
 	}
-	scaleP21SW77Usable(t, tx)
+	legacyDeltaBudgetUsable(t, tx)
 }
 
-func TestScaleP21SW77LegacyDeltaActualReadChanges(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestLegacyDeltaActualReadChanges(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	workspace := before.Workspace.URLKey
 	for _, variant := range []string{"append-after-preflight", "headers-exceed-earlier-count", "selected-body-grows", "unknown-body-grows", "cancel-after-preflight"} {
 		t.Run(variant, func(t *testing.T) {
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			known := map[metadataRecordKey]metadataRecord{}
 			for index, user := range before.Users {
-				raw := scaleP21SW77Put(t, tx, workspace, user.ID, user, index)
+				raw := legacyDeltaBudgetPut(t, tx, workspace, user.ID, user, index)
 				known[metadataRecordKey{"users", user.ID}] = metadataRecord{data: raw, order: index}
 			}
 			unknown := "sw77-dynamic-unknown"
 			if variant == "unknown-body-grows" {
-				scaleP21SW77Put(t, tx, workspace, unknown, domain.User{ID: unknown, Name: "Before size read"}, 7)
+				legacyDeltaBudgetPut(t, tx, workspace, unknown, domain.User{ID: unknown, Name: "Before size read"}, 7)
 			}
 			var oldCount int
 			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='users'`, workspace).Scan(&oldCount); err != nil {
@@ -286,15 +286,15 @@ func TestScaleP21SW77LegacyDeltaActualReadChanges(t *testing.T) {
 						if index > 0 {
 							key = idgen.New("sw77-extra-")
 						}
-						scaleP21SW77Put(t, tx, workspace, key, domain.User{ID: key, Name: "Added after preflight"}, index+7)
+						legacyDeltaBudgetPut(t, tx, workspace, key, domain.User{ID: key, Name: "Added after preflight"}, index+7)
 					}
 				} else if variant == "selected-body-grows" && bodyRead && strings.Contains(query, "collection_order") {
 					fired = true
-					scaleP21SW77Put(t, tx, workspace, before.Users[0].ID, grown, 0)
+					legacyDeltaBudgetPut(t, tx, workspace, before.Users[0].ID, grown, 0)
 				} else if variant == "unknown-body-grows" && bodyRead && !strings.Contains(query, "collection_order") {
 					fired = true
 					grown.ID = unknown
-					scaleP21SW77Put(t, tx, workspace, unknown, grown, 7)
+					legacyDeltaBudgetPut(t, tx, workspace, unknown, grown, 7)
 				} else if variant == "cancel-after-preflight" && bodyRead && strings.Contains(query, "collection_order") {
 					fired = true
 					cancel()
@@ -339,19 +339,19 @@ func TestScaleP21SW77LegacyDeltaActualReadChanges(t *testing.T) {
 			if view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("actual-read failure leaked its dynamic reservations")
 			}
-			scaleP21SW77Usable(t, tx)
+			legacyDeltaBudgetUsable(t, tx)
 		})
 	}
 }
 
-func TestScaleP21SW77LegacyDeltaBudgetCancellation(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestLegacyDeltaBudgetCancellation(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	workspace := before.Workspace.URLKey
-	tx, ctx := scaleP21SW77Begin(t, f, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 	user := before.Users[0]
 	user.JobTitle = strings.Repeat("Large canonical user body. ", 20000)
-	scaleP21SW77Put(t, tx, workspace, user.ID, user, 0)
-	image := scaleP21SW77Image(t, tx, workspace)
+	legacyDeltaBudgetPut(t, tx, workspace, user.ID, user, 0)
+	image := legacyDeltaBudgetImage(t, tx, workspace)
 	budget, limit := view.metadataResidency.work, view.metadataResidency.work.limit
 	defer func() { budget.limit = limit }()
 	budget.limit = 8 << 20
@@ -363,7 +363,7 @@ func TestScaleP21SW77LegacyDeltaBudgetCancellation(t *testing.T) {
 		t.Fatal("large canonical JSON escaped actual-read admission", err)
 	}
 	owner.Close()
-	if view.MetadataWorkUsedForTesting() != 0 || !reflect.DeepEqual(scaleP21SW77Image(t, tx, workspace), image) {
+	if view.MetadataWorkUsedForTesting() != 0 || !reflect.DeepEqual(legacyDeltaBudgetImage(t, tx, workspace), image) {
 		t.Fatal("failed read changed canonical rows or leaked work")
 	}
 	budget.limit = limit
@@ -394,5 +394,5 @@ func TestScaleP21SW77LegacyDeltaBudgetCancellation(t *testing.T) {
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("oversized header retained work after close")
 	}
-	scaleP21SW77Usable(t, tx)
+	legacyDeltaBudgetUsable(t, tx)
 }

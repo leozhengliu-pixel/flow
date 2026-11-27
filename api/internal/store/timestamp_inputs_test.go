@@ -12,20 +12,20 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW31TimestampFatOwner struct {
+type timestampFatOwner struct {
 	Padding [8 << 20]byte
 	Zone    time.Location
 }
 
-func scaleP21SW31TimestampFatLocation() time.Time {
-	owner := new(scaleP21SW31TimestampFatOwner)
+func timestampFatLocation() time.Time {
+	owner := new(timestampFatOwner)
 	owner.Padding[0], owner.Padding[len(owner.Padding)-1] = 1, 2
 	owner.Zone = *time.FixedZone("", 20700)
 	return time.Date(2026, 11, 13, 1, 2, 3, 4, &owner.Zone)
 }
 
-func TestScaleP21SW31TimestampInputsReplacedLocalNotAudited(t *testing.T) {
-	fat := scaleP21SW31TimestampFatLocation()
+func TestTimestampInputsReplacedLocalNotAudited(t *testing.T) {
+	fat := timestampFatLocation()
 	if _, err := metadataTimestampParsedLocation(fat, fat.Location()); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("replaced time.Local minted provenance for an interior private Location", err)
 	}
@@ -39,12 +39,12 @@ func TestScaleP21SW31TimestampInputsReplacedLocalNotAudited(t *testing.T) {
 	}
 }
 
-func scaleP21SW31TimestampFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func timestampFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	id := idgen.New("time_input_receipt_")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "integrationConnections"), f.data.Workspace.URLKey, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
 		data.IntegrationConnections = []domain.IntegrationConnection{
@@ -62,8 +62,8 @@ func scaleP21SW31TimestampFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, 
 	return f, view, id
 }
 
-func TestScaleP21SW31TimestampInputsProducerAndNativeIdentity(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTimestampInputsProducerAndNativeIdentity(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	workspace := f.data.Workspace.URLKey
 	ctx, timestamps := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
 	if _, err := timestamps.ParseRFC3339("2026-11-13T01:02:03+05:45"); !errors.Is(err, ErrMetadataRecordQuery) {
@@ -118,8 +118,8 @@ func TestScaleP21SW31TimestampInputsProducerAndNativeIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31TimestampInputsKeepColdRegistryOrder(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTimestampInputsKeepColdRegistryOrder(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	workspace := f.data.Workspace.URLKey
 	ctx, timestamps := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
 	writeBoth := MetadataRecordScope{Write: []RecordKey{{Kind: "integrationConnections", ID: id}, {Kind: "integrationConnections", ID: id + "-retained"}}}
@@ -185,8 +185,8 @@ func TestScaleP21SW31TimestampInputsKeepColdRegistryOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31TimestampInputsRetryLimitAndFailureCleanup(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTimestampInputsRetryLimitAndFailureCleanup(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	workspace := f.data.Workspace.URLKey
 	ctx, timestamps := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
 	var native time.Time
@@ -229,8 +229,8 @@ func TestScaleP21SW31TimestampInputsRetryLimitAndFailureCleanup(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31TimestampInputsForeignConcurrentAndCancellation(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTimestampInputsForeignConcurrentAndCancellation(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	workspace := f.data.Workspace.URLKey
 	foreign, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -281,8 +281,8 @@ func TestScaleP21SW31TimestampInputsForeignConcurrentAndCancellation(t *testing.
 // caller-owned copy inside a larger allocation, commits as the legacy writer
 // commits it: the installed source holds it by value (an offset time) and
 // keeps no pointer to the caller's location.
-func TestScaleP21SW31TimestampInputsOpaqueNativeRejectedBeforeCommit(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTimestampInputsOpaqueNativeRejectedBeforeCommit(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "integrationConnections", ID: id}}}
 	write := func(at time.Time) error {
@@ -319,7 +319,7 @@ func TestScaleP21SW31TimestampInputsOpaqueNativeRejectedBeforeCommit(t *testing.
 		t.Fatal("rejected private pointer changed the prior installed source")
 	}
 	stored()
-	fat := scaleP21SW31TimestampFatLocation()
+	fat := timestampFatLocation()
 	if err := write(fat); err != nil {
 		t.Fatal("an unnamed RFC 3339 offset callback value was refused", err)
 	}

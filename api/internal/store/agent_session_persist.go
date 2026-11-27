@@ -113,7 +113,7 @@ func (p *legacyMetadataWritePlan) writeAgentSessionLifecycleNativeRow(ctx contex
 	if err := stage.writeMetadataRow(ctx); err != nil {
 		return true, err
 	}
-	// These are currently no-ops for agentSessions. SW198 pins that closed
+	// These are currently no-ops for agentSessions. agent session lifecycle pins that closed
 	// hook contract; future session side indexes must extend this writer.
 	if err := writeCustomerFilterRecord(ctx, p.tx, p.workspace, "agentSessions", row.id, nil); err != nil {
 		return true, err

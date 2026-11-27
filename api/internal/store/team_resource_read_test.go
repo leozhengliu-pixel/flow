@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW307ResourceOutput(data domain.Bootstrap, team string) domain.Bootstrap {
+func resourceOutput(data domain.Bootstrap, team string) domain.Bootstrap {
 	result := domain.Bootstrap{TeamResourceSections: []domain.TeamResourceSection{}, TeamPinnedResources: []domain.TeamPinnedResource{}}
 	for _, item := range data.TeamResourceSections {
 		if item.TeamID == team {
@@ -38,11 +38,11 @@ func scaleP21SW307ResourceOutput(data domain.Bootstrap, team string) domain.Boot
 	return result
 }
 
-func TestScaleP21SW307OwnedNativeInlineResources(t *testing.T) {
+func TestOwnedNativeInlineResources(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, userID, team := f.data.Workspace.URLKey, f.data.Viewer.ID, f.data.Teams[0].ID
 	prefix := idgen.New("sw307-store-")
 	at := time.Date(2026, 11, 17, 1, 2, 3, 456, time.FixedZone("native-sw307", 7*3600+123))
@@ -103,7 +103,7 @@ func TestScaleP21SW307OwnedNativeInlineResources(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := scaleP21SW307ResourceOutput(literal, team)
+			want := resourceOutput(literal, team)
 			queries, bodyQueries := 0, 0
 			ctx = WithSQLStatementObserver(ctx, func(query string) {
 				queries++
@@ -116,7 +116,7 @@ func TestScaleP21SW307OwnedNativeInlineResources(t *testing.T) {
 			if err != nil || !read.Allowed || len(read.Data.Teams) != 1 || read.Data.Teams[0].ID != team {
 				t.Fatal("owned team resource authorization failed", err)
 			}
-			got := scaleP21SW307ResourceOutput(read.Data, team)
+			got := resourceOutput(read.Data, team)
 			// FixedZone's private Location graph is intentionally unavailable
 			// to native readers. This output-only route requires exact JSON,
 			// including timestamp offsets and stable ties, not zone identity.

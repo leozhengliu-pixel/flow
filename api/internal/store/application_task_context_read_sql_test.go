@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21ApplicationTaskContextReadRawBatches(t *testing.T) {
+func TestScaleApplicationTaskContextReadRawBatches(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-task-batches-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.task_batches", "", nil, func(data *domain.Bootstrap) error {
 		data.Issues = nil
@@ -93,11 +93,11 @@ func TestScaleP21ApplicationTaskContextReadRawBatches(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationTaskContextReadPhysicalBatch(t *testing.T) {
+func TestScaleApplicationTaskContextReadPhysicalBatch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite storage-class identity")
 	}
@@ -174,11 +174,11 @@ func TestScaleP21ApplicationTaskContextReadPhysicalBatch(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationTaskContextReadSQLDifferential(t *testing.T) {
+func TestScaleApplicationTaskContextReadSQLDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-task-count-hold-")
 	at := time.Now().UTC()
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.task_count_sql_hold", "", nil, func(data *domain.Bootstrap) error {
@@ -266,8 +266,8 @@ func TestScaleP21ApplicationTaskContextReadSQLDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationTaskContextReadRawCodec(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestScaleApplicationTaskContextReadRawCodec(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	for _, raw := range []string{
 		` null `,
 		` {"id":"one","id":null,"team":{"id":"team"},"project":{"id":"project"},"parentId":"parent","permissions":[{"subjectType":"user","subjectId":"user","role":"editor"}]} `,

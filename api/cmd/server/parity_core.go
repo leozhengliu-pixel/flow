@@ -538,7 +538,7 @@ func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) {
-	if s.scaleP20History(w, r) {
+	if s.scaleHistory(w, r) {
 		return
 	}
 	var data domain.Bootstrap

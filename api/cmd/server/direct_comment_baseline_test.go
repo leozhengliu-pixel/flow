@@ -17,11 +17,11 @@ import (
 
 // The direct endpoints and issue-record aliases intentionally retain their
 // different production middleware topology in this baseline.
-func TestScaleP21SW86DirectCommentBaseline(t *testing.T) {
+func TestDirectCommentBaseline(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestScaleP21SW86DirectCommentBaseline(t *testing.T) {
 				var results []outcome
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(t)
-					before := scaleP21SW59SQL(t, f)
+					before := discussionWriteSql(t, f)
 					decodes := source.WorkspaceMetadataDecodes()
 					work := source.MetadataWorkUsedForTesting()
 					request := f.literalRequest(owner, nil, test.body)
@@ -135,7 +135,7 @@ func TestScaleP21SW86DirectCommentBaseline(t *testing.T) {
 						if !reflect.DeepEqual(body, map[string]any{"error": "This resource is outside your teams"}) {
 							t.Fatalf("direct refusal body changed: %s", response.Body.String())
 						}
-						if after := scaleP21SW59SQL(t, f); !reflect.DeepEqual(before, after) {
+						if after := discussionWriteSql(t, f); !reflect.DeepEqual(before, after) {
 							t.Fatal("refused direct request changed issue, content or subscription rows")
 						}
 					} else if test.name == "delete" {

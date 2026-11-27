@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21M3CodingSettingsDifferential(t *testing.T) {
+func TestScaleCodingSettingsDifferential(t *testing.T) {
 	seed := func(data *domain.Bootstrap, _ domain.User) {
 		data.WorkspaceSettings.CodingAgentSettings = domain.CodingAgentSettings{}
 		if data.WorkspaceSettings.FeatureFlags == nil {
@@ -23,7 +23,7 @@ func TestScaleP21M3CodingSettingsDifferential(t *testing.T) {
 		s.coding = &codingServices{service: new(coding.Service), config: appconfig.CodingConfig{Provider: appconfig.CodingProviderFake, Regions: []string{"eu"}}}
 		s.updateCodingSettings(w, r)
 	}
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
 			name: "coding-settings", kind: "workspaceSettings", body: `{"enabled":true,"harness":"codex","pinnedRegion":"eu","reasoningEffort":"high","loopRepositoryAccess":"selected","loopRepositories":["env1","env1"," "]}`,
 			seed: seed, handler: handler,

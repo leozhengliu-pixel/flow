@@ -10,9 +10,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW215ColdConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
+const coldConsumer = "server/oauth_authorized_applications.go:listAuthorizedApplications"
 
-func TestScaleP21SW215ColdReadOwnerOffIdentity(t *testing.T) {
+func TestColdReadOwnerOffIdentity(t *testing.T) {
 	repo := &SQLiteStore{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -30,14 +30,14 @@ func TestScaleP21SW215ColdReadOwnerOffIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdReadOwnerRefreshesAtFreshAccessor(t *testing.T) {
-	f, parent, workspace := scaleP21ColdReadFixture(t)
+func TestColdReadOwnerRefreshesAtFreshAccessor(t *testing.T) {
+	f, parent, workspace := scaleColdReadFixture(t)
 	explicit := workspaceRead{
 		database: f.db, workspace: workspace,
 		metadata: domain.Bootstrap{Workspace: domain.Workspace{ID: f.data.Workspace.ID, Name: "explicit SQL read snapshot"}},
 	}
 	ctx := context.WithValue(t.Context(), workspaceReadKey{}, explicit)
-	read, err := parent.BeginColdMetadataRead(ctx, scaleP21SW215ColdConsumer)
+	read, err := parent.BeginColdMetadataRead(ctx, coldConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,15 +102,15 @@ func TestScaleP21SW215ColdReadOwnerRefreshesAtFreshAccessor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW215ColdReadOwnerBorrowsUntilOuterOutput(t *testing.T) {
-	f, view, workspace := scaleP21ColdReadFixture(t)
+func TestColdReadOwnerBorrowsUntilOuterOutput(t *testing.T) {
+	f, view, workspace := scaleColdReadFixture(t)
 	want, found := f.WorkspaceMetadata(workspace)
 	if !found {
 		t.Fatal("fixture source missing")
 	}
 	sql := 0
 	ctx := WithSQLStatementObserver(t.Context(), func(string) { sql++ })
-	read, err := view.BeginColdMetadataRead(ctx, scaleP21SW215ColdConsumer)
+	read, err := view.BeginColdMetadataRead(ctx, coldConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestScaleP21SW215ColdReadOwnerBorrowsUntilOuterOutput(t *testing.T) {
 	if !found || !reflect.DeepEqual(got, want) || sql != 0 {
 		t.Fatal("owned capture changed native source or decoded SQL", sql)
 	}
-	nested, err := facade.BeginColdMetadataRead(read.Context(), scaleP21SW215ColdConsumer)
+	nested, err := facade.BeginColdMetadataRead(read.Context(), coldConsumer)
 	if err != nil || nested.Store() != facade || nested.Context() != read.Context() {
 		t.Fatal("owned nesting selected another facade, context or slot", err)
 	}
@@ -131,7 +131,7 @@ func TestScaleP21SW215ColdReadOwnerBorrowsUntilOuterOutput(t *testing.T) {
 	if read.Store() != facade || len(view.metadataResidency.coldSlot) != 1 {
 		t.Fatal("nested close released outer ownership")
 	}
-	if err := view.WithColdMetadataRead(read.Context(), scaleP21SW215ColdConsumer, func(ctx context.Context, source *SQLiteStore) error {
+	if err := view.WithColdMetadataRead(read.Context(), coldConsumer, func(ctx context.Context, source *SQLiteStore) error {
 		if source != facade || ctx != read.Context() {
 			t.Fatal("existing handler bridge did not borrow the owned auth facade")
 		}
@@ -144,16 +144,16 @@ func TestScaleP21SW215ColdReadOwnerBorrowsUntilOuterOutput(t *testing.T) {
 		view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("outer output release retained graph, source, replica slot or HOT admission")
 	}
-	next, err := view.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdConsumer)
+	next, err := view.BeginColdMetadataRead(t.Context(), coldConsumer)
 	if err != nil || next.Store() == nil || next.Store() == facade {
 		t.Fatal("released owner prevented an independent next request", err)
 	}
 	next.Close()
 }
 
-func TestScaleP21SW215ColdReadOwnerWaitCancellationAndConcurrentClose(t *testing.T) {
-	_, view, _ := scaleP21ColdReadFixture(t)
-	read, err := view.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdConsumer)
+func TestColdReadOwnerWaitCancellationAndConcurrentClose(t *testing.T) {
+	_, view, _ := scaleColdReadFixture(t)
+	read, err := view.BeginColdMetadataRead(t.Context(), coldConsumer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestScaleP21SW215ColdReadOwnerWaitCancellationAndConcurrentClose(t *testing
 	entered, done := make(chan struct{}), make(chan error, 1)
 	go func() {
 		close(entered)
-		next, err := view.BeginColdMetadataRead(waiting, scaleP21SW215ColdConsumer)
+		next, err := view.BeginColdMetadataRead(waiting, coldConsumer)
 		if next != nil {
 			next.Close()
 		}
@@ -184,8 +184,8 @@ func TestScaleP21SW215ColdReadOwnerWaitCancellationAndConcurrentClose(t *testing
 	}
 }
 
-func TestScaleP21SW215ColdReadOwnerCaptureFailureReleasesSlot(t *testing.T) {
-	_, view, workspace := scaleP21ColdReadFixture(t)
+func TestColdReadOwnerCaptureFailureReleasesSlot(t *testing.T) {
+	_, view, workspace := scaleColdReadFixture(t)
 	view.metadataResidency.mu.Lock()
 	source := view.metadataResidency.logical[workspace]
 	delete(view.metadataResidency.logical, workspace)
@@ -195,7 +195,7 @@ func TestScaleP21SW215ColdReadOwnerCaptureFailureReleasesSlot(t *testing.T) {
 		view.metadataResidency.logical[workspace] = source
 		view.metadataResidency.mu.Unlock()
 	}()
-	read, err := view.BeginColdMetadataRead(t.Context(), scaleP21SW215ColdConsumer)
+	read, err := view.BeginColdMetadataRead(t.Context(), coldConsumer)
 	if read != nil || !errors.Is(err, ErrBoundedMetadataCoverage) || len(view.metadataResidency.coldSlot) != 0 ||
 		view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("partial installed capture leaked its graph/replica slot", err)

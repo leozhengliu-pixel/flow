@@ -20,10 +20,10 @@ import (
 // Seed and warmup are excluded; authentication, persistence, sequencing,
 // event enrichment and HTTP encoding are included. Retained bytes are the
 // live heap change after GC, independently of cumulative allocation bytes.
-func TestScaleP16EnableEditMemory(t *testing.T) {
+func TestScaleEnableEditMemory(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	data, _ := db.repo.BootstrapFor(db.key)
 	if err := db.repo.SeedSyntheticMetadata(t.Context(), db.key, store.SyntheticMetadata{
 		Projects: 20000, ProjectBytes: 2048, TeamIDs: []string{data.Teams[0].ID},

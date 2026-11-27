@@ -12,18 +12,18 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21ResidentFixture struct {
-	scaleP21M2Fixture
+type scaleResidentFixture struct {
+	policyDifferentialFixture
 	workspace, plain, linked, project string
 	tokens                            map[string]string
 }
 
-// scaleP21ResidentSetup seeds two documents (one linked to a project, so its
+// scaleResidentSetup seeds two documents (one linked to a project, so its
 // title edits rewrite the project's resource) and logs every principal in.
-func scaleP21ResidentSetup(t *testing.T, repo *store.SQLiteStore) scaleP21ResidentFixture {
+func scaleResidentSetup(t *testing.T, repo *store.SQLiteStore) scaleResidentFixture {
 	t.Helper()
-	f := scaleP21M2Setup(t, repo)
-	r := scaleP21ResidentFixture{scaleP21M2Fixture: f, workspace: f.data.Workspace.URLKey, tokens: map[string]string{}}
+	f := setupPolicyDifferential(t, repo)
+	r := scaleResidentFixture{policyDifferentialFixture: f, workspace: f.data.Workspace.URLKey, tokens: map[string]string{}}
 	prefix := idgen.New("resident-")
 	r.plain, r.linked, r.project = prefix+"plain", prefix+"linked", prefix+"project"
 	if err := repo.MutateWorkspace(t.Context(), r.workspace, "scale_p21.resident_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -55,11 +55,11 @@ func scaleP21ResidentSetup(t *testing.T, repo *store.SQLiteStore) scaleP21Reside
 	return r
 }
 
-func (r scaleP21ResidentFixture) edit(source *store.SQLiteStore, user domain.User, key *domain.APIKey, id string, body map[string]any) scaleP21DocRoutesOutcome {
-	return scaleP21DocRoutesServe(r.scaleP21M2Fixture, source, r.tokens[user.ID], user, key, http.MethodPatch, "/api/documents/"+id, body)
+func (r scaleResidentFixture) edit(source *store.SQLiteStore, user domain.User, key *domain.APIKey, id string, body map[string]any) scaleDocRoutesOutcome {
+	return scaleDocRoutesServe(r.policyDifferentialFixture, source, r.tokens[user.ID], user, key, http.MethodPatch, "/api/documents/"+id, body)
 }
 
-func scaleP21ResidentStats() (made, verified int64, fallbacks map[string]int64) {
+func scaleResidentStats() (made, verified int64, fallbacks map[string]int64) {
 	stats := store.ResidentWriteStatsForTesting()
 	fallbacks = map[string]int64{}
 	for key, value := range stats {
@@ -70,7 +70,7 @@ func scaleP21ResidentStats() (made, verified int64, fallbacks map[string]int64) 
 	return stats["made"], stats["verified"], fallbacks
 }
 
-// TestScaleP21ResidentDocumentWrite: with bounded metadata on, sequential
+// TestScaleResidentDocumentWrite: with bounded metadata on, sequential
 // edits of a document by one principal are made from the resident image
 // once the installed generation is current, and every one of them is
 // verified against the scoped image writer (callback input, previous values,
@@ -78,16 +78,16 @@ func scaleP21ResidentStats() (made, verified int64, fallbacks map[string]int64) 
 // resident_write_verify.go). Title, content and archive edits,
 // edits that rewrite a linked project's resource, and API key edits are
 // covered; the stored documents are the edits'.
-func TestScaleP21ResidentDocumentWrite(t *testing.T) {
+func TestScaleResidentDocumentWrite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		r := scaleP21ResidentSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		r := scaleResidentSetup(t, repo)
 		admin, member := r.data.Viewer, r.principals[1].user
 		key := &domain.APIKey{ID: idgen.New("resident-key-"), Scopes: []string{"read", "write", "admin"}, TeamRestriction: "all"}
-		madeBefore, verifiedBefore, _ := scaleP21ResidentStats()
+		madeBefore, verifiedBefore, _ := scaleResidentStats()
 		steps := []struct {
 			user domain.User
 			key  *domain.APIKey
@@ -119,7 +119,7 @@ func TestScaleP21ResidentDocumentWrite(t *testing.T) {
 				t.Fatalf("step %d %v = %d %s, want %d", index, step.body, outcome.code, outcome.body, want)
 			}
 		}
-		made, verified, fallbacks := scaleP21ResidentStats()
+		made, verified, fallbacks := scaleResidentStats()
 		t.Logf("resident writes made=%d verified=%d fallbacks=%v images=%v decode=%v", made-madeBefore, verified-verifiedBefore, fallbacks,
 			store.ResidentImageStatsForTesting(), store.ColdDecodeCacheStatsForTesting())
 		// Every successful edit is resident (the conflict makes none).
@@ -143,17 +143,17 @@ func TestScaleP21ResidentDocumentWrite(t *testing.T) {
 	}
 }
 
-// TestScaleP21ResidentDocumentWriteStale: a write another server committed
+// TestScaleResidentDocumentWriteStale: a write another server committed
 // after the generation was installed (before the edit, or between the edit's
 // preparation and its commit) sends the edit to the scoped writer, which
 // makes it on the current state: both writes are kept.
-func TestScaleP21ResidentDocumentWriteStale(t *testing.T) {
+func TestScaleResidentDocumentWriteStale(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		r := scaleP21ResidentSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		r := scaleResidentSetup(t, repo)
 		admin := r.data.Viewer
 		for _, title := range []string{"Warm 1", "Warm 2"} {
 			if outcome := r.edit(r.probe, admin, nil, r.plain, map[string]any{"title": title}); outcome.code != http.StatusOK {
@@ -165,11 +165,11 @@ func TestScaleP21ResidentDocumentWriteStale(t *testing.T) {
 		if outcome := r.edit(repo, admin, nil, r.linked, map[string]any{"title": "Linked elsewhere"}); outcome.code != http.StatusOK {
 			t.Fatalf("other server edit = %d %s", outcome.code, outcome.body)
 		}
-		_, _, before := scaleP21ResidentStats()
+		_, _, before := scaleResidentStats()
 		if outcome := r.edit(r.probe, admin, nil, r.plain, map[string]any{"title": "After a stale generation"}); outcome.code != http.StatusOK {
 			t.Fatalf("edit on a stale generation = %d %s", outcome.code, outcome.body)
 		}
-		_, _, after := scaleP21ResidentStats()
+		_, _, after := scaleResidentStats()
 		if after["generation behind the stored stamp"] <= before["generation behind the stored stamp"] {
 			t.Fatalf("the edit on a stale generation did not fall back: %v", after)
 		}
@@ -190,13 +190,13 @@ func TestScaleP21ResidentDocumentWriteStale(t *testing.T) {
 				t.Errorf("other server edit in the window = %d %s", outcome.code, outcome.body)
 			}
 		})
-		_, _, before = scaleP21ResidentStats()
+		_, _, before = scaleResidentStats()
 		outcome := r.edit(r.probe, admin, nil, r.plain, map[string]any{"title": "After the window"})
 		restore()
 		if outcome.code != http.StatusOK {
 			t.Fatalf("edit raced by another server = %d %s", outcome.code, outcome.body)
 		}
-		_, _, after = scaleP21ResidentStats()
+		_, _, after = scaleResidentStats()
 		if !raced || after["stored stamp moved"] <= before["stored stamp moved"] {
 			t.Fatalf("the raced edit did not fall back at its commit (raced=%v): %v", raced, after)
 		}
@@ -216,17 +216,17 @@ func TestScaleP21ResidentDocumentWriteStale(t *testing.T) {
 	}
 }
 
-// TestScaleP21ResidentDocumentWriteConcurrent: concurrent edits of two
+// TestScaleResidentDocumentWriteConcurrent: concurrent edits of two
 // documents through one replica all land: every edit answers 200, each
 // document's version counts its edits, and the installed generation equals
 // a fresh decode. Run with -race.
-func TestScaleP21ResidentDocumentWriteConcurrent(t *testing.T) {
+func TestScaleResidentDocumentWriteConcurrent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		r := scaleP21ResidentSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		r := scaleResidentSetup(t, repo)
 		admin := r.data.Viewer
 		if outcome := r.edit(r.probe, admin, nil, r.plain, map[string]any{"title": "Warm"}); outcome.code != http.StatusOK {
 			t.Fatalf("warm edit = %d %s", outcome.code, outcome.body)

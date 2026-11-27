@@ -603,7 +603,7 @@ type taskIssueJSON struct {
 }
 
 func (p taskIssueJSON) first(part metadataCollectionRange) (byte, error) {
-	scanner := sw17CredentialScanner(p.ctx, p.input, part.offset, part.size)
+	scanner := credentialScanner(p.ctx, p.input, part.offset, part.size)
 	if err := scanner.spaces(); err != nil {
 		return 0, err
 	}
@@ -643,7 +643,7 @@ func (p taskIssueJSON) validate(part metadataCollectionRange, typ reflect.Type, 
 		return validateMetadataCollectionJSON(p.ctx, io.NewSectionReader(p.input, part.offset, part.size))
 	}
 	if typ == reflect.TypeFor[time.Time]() {
-		_, err := scaleP21SW23TeamTime(p.ctx, io.NewSectionReader(p.input, part.offset, part.size))
+		_, err := teamTime(p.ctx, io.NewSectionReader(p.input, part.offset, part.size))
 		return err
 	}
 	if typ.Kind() != reflect.Pointer && typ != reflect.TypeFor[domain.OptionalInt]() &&
@@ -651,7 +651,7 @@ func (p taskIssueJSON) validate(part metadataCollectionRange, typ reflect.Type, 
 		return ErrBoundedMetadataCoverage
 	}
 	if first == 'n' {
-		scanner := sw17CredentialScanner(p.ctx, p.input, part.offset, part.size)
+		scanner := credentialScanner(p.ctx, p.input, part.offset, part.size)
 		if err := scanner.spaces(); err != nil {
 			return err
 		}
@@ -667,7 +667,7 @@ func (p taskIssueJSON) validate(part metadataCollectionRange, typ reflect.Type, 
 		var value domain.OptionalInt
 		return p.scalar(part, &value, false)
 	}
-	scanner := sw17CredentialScanner(p.ctx, p.input, part.offset, part.size)
+	scanner := credentialScanner(p.ctx, p.input, part.offset, part.size)
 	if err := scanner.spaces(); err != nil {
 		return err
 	}
@@ -683,7 +683,7 @@ func (p taskIssueJSON) validate(part metadataCollectionRange, typ reflect.Type, 
 			return ErrMetadataRecordQuery
 		}
 		if err := scanner.object(func(key, value metadataCollectionRange) error {
-			index, err := sw17CredentialField(p.input, key, typ)
+			index, err := credentialField(p.input, key, typ)
 			if err != nil || index < 0 {
 				return err
 			}
@@ -780,7 +780,7 @@ func (p taskIssueJSON) project(part metadataCollectionRange, target reflect.Valu
 		return p.project(part, target.Elem(), depth+1)
 	}
 	if target.Type() == reflect.TypeFor[time.Time]() {
-		value, err := scaleP21SW23TeamTime(p.ctx, io.NewSectionReader(p.input, part.offset, part.size))
+		value, err := teamTime(p.ctx, io.NewSectionReader(p.input, part.offset, part.size))
 		if err == nil && value != nil {
 			target.Set(reflect.ValueOf(*value))
 		}
@@ -794,12 +794,12 @@ func (p taskIssueJSON) project(part metadataCollectionRange, target reflect.Valu
 		if fields == nil {
 			fields = taskIssueHeaderFields
 		}
-		scanner := sw17CredentialScanner(p.ctx, p.input, part.offset, part.size)
+		scanner := credentialScanner(p.ctx, p.input, part.offset, part.size)
 		if err := scanner.spaces(); err != nil {
 			return err
 		}
 		return scanner.object(func(key, value metadataCollectionRange) error {
-			index, err := sw17CredentialField(p.input, key, target.Type())
+			index, err := credentialField(p.input, key, target.Type())
 			if err != nil || index < 0 || !slices.Contains(fields[target.Type()], target.Type().Field(index).Name) {
 				return err
 			}
@@ -808,7 +808,7 @@ func (p taskIssueJSON) project(part metadataCollectionRange, target reflect.Valu
 	case reflect.Slice:
 		target.SetLen(0)
 		index := 0
-		scanner := sw17CredentialScanner(p.ctx, p.input, part.offset, part.size)
+		scanner := credentialScanner(p.ctx, p.input, part.offset, part.size)
 		err := scanner.array(func(value metadataCollectionRange) error {
 			if index == target.Cap() {
 				if err := p.owner.reserve(p.ctx, uint64(target.Type().Elem().Size())*4+512); err != nil {

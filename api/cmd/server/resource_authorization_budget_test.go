@@ -35,7 +35,7 @@ func resourceAuthorizationRequest(t *testing.T, handler http.Handler, workspace,
 }
 
 func TestBoundedSavedViewMutationAuthorizationBudget(t *testing.T) {
-	peers, f, _, project := scaleP21ActivationHTTPPeers(t, "current")
+	peers, f, _, project := scaleActivationHTTPPeers(t, "current")
 	peer := peers[0]
 	s := peer.service
 	repo, workspace := s.store, f.data.Workspace.URLKey
@@ -111,8 +111,8 @@ func TestBoundedSavedViewMutationAuthorizationBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21ActivationPointResourceAuthorizationBudget(t *testing.T) {
-	f := scaleP21SW491Setup(t, nil)
+func TestScaleActivationPointResourceAuthorizationBudget(t *testing.T) {
+	f := harnessSetup(t, nil)
 	repo, workspace, user := f.f.probe, f.workspace, f.f.data.Viewer
 	if err := repo.RefreshInstalledMetadataViewForTesting(t.Context(), f.repo, workspace); err != nil {
 		t.Fatal(err)

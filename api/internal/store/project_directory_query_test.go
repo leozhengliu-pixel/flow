@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW90Projects(repetitions int) []domain.Project {
+func projectDirectoryQueryProjects(repetitions int) []domain.Project {
 	body := strings.Repeat("Ignored project and milestone body. ", repetitions)
 	at := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	past, future := "2000-01-01", "9999-12-31"
@@ -37,7 +37,7 @@ func scaleP21SW90Projects(repetitions int) []domain.Project {
 	}
 }
 
-func scaleP21SW90Queries() []ProjectRecordQuery {
+func projectDirectoryQueryQueries() []ProjectRecordQuery {
 	queries := []ProjectRecordQuery{
 		{Admin: true}, {Admin: true, Archived: "all"}, {Admin: true, Archived: "true"},
 		{AllowedTeamIDs: nil}, {AllowedTeamIDs: []string{}}, {AllowedTeamIDs: []string{"public"}},
@@ -78,7 +78,7 @@ func scaleP21SW90Queries() []ProjectRecordQuery {
 	return queries
 }
 
-func scaleP21SW90Assert(t *testing.T, source *SQLiteStore, query ProjectRecordQuery, want ProjectRecordPage) int {
+func assert(t *testing.T, source *SQLiteStore, query ProjectRecordQuery, want ProjectRecordPage) int {
 	t.Helper()
 	queries := 0
 	read, err := source.BeginProjectDirectoryQuery(WithSQLStatementObserver(t.Context(), func(string) { queries++ }), query)
@@ -86,7 +86,7 @@ func scaleP21SW90Assert(t *testing.T, source *SQLiteStore, query ProjectRecordQu
 		t.Fatal(err)
 	}
 	t.Cleanup(read.Close)
-	scaleP10Equal(t, want, read.Page)
+	scaleEqual(t, want, read.Page)
 	held := source.MetadataWorkUsedForTesting()
 	if held == 0 {
 		t.Fatal("directory output has no work owner")
@@ -99,14 +99,14 @@ func scaleP21SW90Assert(t *testing.T, source *SQLiteStore, query ProjectRecordQu
 	return queries
 }
 
-func TestScaleP21SW90ProjectDirectoryLiteral(t *testing.T) {
+func TestProjectDirectoryLiteral(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "off")
-	projects := scaleP21SW90Projects(2)
+	projects := projectDirectoryQueryProjects(2)
 	values := map[string]domain.Bootstrap{"physical\x00": {Workspace: domain.Workspace{ID: "organization", URLKey: "logical"}, Projects: projects}}
 	legacy := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical\x00"}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = "physical\x00"
-	for index, query := range scaleP21SW90Queries() {
+	for index, query := range projectDirectoryQueryQueries() {
 		query.Workspace = "physical\x00"
 		if query.Limit == 0 {
 			query.Limit = 2
@@ -120,7 +120,7 @@ func TestScaleP21SW90ProjectDirectoryLiteral(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if sql := scaleP21SW90Assert(t, view, query, want); sql != 0 {
+					if sql := assert(t, view, query, want); sql != 0 {
 						t.Fatal("native directory used SQL", sql)
 					}
 				})
@@ -131,7 +131,7 @@ func TestScaleP21SW90ProjectDirectoryLiteral(t *testing.T) {
 		t.Run("installed-mode-"+mode, func(t *testing.T) {
 			t.Setenv("FLOW_INDEXED_READS", mode)
 			query := ProjectRecordQuery{Workspace: "physical\x00", Admin: true, Archived: "all", IncludeTotal: true, Limit: 2}
-			scaleP21SW90Assert(t, view, query, filterProjectDirectory(projects, query))
+			assert(t, view, query, filterProjectDirectory(projects, query))
 		})
 	}
 	read, err := view.BeginProjectDirectoryQuery(t.Context(), ProjectRecordQuery{Workspace: "physical\x00", Admin: true, Archived: "all"})
@@ -149,13 +149,13 @@ func TestScaleP21SW90ProjectDirectoryLiteral(t *testing.T) {
 	for index := range many {
 		many[index] = domain.Project{ID: fmt.Sprint(index), Name: fmt.Sprint(index), Description: "stripped"}
 	}
-	manyView := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"many": {Projects: many}, "empty": {Projects: []domain.Project{}}})
+	manyView := scaleHotLogoStore(t, map[string]domain.Bootstrap{"many": {Projects: many}, "empty": {Projects: []domain.Project{}}})
 	for _, limit := range []int{-1, 0, 101, 1000} {
 		query := ProjectRecordQuery{Workspace: "many", Admin: true, Archived: "all", Limit: limit, IncludeTotal: true}
-		scaleP21SW90Assert(t, manyView, query, filterProjectDirectory(many, query))
+		assert(t, manyView, query, filterProjectDirectory(many, query))
 	}
 	emptyQuery := ProjectRecordQuery{Workspace: "empty", Admin: true, Archived: "all", IncludeTotal: true}
-	scaleP21SW90Assert(t, manyView, emptyQuery, filterProjectDirectory([]domain.Project{}, emptyQuery))
+	assert(t, manyView, emptyQuery, filterProjectDirectory([]domain.Project{}, emptyQuery))
 	for _, query := range []ProjectRecordQuery{{}, {Workspace: " \t "}} {
 		if read, err := view.BeginProjectDirectoryQuery(t.Context(), query); read != nil || !errors.Is(err, ErrIssueQuery) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("blank workspace directory changed", err)
@@ -163,13 +163,13 @@ func TestScaleP21SW90ProjectDirectoryLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW90ProjectDirectoryCurrentAndProjected(t *testing.T) {
+func TestProjectDirectoryCurrentAndProjected(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "off")
-	before := domain.Bootstrap{Projects: scaleP21SW90Projects(2)}
+	before := domain.Bootstrap{Projects: projectDirectoryQueryProjects(2)}
 	after := before
 	after.Projects = slices.Clone(before.Projects)
 	after.Projects[0].Name, after.Projects[0].Summary = "Current installed name", "Current installed summary"
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "foreign": {Projects: []domain.Project{{ID: "foreign", Name: "Foreign"}}}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before, "foreign": {Projects: []domain.Project{{ID: "foreign", Name: "Foreign"}}}})
 	view.lastWorkspaceKey = "physical"
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "foreign")
 	if err != nil {
@@ -193,10 +193,10 @@ func TestScaleP21SW90ProjectDirectoryCurrentAndProjected(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent.Close()
-	scaleP10Equal(t, filterProjectDirectory(after.Projects, query), read.Page)
+	scaleEqual(t, filterProjectDirectory(after.Projects, query), read.Page)
 	read.Close()
 	// A pre-projected handoff deliberately owns a different generation.
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithColdWork(t.Context(), "project directory fixture"), workspace, "scale_p21.sw90_projected_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{{ID: "selected", Name: "Installed", Summary: "Installed summary", TeamIDs: nil, Milestones: []domain.ProjectMilestone{{ID: "milestone", Name: "Retained", Description: "Ignored"}}}}
@@ -223,35 +223,35 @@ func TestScaleP21SW90ProjectDirectoryCurrentAndProjected(t *testing.T) {
 		t.Fatal(err)
 	}
 	directory.Close()
-	scaleP10Equal(t, QueryProjectedProjectDirectory(handed.Projects, query), read.Page)
+	scaleEqual(t, QueryProjectedProjectDirectory(handed.Projects, query), read.Page)
 	read.Close()
 	if bounded.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("projected page borrowed its directory lifetime")
 	}
 }
 
-func TestScaleP21SW90ProjectDirectoryCanonicalAndCatalog(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	projects := scaleP21SW90Projects(2)
+func TestProjectDirectoryCanonicalAndCatalog(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	projects := projectDirectoryQueryProjects(2)
 	projects[5].ID, projects[5].Name = "ordinary", "Ordinary"
 	projects[5].PreviousSlugIDs = []string{"ordinary-old"}
 	for index, project := range projects {
-		scaleP05Put(t, s, workspace, "projects", fmt.Sprintf("physical-%02d", index), index/2, project)
+		catalogScalePut(t, s, workspace, "projects", fmt.Sprintf("physical-%02d", index), index/2, project)
 	}
-	scaleP05Finish(t, s, workspace, "projects")
+	scaleFinish(t, s, workspace, "projects")
 	view := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
 	defer view.releaseMetadataLogicalSources()
 	for _, mode := range []string{"off", "on", "shadow"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_INDEXED_READS", mode)
-			for index, query := range scaleP21SW90Queries() {
+			for index, query := range projectDirectoryQueryQueries() {
 				query.Workspace, query.Limit, query.IncludeTotal = workspace, 2, true
 				want, err := s.queryProjectDirectoryAdapter(t.Context(), query)
 				if err != nil {
 					t.Fatal(err)
 				}
 				t.Run(fmt.Sprint(index), func(t *testing.T) {
-					scaleP21SW90Assert(t, view, query, want)
+					assert(t, view, query, want)
 				})
 			}
 		})
@@ -272,7 +272,7 @@ func TestScaleP21SW90ProjectDirectoryCanonicalAndCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP10Equal(t, want, read.Page)
+	scaleEqual(t, want, read.Page)
 	read.Close()
 	var one int
 	if err := tx.QueryRowContext(t.Context(), "SELECT 1").Scan(&one); err != nil || one != 1 {
@@ -287,7 +287,7 @@ func TestScaleP21SW90ProjectDirectoryCanonicalAndCatalog(t *testing.T) {
 	view.mu.Unlock()
 	// Policy-only recovery deliberately has no logical generation. Its
 	// nil Projects matches the literal SQL-only projectSnapshot fallback.
-	scaleP21SW90Assert(t, view, query, want)
+	assert(t, view, query, want)
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if source, usable, err := view.projectDirectoryInstalledSource(cancelled, workspace); source != nil || usable || !errors.Is(err, context.Canceled) {
@@ -316,7 +316,7 @@ func TestScaleP21SW90ProjectDirectoryCanonicalAndCatalog(t *testing.T) {
 	view.workspaces[workspace] = nilSourceData
 	view.mu.Unlock()
 	view.installMetadataLogicalSource(workspace, nilSource)
-	scaleP21SW90Assert(t, view, query, want)
+	assert(t, view, query, want)
 	if s.dialect == "sqlite" {
 		// Identity-only storage-class changes bypass neither body validation
 		// nor the canonical SQL ordering selected by the literal reader.
@@ -327,16 +327,16 @@ func TestScaleP21SW90ProjectDirectoryCanonicalAndCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW90Assert(t, view, query, want)
+		assert(t, view, query, want)
 	}
 }
 
-func TestScaleP21SW90ProjectDirectoryWarmReloadAndRelease(t *testing.T) {
+func TestProjectDirectoryWarmReloadAndRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_INDEXED_READS", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -347,7 +347,7 @@ func TestScaleP21SW90ProjectDirectoryWarmReloadAndRelease(t *testing.T) {
 	for _, size := range []int{2000, 20000} {
 		restore := ForceFullMutationsForTesting(true)
 		err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw90_body_seed", "", nil, func(data *domain.Bootstrap) error {
-			data.Projects = []domain.Project{scaleP21SW90Projects(size)[0]}
+			data.Projects = []domain.Project{projectDirectoryQueryProjects(size)[0]}
 			return nil
 		})
 		restore()
@@ -376,7 +376,7 @@ func TestScaleP21SW90ProjectDirectoryWarmReloadAndRelease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				scaleP10Equal(t, want, read.Page)
+				scaleEqual(t, want, read.Page)
 				work := view.MetadataWorkUsedForTesting()
 				if held[reload] == 0 {
 					held[reload] = work
@@ -443,15 +443,15 @@ func TestScaleP21SW90ProjectDirectoryWarmReloadAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW90ProjectDirectoryCanonicalBodyBound(t *testing.T) {
+func TestProjectDirectoryCanonicalBodyBound(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "off")
-	s, workspace := scaleP05Database(t)
+	s, workspace := catalogScaleDatabase(t)
 	view := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
 	defer view.releaseMetadataLogicalSources()
 	var expectedHeld, expectedPeak int
 	for _, size := range []int{2000, 20000} {
-		project := scaleP21SW90Projects(size)[0]
-		scaleP05Put(t, s, workspace, "projects", "one-physical-row", 0, project)
+		project := projectDirectoryQueryProjects(size)[0]
+		catalogScalePut(t, s, workspace, "projects", "one-physical-row", 0, project)
 		query := ProjectRecordQuery{Workspace: workspace, Admin: true, Archived: "all", IncludeTotal: true}
 		want, err := s.queryProjectDirectoryLegacy(t.Context(), query)
 		if err != nil {
@@ -467,7 +467,7 @@ func TestScaleP21SW90ProjectDirectoryCanonicalBodyBound(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP10Equal(t, want, read.Page)
+		scaleEqual(t, want, read.Page)
 		held := view.MetadataWorkUsedForTesting()
 		if expectedHeld == 0 {
 			expectedHeld, expectedPeak = held, peak

@@ -8,14 +8,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-// TestScaleP21SW288PulseScheduleReadSource pins the fact the SW286 wrapper
+// TestPulseScheduleReadSource pins the fact the store wrapper wrapper
 // guard relies on: a pulse read has no logical source only when the flag-off
 // branch of beginPulseRead built it, so LoadSchedule's literal
 // WorkspaceMetadataFields branch never runs with bounded metadata on. A
 // bounded read answers from its retained source even when the resident copy
 // holds only the workspace identity; a closed read refuses before either
 // branch.
-func TestScaleP21SW288PulseScheduleReadSource(t *testing.T) {
+func TestPulseScheduleReadSource(t *testing.T) {
 	cursor := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	data := domain.Bootstrap{
 		Workspace:         domain.Workspace{ID: "sw288-workspace", URLKey: "logical"},
@@ -25,7 +25,7 @@ func TestScaleP21SW288PulseScheduleReadSource(t *testing.T) {
 		TeamSettings:      map[string]domain.TeamSettings{"team": {Timezone: "Europe/London"}},
 	}
 	literal := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}}
-	bounded := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	bounded := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	if len(bounded.workspaces["physical"].UserSettings) != 0 {
 		t.Fatal("bounded fixture must hold only the resident workspace identity")
 	}

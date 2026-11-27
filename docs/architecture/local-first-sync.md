@@ -19,7 +19,7 @@ Non-goals: offline editing for long periods, peer-to-peer sync, changing the ser
 | Change cursor | bootstrap sends `X-Flow-Change-Cursor`; `GET /api/realtime/changes?since=` replays, answers `resyncRequired` when the cursor is gone | the resume protocol |
 | Sync v2 | manifest (`schema`, `viewerId`, `authzEpoch`, `head`, `collections`), `GET /api/sync/records`, `POST /api/sync/batch`, `GET /api/sync/changes` (behind `VITE_SYNC_V2`) | per-entity record transport |
 | Realtime | SSE stream, one leader tab per origin/workspace/viewer rebroadcasting (`shared-realtime.ts`) | live deltas |
-| Bounded metadata (P21) | server never materialises a whole workspace per request; projections behind a read gate that answers 503 + `Retry-After` | the reason partial bootstrap must exist |
+| Bounded metadata | server never materialises a whole workspace per request; projections behind a read gate that answers 503 + `Retry-After` | the reason partial bootstrap must exist |
 | Snapshot paint | one JSON blob per viewer+workspace in IndexedDB, retired when the store became the default | the entry removes the old database and its index on upgrade |
 
 ## Storage layout
@@ -136,7 +136,7 @@ Versioning:
 - SharedWorker is not required; it can host the owner later if main-thread cost of applying deltas shows up in
   profiles.
 
-## Interaction with bounded metadata (P21)
+## Interaction with bounded metadata
 
 - The server stops building whole-workspace projections on the hot path: partial bootstrap is a change-log read,
   and full bootstrap is paged and byte-bounded per record kind, so it fits the same read gate (`503 + Retry-After`

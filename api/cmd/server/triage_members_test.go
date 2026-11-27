@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW185MemberImage(t *testing.T, repo *store.SQLiteStore, workspace string) string {
+func memberImage(t *testing.T, repo *store.SQLiteStore, workspace string) string {
 	t.Helper()
 	var members []domain.WorkspaceMember
 	var teamMembers []domain.TeamMember
@@ -48,14 +48,14 @@ func scaleP21SW185MemberImage(t *testing.T, repo *store.SQLiteStore, workspace s
 	return string(raw)
 }
 
-func TestScaleP21SW185TriageTeamMoveKeepsStaleMemberSnapshots(t *testing.T) {
+func TestTriageTeamMoveKeepsStaleMemberSnapshots(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamMoveSetup(t)
+	f := scaleTeamMoveSetup(t)
 	workspace := f.data.Workspace.URLKey
-	seed := f.prepare(scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"})
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	seed := f.prepare(scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"})
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		seed(t)
 		restore := store.ForceFullMutationsForTesting(true)
 		defer restore()
@@ -71,7 +71,7 @@ func TestScaleP21SW185TriageTeamMoveKeepsStaleMemberSnapshots(t *testing.T) {
 	}
 	var expected string
 	outcomes := f.differential(t, "stale member snapshots", func(service *server) *httptest.ResponseRecorder {
-		before := scaleP21SW185MemberImage(t, service.store, workspace)
+		before := memberImage(t, service.store, workspace)
 		if !strings.Contains(before, "Stored member snapshot") {
 			t.Fatal("fixture did not retain stale member snapshot")
 		}
@@ -87,16 +87,16 @@ func TestScaleP21SW185TriageTeamMoveKeepsStaleMemberSnapshots(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		after := scaleP21SW185MemberImage(t, service.store, workspace)
+		after := memberImage(t, service.store, workspace)
 		if after != before {
-			t.Fatalf("bounded=%t replaced stored member snapshots: %s", service.store.BoundedMetadataEnabled(), scaleP21M2Diff(before, after))
+			t.Fatalf("bounded=%t replaced stored member snapshots: %s", service.store.BoundedMetadataEnabled(), policyFirstDifference(before, after))
 		}
 		w := httptest.NewRecorder()
 		writeJSON(w, http.StatusOK, results)
 		return w
 	})
 	for _, outcome := range outcomes {
-		if issue := scaleP21TeamMoveIssue(t, outcome, f.triage.ID); issue.Team.ID != "tm-parent" {
+		if issue := scaleTeamMoveIssue(t, outcome, f.triage.ID); issue.Team.ID != "tm-parent" {
 			t.Fatalf("issue did not move: %s", issue.Team.ID)
 		}
 	}

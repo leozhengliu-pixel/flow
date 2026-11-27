@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW602: PATCH /api/account/settings migrated from the COLD facade to the
+// PATCH /api/account/settings migrated from the COLD facade to the
 // bounded personal settings writer (MutateUserSettings), served through the
 // real cookie authentication (or development mode), the route mux and its
 // temperature dispatch on the legacy store, a warm bounded view and a
@@ -30,16 +30,16 @@ import (
 // users and members entries (added, changed and removed) must agree; bounded,
 // no request decodes the whole workspace.
 
-var sw602Fields = []string{"userSettings", "users", "members"}
+var workspaceAccountSettingsFields = []string{"userSettings", "users", "members"}
 
-func sw602Handler(s *server) http.Handler {
+func workspaceAccountSettingsHandler(s *server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/account/settings", s.getUserSettings)
 	mux.HandleFunc("PATCH /api/account/settings", s.updateUserSettings)
 	return s.withColdMetadataRouteMux(mux, s.authenticate(mux))
 }
 
-func sw602Do(s *server, method, body, workspace string, user domain.User) *httptest.ResponseRecorder {
+func workspaceAccountSettingsDo(s *server, method, body, workspace string, user domain.User) *httptest.ResponseRecorder {
 	var r *http.Request
 	if body != "" {
 		r = httptest.NewRequest(method, "/api/account/settings", strings.NewReader(body))
@@ -64,16 +64,16 @@ func sw602Do(s *server, method, body, workspace string, user domain.User) *httpt
 		return w
 	}
 	if user.ID != "" {
-		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sw410Session(user)})
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: oAuthClientLookupSession(user)})
 	}
 	w := httptest.NewRecorder()
-	sw602Handler(s).ServeHTTP(w, r)
+	workspaceAccountSettingsHandler(s).ServeHTTP(w, r)
 	return w
 }
 
-// sw602Delta lists, per field, the installed entries a call added, changed
+// workspaceAccountSettingsDelta lists, per field, the installed entries a call added, changed
 // or removed (by ID or map key), sorted.
-func sw602Delta(t *testing.T, before, after map[string]json.RawMessage) json.RawMessage {
+func workspaceAccountSettingsDelta(t *testing.T, before, after map[string]json.RawMessage) json.RawMessage {
 	t.Helper()
 	entries := func(raw json.RawMessage) map[string]string {
 		var value any
@@ -108,7 +108,7 @@ func sw602Delta(t *testing.T, before, after map[string]json.RawMessage) json.Raw
 		return result
 	}
 	result := map[string][]string{}
-	for _, name := range sw602Fields {
+	for _, name := range workspaceAccountSettingsFields {
 		old, current := entries(before[name]), entries(after[name])
 		for key, value := range current {
 			if previous, ok := old[key]; !ok || previous != value {
@@ -129,18 +129,18 @@ func sw602Delta(t *testing.T, before, after map[string]json.RawMessage) json.Raw
 	return raw
 }
 
-func (f scaleP21TeamCreateFixture) sw602Run(t *testing.T, source string, development bool, call func(*server) string) (sw410Outcome, time.Time) {
+func (f scaleTeamCreateFixture) workspaceAccountSettingsRun(t *testing.T, source string, development bool, call func(*server) string) (oauthClientLookupOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.service(t, source)
 	service.authDisabled = development
 	workspace := f.data.Workspace.URLKey
-	got := sw410Outcome{}
+	got := oauthClientLookupOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -148,7 +148,7 @@ func (f scaleP21TeamCreateFixture) sw602Run(t *testing.T, source string, develop
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -157,7 +157,7 @@ func (f scaleP21TeamCreateFixture) sw602Run(t *testing.T, source string, develop
 	for _, event := range f.state(t).Events {
 		prior[event[0]] = true
 	}
-	before := scaleP21SW294Image(t, service.store, workspace, sw602Fields...)
+	before := oauthMetadataImage(t, service.store, workspace, workspaceAccountSettingsFields...)
 	decodes := service.store.WorkspaceMetadataDecodes()
 	got.Result = call(service)
 	mu.Lock()
@@ -181,45 +181,45 @@ func (f scaleP21TeamCreateFixture) sw602Run(t *testing.T, source string, develop
 	if service.store.BoundedMetadataEnabled() && service.store.MetadataWorkUsedForTesting() != 0 {
 		t.Fatalf("%s: retained metadata work %d", source, service.store.MetadataWorkUsedForTesting())
 	}
-	got.Installed = sw602Delta(t, before, scaleP21SW294Image(t, service.store, workspace, sw602Fields...))
+	got.Installed = workspaceAccountSettingsDelta(t, before, oauthMetadataImage(t, service.store, workspace, workspaceAccountSettingsFields...))
 	reloaded, err := store.OpenDatabase(f.reader.config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got.Reloaded, _ = json.Marshal(scaleP21SW294Image(t, reloaded, workspace, sw602Fields...))
+	got.Reloaded, _ = json.Marshal(oauthMetadataImage(t, reloaded, workspace, workspaceAccountSettingsFields...))
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return got, started
 }
 
-func (f scaleP21TeamCreateFixture) sw602Differential(t *testing.T, name string, development bool, setup func(*testing.T), call func(*server) string) {
+func (f scaleTeamCreateFixture) workspaceAccountSettingsDifferential(t *testing.T, name string, development bool, setup func(*testing.T), call func(*server) string) {
 	t.Helper()
-	prepare := f.sw294Prepare(setup)
+	prepare := f.oauthMetadataPrepare(setup)
 	users := []domain.User{}
 	for _, principal := range f.principals {
 		users = append(users, principal.user)
 	}
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		stamp := time.Now().UTC()
 		for _, user := range users {
 			f.exec(t, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
-			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(sw410Session(user)), user.ID,
+			f.exec(t, `INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`, secretHash(oAuthClientLookupSession(user)), user.ID,
 				stamp.Add(24*time.Hour).Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano))
 		}
 		prepare(t)
 	}
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started := f.sw602Run(t, source, development, call)
-		text := sw410Normalize(t, got, started)
+		got, started := f.workspaceAccountSettingsRun(t, source, development, call)
+		text := oauthClientLookupNormalize(t, got, started)
 		normalized = append(normalized, text)
 		if dir := os.Getenv("FLOW_SW602_DUMP"); dir != "" {
 			_ = os.WriteFile(filepath.Join(dir, name+"-"+source+".json"), []byte(text), 0o600)
 		}
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Errorf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Errorf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 		if source == "legacy" {
 			t.Logf("legacy result %s", got.Result)
@@ -227,11 +227,11 @@ func (f scaleP21TeamCreateFixture) sw602Differential(t *testing.T, name string, 
 	}
 }
 
-func TestScaleP21SW602AccountSettings(t *testing.T) {
+func TestAccountSettings(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
 	t.Cleanup(func() { webhookDeliverySlots = oldSlots })
@@ -253,12 +253,12 @@ func TestScaleP21SW602AccountSettings(t *testing.T) {
 	patch := func(name string, body any, user domain.User) step {
 		raw, _ := json.Marshal(body)
 		return func(s *server, lines *[]string) {
-			*lines = append(*lines, sw410Response(name, sw602Do(s, http.MethodPatch, string(raw), workspace, user)))
+			*lines = append(*lines, oauthClientLookupResponse(name, workspaceAccountSettingsDo(s, http.MethodPatch, string(raw), workspace, user)))
 		}
 	}
 	get := func(user domain.User) step {
 		return func(s *server, lines *[]string) {
-			*lines = append(*lines, sw410Response("get "+user.Name, sw602Do(s, http.MethodGet, "", workspace, user)))
+			*lines = append(*lines, oauthClientLookupResponse("get "+user.Name, workspaceAccountSettingsDo(s, http.MethodGet, "", workspace, user)))
 		}
 	}
 	settings := func(change func(map[string]domain.UserSettings)) func(*testing.T) {
@@ -343,7 +343,7 @@ func TestScaleP21SW602AccountSettings(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.sw602Differential(t, test.name, test.development, test.setup, test.call)
+			f.workspaceAccountSettingsDifferential(t, test.name, test.development, test.setup, test.call)
 		})
 	}
 }

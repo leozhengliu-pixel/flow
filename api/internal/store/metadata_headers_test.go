@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW0HeaderLegacyUsers(t *testing.T, f scaleP09Fixture) []domain.User {
+func headerLegacyUsers(t *testing.T, f scaleFixture) []domain.User {
 	t.Helper()
 	var root []byte
 	workspace := f.data.Workspace.URLKey
@@ -30,11 +30,11 @@ func scaleP21SW0HeaderLegacyUsers(t *testing.T, f scaleP09Fixture) []domain.User
 	return data.Users
 }
 
-func TestScaleP21SW0MetadataHeaderByteOrder(t *testing.T) {
+func TestMetadataHeaderByteOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	prefix := idgen.New("sw0-header-order-")
 	suffixes := []string{"A", "a", "Z", "z", "E", "e", "É", "é", "Σ", "σ", "K", "k", "中", "文"}
@@ -65,7 +65,7 @@ func TestScaleP21SW0MetadataHeaderByteOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	var expected []string
-	for _, user := range scaleP21SW0HeaderLegacyUsers(t, f) {
+	for _, user := range headerLegacyUsers(t, f) {
 		expected = append(expected, user.ID)
 	}
 	if len(expected) <= 100 {
@@ -104,11 +104,11 @@ func TestScaleP21SW0MetadataHeaderByteOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0MetadataHeaderSQLiteTextBytes(t *testing.T) {
+func TestMetadataHeaderSQLiteTextBytes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite TEXT and BLOB have distinct LENGTH semantics")
 	}
@@ -133,7 +133,7 @@ func TestScaleP21SW0MetadataHeaderSQLiteTextBytes(t *testing.T) {
 		t.Fatal("Unicode TEXT fixture did not exceed multiple byte chunks")
 	}
 	found := false
-	for _, user := range scaleP21SW0HeaderLegacyUsers(t, f) {
+	for _, user := range headerLegacyUsers(t, f) {
 		found = found || user.ID == key && user.Name == "共享用户"
 	}
 	if !found {
@@ -185,11 +185,11 @@ func TestScaleP21SW0MetadataHeaderSQLiteTextBytes(t *testing.T) {
 	t.Logf("SQLite TEXT characters=%d bytes=%d, complete stream retained fixed chunks", characters, octets)
 }
 
-func TestScaleP21SW0MetadataHeaderCancellation(t *testing.T) {
+func TestMetadataHeaderCancellation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

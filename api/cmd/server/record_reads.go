@@ -14,7 +14,7 @@ func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
 		s.localStoreIssuePage(w, r)
 		return
 	}
-	if s.scaleP20Records(w, r) {
+	if s.scaleRecords(w, r) {
 		return
 	}
 	if !syncFlagEnabled("FLOW_INDEXED_READS") {
@@ -22,7 +22,7 @@ func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has("window") {
-		s.scaleP19Window(w, r)
+		s.scaleWindow(w, r)
 		return
 	}
 	access, ok := s.syncAccess(w, r)
@@ -87,7 +87,7 @@ func (s *server) syncBatch(w http.ResponseWriter, r *http.Request) {
 		s.localStoreIssueBatch(w, r, input.Keys, input.Projection)
 		return
 	}
-	if s.scaleP20Batch(w, r, input.Keys, input.Projection) {
+	if s.scaleBatch(w, r, input.Keys, input.Projection) {
 		return
 	}
 	batch, err := s.store.ReadRecords(r.Context(), access, input.Keys, input.Projection)

@@ -34,7 +34,7 @@ func (s *SQLiteStore) OAuthApplicationSecret(workspaceKey, applicationID string)
 // an installed application's public details (description, developer).
 func (s *SQLiteStore) OAuthApplicationByClientID(clientID string) (domain.OAuthApplication, bool) {
 	if s.BoundedMetadataEnabled() {
-		return s.scaleP21OAuthApplicationByClientID(clientID)
+		return s.scaleOAuthApplicationByClientID(clientID)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()

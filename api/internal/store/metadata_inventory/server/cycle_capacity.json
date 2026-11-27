@@ -18,7 +18,7 @@
     "decorateCycleCapacity": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The metadata fallback only resolves the canonical default workspace key from resident identity in bounded mode; cycle/reference inputs remain caller-owned and existing permission-scoped completed-issue SQL is unchanged. Off mode retains the empty field-list accessor. TestScaleP21M1CoreReadsDifferential compares capacity and default-workspace resolution; cycleWithCapacity remains an independent blocker.",
+      "reason": "The metadata fallback only resolves the canonical default workspace key from resident identity in bounded mode; cycle/reference inputs remain caller-owned and existing permission-scoped completed-issue SQL is unchanged. Off mode retains the empty field-list accessor. TestScaleCoreReadsDifferential compares capacity and default-workspace resolution; cycleWithCapacity remains an independent blocker.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"

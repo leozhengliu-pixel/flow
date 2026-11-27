@@ -21,22 +21,22 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21M2Principal struct {
+type policyFixturePrincipal struct {
 	name string
 	user domain.User
 }
 
-type scaleP21M2Fixture struct {
-	scaleP03PlatformFixture
+type policyDifferentialFixture struct {
+	scalePlatformFixture
 	probe      *store.SQLiteStore
-	principals []scaleP21M2Principal
+	principals []policyFixturePrincipal
 	public     string
 	testingT   *testing.T
 }
 
-func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
+func setupPolicyDifferential(t *testing.T, repo *store.SQLiteStore) policyDifferentialFixture {
 	t.Helper()
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	repo.SetWebhookSink(func(string, domain.DomainEvent) {})
 	repo.SetRealtimeSink(func(string, domain.RealtimeEvent) {})
 	public, private, child := idgen.New("m2-public-"), idgen.New("m2-private-"), idgen.New("m2-child-")
@@ -54,7 +54,7 @@ func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	principals := []scaleP21M2Principal{{"admin-private-outsider", f.data.Viewer}}
+	principals := []policyFixturePrincipal{{"admin-private-outsider", f.data.Viewer}}
 	var privateAdmin *http.Client
 	for _, spec := range []struct {
 		name, role string
@@ -65,11 +65,11 @@ func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
 		{"guest-explicit", "guest", []string{public}},
 		{"sub-team-inheritance", "member", []string{private}},
 	} {
-		client, user := scaleP03Join(t, f, spec.name, idgen.New("m2-user-")+"@example.test", spec.role, spec.teams...)
+		client, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("m2-user-")+"@example.test", spec.role, spec.teams...)
 		if spec.name == "admin" {
 			privateAdmin = client
 		}
-		principals = append(principals, scaleP21M2Principal{spec.name, user})
+		principals = append(principals, policyFixturePrincipal{spec.name, user})
 	}
 	issue := authRequest[domain.Issue](t, privateAdmin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "M2 private grant", "teamId": private}, f.data.Workspace.URLKey, http.StatusCreated)
 	authRequest[[]domain.IssuePermission](t, privateAdmin, http.MethodPut, f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": principals[3].user.ID, "role": "viewer"}}}, f.data.Workspace.URLKey, http.StatusOK)
@@ -77,18 +77,18 @@ func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unrelated := scaleP21M2UnrelatedHash(t, t.Context(), repo, f.data.Workspace.URLKey)
+	unrelated := unrelatedPolicyRowsHash(t, t.Context(), repo, f.data.Workspace.URLKey)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		if after := scaleP21M2UnrelatedHash(t, ctx, repo, f.data.Workspace.URLKey); after != unrelated {
+		if after := unrelatedPolicyRowsHash(t, ctx, repo, f.data.Workspace.URLKey); after != unrelated {
 			t.Error("unrelated canonical settings bytes changed")
 		}
 	})
-	return scaleP21M2Fixture{scaleP03PlatformFixture: f, probe: probe, principals: principals, public: public, testingT: t}
+	return policyDifferentialFixture{scalePlatformFixture: f, probe: probe, principals: principals, public: public, testingT: t}
 }
 
-func scaleP21M2UnrelatedHash(t *testing.T, ctx context.Context, repo *store.SQLiteStore, workspace string) [32]byte {
+func unrelatedPolicyRowsHash(t *testing.T, ctx context.Context, repo *store.SQLiteStore, workspace string) [32]byte {
 	t.Helper()
 	digest := sha256.New()
 	found := false
@@ -105,7 +105,7 @@ func scaleP21M2UnrelatedHash(t *testing.T, ctx context.Context, repo *store.SQLi
 	return [32]byte(digest.Sum(nil))
 }
 
-func (f scaleP21M2Fixture) request(user domain.User, key *domain.APIKey, body any) *http.Request {
+func (f policyDifferentialFixture) request(user domain.User, key *domain.APIKey, body any) *http.Request {
 	// Each pair resets the literal owner between phases. Reset the bounded
 	// view to that same installed preimage, including warm native values.
 	if err := f.probe.RefreshInstalledMetadataViewForTesting(context.Background(), f.repository, f.data.Workspace.URLKey); err != nil {
@@ -114,7 +114,7 @@ func (f scaleP21M2Fixture) request(user domain.User, key *domain.APIKey, body an
 	return f.literalRequest(user, key, body)
 }
 
-func (f scaleP21M2Fixture) literalRequest(user domain.User, key *domain.APIKey, body any) *http.Request {
+func (f policyDifferentialFixture) literalRequest(user domain.User, key *domain.APIKey, body any) *http.Request {
 	var raw []byte
 	if body != nil {
 		raw, _ = json.Marshal(body)
@@ -131,7 +131,7 @@ func (f scaleP21M2Fixture) literalRequest(user domain.User, key *domain.APIKey, 
 	return r.WithContext(ctx)
 }
 
-func (f scaleP21M2Fixture) matrix(t *testing.T, visit func(*testing.T, domain.User, *domain.APIKey)) {
+func (f policyDifferentialFixture) matrix(t *testing.T, visit func(*testing.T, domain.User, *domain.APIKey)) {
 	t.Helper()
 	for _, principal := range f.principals {
 		for _, credential := range []struct {
@@ -150,7 +150,7 @@ func (f scaleP21M2Fixture) matrix(t *testing.T, visit func(*testing.T, domain.Us
 
 // Only generated clocks and the invite link's random token are normalized.
 // Actor, role, reference, count, permission and collection shapes stay intact.
-func scaleP21M2JSON(t *testing.T, value any, invite bool) any {
+func normalizePolicyJSON(t *testing.T, value any, invite bool) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -188,7 +188,7 @@ func scaleP21M2JSON(t *testing.T, value any, invite bool) any {
 	return decoded
 }
 
-func scaleP21M2Response(t *testing.T, w *httptest.ResponseRecorder, invite bool) any {
+func policyDifferentialResponse(t *testing.T, w *httptest.ResponseRecorder, invite bool) any {
 	t.Helper()
 	if w.Body.Len() == 0 {
 		return nil
@@ -197,10 +197,10 @@ func scaleP21M2Response(t *testing.T, w *httptest.ResponseRecorder, invite bool)
 	if err := json.Unmarshal(w.Body.Bytes(), &value); err != nil {
 		t.Fatal(err)
 	}
-	return scaleP21M2JSON(t, value, invite)
+	return normalizePolicyJSON(t, value, invite)
 }
 
-func scaleP21M2Canonical(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
+func policyCanonicalRecords(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) any {
 	t.Helper()
 	batch, err := repo.ReadCanonicalRecords(t.Context(), workspace, keys, "detail")
 	if err != nil {
@@ -214,10 +214,10 @@ func scaleP21M2Canonical(t *testing.T, repo *store.SQLiteStore, workspace string
 		rows = append(rows, []any{item.Key, item.Missing, item.Data})
 	}
 	// Row versions are fingerprints of JSON that includes generated clocks.
-	return scaleP21M2JSON(t, rows, false)
+	return normalizePolicyJSON(t, rows, false)
 }
 
-func scaleP21M2Diff(before, after any) string {
+func policyFirstDifference(before, after any) string {
 	a, _ := json.Marshal(before)
 	b, _ := json.Marshal(after)
 	at := 0
@@ -228,12 +228,12 @@ func scaleP21M2Diff(before, after any) string {
 	return fmt.Sprintf("JSON byte %d: legacy=%s bounded=%s", at, a[min(start, len(a)):min(at+150, len(a))], b[min(start, len(b)):min(at+150, len(b))])
 }
 
-func TestScaleP21M2PolicyDifferential(t *testing.T) {
+func TestScalePolicyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		services := []*server{{store: repo}, {store: f.probe}}
 		unrelated, err := repo.ReadCanonicalRecords(t.Context(), workspace, []store.RecordKey{{Kind: "settings", ID: "m2-unrelated"}}, "summary")
@@ -286,15 +286,15 @@ func TestScaleP21M2PolicyDifferential(t *testing.T) {
 						r.SetPathValue("requestId", "m2-request")
 						w := httptest.NewRecorder()
 						operation.run(s, w, r)
-						responses = append(responses, []any{w.Code, scaleP21M2Response(t, w, operation.invite)})
+						responses = append(responses, []any{w.Code, policyDifferentialResponse(t, w, operation.invite)})
 						if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 							t.Fatal(err)
 						}
 						data, _ := repo.WorkspaceMetadata(workspace)
-						effects = append(effects, scaleP21M2JSON(t, []any{data.WorkspaceInviteLink, data.OAuthSyncGroupRequests, event.Type, event.AggregateID, event.Payload, event.PreviousValues, realtime.Payload}, operation.invite))
+						effects = append(effects, normalizePolicyJSON(t, []any{data.WorkspaceInviteLink, data.OAuthSyncGroupRequests, event.Type, event.AggregateID, event.Payload, event.PreviousValues, realtime.Payload}, operation.invite))
 					}
 					if !reflect.DeepEqual(responses[0], responses[1]) || !reflect.DeepEqual(effects[0], effects[1]) {
-						t.Fatalf("response: %s; effects: %s", scaleP21M2Diff(responses[0], responses[1]), scaleP21M2Diff(effects[0], effects[1]))
+						t.Fatalf("response: %s; effects: %s", policyFirstDifference(responses[0], responses[1]), policyFirstDifference(effects[0], effects[1]))
 					}
 				})
 			}
@@ -352,12 +352,12 @@ func TestScaleP21M2PolicyDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21M2SCIMProfileAndAudit(t *testing.T) {
+func TestScaleSCIMProfileAndAudit(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 		var effects []any
 		for _, service := range []*server{{store: repo}, {store: f.probe}} {
@@ -391,11 +391,11 @@ func TestScaleP21M2SCIMProfileAndAudit(t *testing.T) {
 			if data.UserSettings[userID].JobTitle != "After" || data.UserSettings[userID].Timezone != "UTC" {
 				t.Fatal("SCIM profile callback did not update the owned record")
 			}
-			effects = append(effects, scaleP21M2JSON(t, []any{scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: userID}), event.Type, event.Payload, event.PreviousValues, realtime.Payload}, false))
+			effects = append(effects, normalizePolicyJSON(t, []any{policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: userID}), event.Type, event.Payload, event.PreviousValues, realtime.Payload}, false))
 			service.recordSCIMAudit(f.request(f.data.Viewer, nil, nil), workspace, []scimAuditEntry{{action: "m2-profile", resourceType: "workspace_member", resourceID: userID}})
 		}
 		if !reflect.DeepEqual(effects[0], effects[1]) {
-			t.Fatalf("profile state/hooks changed: %s", scaleP21M2Diff(effects[0], effects[1]))
+			t.Fatalf("profile state/hooks changed: %s", policyFirstDifference(effects[0], effects[1]))
 		}
 		audits, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, store.AuditQuery{ResourceID: userID})
 		if err != nil {
@@ -405,7 +405,7 @@ func TestScaleP21M2SCIMProfileAndAudit(t *testing.T) {
 		for _, audit := range audits {
 			if audit.Action == "m2-profile" {
 				audit.ID, audit.CreatedAt, audit.Seq, audit.Hash = "", time.Time{}, 0, ""
-				recorded = append(recorded, scaleP21M2JSON(t, audit, false))
+				recorded = append(recorded, normalizePolicyJSON(t, audit, false))
 			}
 		}
 		if len(recorded) != 2 || !reflect.DeepEqual(recorded[0], recorded[1]) {
@@ -426,12 +426,12 @@ func TestScaleP21M2SCIMProfileAndAudit(t *testing.T) {
 	}
 }
 
-func TestScaleP21M2CredentialsAndUploadDifferential(t *testing.T) {
+func TestScaleCredentialsAndUploadDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		var results []any
 		for _, s := range []*server{{store: repo}, {store: f.probe}} {
 			var outcomes []any

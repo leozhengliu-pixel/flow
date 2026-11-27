@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW170Output struct {
+type chatHeadersOutput struct {
 	Error        string
 	FormError    string
 	PreviewError []string
@@ -28,7 +28,7 @@ type scaleP21SW170Output struct {
 	RequestScope *chatGroupRequestScope
 }
 
-func scaleP21SW170Call(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID string, record domain.ChatIntegrationRecord, prefix string, render bool, cards *[]map[string]any, statements ...*int) scaleP21SW170Output {
+func chatHeadersCall(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID string, record domain.ChatIntegrationRecord, prefix string, render bool, cards *[]map[string]any, statements ...*int) chatHeadersOutput {
 	t.Helper()
 	owned, closeOutput := beginMetadataOutputReads(ctx)
 	defer closeOutput()
@@ -45,7 +45,7 @@ func scaleP21SW170Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 	} else {
 		err = service.chatAuthorizedMutation(readContext, workspace, userID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata)
 	}
-	output := scaleP21SW170Output{Error: scaleP21ChatPointError(err)}
+	output := chatHeadersOutput{Error: scaleChatPointError(err)}
 	if err != nil {
 		if metadata.ViewerRole != "preexisting-destination" {
 			t.Fatal("refused chat header read changed its destination")
@@ -72,9 +72,9 @@ func scaleP21SW170Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 			command: chatInboundCommand{OpenID: identity.OpenID, MessageID: ""},
 			job:     domain.ChatJob{DedupKey: prefix + userID + "-form"},
 		}
-		output.FormError = scaleP21ChatPointError(service.chatDMNewIssueForm(owned, dm, "Header-preserving issue"))
+		output.FormError = scaleChatPointError(service.chatDMNewIssueForm(owned, dm, "Header-preserving issue"))
 		for _, ref := range []string{prefix + "project", prefix + "current-project", prefix + "old-project"} {
-			output.PreviewError = append(output.PreviewError, scaleP21ChatPointError(service.chatDMLinkPreview(owned, dm, chatDMLink{
+			output.PreviewError = append(output.PreviewError, scaleChatPointError(service.chatDMLinkPreview(owned, dm, chatDMLink{
 				Workspace: workspace, Kind: "project", Ref: ref,
 			})))
 		}
@@ -92,13 +92,13 @@ func scaleP21SW170Call(t *testing.T, source *store.SQLiteStore, ctx context.Cont
 	return output
 }
 
-func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
+func TestChatBootstrapHeadersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{70}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -182,13 +182,13 @@ func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
 		})
 		pair := func(t *testing.T, ctx context.Context, key, userID string, render bool) {
 			t.Helper()
-			var results []scaleP21SW170Output
+			var results []chatHeadersOutput
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				active = source
-				results = append(results, scaleP21SW170Call(t, source, ctx, key, userID, record, prefix, render, &cards))
+				results = append(results, chatHeadersCall(t, source, ctx, key, userID, record, prefix, render, &cards))
 			}
 			if !reflect.DeepEqual(results[0], results[1]) {
-				t.Fatal("chat header authorization/rendering differs", scaleP21M2Diff(results[0], results[1]))
+				t.Fatal("chat header authorization/rendering differs", policyFirstDifference(results[0], results[1]))
 			}
 		}
 		for _, records := range []string{"off", "on"} {
@@ -205,7 +205,7 @@ func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 						f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-							ctx := scaleP21ChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
+							ctx := scaleChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
 							pair(t, ctx, workspace, user.ID, true)
 						})
 					})
@@ -213,15 +213,15 @@ func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
 			})
 		}
 		t.Run("sql-and-rendered-branch-witness", func(t *testing.T) {
-			ctx := scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID)
-			var outputs []scaleP21SW170Output
+			ctx := scaleChatPointIdentity(t.Context(), f.data.Viewer.ID)
+			var outputs []chatHeadersOutput
 			var counts [2]int
 			for index, source := range []*store.SQLiteStore{repo, f.probe} {
 				active = source
-				outputs = append(outputs, scaleP21SW170Call(t, source, ctx, workspace, f.data.Viewer.ID, record, prefix, true, &cards, &counts[index]))
+				outputs = append(outputs, chatHeadersCall(t, source, ctx, workspace, f.data.Viewer.ID, record, prefix, true, &cards, &counts[index]))
 			}
 			if !reflect.DeepEqual(outputs[0], outputs[1]) {
-				t.Fatal("measured header rendering changed", scaleP21M2Diff(outputs[0], outputs[1]))
+				t.Fatal("measured header rendering changed", policyFirstDifference(outputs[0], outputs[1]))
 			}
 			got := outputs[1]
 			if got.Error != "" || got.FormError != "" || len(got.Cards) != 4 || got.Group.Requests == nil || got.RequestScope == nil ||
@@ -263,7 +263,7 @@ func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
 		// The probe deliberately retains the earlier generation. Opening a
 		// snapshot only after the write avoids write-lock upgrades and needs
 		// no second connection for an in-snapshot mutation.
-		ctx := scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID)
+		ctx := scaleChatPointIdentity(t.Context(), f.data.Viewer.ID)
 		snapshot, closeSnapshot, err := repo.BeginWorkspaceRead(ctx, workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -329,11 +329,11 @@ func TestScaleP21SW170ChatBootstrapHeadersDifferential(t *testing.T) {
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
-		pair(t, scaleP21ChatPointIdentity(t.Context(), member.ID), workspace, member.ID, false)
+		pair(t, scaleChatPointIdentity(t.Context(), member.ID), workspace, member.ID, false)
 
 		for _, state := range []string{"missing", "closed"} {
 			t.Run("owner="+state, func(t *testing.T) {
-				ctx := scaleP21ChatPointIdentity(t.Context(), f.data.Viewer.ID)
+				ctx := scaleChatPointIdentity(t.Context(), f.data.Viewer.ID)
 				if state == "closed" {
 					var closeOutput func()
 					ctx, closeOutput = beginMetadataOutputReads(ctx)

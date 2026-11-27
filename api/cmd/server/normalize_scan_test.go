@@ -9,12 +9,12 @@ import (
 
 // The differential normalizer runs over every outcome of every leg, and the
 // two regular expressions it applies dominated whole matrix tests. These
-// scanners replace exactly the matches of scaleP21TriageStamp
-// (\d{19}_[0-9a-z]{10}) and scaleP21TriageClock
+// scanners replace exactly the matches of scaleTriageStamp
+// (\d{19}_[0-9a-z]{10}) and scaleTriageClock
 // (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})), leftmost
 // first and non-overlapping, as ReplaceAllString/ReplaceAllStringFunc do.
 
-func scaleP21ScanDigits(text string, at, count int) bool {
+func scaleScanDigits(text string, at, count int) bool {
 	if at+count > len(text) {
 		return false
 	}
@@ -26,9 +26,9 @@ func scaleP21ScanDigits(text string, at, count int) bool {
 	return true
 }
 
-// scaleP21StampAt returns the end of a stamp match starting at at, or -1.
-func scaleP21StampAt(text string, at int) int {
-	if !scaleP21ScanDigits(text, at, 19) || at+30 > len(text) || text[at+19] != '_' {
+// scaleStampAt returns the end of a stamp match starting at at, or -1.
+func scaleStampAt(text string, at int) int {
+	if !scaleScanDigits(text, at, 19) || at+30 > len(text) || text[at+19] != '_' {
 		return -1
 	}
 	for _, b := range []byte(text[at+20 : at+30]) {
@@ -39,13 +39,13 @@ func scaleP21StampAt(text string, at int) int {
 	return at + 30
 }
 
-// scaleP21ClockAt returns the end of a clock match starting at at, or -1.
-func scaleP21ClockAt(text string, at int) int {
+// scaleClockAt returns the end of a clock match starting at at, or -1.
+func scaleClockAt(text string, at int) int {
 	for _, part := range []struct {
 		offset, digits int
 		separator      byte
 	}{{0, 4, '-'}, {5, 2, '-'}, {8, 2, 'T'}, {11, 2, ':'}, {14, 2, ':'}, {17, 2, 0}} {
-		if !scaleP21ScanDigits(text, at+part.offset, part.digits) {
+		if !scaleScanDigits(text, at+part.offset, part.digits) {
 			return -1
 		}
 		if part.separator != 0 && (at+part.offset+part.digits >= len(text) || text[at+part.offset+part.digits] != part.separator) {
@@ -62,14 +62,14 @@ func scaleP21ClockAt(text string, at int) int {
 	if end < len(text) && text[end] == 'Z' {
 		return end + 1
 	}
-	if end < len(text) && (text[end] == '+' || text[end] == '-') && scaleP21ScanDigits(text, end+1, 2) &&
-		end+3 < len(text) && text[end+3] == ':' && scaleP21ScanDigits(text, end+4, 2) {
+	if end < len(text) && (text[end] == '+' || text[end] == '-') && scaleScanDigits(text, end+1, 2) &&
+		end+3 < len(text) && text[end+3] == ':' && scaleScanDigits(text, end+4, 2) {
 		return end + 6
 	}
 	return -1
 }
 
-func scaleP21ReplaceScan(text string, match func(string, int) int, replace func(string) string) string {
+func scaleReplaceScan(text string, match func(string, int) int, replace func(string) string) string {
 	var out strings.Builder
 	last := 0
 	for at := 0; at < len(text); {
@@ -96,12 +96,12 @@ func scaleP21ReplaceScan(text string, match func(string, int) int, replace func(
 	return out.String()
 }
 
-func scaleP21NormalizeStampsAndClocks(text string, started time.Time) string {
-	text = scaleP21ReplaceScan(text, scaleP21StampAt, func(string) string { return "<stamp>" })
+func scaleNormalizeStampsAndClocks(text string, started time.Time) string {
+	text = scaleReplaceScan(text, scaleStampAt, func(string) string { return "<stamp>" })
 	// Daily buckets (UTC midnight) of the day the run started, or of the next
 	// day when the run crosses midnight, are the same bucket for both arms.
 	day := started.UTC().Truncate(24 * time.Hour)
-	return scaleP21ReplaceScan(text, scaleP21ClockAt, func(clock string) string {
+	return scaleReplaceScan(text, scaleClockAt, func(clock string) string {
 		at, err := time.Parse(time.RFC3339Nano, clock)
 		if err != nil {
 			return clock
@@ -116,11 +116,11 @@ func scaleP21NormalizeStampsAndClocks(text string, started time.Time) string {
 	})
 }
 
-func TestScaleP21NormalizeScanMatchesRegexp(t *testing.T) {
+func TestScaleNormalizeScanMatchesRegexp(t *testing.T) {
 	started := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	regexp := func(text string) string {
-		text = scaleP21TriageStamp.ReplaceAllString(text, "<stamp>")
-		return scaleP21TriageClock.ReplaceAllStringFunc(text, func(clock string) string {
+		text = scaleTriageStamp.ReplaceAllString(text, "<stamp>")
+		return scaleTriageClock.ReplaceAllStringFunc(text, func(clock string) string {
 			if at, err := time.Parse(time.RFC3339Nano, clock); err == nil && !at.Before(started) {
 				return "<now>"
 			}
@@ -141,7 +141,7 @@ func TestScaleP21NormalizeScanMatchesRegexp(t *testing.T) {
 		for range r.Intn(12) {
 			text.WriteString(pieces[r.Intn(len(pieces))])
 		}
-		if got, want := scaleP21NormalizeStampsAndClocks(text.String(), started), regexp(text.String()); got != want {
+		if got, want := scaleNormalizeStampsAndClocks(text.String(), started), regexp(text.String()); got != want {
 			t.Fatalf("normalizer scan differs for %q:\n got %q\nwant %q", text.String(), got, want)
 		}
 	}

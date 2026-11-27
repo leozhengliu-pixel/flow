@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP06EncodedReservationMatchesWire(t *testing.T) {
+func TestScaleEncodedReservationMatchesWire(t *testing.T) {
 	empty := collaborationSyncMessage{Type: "document.sync", DocumentID: "doc"}
 	rawEmpty, _ := json.Marshal(empty)
 	if collaborationSyncBytes(empty) != int64(len(rawEmpty)) {
@@ -27,16 +27,16 @@ func TestScaleP06EncodedReservationMatchesWire(t *testing.T) {
 	}
 }
 
-type p06DiscardSSE struct{ header http.Header }
+type discardSSE struct{ header http.Header }
 
-func (w *p06DiscardSSE) Header() http.Header            { return w.header }
-func (w *p06DiscardSSE) Write(data []byte) (int, error) { return len(data), nil }
-func (w *p06DiscardSSE) WriteHeader(int)                {}
-func (w *p06DiscardSSE) Flush()                         {}
+func (w *discardSSE) Header() http.Header            { return w.header }
+func (w *discardSSE) Write(data []byte) (int, error) { return len(data), nil }
+func (w *discardSSE) WriteHeader(int)                {}
+func (w *discardSSE) Flush()                         {}
 
-func TestScaleP06SharedSSEFramesStayChargedThroughFlush(t *testing.T) {
+func TestScaleSharedSSEFramesStayChargedThroughFlush(t *testing.T) {
 	budget := newRealtimeBudget()
-	w := &realtimeBudgetWriter{ResponseWriter: &p06DiscardSSE{header: http.Header{}}, budget: budget}
+	w := &realtimeBudgetWriter{ResponseWriter: &discardSSE{header: http.Header{}}, budget: budget}
 	event := domain.RealtimeEvent{ID: "shared", Type: "presence.updated", Payload: json.RawMessage(`{"data":"` + strings.Repeat("x", 64<<10) + `"}`)}
 	for range 2000 {
 		if !writeSSE(w, event, "") {

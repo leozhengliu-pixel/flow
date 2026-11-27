@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP03SmallReadFixture(t *testing.T, repo *store.SQLiteStore, scale int) scaleP03PlatformFixture {
+func scaleSmallReadFixture(t *testing.T, repo *store.SQLiteStore, scale int) scalePlatformFixture {
 	t.Helper()
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	// The five-second delivery sweep mutates workspace settings; keep request
 	// cost measurements independent of unrelated scheduled maintenance.
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
@@ -41,7 +41,7 @@ func scaleP03SmallReadFixture(t *testing.T, repo *store.SQLiteStore, scale int) 
 	return f
 }
 
-func scaleP03SmallReadRequest(f scaleP03PlatformFixture, path string) *http.Request {
+func scaleSmallReadRequest(f scalePlatformFixture, path string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	r.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
 	origin, _ := url.Parse(f.host.URL)
@@ -51,9 +51,9 @@ func scaleP03SmallReadRequest(f scaleP03PlatformFixture, path string) *http.Requ
 	return r
 }
 
-func scaleP03SQLStatements(t *testing.T, f scaleP03PlatformFixture, path string) (queries []string, resolves int) {
+func scaleSQLStatements(t *testing.T, f scalePlatformFixture, path string) (queries []string, resolves int) {
 	t.Helper()
-	r := scaleP03SmallReadRequest(f, path)
+	r := scaleSmallReadRequest(f, path)
 	var mu sync.Mutex
 	r = r.WithContext(store.WithSQLStatementObserver(r.Context(), func(query string) {
 		mu.Lock()
@@ -73,21 +73,21 @@ func scaleP03SQLStatements(t *testing.T, f scaleP03PlatformFixture, path string)
 
 // The timed region has no observer; statement counts use one separate request
 // through the same complete middleware chain and fixture.
-func scaleP03MeasureRequestCosts(t *testing.T) {
+func scaleMeasureRequestCosts(t *testing.T) {
 	for _, scale := range []int{1, 10} {
-		for driver, repo := range scaleP03ServerTestStores(t) {
+		for driver, repo := range scaleServerTestStores(t) {
 			t.Run(fmt.Sprintf("%s/body%d", driver, scale), func(t *testing.T) {
-				f := scaleP03SmallReadFixture(t, repo, scale)
+				f := scaleSmallReadFixture(t, repo, scale)
 				for _, mode := range []string{"off", "on"} {
 					t.Setenv("FLOW_RECORD_ACCESS", mode)
 					for _, path := range []string{"/api/projects/p03-target", "/api/initiatives/p03-initiative"} {
 						t.Run(mode+path, func(t *testing.T) {
-							queries, resolves := scaleP03SQLStatements(t, f, path)
+							queries, resolves := scaleSQLStatements(t, f, path)
 							var failure string
 							result := testing.Benchmark(func(b *testing.B) {
 								for range b.N {
 									w := httptest.NewRecorder()
-									f.host.Config.Handler.ServeHTTP(w, scaleP03SmallReadRequest(f, path))
+									f.host.Config.Handler.ServeHTTP(w, scaleSmallReadRequest(f, path))
 									if w.Code != http.StatusOK {
 										failure = fmt.Sprintf("GET %s: %d %s", path, w.Code, w.Body)
 										b.Fatal(failure)
@@ -109,13 +109,13 @@ func scaleP03MeasureRequestCosts(t *testing.T) {
 	}
 }
 
-func TestScaleP03RequestSQLBudget(t *testing.T) {
+func TestScaleRequestSQLBudget(t *testing.T) {
 	for _, scale := range []int{1, 10} {
-		for driver, repo := range scaleP03ServerTestStores(t) {
+		for driver, repo := range scaleServerTestStores(t) {
 			t.Run(fmt.Sprintf("%s/body%d", driver, scale), func(t *testing.T) {
-				f := scaleP03SmallReadFixture(t, repo, scale)
+				f := scaleSmallReadFixture(t, repo, scale)
 				t.Setenv("FLOW_RECORD_ACCESS", "off")
-				member, _ := scaleP03Join(t, f, "P03 cost member", fmt.Sprintf("p03-cost-%d@example.com", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
+				member, _ := resourceAccessScaleJoin(t, f, "P03 cost member", fmt.Sprintf("p03-cost-%d@example.com", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
 				for _, state := range []string{"canonical", "installed"} {
 					if state == "installed" {
 						if err := repo.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
@@ -130,9 +130,9 @@ func TestScaleP03RequestSQLBudget(t *testing.T) {
 						viewer.admin = client.http
 						for _, path := range []string{"/api/projects/p03-target", "/api/initiatives/p03-initiative"} {
 							t.Setenv("FLOW_RECORD_ACCESS", "off")
-							legacy, _ := scaleP03SQLStatements(t, viewer, path)
+							legacy, _ := scaleSQLStatements(t, viewer, path)
 							t.Setenv("FLOW_RECORD_ACCESS", "on")
-							enabled, resolves := scaleP03SQLStatements(t, viewer, path)
+							enabled, resolves := scaleSQLStatements(t, viewer, path)
 							t.Logf("principal=%s state=%s route=%s legacy_sql=%d on_sql=%d resolves=%d", client.name, state, path, len(legacy), len(enabled), resolves)
 							if resolves != 1 || len(enabled) > len(legacy)+1 {
 								t.Fatalf("state=%s route=%s: on SQL=%d, legacy=%d, resolves=%d; statements=%q", state, path, len(enabled), len(legacy), resolves, enabled)

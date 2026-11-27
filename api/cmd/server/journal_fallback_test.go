@@ -11,20 +11,20 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP12JournalFallbackKeepsDeliveryAndFreshPermissions(t *testing.T) {
+func TestScaleJournalFallbackKeepsDeliveryAndFreshPermissions(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
 	for _, mode := range []string{"", "off", "shadow", "on"} {
 		t.Run("unready-"+mode, func(t *testing.T) {
 			// A store opened without journal support also represents an enabled
 			// deployment whose journal initialization could not complete.
 			t.Setenv("FLOW_RECORD_JOURNAL", "off")
-			config := scaleP03DatabaseConfig(t)
+			config := platformDatabaseFixtureScaleDatabaseConfig(t)
 			writer, err := store.OpenDatabase(config)
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = writer.Close() })
-			f := newScaleP12Fixture(t, writer)
+			f := newScaleFixture(t, writer)
 			reader, err := store.OpenDatabase(config)
 			if err != nil {
 				t.Fatal(err)
@@ -51,7 +51,7 @@ func TestScaleP12JournalFallbackKeepsDeliveryAndFreshPermissions(t *testing.T) {
 				t.Fatal("realtime delivery with Sync V2 off used shared projection without a journal")
 			}
 			t.Setenv("FLOW_SYNC_V2", "on")
-			scaleP12EqualEvent(t, peer, request, event)
+			scaleEqualEvent(t, peer, request, event)
 			frame, handled, err := peer.sharedEventFrame(request, event)
 			defer frame.Close()
 			if err != nil || !handled || !frame.Visible() {

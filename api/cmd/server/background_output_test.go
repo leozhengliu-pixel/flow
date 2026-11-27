@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW0BackgroundOutputScope(t *testing.T) {
+func TestBackgroundOutputScope(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	ctx, close := beginMetadataOutputReads(ctx)
 	count := 0
@@ -50,12 +50,12 @@ func TestScaleP21SW0BackgroundOutputScope(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0WebhookChildOutputFailure(t *testing.T) {
+func TestWebhookChildOutputFailure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, project := f.data.Workspace.URLKey, idgen.New("child-output-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.child_output", "", nil, func(data *domain.Bootstrap) error {
 			data.ProjectUpdates[project] = []domain.ProjectUpdate{{ID: "child", ProjectID: project, Body: "Complete child"}}

@@ -306,7 +306,7 @@ func TestBoundedRolloutFastCatalogEqualsStepwise(t *testing.T) {
 		t.Fatal(err)
 	}
 	dump := func(path string, complete func(*SQLiteStore) error) (map[string][]string, time.Duration) {
-		scaleP21SW557CopyDatabase(t, seed, path)
+		copyDatabase(t, seed, path)
 		repo, err := OpenSQLite(path)
 		if err != nil {
 			t.Fatal(err)

@@ -12,17 +12,17 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW31UserDecodeProbe struct {
+type userDecodeProbe struct {
 	called bool
 	user   domain.User
 }
 
-func (p *scaleP21SW31UserDecodeProbe) UnmarshalJSON(raw []byte) error {
+func (p *userDecodeProbe) UnmarshalJSON(raw []byte) error {
 	p.called = true
 	return json.Unmarshal(raw, &p.user)
 }
 
-func scaleP21SW31NormalizerWork(t *testing.T) (*metadataLogicalNormalizer, context.Context, func()) {
+func normalizerWork(t *testing.T) (*metadataLogicalNormalizer, context.Context, func()) {
 	t.Helper()
 	store := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	ctx, releaseParent, err := store.admitMetadataWork(t.Context(), 194<<20)
@@ -34,7 +34,7 @@ func scaleP21SW31NormalizerWork(t *testing.T) (*metadataLogicalNormalizer, conte
 		releaseParent()
 		t.Fatal(err)
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		releaseOther()
 		releaseParent()
@@ -63,8 +63,8 @@ func scaleP21SW31NormalizerWork(t *testing.T) (*metadataLogicalNormalizer, conte
 	return n, ctx, close
 }
 
-func TestScaleP21SW31NormalizerLargeDependencyUsesParentCredit(t *testing.T) {
-	n, ctx, _ := scaleP21SW31NormalizerWork(t)
+func TestNormalizerLargeDependencyUsesParentCredit(t *testing.T) {
+	n, ctx, _ := normalizerWork(t)
 	const nameBytes = 8 << 20
 	raw, err := json.Marshal(domain.User{ID: "sw31-large-dependency", Name: strings.Repeat("x", nameBytes)})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestScaleP21SW31NormalizerLargeDependencyUsesParentCredit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var user scaleP21SW31UserDecodeProbe
+	var user userDecodeProbe
 	found, release, err := n.getAdmitted(ctx, "users", "large", &user)
 	if err != nil || !found || !user.called || len(user.user.Name) != nameBytes {
 		t.Fatalf("legal large dependency lost covered parent credit: found=%t decoded=%t err=%v", found, user.called, err)
@@ -95,8 +95,8 @@ func TestScaleP21SW31NormalizerLargeDependencyUsesParentCredit(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31NormalizerActualLargeUserDependency(t *testing.T) {
-	n, ctx, _ := scaleP21SW31NormalizerWork(t)
+func TestNormalizerActualLargeUserDependency(t *testing.T) {
+	n, ctx, _ := normalizerWork(t)
 	large := domain.User{ID: "sw31-actual-large-user", Name: strings.Repeat("z", 8<<20)}
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "sw31-normalizer-workspace"},
@@ -141,8 +141,8 @@ func TestScaleP21SW31NormalizerActualLargeUserDependency(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31NormalizerTypedDependencyNativeOffset(t *testing.T) {
-	n, ctx, _ := scaleP21SW31NormalizerWork(t)
+func TestNormalizerTypedDependencyNativeOffset(t *testing.T) {
+	n, ctx, _ := normalizerWork(t)
 	var data domain.Bootstrap
 	if err := json.Unmarshal([]byte(`{
 		"workspace":{"id":"sw31-offset-workspace"},
@@ -199,8 +199,8 @@ func TestScaleP21SW31NormalizerTypedDependencyNativeOffset(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31NormalizerDenseDependenciesRejectBeforeDecode(t *testing.T) {
-	n, ctx, _ := scaleP21SW31NormalizerWork(t)
+func TestNormalizerDenseDependenciesRejectBeforeDecode(t *testing.T) {
+	n, ctx, _ := normalizerWork(t)
 	raw, err := json.Marshal(domain.User{ID: "sw31-dense-dependency", Name: "directory", AppScopes: make([]string, 100000)})
 	if err != nil {
 		t.Fatal(err)
@@ -212,11 +212,11 @@ func TestScaleP21SW31NormalizerDenseDependenciesRejectBeforeDecode(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	outputs := make([]*scaleP21SW31UserDecodeProbe, 0, 16)
+	outputs := make([]*userDecodeProbe, 0, 16)
 	previous := n.work.total
 	rejected := false
 	for range 32 {
-		output := &scaleP21SW31UserDecodeProbe{}
+		output := &userDecodeProbe{}
 		found, release, err := n.getAdmitted(ctx, "users", "dense", output)
 		if err != nil {
 			if !errors.Is(err, ErrMetadataWorkBudget) || output.called || found {
@@ -242,8 +242,8 @@ func TestScaleP21SW31NormalizerDenseDependenciesRejectBeforeDecode(t *testing.T)
 	}
 }
 
-func TestScaleP21SW31NormalizerDependencyMissingAndCanceled(t *testing.T) {
-	n, ctx, _ := scaleP21SW31NormalizerWork(t)
+func TestNormalizerDependencyMissingAndCanceled(t *testing.T) {
+	n, ctx, _ := normalizerWork(t)
 	var output bool
 	found, release, err := n.getAdmitted(ctx, "seen", "absent", &output)
 	if err != nil || found || release == nil {

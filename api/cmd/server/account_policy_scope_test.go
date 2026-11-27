@@ -137,8 +137,8 @@ func TestAttachmentVisibilitySkipsWorkspacesOutsideThePolicy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW268Seed(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := attachmentVisibilitySeed(t, repo)
 		workspace := f.data.Workspace.URLKey
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace, f.other)
 		if err != nil {
@@ -154,8 +154,8 @@ func TestAttachmentVisibilitySkipsWorkspacesOutsideThePolicy(t *testing.T) {
 			visible := func(allowed map[string]bool) bool {
 				check := sessionPolicyChecker(func(_ context.Context, key, _ string) bool { return allowed[key] })
 				ctx := context.WithValue(t.Context(), sessionPolicyKey{}, check)
-				return service.attachmentVisible(ctx, account, member.ID, scaleP21SW268URL("issue-public")) ||
-					service.attachmentVisible(ctx, account, member.ID, scaleP21SW268URL("other-workspace"))
+				return service.attachmentVisible(ctx, account, member.ID, attachmentVisibilityURL("issue-public")) ||
+					service.attachmentVisible(ctx, account, member.ID, attachmentVisibilityURL("other-workspace"))
 			}
 			if !visible(map[string]bool{workspace: true, f.other: true}) {
 				t.Fatalf("%s: files of workspaces that pass the policy are not visible", name)
@@ -167,7 +167,7 @@ func TestAttachmentVisibilitySkipsWorkspacesOutsideThePolicy(t *testing.T) {
 				t.Fatalf("%s: denied workspaces are visible", name)
 			}
 			ctx := context.WithValue(t.Context(), sessionPolicyKey{}, sessionPolicyChecker(func(_ context.Context, key, _ string) bool { return key == f.other }))
-			if service.attachmentVisible(ctx, account, member.ID, scaleP21SW268URL("issue-public")) || !service.attachmentVisible(ctx, account, member.ID, scaleP21SW268URL("other-workspace")) {
+			if service.attachmentVisible(ctx, account, member.ID, attachmentVisibilityURL("issue-public")) || !service.attachmentVisible(ctx, account, member.ID, attachmentVisibilityURL("other-workspace")) {
 				t.Fatalf("%s: the policy of one workspace must not decide another's files", name)
 			}
 		}
@@ -178,8 +178,8 @@ func TestSessionPolicyAnswersMatchOnBoundedMetadata(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(store.WithColdWork(t.Context(), "workspace fixture"), workspace, "test.policy", "", nil, func(data *domain.Bootstrap) error {
 			data.WorkspaceSettings.DisableAdminBypass = true

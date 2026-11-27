@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW62PresenceJSON(t *testing.T, value any) any {
+func presenceJSON(t *testing.T, value any) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -48,13 +48,13 @@ func scaleP21SW62PresenceJSON(t *testing.T, value any) any {
 	return decoded
 }
 
-func TestScaleP21SW62PresenceDifferential(t *testing.T) {
+func TestPresenceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_PRESENCE_MINIMAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -179,20 +179,20 @@ func TestScaleP21SW62PresenceDifferential(t *testing.T) {
 							if route.method == http.MethodPost {
 								handler = (*server).updatePresence
 							}
-							scaleP21CallWithOutputOwner(service, w, r, handler)
+							scaleCallWithOutputOwner(service, w, r, handler)
 							var body any
 							if w.Body.Len() != 0 {
 								if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 									t.Fatal("presence response is not JSON", w.Code, err)
 								}
 							}
-							outputs = append(outputs, scaleP21SW62PresenceJSON(t, []any{w.Code, w.Header(), body, service.realtime.snapshotPresence(workspace)}))
+							outputs = append(outputs, presenceJSON(t, []any{w.Code, w.Header(), body, service.realtime.snapshotPresence(workspace)}))
 							if source.MetadataWorkUsedForTesting() != 0 {
 								t.Fatal("presence operation leaked owned document headers")
 							}
 						}
 						if !reflect.DeepEqual(outputs[0], outputs[1]) {
-							t.Fatalf("reload=%t presence differential: %s", reload, scaleP21M2Diff(outputs[0], outputs[1]))
+							t.Fatalf("reload=%t presence differential: %s", reload, policyFirstDifference(outputs[0], outputs[1]))
 						}
 					})
 				}
@@ -206,11 +206,11 @@ func TestScaleP21SW62PresenceDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21SW62PresenceJSON(t, roster)
+		before := presenceJSON(t, roster)
 		if _, err := service.pagedPresenceFor(r, data, query, roster); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(before, scaleP21SW62PresenceJSON(t, roster)) {
+		if !reflect.DeepEqual(before, presenceJSON(t, roster)) {
 			t.Fatal("presence projection mutated shared roster")
 		}
 		cancelled, cancel := context.WithCancel(r.Context())
@@ -220,7 +220,7 @@ func TestScaleP21SW62PresenceDifferential(t *testing.T) {
 		}
 		r.URL.RawQuery = url.Values{"documentId": {public}}.Encode()
 		w := httptest.NewRecorder()
-		scaleP21CallWithOutputOwner(service, w, r.WithContext(cancelled), (*server).listPresence)
+		scaleCallWithOutputOwner(service, w, r.WithContext(cancelled), (*server).listPresence)
 		if w.Code != http.StatusServiceUnavailable {
 			t.Fatal("presence read failure became permission denial or success", w.Code, w.Body.String())
 		}

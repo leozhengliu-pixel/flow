@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW71LegacyResourceCounts(t *testing.T) {
+func TestLegacyResourceCounts(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw71-counts-")
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
 	zeroAt := time.Time{}

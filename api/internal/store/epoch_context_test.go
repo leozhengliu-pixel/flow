@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestScaleP12LiveEventContextRejectsTheSoleHeldConnection(t *testing.T) {
+func TestScaleLiveEventContextRejectsTheSoleHeldConnection(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, fixture := range scaleP03Stores(t) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		s.db.SetMaxOpenConns(1)
 		ctx, release, err := s.BeginWorkspaceRead(t.Context(), fixture.data.Workspace.URLKey)
@@ -28,9 +28,9 @@ func TestScaleP12LiveEventContextRejectsTheSoleHeldConnection(t *testing.T) {
 	}
 }
 
-func TestScaleP12LiveEventContextWithoutJournalKeepsLegacySnapshot(t *testing.T) {
+func TestScaleLiveEventContextWithoutJournalKeepsLegacySnapshot(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	for _, fixture := range scaleP03Stores(t) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		s.db.SetMaxOpenConns(1)
 		ctx, release, err := s.BeginWorkspaceRead(t.Context(), fixture.data.Workspace.URLKey)

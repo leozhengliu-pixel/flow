@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW19GitLabInstalledSourceHold(t *testing.T) {
+func TestGitLabInstalledSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		for _, spec := range []struct {
 			name, provider, status string
@@ -94,12 +94,12 @@ func TestScaleP21SW19GitLabInstalledSourceHold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19GitLabAggregateSourceHold(t *testing.T) {
+func TestGitLabAggregateSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("sw19-gitlab-aggregate-")
 		reset := func() {
 			t.Helper()

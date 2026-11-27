@@ -32,30 +32,30 @@ import (
 // automation. Legacy, warm and SQL-reloaded runs must agree byte for byte
 // except generated IDs and clocks.
 
-var scaleP21IssueUpdateCollaboration = regexp.MustCompile(`collab_\d+_[0-9a-f]{16}`)
+var scaleIssueUpdateCollaboration = regexp.MustCompile(`collab_\d+_[0-9a-f]{16}`)
 
-type scaleP21IssueUpdateState struct {
-	scaleP21TeamMoveState
+type scaleIssueUpdateState struct {
+	scaleTeamMoveState
 	Collaboration [][]any
 }
 
-type scaleP21IssueUpdateOutcome struct {
+type scaleIssueUpdateOutcome struct {
 	Code                int
 	Body                json.RawMessage
-	State               scaleP21IssueUpdateState
+	State               scaleIssueUpdateState
 	Webhooks, Realtime  []json.RawMessage
 	Installed, Reloaded json.RawMessage
 }
 
-type scaleP21IssueUpdateFixture struct {
-	scaleP21TeamMoveFixture
+type scaleIssueUpdateFixture struct {
+	scaleTeamMoveFixture
 	former       domain.User
 	reloadOracle *store.SQLiteStore
 }
 
-type scaleP21IssueUpdateCase struct {
+type scaleIssueUpdateCase struct {
 	name string
-	opts scaleP21TeamMoveOptions
+	opts scaleTeamMoveOptions
 	// edit adjusts the moved issue after the team-move seed.
 	edit  func(*domain.Issue)
 	setup func(*testing.T)
@@ -66,14 +66,14 @@ type scaleP21IssueUpdateCase struct {
 	stop  bool
 	code  int
 	// check inspects the legacy outcome (every source equals it).
-	check func(*testing.T, scaleP21IssueUpdateOutcome)
+	check func(*testing.T, scaleIssueUpdateOutcome)
 }
 
-func scaleP21IssueUpdateSetup(t *testing.T) scaleP21IssueUpdateFixture {
+func scaleIssueUpdateSetup(t *testing.T) scaleIssueUpdateFixture {
 	t.Helper()
-	f := scaleP21IssueUpdateFixture{scaleP21TeamMoveFixture: scaleP21TeamMoveSetup(t)}
+	f := scaleIssueUpdateFixture{scaleTeamMoveFixture: scaleTeamMoveSetup(t)}
 	repo, workspace := f.repository, f.data.Workspace.URLKey
-	_, f.former = scaleP03Join(t, f.scaleP03PlatformFixture, "former-member", idgen.New("iu-former-")+"@example.test", "member", f.public)
+	_, f.former = resourceAccessScaleJoin(t, f.scalePlatformFixture, "former-member", idgen.New("iu-former-")+"@example.test", "member", f.public)
 	if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, f.former.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -103,17 +103,17 @@ func scaleP21IssueUpdateSetup(t *testing.T) scaleP21IssueUpdateFixture {
 	return f
 }
 
-func (f scaleP21IssueUpdateFixture) state(t *testing.T) scaleP21IssueUpdateState {
+func (f scaleIssueUpdateFixture) state(t *testing.T) scaleIssueUpdateState {
 	t.Helper()
-	return scaleP21IssueUpdateState{
-		scaleP21TeamMoveState: f.scaleP21TeamMoveFixture.state(t),
-		Collaboration:         f.rows(t, `SELECT document_id,update_id,client_id,update_data FROM document_collaboration_updates WHERE workspace_key=? ORDER BY document_id,update_id`, f.data.Workspace.URLKey),
+	return scaleIssueUpdateState{
+		scaleTeamMoveState: f.scaleTeamMoveFixture.state(t),
+		Collaboration:      f.rows(t, `SELECT document_id,update_id,client_id,update_data FROM document_collaboration_updates WHERE workspace_key=? ORDER BY document_id,update_id`, f.data.Workspace.URLKey),
 	}
 }
 
 // prepare seeds the team-move fixture, then the case's issue edit and setup.
-func (f scaleP21IssueUpdateFixture) prepare(test scaleP21IssueUpdateCase) func(*testing.T) {
-	seed := f.scaleP21TeamMoveFixture.prepare(test.opts)
+func (f scaleIssueUpdateFixture) prepare(test scaleIssueUpdateCase) func(*testing.T) {
+	seed := f.scaleTeamMoveFixture.prepare(test.opts)
 	return func(t *testing.T) {
 		seed(t)
 		repo, workspace := f.repository, f.data.Workspace.URLKey
@@ -139,7 +139,7 @@ func (f scaleP21IssueUpdateFixture) prepare(test scaleP21IssueUpdateCase) func(*
 
 // prepareTriageReset saves a complete case preimage so each source can restore
 // it without repeating the team, issue and action settings writes.
-func (f *scaleP21IssueUpdateFixture) prepareTriageReset(t *testing.T, prepare func(*testing.T)) {
+func (f *scaleIssueUpdateFixture) prepareTriageReset(t *testing.T, prepare func(*testing.T)) {
 	t.Helper()
 	oracle, err := store.OpenDatabase(f.reader.config)
 	if err != nil {
@@ -158,16 +158,16 @@ func (f *scaleP21IssueUpdateFixture) prepareTriageReset(t *testing.T, prepare fu
 	if f.baseline, err = json.Marshal(full); err != nil {
 		t.Fatal(err)
 	}
-	f.scaleP21TriageWriterFixture.prepare = f.resetTriageSideTables
+	f.scaleTriageWriterFixture.prepare = f.resetTriageSideTables
 }
 
-func (f scaleP21IssueUpdateFixture) resetTriageSideTables(t *testing.T) {
+func (f scaleIssueUpdateFixture) resetTriageSideTables(t *testing.T) {
 	t.Helper()
 	f.resetSequenceAndAliases(t)
 	f.exec(t, `DELETE FROM document_collaboration_updates WHERE workspace_key=?`, f.data.Workspace.URLKey)
 }
 
-func (f scaleP21IssueUpdateFixture) patch(service *server, user domain.User, key *domain.APIKey, id string, body any, cancelled bool) *httptest.ResponseRecorder {
+func (f scaleIssueUpdateFixture) patch(service *server, user domain.User, key *domain.APIKey, id string, body any, cancelled bool) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
 	r := httptest.NewRequest(http.MethodPatch, "/api/issue-records/"+id, bytes.NewReader(raw))
 	r.Header.Set("Content-Type", "application/json")
@@ -193,16 +193,16 @@ func (f scaleP21IssueUpdateFixture) patch(service *server, user domain.User, key
 	return w
 }
 
-func (f scaleP21IssueUpdateFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleP21IssueUpdateOutcome, time.Time) {
+func (f scaleIssueUpdateFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleIssueUpdateOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.reset(t, source)
-	got := scaleP21IssueUpdateOutcome{}
+	got := scaleIssueUpdateOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -210,7 +210,7 @@ func (f scaleP21IssueUpdateFixture) run(t *testing.T, source string, call func(*
 	realtime := func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -245,12 +245,12 @@ func (f scaleP21IssueUpdateFixture) run(t *testing.T, source string, call func(*
 	got.Reloaded = f.reloaded(t)
 	nul := strings.NewReplacer(`\u0000`, "")
 	if installed, reloaded := nul.Replace(string(got.Installed)), nul.Replace(string(got.Reloaded)); installed != reloaded {
-		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, reloaded))
+		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, policyFirstDifference(installed, reloaded))
 	}
 	return got, started
 }
 
-func (f scaleP21IssueUpdateFixture) reloaded(t *testing.T) json.RawMessage {
+func (f scaleIssueUpdateFixture) reloaded(t *testing.T) json.RawMessage {
 	t.Helper()
 	if oracle := f.reloadOracle; oracle != nil {
 		// Reuse the connection and force an actual SQL decode for every
@@ -279,24 +279,24 @@ func (f scaleP21IssueUpdateFixture) reloaded(t *testing.T) json.RawMessage {
 	return result
 }
 
-func scaleP21IssueUpdateNormalize(t *testing.T, value any, started time.Time) string {
+func scaleIssueUpdateNormalize(t *testing.T, value any, started time.Time) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Collaboration generations are generated IDs too.
-	raw = scaleP21IssueUpdateCollaboration.ReplaceAll(raw, []byte("collab_generated"))
-	return scaleP21TriageNormalize(t, json.RawMessage(raw), started)
+	raw = scaleIssueUpdateCollaboration.ReplaceAll(raw, []byte("collab_generated"))
+	return scaleTriageNormalize(t, json.RawMessage(raw), started)
 }
 
-// scaleP21IssueUpdateSorted orders concurrent publications by their
+// scaleIssueUpdateSorted orders concurrent publications by their
 // normalized envelope; each envelope is still compared byte for byte.
-func scaleP21IssueUpdateSorted(t *testing.T, items []json.RawMessage, started time.Time) []json.RawMessage {
+func scaleIssueUpdateSorted(t *testing.T, items []json.RawMessage, started time.Time) []json.RawMessage {
 	t.Helper()
 	var normalized []string
 	for _, item := range items {
-		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, item, started))
+		normalized = append(normalized, scaleIssueUpdateNormalize(t, item, started))
 	}
 	slices.Sort(normalized)
 	result := []json.RawMessage{}
@@ -306,46 +306,46 @@ func scaleP21IssueUpdateSorted(t *testing.T, items []json.RawMessage, started ti
 	return result
 }
 
-func (f scaleP21IssueUpdateFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21IssueUpdateOutcome {
+func (f scaleIssueUpdateFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleIssueUpdateOutcome {
 	t.Helper()
 	return f.differentialSources(t, name, []string{"legacy", "warm", "reloaded"}, call)
 }
 
-func (f scaleP21IssueUpdateFixture) differentialSources(t *testing.T, name string, sources []string, call func(*server) *httptest.ResponseRecorder) []scaleP21IssueUpdateOutcome {
+func (f scaleIssueUpdateFixture) differentialSources(t *testing.T, name string, sources []string, call func(*server) *httptest.ResponseRecorder) []scaleIssueUpdateOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21IssueUpdateOutcome
+	var outcomes []scaleIssueUpdateOutcome
 	for _, source := range sources {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, got, started))
+		normalized = append(normalized, scaleIssueUpdateNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
 			if dir := os.Getenv("FLOW_ISSUE_UPDATE_DUMP"); dir != "" {
 				_ = os.WriteFile(dir+"/legacy.json", []byte(normalized[0]), 0o600)
 				_ = os.WriteFile(dir+"/"+source+".json", []byte(normalized[len(normalized)-1]), 0o600)
 			}
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func (f scaleP21IssueUpdateFixture) runCases(t *testing.T, cases []scaleP21IssueUpdateCase) {
+func (f scaleIssueUpdateFixture) runCases(t *testing.T, cases []scaleIssueUpdateCase) {
 	t.Helper()
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			if test.issue == "" {
 				test.issue = f.triage.ID
 			}
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				return f.patch(service, test.user, test.key, test.issue, test.body, test.stop)
 			})
 			legacy := outcomes[0]
 			t.Logf("legacy status %d", legacy.Code)
 			if dir := os.Getenv("FLOW_ISSUE_UPDATE_DUMP"); dir != "" && legacy.Code >= 500 {
-				_ = os.WriteFile(dir+"/failed-"+test.name+".json", []byte(scaleP21IssueUpdateNormalize(t, legacy, time.Time{})), 0o600)
+				_ = os.WriteFile(dir+"/failed-"+test.name+".json", []byte(scaleIssueUpdateNormalize(t, legacy, time.Time{})), 0o600)
 			}
 			if test.code != 0 && legacy.Code != test.code {
 				t.Fatalf("legacy status %d, want %d: %s", legacy.Code, test.code, legacy.Body)
@@ -357,7 +357,7 @@ func (f scaleP21IssueUpdateFixture) runCases(t *testing.T, cases []scaleP21Issue
 				test.check(t, legacy)
 			}
 			if team, move := test.body["teamId"].(string); move && legacy.Code == http.StatusOK {
-				issue := scaleP21TeamMoveIssue(t, scaleP21TeamMoveOutcome{State: legacy.State.scaleP21TeamMoveState}, test.issue)
+				issue := scaleTeamMoveIssue(t, scaleTeamMoveOutcome{State: legacy.State.scaleTeamMoveState}, test.issue)
 				if issue.Team.ID != team || team != f.public && (len(issue.PreviousIdentifiers) == 0 || len(legacy.State.Aliases) == 0) {
 					t.Fatalf("legacy move: team %s previous %v aliases %v", issue.Team.ID, issue.PreviousIdentifiers, legacy.State.Aliases)
 				}
@@ -380,7 +380,7 @@ func (f scaleP21IssueUpdateFixture) runCases(t *testing.T, cases []scaleP21Issue
 	}
 }
 
-func scaleP21IssueUpdateNotifications(outcome scaleP21IssueUpdateOutcome) map[string]bool {
+func scaleIssueUpdateNotifications(outcome scaleIssueUpdateOutcome) map[string]bool {
 	recipients := map[string]bool{}
 	for _, row := range outcome.State.Content {
 		if row[0] != "notification" {
@@ -394,11 +394,11 @@ func scaleP21IssueUpdateNotifications(outcome scaleP21IssueUpdateOutcome) map[st
 	return recipients
 }
 
-func TestScaleP21IssueUpdateFieldsDifferential(t *testing.T) {
+func TestScaleIssueUpdateFieldsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member, guest, sub := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user, f.principals[4].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	subscribe := func(issue *domain.Issue) {
@@ -421,7 +421,7 @@ func TestScaleP21IssueUpdateFieldsDifferential(t *testing.T) {
 		raw, _ := json.Marshal(mentioningDocument("Editor ", ids...))
 		return string(raw)
 	}
-	f.runCases(t, []scaleP21IssueUpdateCase{
+	f.runCases(t, []scaleIssueUpdateCase{
 		{name: "plain-fields", edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"title": "Retitled", "priority": 2, "estimate": 5, "dueDate": "2026-12-01", "sortOrder": 7.5, "icon": "Bug"}},
 		{name: "plain-fields-member", edit: subscribe, user: member, code: http.StatusOK, body: map[string]any{"title": "Member edit", "priority": 1}},
@@ -454,7 +454,7 @@ func TestScaleP21IssueUpdateFieldsDifferential(t *testing.T) {
 		{name: "project-missing", user: owner, code: http.StatusForbidden, body: map[string]any{"projectId": "iu-missing-project"}},
 		{name: "project-selected-key-outside", user: owner, key: selected, code: http.StatusForbidden, body: map[string]any{"projectId": "triage-p-private"}},
 		{name: "project-selected-key-inside", user: owner, key: selected, code: 0, body: map[string]any{"projectId": "triage-p-public"}},
-		{name: "project-clear", opts: scaleP21TeamMoveOptions{project: "triage-p-public"}, user: owner, code: http.StatusOK, body: map[string]any{"projectId": ""}},
+		{name: "project-clear", opts: scaleTeamMoveOptions{project: "triage-p-public"}, user: owner, code: http.StatusOK, body: map[string]any{"projectId": ""}},
 		{name: "cycle-valid", edit: subscribe, user: member, code: http.StatusOK, body: map[string]any{"cycleId": "iu-cycle-public"}},
 		{name: "cycle-private-member", user: member, code: http.StatusForbidden, body: map[string]any{"cycleId": "iu-cycle-private"}},
 		{name: "cycle-private-admin-member", user: admin, code: 0, body: map[string]any{"cycleId": "iu-cycle-private"}},
@@ -475,11 +475,11 @@ func TestScaleP21IssueUpdateFieldsDifferential(t *testing.T) {
 	})
 }
 
-func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
+func TestScaleIssueUpdateTeamMoveDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member, guest, sub := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user, f.principals[4].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	subscribe := func(issue *domain.Issue) {
@@ -511,8 +511,8 @@ func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	breaches := func(want bool) func(*testing.T, scaleP21IssueUpdateOutcome) {
-		return func(t *testing.T, outcome scaleP21IssueUpdateOutcome) {
+	breaches := func(want bool) func(*testing.T, scaleIssueUpdateOutcome) {
+		return func(t *testing.T, outcome scaleIssueUpdateOutcome) {
 			found := false
 			for _, row := range outcome.State.Content {
 				found = found || row[0] == "activity" && strings.Contains(row[3].(string), `"issue.sla_breached"`)
@@ -522,19 +522,19 @@ func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
 			}
 		}
 	}
-	cases := []scaleP21IssueUpdateCase{
+	cases := []scaleIssueUpdateCase{
 		{name: "sla-destination-rule", edit: subscribe, setup: sla, user: owner, code: http.StatusOK, body: map[string]any{"teamId": "tm-parent"}, check: breaches(false)},
 		{name: "sla-same-team-breach", edit: subscribe, setup: sla, user: owner, code: http.StatusOK, body: map[string]any{"title": "Breached"}, check: breaches(true)},
-		{name: "parent-team-incompatible-project", opts: scaleP21TeamMoveOptions{project: "triage-p-public"}, edit: subscribe, user: owner, code: http.StatusOK,
+		{name: "parent-team-incompatible-project", opts: scaleTeamMoveOptions{project: "triage-p-public"}, edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-parent"}},
-		{name: "sub-team-compatible-project", opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: owner, code: http.StatusOK,
+		{name: "sub-team-compatible-project", opts: scaleTeamMoveOptions{project: "tm-p-cross"}, edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-sub"}},
 		{name: "team-without-settings-or-labels", edit: subscribe, user: owner, code: http.StatusOK, body: map[string]any{"teamId": "tm-bare"}},
-		{name: "triage-target-viewer-outside", opts: scaleP21TeamMoveOptions{triageTarget: true}, edit: subscribe, user: owner, code: http.StatusOK,
+		{name: "triage-target-viewer-outside", opts: scaleTeamMoveOptions{triageTarget: true}, edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-triage"}},
-		{name: "triage-target-viewer-on-team", opts: scaleP21TeamMoveOptions{triageTarget: true}, edit: subscribe, setup: onTriage, user: owner, code: http.StatusOK,
+		{name: "triage-target-viewer-on-team", opts: scaleTeamMoveOptions{triageTarget: true}, edit: subscribe, setup: onTriage, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-triage"}},
-		{name: "merged-update-activity", opts: scaleP21TeamMoveOptions{mergeAt: time.Now().UTC(), project: "triage-p-public"}, edit: subscribe, user: owner, code: http.StatusOK,
+		{name: "merged-update-activity", opts: scaleTeamMoveOptions{mergeAt: time.Now().UTC(), project: "triage-p-public"}, edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-parent"}},
 		{name: "move-with-state-labels-cycle", edit: subscribe, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-parent", "stateId": "tmp-started", "labelIds": []string{"tm-l-parent-bug", "tm-l-shared"}, "cycleId": "iu-cycle-parent", "title": "Moved and edited"}},
@@ -560,13 +560,13 @@ func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
 	// new team hear about it (checked on the legacy outcome above through
 	// the differential; here the private move excludes the outsiders).
 	t.Run("private-move-audience", func(t *testing.T) {
-		test := scaleP21IssueUpdateCase{name: "audience", edit: subscribe, user: admin, issue: f.triage.ID, body: map[string]any{"teamId": f.private}}
-		f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-		defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+		test := scaleIssueUpdateCase{name: "audience", edit: subscribe, user: admin, issue: f.triage.ID, body: map[string]any{"teamId": f.private}}
+		f.scaleTriageWriterFixture.prepare = f.prepare(test)
+		defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 		outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 			return f.patch(service, test.user, nil, test.issue, test.body, false)
 		})
-		recipients := scaleP21IssueUpdateNotifications(outcomes[0])
+		recipients := scaleIssueUpdateNotifications(outcomes[0])
 		if outcomes[0].Code != http.StatusOK || recipients[guest.ID] || recipients[f.former.ID] || !recipients[sub.ID] {
 			t.Fatalf("legacy private move audience %d %v", outcomes[0].Code, recipients)
 		}
@@ -576,13 +576,13 @@ func TestScaleP21IssueUpdateTeamMoveDifferential(t *testing.T) {
 // A CRDT snapshot keeps the bounded writer's coverage boundary: the write
 // is refused before any change, with a typed error. Cancellation writes
 // nothing in either mode.
-func TestScaleP21IssueUpdateStoreBoundaries(t *testing.T) {
+func TestScaleIssueUpdateStoreBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	state := mentioningCollaborationState(f.principals[2].user.ID)
-	f.runCases(t, []scaleP21IssueUpdateCase{
+	f.runCases(t, []scaleIssueUpdateCase{
 		{name: "content-state", user: f.data.Viewer, issue: f.triage.ID, body: map[string]any{"contentState": state}, code: http.StatusOK},
 	})
 	// A cancelled bounded move fails like the legacy one, writing nothing.
@@ -613,11 +613,11 @@ func TestScaleP21IssueUpdateStoreBoundaries(t *testing.T) {
 // The stale-close and archive automation passes an untyped payload: its
 // state change, activity and subscriber notifications, the closed issue's
 // project progress and the archive read the same closure as a typed update.
-func TestScaleP21IssueUpdateSchedulerDifferential(t *testing.T) {
+func TestScaleIssueUpdateSchedulerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member, guest := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user
 	old := time.Date(2026, 1, 5, 6, 7, 8, 0, time.UTC)
 	settings := func(stale bool) func(*testing.T) {
@@ -651,14 +651,14 @@ func TestScaleP21IssueUpdateSchedulerDifferential(t *testing.T) {
 		issue.SubscriberIDs = []string{owner.ID, admin.ID, member.ID, guest.ID, f.former.ID}
 		issue.Assignee = &member
 	}
-	for _, test := range []scaleP21IssueUpdateCase{
-		{name: "stale-close-and-archive", opts: scaleP21TeamMoveOptions{project: "triage-p-public"}, edit: stale, setup: settings(true)},
+	for _, test := range []scaleIssueUpdateCase{
+		{name: "stale-close-and-archive", opts: scaleTeamMoveOptions{project: "triage-p-public"}, edit: stale, setup: settings(true)},
 		{name: "archive-only", edit: stale, setup: settings(false)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.issue = f.triage.ID
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			now := time.Now().UTC()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()
@@ -673,7 +673,7 @@ func TestScaleP21IssueUpdateSchedulerDifferential(t *testing.T) {
 			if legacy.Code != http.StatusNoContent || len(legacy.State.Events) == 0 {
 				t.Fatalf("legacy automation %d events %d: %s", legacy.Code, len(legacy.State.Events), legacy.Body)
 			}
-			if test.name == "stale-close-and-archive" && len(scaleP21IssueUpdateNotifications(legacy)) == 0 {
+			if test.name == "stale-close-and-archive" && len(scaleIssueUpdateNotifications(legacy)) == 0 {
 				t.Fatal("legacy stale close notified nobody")
 			}
 		})
@@ -682,11 +682,11 @@ func TestScaleP21IssueUpdateSchedulerDifferential(t *testing.T) {
 
 // Concurrent updates of one issue serialize: each bounded outcome equals
 // one sequential legacy order.
-func TestScaleP21IssueUpdateConcurrentSameIssue(t *testing.T) {
+func TestScaleIssueUpdateConcurrentSameIssue(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, admin, member := f.data.Viewer, f.principals[1].user, f.principals[2].user
 	// The triage run after each response reads the issue as the other
 	// write left it; this test compares the writers alone.
@@ -698,11 +698,11 @@ func TestScaleP21IssueUpdateConcurrentSameIssue(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	test := scaleP21IssueUpdateCase{issue: f.triage.ID, opts: scaleP21TeamMoveOptions{project: "tm-p-cross"}, setup: triageOff, edit: func(issue *domain.Issue) {
+	test := scaleIssueUpdateCase{issue: f.triage.ID, opts: scaleTeamMoveOptions{project: "tm-p-cross"}, setup: triageOff, edit: func(issue *domain.Issue) {
 		issue.SubscriberIDs = []string{member.ID}
 	}}
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.prepare(test)
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.patch(service, owner, nil, f.triage.ID, map[string]any{"teamId": "tm-parent", "title": "Moved concurrently"}, false)
 	}
@@ -719,8 +719,8 @@ func TestScaleP21IssueUpdateConcurrentSameIssue(t *testing.T) {
 			}
 			return nil
 		})
-		got.Webhooks, got.Realtime = scaleP21IssueUpdateSorted(t, got.Webhooks, started), scaleP21IssueUpdateSorted(t, got.Realtime, started)
-		expected[scaleP21IssueUpdateNormalize(t, got, started)] = true
+		got.Webhooks, got.Realtime = scaleIssueUpdateSorted(t, got.Webhooks, started), scaleIssueUpdateSorted(t, got.Realtime, started)
+		expected[scaleIssueUpdateNormalize(t, got, started)] = true
 	}
 	for _, source := range []string{"warm", "reloaded"} {
 		for attempt := range 3 {
@@ -740,8 +740,8 @@ func TestScaleP21IssueUpdateConcurrentSameIssue(t *testing.T) {
 				}
 				return nil
 			})
-			got.Webhooks, got.Realtime = scaleP21IssueUpdateSorted(t, got.Webhooks, started), scaleP21IssueUpdateSorted(t, got.Realtime, started)
-			if state := scaleP21IssueUpdateNormalize(t, got, started); !expected[state] {
+			got.Webhooks, got.Realtime = scaleIssueUpdateSorted(t, got.Webhooks, started), scaleIssueUpdateSorted(t, got.Realtime, started)
+			if state := scaleIssueUpdateNormalize(t, got, started); !expected[state] {
 				if dir := os.Getenv("FLOW_ISSUE_UPDATE_DUMP"); dir != "" {
 					index := 0
 					for item := range expected {
@@ -759,11 +759,11 @@ func TestScaleP21IssueUpdateConcurrentSameIssue(t *testing.T) {
 // A workspace whose labels and documents are stored inline (duplicate
 // IDs): a move remaps labels by first match and re-derives every copy of
 // the attached documents' scope, persisting the inline fields exactly.
-func TestScaleP21IssueUpdateInlineCollections(t *testing.T) {
+func TestScaleIssueUpdateInlineCollections(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, member := f.data.Viewer, f.principals[2].user
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	inline := func(t *testing.T) {
@@ -790,7 +790,7 @@ func TestScaleP21IssueUpdateInlineCollections(t *testing.T) {
 			}
 		}
 	}
-	f.runCases(t, []scaleP21IssueUpdateCase{
+	f.runCases(t, []scaleIssueUpdateCase{
 		{name: "inline-move", edit: func(issue *domain.Issue) { issue.SubscriberIDs = []string{member.ID} }, setup: inline, user: owner, code: http.StatusOK,
 			body: map[string]any{"teamId": "tm-parent"}},
 		{name: "inline-plain", setup: inline, user: owner, code: http.StatusOK, body: map[string]any{"title": "Inline plain"}},
@@ -800,13 +800,13 @@ func TestScaleP21IssueUpdateInlineCollections(t *testing.T) {
 // Without authentication the destination checks read the complete
 // unprojected workspace: the bounded handler looks the IDs up in the
 // installed collections.
-func TestScaleP21IssueUpdateWithoutAuthDifferential(t *testing.T) {
+func TestScaleIssueUpdateWithoutAuthDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, member := f.data.Viewer, f.principals[2].user
-	for _, test := range []scaleP21IssueUpdateCase{
+	for _, test := range []scaleIssueUpdateCase{
 		{name: "private-project", body: map[string]any{"projectId": "triage-p-private"}, code: http.StatusOK},
 		{name: "missing-project", body: map[string]any{"projectId": "iu-missing-project"}, code: http.StatusForbidden},
 		{name: "private-cycle", body: map[string]any{"cycleId": "iu-cycle-private"}, code: http.StatusBadRequest},
@@ -819,8 +819,8 @@ func TestScaleP21IssueUpdateWithoutAuthDifferential(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.issue = f.triage.ID
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				service.authDisabled = true
 				return f.patch(service, owner, nil, test.issue, test.body, false)

@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW22Effects(t *testing.T, webhooks []domain.DomainEvent, realtime []domain.RealtimeEvent) any {
+func webhooksEffects(t *testing.T, webhooks []domain.DomainEvent, realtime []domain.RealtimeEvent) any {
 	t.Helper()
 	result := []any{}
 	for _, event := range webhooks {
@@ -24,21 +24,21 @@ func scaleP21SW22Effects(t *testing.T, webhooks []domain.DomainEvent, realtime [
 	for _, event := range realtime {
 		result = append(result, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
 	}
-	return scaleP21M2JSON(t, result, false)
+	return normalizePolicyJSON(t, result, false)
 }
 
-func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
+func TestApplicationWebhookDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	enableConnectorSecrets(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		app := scaleP21SW12Applications(t, repo, workspace, f.data.Viewer, "")
+		app := accessOAuthApplications(t, repo, workspace, f.data.Viewer, "")
 		app.WebhookURL, app.WebhookEnabled, app.WebhookSecretPrefix = "https://example.test/sw22", true, "before-prefix"
 		app.WebhookResourceTypes = nil
-		scaleP21SW12Reset(t, repo, workspace, app)
+		accessOauthReset(t, repo, workspace, app)
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "webhooks"), workspace, "webhook.updated", "", nil, func(data *domain.Bootstrap) error {
 			data.Webhooks = []domain.Webhook{
 				{ID: idgen.New("sw22-matching-"), ManagedBy: "application", ApplicationClientID: app.ClientID, Enabled: true, URL: "https://example.test/hook"},
@@ -52,15 +52,15 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		unrelated := scaleP21SW12OtherApplications(t, repo, workspace, app.ID)
-		hooks := scaleP21M3Fingerprint(t, repo, workspace, "webhooks")
+		unrelated := otherApplications(t, repo, workspace, app.ID)
+		hooks := pointRecordFingerprint(t, repo, workspace, "webhooks")
 		reset := func() {
 			t.Helper()
 			repo.SetWebhookSink(nil)
 			repo.SetRealtimeSink(nil)
 			f.probe.SetWebhookSink(nil)
 			f.probe.SetRealtimeSink(nil)
-			scaleP21SW12Reset(t, repo, workspace, app)
+			accessOauthReset(t, repo, workspace, app)
 			if err := repo.DeleteWebhookSigningSecret(t.Context(), store.ApplicationWebhookSecretRef(app.ClientID)); err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 								target += "-missing"
 							}
 							r.SetPathValue("id", target)
-							scaleP21M3Call(&server{store: source}, w, r, operation.handler)
+							callPointSettingsHandler(&server{store: source}, w, r, operation.handler)
 							if missing {
 								if w.Code != http.StatusNotFound {
 									t.Fatalf("missing application status=%d body=%s", w.Code, w.Body.String())
@@ -110,13 +110,13 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 								t.Fatal("read or missing application created a signing secret")
 							}
 							outcomes = append(outcomes, []any{
-								w.Code, scaleP21M3JSON(t, w.Body.Bytes()), signing,
-								scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "oauthApplications", ID: app.ID}, store.RecordKey{Kind: "users", ID: user.ID}),
-								scaleP21SW22Effects(t, webhooks, realtime),
+								w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes()), signing,
+								policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "oauthApplications", ID: app.ID}, store.RecordKey{Kind: "users", ID: user.ID}),
+								webhooksEffects(t, webhooks, realtime),
 							})
 						}
 						if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-							t.Fatalf("application webhook differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+							t.Fatalf("application webhook differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 						}
 					})
 				}
@@ -137,8 +137,8 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			large := app
 			large.Description = strings.Repeat("large target application ", 18000)
 			reset()
-			scaleP21SW12Reset(t, repo, workspace, large)
-			before := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+			accessOauthReset(t, repo, workspace, large)
+			before := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				r, w := f.request(f.data.Viewer, &domain.APIKey{ID: "sw22-read", Scopes: []string{"read"}}, nil), httptest.NewRecorder()
 				r.SetPathValue("id", app.ID)
@@ -150,7 +150,7 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", app.ID)
 			(&server{store: f.probe}).getApplicationWebhook(w, r)
-			if w.Code < 400 || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) || before != scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") {
+			if w.Code < 400 || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) || before != pointRecordFingerprint(t, repo, workspace, "oauthApplications") {
 				t.Fatal("large selected application was silently omitted or changed state", w.Code, w.Body.String())
 			}
 		})
@@ -166,7 +166,7 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			}
 		}
 		t.Run("ownership-cancellation-and-recovery", func(t *testing.T) {
-			before := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+			before := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", app.ID)
 			service := &server{store: f.probe}
@@ -181,7 +181,7 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			service.getApplicationWebhook(httptest.NewRecorder(), r.WithContext(ctx))
 			w = httptest.NewRecorder()
 			service.getApplicationWebhook(w, r)
-			if w.Code != http.StatusOK || before != scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") {
+			if w.Code != http.StatusOK || before != pointRecordFingerprint(t, repo, workspace, "oauthApplications") {
 				t.Fatal("owned return mutation, cancellation or recovery changed canonical application")
 			}
 		})
@@ -195,14 +195,14 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			r.Header.Set("X-Workspace-Key", foreign.Workspace.URLKey)
 			r.SetPathValue("workspaceKey", foreign.Workspace.URLKey)
 			r.SetPathValue("id", app.ID)
-			scaleP21M3Call(&server{store: source}, w, r, (*server).getApplicationWebhook)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).getApplicationWebhook)
 			if w.Code != http.StatusNotFound {
 				t.Fatal("application crossed its workspace binding", w.Code, w.Body.String())
 			}
 		}
 		requests := []*http.Request{}
 		member := f.principals[2].user
-		for _, credential := range scaleP21M3Credentials() {
+		for _, credential := range pointSettingsCredentialCases() {
 			r := f.request(member, credential.key, nil)
 			r.SetPathValue("id", app.ID)
 			requests = append(requests, r)
@@ -214,7 +214,7 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 			for _, r := range requests {
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).getApplicationWebhook)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).getApplicationWebhook)
 					if w.Code != http.StatusForbidden {
 						t.Fatal("queued/replayed webhook read retained revoked authority")
 					}
@@ -224,17 +224,17 @@ func TestScaleP21SW22ApplicationWebhookDifferential(t *testing.T) {
 		if _, signing, err := repo.WebhookSigningSecret(t.Context(), store.ApplicationWebhookSecretRef(app.ClientID)); err != nil || signing {
 			t.Fatal("revoked webhook read created a signing secret", err)
 		}
-		if unrelated != scaleP21SW12OtherApplications(t, repo, workspace, app.ID) || hooks != scaleP21M3Fingerprint(t, repo, workspace, "webhooks") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if unrelated != otherApplications(t, repo, workspace, app.ID) || hooks != pointRecordFingerprint(t, repo, workspace, "webhooks") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("webhook helpers changed unrelated application/hook rows or decoded full metadata")
 		}
 	}
 }
 
-func TestScaleP21SW22CodingArtifactWorkspaceDifferential(t *testing.T) {
+func TestCodingArtifactWorkspaceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		id := idgen.New("sw22-coding-")
 		previous := codingArtifacts
@@ -283,12 +283,12 @@ func TestScaleP21SW22CodingArtifactWorkspaceDifferential(t *testing.T) {
 					bound, session, ok := service.codingArtifactSession(w, r)
 					var response any
 					if w.Body.Len() > 0 {
-						response = scaleP21M3JSON(t, w.Body.Bytes())
+						response = normalizeSettingsPointJSON(t, w.Body.Bytes())
 					}
 					outcomes = append(outcomes, []any{w.Code, response, bound, session, ok, calls - before})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("%s artifact session differential: %s", spec.name, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("%s artifact session differential: %s", spec.name, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})

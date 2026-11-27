@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW198StreamStore(t *testing.T) *SQLiteStore {
+func streamStore(t *testing.T) *SQLiteStore {
 	t.Helper()
-	return scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+	return scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 }
 
-func TestScaleP21SW198SessionCanonicalFrames(t *testing.T) {
-	repo := scaleP21SW198StreamStore(t)
+func TestSessionCanonicalFrames(t *testing.T) {
+	repo := streamStore(t)
 	for _, raw := range []string{
 		`{"id":"session","messages":null}`,
 		`{"id":"session","messages":[]}`,
@@ -73,8 +73,8 @@ func TestScaleP21SW198SessionCanonicalFrames(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionStreamedOffload(t *testing.T) {
-	repo := scaleP21SW198StreamStore(t)
+func TestSessionStreamedOffload(t *testing.T) {
+	repo := streamStore(t)
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	cases := []domain.AgentSession{
 		{ID: "session", Messages: nil},
@@ -124,8 +124,8 @@ func TestScaleP21SW198SessionStreamedOffload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionMessageMerge(t *testing.T) {
-	repo := scaleP21SW198StreamStore(t)
+func TestSessionMessageMerge(t *testing.T) {
+	repo := streamStore(t)
 	large := strings.Repeat("unchanged user ", 170000)
 	for _, test := range []struct{ name, base, ours, theirs string }{
 		{"independent-fields", `[{"id":"m","content":"base","status":"streaming"}]`, `[{"id":"m","content":"base","status":""}]`, `[{"id":"m","content":"peer","status":"streaming"}]`},
@@ -164,7 +164,7 @@ func TestScaleP21SW198SessionMessageMerge(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionRowHookContract(t *testing.T) {
+func TestSessionRowHookContract(t *testing.T) {
 	if metadataSearchFieldSet["agentSessions"] {
 		t.Fatal("session search hook added; extend streamed session writer")
 	}
@@ -178,10 +178,10 @@ func TestScaleP21SW198SessionRowHookContract(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionFullFieldSmallRowRebase(t *testing.T) {
+func TestSessionFullFieldSmallRowRebase(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	first := domain.AgentSession{ID: "session", Title: "before", UpdatedAt: at}
 	duplicate := domain.AgentSession{ID: "session", Title: "later duplicate", UpdatedAt: at}
@@ -196,7 +196,7 @@ func TestScaleP21SW198SessionFullFieldSmallRowRebase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	scaleP09Put(t, tx, f.data.Workspace.URLKey, "agentSessions", "session", peer)
+	journalScalePut(t, tx, f.data.Workspace.URLKey, "agentSessions", "session", peer)
 	ctx := context.WithValue(t.Context(), agentSessionLifecycleWriteKey{}, true)
 	stamp := copyStamp{workspaceID: f.data.Workspace.ID}
 	left, err := captureMetadataLogicalSource(ctx, before, stamp)
@@ -261,9 +261,9 @@ func TestScaleP21SW198SessionFullFieldSmallRowRebase(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionRawAndLoadedEquality(t *testing.T) {
+func TestSessionRawAndLoadedEquality(t *testing.T) {
 	session := domain.AgentSession{ID: "session", Messages: []domain.AgentMessage{{ID: "user", Role: "user", Content: string([]byte{0xff})}}}
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {AgentSessions: []domain.AgentSession{session}}})
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {AgentSessions: []domain.AgentSession{session}}})
 	source, err := repo.retainMetadataLogicalSource(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -320,8 +320,8 @@ func TestScaleP21SW198SessionRawAndLoadedEquality(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionAggregateFrames(t *testing.T) {
-	repo := scaleP21SW198StreamStore(t)
+func TestSessionAggregateFrames(t *testing.T) {
+	repo := streamStore(t)
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	for _, test := range []struct {
 		name, body, raw string

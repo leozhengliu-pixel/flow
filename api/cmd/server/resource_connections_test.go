@@ -31,12 +31,12 @@ func resourceConnectionHandler(service *server, kind string) http.HandlerFunc {
 	}
 }
 
-func TestScaleP21ProjectConnectionDuringAPIKeyUse(t *testing.T) {
+func TestScaleProjectConnectionDuringAPIKeyUse(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		authRequest[domain.Project](t, f.admin, http.MethodPost, f.host.URL+"/api/projects", map[string]any{
 			"name": "Project connection", "teamIds": []string{f.data.Teams[0].ID},
@@ -134,12 +134,12 @@ func TestScaleP21ProjectConnectionDuringAPIKeyUse(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceConnectionsHTTPTable(t *testing.T) {
+func TestScaleResourceConnectionsHTTPTable(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("resource-connection-")
 		at := time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC)
 		private := ""
@@ -303,12 +303,12 @@ func TestScaleP21ResourceConnectionsHTTPTable(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceConnectionsEncodingLifetime(t *testing.T) {
+func TestScaleResourceConnectionsEncodingLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.connection_encoder", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = []domain.Document{{ID: idgen.New("connection-encoder-"), Title: "Owned", Content: strings.Repeat("full body ", 10000), Creator: data.Viewer, TeamIDs: []string{f.public}}}
 			return nil
@@ -327,7 +327,7 @@ func TestScaleP21ResourceConnectionsEncodingLifetime(t *testing.T) {
 					ctx, cancel := context.WithCancel(r.Context())
 					defer cancel()
 					r = r.WithContext(ctx)
-					w := &scaleP21ResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
+					w := &scaleResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
 					if exit == "canceled" {
 						w.err = ctx.Err
 					}
@@ -366,13 +366,13 @@ func TestScaleP21ResourceConnectionsEncodingLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceConnectionsSigningFallback(t *testing.T) {
+func TestScaleResourceConnectionsSigningFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "resource-connection-signing-fixture")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.connection_signing", "", nil, func(data *domain.Bootstrap) error {
 			body := "![before](/uploads/before.png) " + strings.Repeat("large legal body ", 10000) + " /uploads/after.png"
 			data.Projects = []domain.Project{{ID: "signing-project", Name: "/uploads/name.png", Description: body, TeamIDs: []string{f.public}, Resources: []domain.ProjectResource{{ID: "signing-resource", URL: "/uploads/resource.png"}}}}
@@ -417,12 +417,12 @@ func TestScaleP21ResourceConnectionsSigningFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceConnectionsSQLAndDevelopmentContext(t *testing.T) {
+func TestScaleResourceConnectionsSQLAndDevelopmentContext(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.connection_sql", "", nil, func(data *domain.Bootstrap) error {
 			data.Projects = []domain.Project{{ID: "sql-project", Name: "SQL project", TeamIDs: []string{f.public}, LabelIDs: []string{"sql-label"}}}
 			data.Documents = []domain.Document{{ID: "sql-document", Title: "SQL document", Content: "searchword", Creator: data.Viewer, TeamIDs: []string{f.public}}}

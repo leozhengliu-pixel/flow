@@ -20,51 +20,51 @@ import (
 // Generated ids (idgen stamps), timestamps and secrets differ between the two
 // runs of a pair; everything else must match byte for byte.
 var (
-	sw244GeneratedID = regexp.MustCompile(`[A-Za-z_-]*[0-9]{19}_[0-9a-z]{10}`)
-	sw244Timestamp   = regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+(Z|[+-][0-9:]+)`)
-	sw244ShareToken  = regexp.MustCompile(`issue_share_[A-Za-z0-9_-]+`)
+	issueWriteDifferentialGeneratedID = regexp.MustCompile(`[A-Za-z_-]*[0-9]{19}_[0-9a-z]{10}`)
+	issueWriteDifferentialTimestamp   = regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+(Z|[+-][0-9:]+)`)
+	issueWriteDifferentialShareToken  = regexp.MustCompile(`issue_share_[A-Za-z0-9_-]+`)
 	// Each pair runs after the previous runs: a state move takes the next
 	// position at the top of the column, and the shared release lists the
 	// complete run's issue before the scoped run adds its own.
-	sw244SortOrder     = regexp.MustCompile(`"sortOrder":-?[0-9.e+-]+`)
-	sw244RepeatedIssue = regexp.MustCompile(`"<issue>"(,"<issue>")+`)
+	sortOrder     = regexp.MustCompile(`"sortOrder":-?[0-9.e+-]+`)
+	repeatedIssue = regexp.MustCompile(`"<issue>"(,"<issue>")+`)
 )
 
-type sw244Principal struct {
+type issueWriteDifferentialPrincipal struct {
 	name    string
 	cookies []*http.Cookie
 	bearer  string
 }
 
-type sw244Variant struct {
+type issueWriteDifferentialVariant struct {
 	name string
 	seed func(data *domain.Bootstrap, issue *domain.Issue)
 }
 
-type sw244Pair struct {
+type issueWriteDifferentialPair struct {
 	old, new, oldIdentifier, newIdentifier string
 }
 
-func (p sw244Pair) normalize(raw string) string {
+func (p issueWriteDifferentialPair) normalize(raw string) string {
 	for _, from := range []string{p.old, p.new} {
 		raw = strings.ReplaceAll(raw, from, "<issue>")
 	}
 	for _, from := range []string{p.oldIdentifier, p.newIdentifier} {
 		raw = strings.ReplaceAll(raw, from, "<identifier>")
 	}
-	raw = sw244GeneratedID.ReplaceAllString(raw, "<generated>")
-	raw = sw244ShareToken.ReplaceAllString(raw, "<share-token>")
-	raw = sw244SortOrder.ReplaceAllString(raw, `"sortOrder":<position>`)
-	raw = sw244RepeatedIssue.ReplaceAllString(raw, `"<issue>"`)
-	return sw244Timestamp.ReplaceAllString(raw, "<time>")
+	raw = issueWriteDifferentialGeneratedID.ReplaceAllString(raw, "<generated>")
+	raw = issueWriteDifferentialShareToken.ReplaceAllString(raw, "<share-token>")
+	raw = sortOrder.ReplaceAllString(raw, `"sortOrder":<position>`)
+	raw = repeatedIssue.ReplaceAllString(raw, `"<issue>"`)
+	return issueWriteDifferentialTimestamp.ReplaceAllString(raw, "<time>")
 }
 
-// TestScaleP21SW244IssueWriteDifferential compares the scoped single-issue
+// TestIssueWriteDifferential compares the scoped single-issue
 // write reads with the complete reads they replace (completeIssueWriteReads)
 // on the same routes, principals and issue shapes: status, response body,
 // the stored issue row, its comments, its domain events and the
 // notifications it produced.
-func TestScaleP21SW244IssueWriteDifferential(t *testing.T) {
+func TestIssueWriteDifferential(t *testing.T) {
 	for _, mode := range []struct {
 		name               string
 		hydration, journal string
@@ -80,16 +80,16 @@ func TestScaleP21SW244IssueWriteDifferential(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", mode.hydration)
 			t.Setenv("FLOW_RECORD_JOURNAL", mode.journal)
-			for driver, repo := range scaleP03ServerTestStores(t) {
-				t.Run(driver, func(t *testing.T) { sw244Differential(t, repo, mode.bounded) })
+			for driver, repo := range scaleServerTestStores(t) {
+				t.Run(driver, func(t *testing.T) { issueWriteDifferentialDifferential(t, repo, mode.bounded) })
 			}
 		})
 	}
 }
 
-func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
+func issueWriteDifferentialDifferential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	t.Cleanup(func() { completeIssueWriteReads.Store(false) })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	repo.SetWebhookSink(func(string, domain.DomainEvent) {})
 	workspace, owner := f.data.Workspace.URLKey, f.data.Viewer
 	public := f.data.Teams[0]
@@ -128,7 +128,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	principals := []sw244Principal{{name: "owner", cookies: f.admin.Jar.Cookies(origin)}}
+	principals := []issueWriteDifferentialPrincipal{{name: "owner", cookies: f.admin.Jar.Cookies(origin)}}
 	users := map[string]domain.User{}
 	for _, spec := range []struct {
 		name, role string
@@ -140,8 +140,8 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 		{"private-member", "member", []string{private.ID}},
 		{"inherited-grant", "member", []string{public.ID}},
 	} {
-		client, user := scaleP03Join(t, f, spec.name, idgen.New("sw244-user-")+"@example.test", spec.role, spec.teams...)
-		principals = append(principals, sw244Principal{name: spec.name, cookies: client.Jar.Cookies(origin)})
+		client, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("sw244-user-")+"@example.test", spec.role, spec.teams...)
+		principals = append(principals, issueWriteDifferentialPrincipal{name: spec.name, cookies: client.Jar.Cookies(origin)})
 		users[spec.name] = user
 	}
 	type created struct {
@@ -156,8 +156,8 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 		return authRequest[created](t, f.admin, http.MethodPost, f.host.URL+"/api/api-keys", input, workspace, http.StatusCreated)
 	}
 	principals = append(principals,
-		sw244Principal{name: "selected-team-key", bearer: key("selected", []string{public.ID}).Secret},
-		sw244Principal{name: "excluded-team-key", bearer: key("excluded", []string{private.ID}).Secret},
+		issueWriteDifferentialPrincipal{name: "selected-team-key", bearer: key("selected", []string{public.ID}).Secret},
+		issueWriteDifferentialPrincipal{name: "excluded-team-key", bearer: key("excluded", []string{private.ID}).Secret},
 	)
 	revoked := key("revoked", nil)
 	request, _ := http.NewRequest(http.MethodDelete, f.host.URL+"/api/api-keys/"+revoked.Key.ID, nil)
@@ -167,10 +167,10 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	} else {
 		_ = response.Body.Close()
 	}
-	principals = append(principals, sw244Principal{name: "revoked-key", bearer: revoked.Secret})
+	principals = append(principals, issueWriteDifferentialPrincipal{name: "revoked-key", bearer: revoked.Secret})
 
 	granted := users["inherited-grant"].ID
-	variants := []sw244Variant{
+	variants := []issueWriteDifferentialVariant{
 		{"public", func(*domain.Bootstrap, *domain.Issue) {}},
 		{"private-child", func(data *domain.Bootstrap, issue *domain.Issue) {
 			// The parent's grant reaches the child.
@@ -183,7 +183,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 		{"archived-team", func(_ *domain.Bootstrap, issue *domain.Issue) { issue.Team = closed }},
 		{"missing", nil},
 	}
-	routes := []sw244Route{
+	routes := []issueWriteScopeBudgetRoute{
 		{name: "comment", method: "POST", tail: "/comments", body: `{"body":"A plain comment"}`},
 		{name: "priority", method: "PATCH", body: `{"priority":2}`},
 		{name: "state", method: "PATCH", body: fmt.Sprintf(`{"stateId":%q}`, stateID)},
@@ -212,7 +212,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	}
 
 	// Seed one issue per run: the pair differs only in ids and identifiers.
-	pairs := map[string]sw244Pair{}
+	pairs := map[string]issueWriteDifferentialPair{}
 	number := 1000
 	err = repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw244_differential_issues", "", nil, func(data *domain.Bootstrap) error {
 		for _, variant := range variants {
@@ -220,7 +220,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 				for _, principal := range principals {
 					number++
 					name := variant.name + "/" + route.name + "/" + principal.name
-					pair := sw244Pair{old: idgen.New("sw244-a-"), oldIdentifier: fmt.Sprintf("SWA-%d", number), newIdentifier: fmt.Sprintf("SWB-%d", number)}
+					pair := issueWriteDifferentialPair{old: idgen.New("sw244-a-"), oldIdentifier: fmt.Sprintf("SWA-%d", number), newIdentifier: fmt.Sprintf("SWB-%d", number)}
 					pair.new = "sw244-b-" + strings.TrimPrefix(pair.old, "sw244-a-")
 					pairs[name] = pair
 					if variant.seed == nil {
@@ -254,7 +254,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 		handler = newHandler(&server{store: view, uploadPath: t.TempDir()})
 	}
 
-	observe := func(pair sw244Pair, id string, principal sw244Principal, route sw244Route) string {
+	observe := func(pair issueWriteDifferentialPair, id string, principal issueWriteDifferentialPrincipal, route issueWriteScopeBudgetRoute) string {
 		tail := strings.NewReplacer("@comment", id+"-comment", "@link", id+"-link").Replace(route.tail)
 		body := strings.ReplaceAll(route.body, "@target", id+"-target")
 		r := httptest.NewRequest(route.method, "/api/issues/"+id+tail, strings.NewReader(body))
@@ -273,22 +273,22 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 		handler.ServeHTTP(w, r)
 		parts := []string{fmt.Sprintf("status=%d", w.Code), "body=" + w.Body.String()}
 		row, rowErr := repo.IssueRecord(t.Context(), workspace, id)
-		parts = append(parts, fmt.Sprintf("row=%s err=%v", sw244JSON(t, row), rowErr != nil))
+		parts = append(parts, fmt.Sprintf("row=%s err=%v", issueWriteDifferentialJSON(t, row), rowErr != nil))
 		comments, _, commentErr := repo.ResourceCommentsPage(t.Context(), workspace, id, "", 100)
-		parts = append(parts, fmt.Sprintf("comments=%s err=%v", sw244JSON(t, comments), commentErr != nil))
+		parts = append(parts, fmt.Sprintf("comments=%s err=%v", issueWriteDifferentialJSON(t, comments), commentErr != nil))
 		events, eventErr := repo.Events(t.Context(), id)
 		eventView := []any{}
 		for _, event := range events {
 			eventView = append(eventView, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues})
 		}
-		parts = append(parts, fmt.Sprintf("events=%s err=%v", sw244JSON(t, eventView), eventErr != nil))
+		parts = append(parts, fmt.Sprintf("events=%s err=%v", issueWriteDifferentialJSON(t, eventView), eventErr != nil))
 		for _, recipient := range append([]string{owner.ID}, users["member"].ID) {
 			page, err := repo.QueryNotifications(t.Context(), store.NotificationQuery{Workspace: workspace, UserID: recipient, Limit: 200, IncludeArchived: true, SkipUnreadCount: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			mine := slices.DeleteFunc(page.Notifications, func(item domain.Notification) bool { return item.IssueID != id })
-			parts = append(parts, "notifications="+sw244JSON(t, mine))
+			parts = append(parts, "notifications="+issueWriteDifferentialJSON(t, mine))
 		}
 		return pair.normalize(strings.Join(parts, "\n"))
 	}
@@ -304,7 +304,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 				completeIssueWriteReads.Store(false)
 				after := observe(pair, pair.new, principal, route)
 				if before != after {
-					t.Errorf("%s: scoped reads changed the outcome\n%s", name, sw244FirstDifference(before, after))
+					t.Errorf("%s: scoped reads changed the outcome\n%s", name, issueWriteDifferentialFirstDifference(before, after))
 				}
 				compared++
 				if strings.HasPrefix(before, "status=2") {
@@ -319,7 +319,7 @@ func sw244Differential(t *testing.T, repo *store.SQLiteStore, bounded bool) {
 	}
 }
 
-func sw244FirstDifference(before, after string) string {
+func issueWriteDifferentialFirstDifference(before, after string) string {
 	left, right := strings.Split(before, "\n"), strings.Split(after, "\n")
 	for index := range max(len(left), len(right)) {
 		var a, b string
@@ -342,7 +342,7 @@ func sw244FirstDifference(before, after string) string {
 	return ""
 }
 
-func sw244JSON(t *testing.T, value any) string {
+func issueWriteDifferentialJSON(t *testing.T, value any) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {

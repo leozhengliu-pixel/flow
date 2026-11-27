@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21DirectoryJSON(t *testing.T, value any) string {
+func scaleDirectoryJSON(t *testing.T, value any) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -23,11 +23,11 @@ func scaleP21DirectoryJSON(t *testing.T, value any) string {
 	return string(raw)
 }
 
-func TestScaleP21DocumentDirectorySourcesOrdinalsAndSearch(t *testing.T) {
+func TestScaleDocumentDirectorySourcesOrdinalsAndSearch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-directory-")
 	at := time.Date(2025, 3, 4, 5, 6, 7, 8, time.FixedZone("directory", 8*3600))
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -97,7 +97,7 @@ func TestScaleP21DocumentDirectorySourcesOrdinalsAndSearch(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if scaleP21DirectoryJSON(t, want) != scaleP21DirectoryJSON(t, value.Document) || value.RevisionError != nil {
+				if scaleDirectoryJSON(t, want) != scaleDirectoryJSON(t, value.Document) || value.RevisionError != nil {
 					t.Fatal("complete occurrence differs from literal source", value.RevisionError)
 				}
 				if view.MetadataWorkUsedForTesting() <= base {
@@ -111,7 +111,7 @@ func TestScaleP21DocumentDirectorySourcesOrdinalsAndSearch(t *testing.T) {
 					t.Fatal("document admission was not released between occurrences")
 				}
 				again, err := read.Load(t.Context(), entry.Ordinal)
-				if err != nil || scaleP21DirectoryJSON(t, again.Document) != scaleP21DirectoryJSON(t, want) {
+				if err != nil || scaleDirectoryJSON(t, again.Document) != scaleDirectoryJSON(t, want) {
 					t.Fatal("mutable output escaped into the immutable directory source", err)
 				}
 				again.Close()
@@ -125,11 +125,11 @@ func TestScaleP21DocumentDirectorySourcesOrdinalsAndSearch(t *testing.T) {
 	}
 }
 
-func TestScaleP21DocumentDirectoryBodyGrowthAndFailure(t *testing.T) {
+func TestScaleDocumentDirectoryBodyGrowthAndFailure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-directory-growth-")
 	held := 0
 	for _, size := range []int{16 << 10, 160 << 10} {
@@ -189,13 +189,13 @@ func TestScaleP21DocumentDirectoryBodyGrowthAndFailure(t *testing.T) {
 	}
 }
 
-func TestScaleP21DocumentDirectoryRevisionBodies(t *testing.T) {
+func TestScaleDocumentDirectoryRevisionBodies(t *testing.T) {
 	for _, mode := range []string{"large", "missing", "invalid-json", "bad-gzip", "empty-key", "cache"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, target := f.data.Workspace.URLKey, idgen.New("p21-directory-revisions-")
 			key := target + "-body"
 			if mode == "empty-key" {
@@ -248,7 +248,7 @@ func TestScaleP21DocumentDirectoryRevisionBodies(t *testing.T) {
 				t.Fatal(err)
 			}
 			legacyErr := f.LoadDocumentRevisionBodies(t.Context(), workspace, wantDoc.Revisions)
-			if scaleP21DirectoryJSON(t, wantDoc) != scaleP21DirectoryJSON(t, value.Document) || (legacyErr == nil) != (value.RevisionError == nil) {
+			if scaleDirectoryJSON(t, wantDoc) != scaleDirectoryJSON(t, value.Document) || (legacyErr == nil) != (value.RevisionError == nil) {
 				t.Fatalf("revision behavior differs: literal=%v bounded=%v", legacyErr, value.RevisionError)
 			}
 			if mode == "large" && view.MetadataWorkUsedForTesting() <= base+len(body)*16 {
@@ -275,11 +275,11 @@ func TestScaleP21DocumentDirectoryRevisionBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21DocumentDirectoryBorrowedSnapshotAndRevocation(t *testing.T) {
+func TestScaleDocumentDirectoryBorrowedSnapshotAndRevocation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("p21-directory-snapshot-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_snapshot", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = []domain.Document{{ID: target, Title: "Original", Creator: data.Viewer}}

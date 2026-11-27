@@ -18,24 +18,24 @@ import (
 // An instrumented browser appends a line after state installation, not in its
 // EventSource callback: {eventId,clientId,appliedAt:RFC3339Nano}. Clocks must
 // share the API host's wall clock. Partial trailing lines wait for the next poll.
-type scaleP01BrowserLog struct {
+type scaleBrowserLog struct {
 	path   string
 	offset int64
 }
 
-func TestScaleP01BrowserAcknowledgements(t *testing.T) {
+func TestScaleBrowserAcknowledgements(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "acks.jsonl")
 	now := time.Now().UTC()
-	ledger := newScaleP01Ledger()
-	ledger.commit(store.ScaleP01Commit{ID: "browser-event", At: now}, "document", []bool{true, true})
-	raw, err := json.Marshal(scaleP01Ack{"browser-event", 0, now.Add(time.Second)})
+	ledger := newScaleLedger()
+	ledger.commit(store.ScaleCommit{ID: "browser-event", At: now}, "document", []bool{true, true})
+	raw, err := json.Marshal(scaleAck{"browser-event", 0, now.Add(time.Second)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	log := scaleP01BrowserLog{path: path}
+	log := scaleBrowserLog{path: path}
 	if err := log.poll(ledger); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestScaleP01BrowserAcknowledgements(t *testing.T) {
 	}
 }
 
-func (log *scaleP01BrowserLog) poll(ledger *scaleP01Ledger) error {
+func (log *scaleBrowserLog) poll(ledger *scaleLedger) error {
 	if log.path == "" {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (log *scaleP01BrowserLog) poll(ledger *scaleP01Ledger) error {
 		if err != nil {
 			return errors.New("browser acknowledgement line exceeds 4096 bytes or cannot be read")
 		}
-		var ack scaleP01Ack
+		var ack scaleAck
 		if err := json.Unmarshal(line, &ack); err != nil {
 			return errors.New("invalid browser acknowledgement JSON")
 		}

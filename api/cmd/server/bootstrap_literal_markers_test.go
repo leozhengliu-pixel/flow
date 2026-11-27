@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW151BootstrapDerivedLiteralMarker(t *testing.T) {
+func TestBootstrapDerivedLiteralMarker(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	literal := "Keep \x00flow-p21-bootstrap-body:" + strings.Repeat("a", 32) + ":7 as ordinary text"
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW145Seed(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := issueBootstrapRoutesSeed(t, repo)
 		restore := store.ForceFullMutationsForTesting(true)
 		err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw151_seed", "", nil, func(data *domain.Bootstrap) error {
 			for index := range data.Loops {
@@ -39,12 +39,12 @@ func TestScaleP21SW151BootstrapDerivedLiteralMarker(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, signed := range []bool{false, true} {
-			test := scaleP21SW145Case{
+			test := issueBootstrapRoutesCase{
 				workspace: f.data.Workspace.URLKey, development: true,
 				status: http.StatusOK, spool: 4 << 20, signed: signed,
 			}
-			old, _ := scaleP21SW145Serve(t, f, repo, test)
-			bounded, _ := scaleP21SW145Serve(t, f, view, test)
+			old, _ := issueBootstrapRoutesServe(t, f, repo, test)
+			bounded, _ := issueBootstrapRoutesServe(t, f, view, test)
 			if old.status != http.StatusOK || bounded.status != old.status ||
 				!reflect.DeepEqual(old.header, bounded.header) || !bytes.Equal(old.body, bounded.body) {
 				t.Fatal("literal instruction-derived marker changed the registered response", old.status, bounded.status)

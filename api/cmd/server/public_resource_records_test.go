@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21PublicResourceRecordWriter struct {
+type scalePublicResourceRecordWriter struct {
 	*httptest.ResponseRecorder
 	repo      *store.SQLiteStore
 	held      int
@@ -23,17 +23,17 @@ type scaleP21PublicResourceRecordWriter struct {
 	canonical int
 }
 
-func (w *scaleP21PublicResourceRecordWriter) Write(raw []byte) (int, error) {
+func (w *scalePublicResourceRecordWriter) Write(raw []byte) (int, error) {
 	w.held = w.repo.MetadataWorkUsedForTesting()
 	return w.ResponseRecorder.Write(raw)
 }
 
-func TestScaleP21PublicResourceRecordHandlerDifferential(t *testing.T) {
+func TestScalePublicResourceRecordHandlerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-public-point-")
 		archived := time.Date(2025, 2, 3, 4, 5, 6, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.public_point_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -130,7 +130,7 @@ func TestScaleP21PublicResourceRecordHandlerDifferential(t *testing.T) {
 							refs = []string{ref}
 						}
 						for _, ref := range refs {
-							serve := func(selected *store.SQLiteStore) *scaleP21PublicResourceRecordWriter {
+							serve := func(selected *store.SQLiteStore) *scalePublicResourceRecordWriter {
 								service := &server{store: selected, authDisabled: principal.development}
 								r := f.literalRequest(principal.user, principal.key, nil)
 								r.Method, r.URL.Path = http.MethodGet, "/api/"+resource.kind+"/"+ref
@@ -188,7 +188,7 @@ func TestScaleP21PublicResourceRecordHandlerDifferential(t *testing.T) {
 									}
 									handOffPagedMetadata(r, workspace, principal.user.ID, data)
 								}
-								w := &scaleP21PublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
+								w := &scalePublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
 								if principal.authorize && !service.authorizeWorkspaceRequest(w, r, principal.user) {
 									w.sql, w.team, w.canonical = queries, teamQueries, canonicalQueries
 									return w
@@ -229,7 +229,7 @@ func TestScaleP21PublicResourceRecordHandlerDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21PublicResourceRecordNULIdentityDifferential(t *testing.T) {
+func TestScalePublicResourceRecordNULIdentityDifferential(t *testing.T) {
 	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver == "postgres" || driver == "postgresql" {
 		t.Skip("PostgreSQL text parameters cannot retain the NUL record key")
 	}
@@ -237,8 +237,8 @@ func TestScaleP21PublicResourceRecordNULIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-point-nul-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.point_nul_seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: prefix + "\x00team"})

@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW198SessionLifecycleNativeClosure(t *testing.T) {
+func TestSessionLifecycleNativeClosure(t *testing.T) {
 	at := time.Date(2026, 2, 3, 4, 5, 6, 7, time.UTC)
 	user := "owner"
 	deleted := domain.AgentSession{ID: "session", UserID: user, DeletedAt: &at}
@@ -35,7 +35,7 @@ func TestScaleP21SW198SessionLifecycleNativeClosure(t *testing.T) {
 		},
 		AgentActivities: []domain.AgentActivity{{ID: "old-activity", Body: "preserved"}},
 	}
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	source, err := repo.retainMetadataLogicalSource(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -109,9 +109,9 @@ func TestScaleP21SW198SessionLifecycleNativeClosure(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionLifecycleInputRelease(t *testing.T) {
+func TestSessionLifecycleInputRelease(t *testing.T) {
 	data := domain.Bootstrap{AgentSessions: []domain.AgentSession{{ID: "target", UserID: "owner", Messages: []domain.AgentMessage{{ID: "message", Content: "body"}}}}}
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	source, err := repo.retainMetadataLogicalSource(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestScaleP21SW198SessionLifecycleInputRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW198SessionLifecycleSkippedTranscriptBound(t *testing.T) {
+func TestSessionLifecycleSkippedTranscriptBound(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	var baselines [3]int
 	for _, scale := range []int{1, 10} {
@@ -164,7 +164,7 @@ func TestScaleP21SW198SessionLifecycleSkippedTranscriptBound(t *testing.T) {
 				},
 			}},
 		}
-		repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 		source, err := repo.retainMetadataLogicalSource(t.Context(), "physical")
 		if err != nil {
 			t.Fatal(err)

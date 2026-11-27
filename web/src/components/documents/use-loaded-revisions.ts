@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchDocumentRevisions } from '@/lib/api'
 import type { DocumentRevision, FlowDocument } from '@/types/flow'
 import { resourceWindowEnabled } from '@/lib/resource-window-adapters'
-import { useResourceRevisions, type RevisionSelection } from './scale-p20-revisions'
+import { useResourceRevisions, type RevisionSelection } from './use-resource-revisions'
 
 /** Loaded bodies of offloaded versions, by document and version id. A version's body never changes once it is offloaded. */
 const loadedBodies = new Map<string, DocumentRevision>()

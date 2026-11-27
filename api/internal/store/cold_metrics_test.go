@@ -115,10 +115,10 @@ func TestBoundedMetadataStatsInterval(t *testing.T) {
 }
 
 func TestColdMetricsCatalogReport(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Put(t, s, workspace, "projects", "p1", 1, map[string]any{"id": "p1", "name": "P"})
-	scaleP05Put(t, s, workspace, "labels", "l1", 1, map[string]any{"id": "l1", "name": "L"})
-	scaleP05Finish(t, s, workspace, "projects")
+	s, workspace := catalogScaleDatabase(t)
+	catalogScalePut(t, s, workspace, "projects", "p1", 1, map[string]any{"id": "p1", "name": "P"})
+	catalogScalePut(t, s, workspace, "labels", "l1", 1, map[string]any{"id": "l1", "name": "L"})
+	scaleFinish(t, s, workspace, "projects")
 	find := func() MetadataCatalogCompleteness {
 		catalogs, err := s.MetadataCatalogCompleteness(t.Context())
 		if err != nil {
@@ -146,7 +146,7 @@ func TestColdMetricsCatalogReport(t *testing.T) {
 	if line := buf.String(); strings.Contains(line, workspace) || !strings.Contains(line, "complete=false") || !strings.Contains(line, "incompleteCollections=1") {
 		t.Fatalf("incomplete line = %q", line)
 	}
-	scaleP05Finish(t, s, workspace, "labels")
+	scaleFinish(t, s, workspace, "labels")
 	if c := find(); c.Collections != 2 || c.Incomplete != 0 {
 		t.Fatalf("complete catalog = %+v", c)
 	}

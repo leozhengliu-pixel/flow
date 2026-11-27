@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21IssueWorkflowStatesNativeSelection(t *testing.T) {
+func TestScaleIssueWorkflowStatesNativeSelection(t *testing.T) {
 	shared := domain.WorkflowState{ID: "same", Name: "Shared\x00name", Type: "completed", Position: 9}
 	parent := domain.WorkflowState{ID: "same", TeamID: "parent", Name: "Parent", Position: -1}
 	reserved := domain.WorkflowState{ID: "same", TeamID: "specific", Name: "Reserved", Reserved: true}
@@ -38,7 +38,7 @@ func TestScaleP21IssueWorkflowStatesNativeSelection(t *testing.T) {
 		for i := 0; i < repetitions/100; i++ {
 			states = append(states, domain.WorkflowState{ID: fmt.Sprint("unrelated-state-", i), TeamID: fmt.Sprint("unrelated-team-", i)})
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {
 			Workspace: domain.Workspace{URLKey: "logical"}, States: states,
 		}})
 		read, err := view.loadIssueWorkflowStates(t.Context(), "physical", &input, domain.IssueUpdateInput{TeamID: &newTeam})
@@ -70,12 +70,12 @@ func TestScaleP21IssueWorkflowStatesNativeSelection(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueWorkflowStatesBudgetAndCancellation(t *testing.T) {
+func TestScaleIssueWorkflowStatesBudgetAndCancellation(t *testing.T) {
 	for _, states := range [][]domain.WorkflowState{
 		{{ID: "large", TeamID: "target", Description: strings.Repeat("body", 100000)}},
 		make([]domain.WorkflowState, 51),
 	} {
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {States: states}})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {States: states}})
 		input := domain.Bootstrap{Issues: []domain.Issue{{Team: domain.Team{ID: "target"}}}}
 		read, err := view.loadIssueWorkflowStates(t.Context(), "workspace", &input, nil)
 		if err != nil || len(read.states) != len(states) {
@@ -104,7 +104,7 @@ func TestScaleP21IssueWorkflowStatesBudgetAndCancellation(t *testing.T) {
 			}
 		}
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"workspace": {}})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"workspace": {}})
 	view.metadataResidency.work.limit = 68 << 10
 	input := domain.Bootstrap{}
 	for i := 0; i < 100; i++ {
@@ -115,8 +115,8 @@ func TestScaleP21IssueWorkflowStatesBudgetAndCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueWorkflowStatesInstalledSnapshotChoice(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {States: []domain.WorkflowState{{ID: "before"}}}})
+func TestScaleIssueWorkflowStatesInstalledSnapshotChoice(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {States: []domain.WorkflowState{{ID: "before"}}}})
 	owner, found, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -142,12 +142,12 @@ func TestScaleP21IssueWorkflowStatesInstalledSnapshotChoice(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssueWorkflowStatesUpdateCommitAndRollback(t *testing.T) {
+func TestScaleIssueWorkflowStatesUpdateCommitAndRollback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	team := f.data.Teams[0]
 	state := domain.WorkflowState{ID: "state_p21_issue_workflow", TeamID: team.ID, Name: "Done", Type: "completed"}

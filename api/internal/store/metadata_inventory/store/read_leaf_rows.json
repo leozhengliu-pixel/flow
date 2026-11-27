@@ -5,7 +5,7 @@
     "readLeafBegin": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Opens the shared-issue and facet reads on BeginInstalledMetadataRead's exact installed generation, the source BootstrapFor reads, including empty-key default resolution; a caller SQL handoff is ignored as BootstrapFor ignores it. A missing workspace is sql.ErrNoRows, the retained source is owned independently of the installed handle and every failed begin releases its admission. SW240 store tests prove native and SQL-reloaded sources, cancellation, budget refusal and release.",
+      "reason": "Opens the shared-issue and facet reads on BeginInstalledMetadataRead's exact installed generation, the source BootstrapFor reads, including empty-key default resolution; a caller SQL handoff is ignored as BootstrapFor ignores it. A missing workspace is sql.ErrNoRows, the retained source is owned independently of the installed handle and every failed begin releases its admission. read leaves store tests prove native and SQL-reloaded sources, cancellation, budget refusal and release.",
       "accessors": [
         "BeginInstalledMetadataRead"
       ],

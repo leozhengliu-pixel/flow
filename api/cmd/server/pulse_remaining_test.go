@@ -16,12 +16,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21PulseRemainingChildDifferential(t *testing.T) {
+func TestScalePulseRemainingChildDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -77,7 +77,7 @@ func TestScaleP21PulseRemainingChildDifferential(t *testing.T) {
 					if source == f.probe && test.entity == nil && test.resource != "milestones" && test.name != "missing-workspace" && source.MetadataWorkUsedForTesting() == 0 {
 						t.Fatal("child result outlived output admission")
 					}
-					outputs = append(outputs, scaleP21M2JSON(t, []any{entity, page}, false))
+					outputs = append(outputs, normalizePolicyJSON(t, []any{entity, page}, false))
 					close()
 					if source.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("child encoding leaked output admission")
@@ -87,7 +87,7 @@ func TestScaleP21PulseRemainingChildDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("child differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("child differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}
@@ -106,12 +106,12 @@ func TestScaleP21PulseRemainingChildDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21PulseRemainingRequestDifferential(t *testing.T) {
+func TestScalePulseRemainingRequestDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -159,18 +159,18 @@ func TestScaleP21PulseRemainingRequestDifferential(t *testing.T) {
 						r := f.literalRequest(user, key, nil)
 						r.SetPathValue("type", route.kind)
 						r.SetPathValue("id", route.id)
-						w := &scaleP21PulseSummaryResponse{ResponseRecorder: httptest.NewRecorder(), t: t}
+						w := &scalePulseSummaryResponse{ResponseRecorder: httptest.NewRecorder(), t: t}
 						if source == f.probe {
 							w.bounded = source
 						}
-						scaleP21CallWithOutputOwner(&server{store: source}, w, r, route.handler)
-						outputs = append(outputs, []any{w.Code, scaleP21M2Response(t, w.ResponseRecorder, false)})
+						scaleCallWithOutputOwner(&server{store: source}, w, r, route.handler)
+						outputs = append(outputs, []any{w.Code, policyDifferentialResponse(t, w.ResponseRecorder, false)})
 						if source.MetadataWorkUsedForTesting() != 0 {
 							t.Fatal("request result leaked admission")
 						}
 					}
 					if !reflect.DeepEqual(outputs[0], outputs[1]) {
-						t.Fatal("request differential", scaleP21M2Diff(outputs[0], outputs[1]))
+						t.Fatal("request differential", policyFirstDifference(outputs[0], outputs[1]))
 					}
 				})
 			}
@@ -213,14 +213,14 @@ func TestScaleP21PulseRemainingRequestDifferential(t *testing.T) {
 				ctx, cancel := context.WithCancel(r.Context())
 				cancel()
 				w := httptest.NewRecorder()
-				scaleP21CallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).createProjectUpdate)
+				scaleCallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).createProjectUpdate)
 				if w.Code != http.StatusInternalServerError {
 					t.Fatal("cancelled creation changed failure behavior", w.Code, w.Body.String())
 				}
-				outputs = append(outputs, []any{w.Code, scaleP21M2Response(t, w, false)})
+				outputs = append(outputs, []any{w.Code, policyDifferentialResponse(t, w, false)})
 			}
 			if !reflect.DeepEqual(outputs[0], outputs[1]) {
-				t.Fatal("cancelled creation differential", scaleP21M2Diff(outputs[0], outputs[1]))
+				t.Fatal("cancelled creation differential", policyFirstDifference(outputs[0], outputs[1]))
 			}
 		})
 		if f.probe.WorkspaceMetadataDecodes() != 0 || f.probe.MetadataWorkUsedForTesting() != 0 {

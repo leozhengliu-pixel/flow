@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21ScopedMetadataLegacyBranch(t *testing.T) {
+func TestScaleScopedMetadataLegacyBranch(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	expected, _ := f.WorkspaceMetadata(workspace)
 	got, ok, err := f.WorkspaceMetadataScoped(t.Context(), workspace, MetadataRecordScope{Fields: []string{"invalid"}})
@@ -43,11 +43,11 @@ func TestScaleP21ScopedMetadataLegacyBranch(t *testing.T) {
 	}
 }
 
-func TestScaleP21ScopedMetadataWritesMatchCanonicalHooks(t *testing.T) {
+func TestScaleScopedMetadataWritesMatchCanonicalHooks(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	scope := MetadataRecordScope{Write: []RecordKey{{"settings", "p21-target"}}}
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -139,11 +139,11 @@ func TestScaleP21ScopedMetadataWritesMatchCanonicalHooks(t *testing.T) {
 	}
 }
 
-func TestScaleP21ScopedMetadataCompleteFieldAndPolicy(t *testing.T) {
+func TestScaleScopedMetadataCompleteFieldAndPolicy(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.restore_links", "", nil, func(data *domain.Bootstrap) error {
 		data.Trash = append(data.Trash, domain.TrashEntry{ID: "p21-linked-trash", ResourceID: "p21-deleted", Payload: json.RawMessage(`{}`), Links: &domain.TrashLinks{}})
@@ -203,10 +203,10 @@ func TestScaleP21ScopedMetadataCompleteFieldAndPolicy(t *testing.T) {
 	}
 }
 
-func TestScaleP21ScopedMetadataScanBoundsAndCancellation(t *testing.T) {
+func TestScaleScopedMetadataScanBoundsAndCancellation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.scan", "", nil, func(data *domain.Bootstrap) error {
 		for i := 0; i < 121; i++ {

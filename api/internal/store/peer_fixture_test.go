@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW311PeerFixtureSQLitePath(t *testing.T) {
+func TestPeerFixtureSQLitePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "persistent-peers.sqlite")
 	t.Setenv("FLOW_TEST_DATABASE_DRIVER", "sqlite")
 	t.Setenv("FLOW_TEST_DATABASE_URL", path)

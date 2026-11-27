@@ -9,12 +9,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP17CanonicalAndSelectedWritersInterleave(t *testing.T) {
+func TestScaleCanonicalAndSelectedWritersInterleave(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	peers := newScaleP03PeerServers(t)
-	f := scaleP03CreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
+	peers := newScalePeerServers(t)
+	f := scaleCreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
 	workspace := f.data.Workspace.URLKey
-	member, user := scaleP03Join(t, f, "P17 peer member", idgen.New("p17-peer-")+"@example.test", "member", f.data.Teams[0].ID)
+	member, user := resourceAccessScaleJoin(t, f, "P17 peer member", idgen.New("p17-peer-")+"@example.test", "member", f.data.Teams[0].ID)
 	peers.stopListening(0)
 	peers.stopListening(1)
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")

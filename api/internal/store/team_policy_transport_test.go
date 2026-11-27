@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW310Cutoff = (256 << 10) / 32
+const teamPolicyTransportCutoff = (256 << 10) / 32
 
-type scaleP21SW310Row struct {
+type teamPolicyTransportRow struct {
 	key   string
 	order int
 	raw   []byte
@@ -24,7 +24,7 @@ type scaleP21SW310Row struct {
 	text  bool
 }
 
-func scaleP21SW310Raw(t *testing.T, object string, size int, unicode bool) []byte {
+func teamPolicyTransportRaw(t *testing.T, object string, size int, unicode bool) []byte {
 	t.Helper()
 	prefix := strings.TrimSuffix(object, "}") + `,"transportPadding":"`
 	padding := size - len(prefix) - len(`"}`)
@@ -42,7 +42,7 @@ func scaleP21SW310Raw(t *testing.T, object string, size int, unicode bool) []byt
 	return raw
 }
 
-func scaleP21SW310Seed(t *testing.T, tx *sqlTx, workspace string, rows []scaleP21SW310Row) {
+func teamPolicyTransportSeed(t *testing.T, tx *sqlTx, workspace string, rows []teamPolicyTransportRow) {
 	t.Helper()
 	if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams'`, workspace); err != nil {
 		t.Fatal(err)
@@ -63,9 +63,9 @@ func scaleP21SW310Seed(t *testing.T, tx *sqlTx, workspace string, rows []scaleP2
 	}
 }
 
-// Use the literal typed decoder and the existing SW23 policy projection.
+// Use the literal typed decoder and the existing team-policy projection policy projection.
 // The SQL order and physical locator stay in the oracle's complete rows.
-func scaleP21SW310Oracle(ctx context.Context, tx *sqlTx, workspace string) ([]metadataCacheRow, error) {
+func teamPolicyTransportOracle(ctx context.Context, tx *sqlTx, workspace string) ([]metadataCacheRow, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' ORDER BY collection_order,record_key`,
 		workspace)
@@ -85,7 +85,7 @@ func scaleP21SW310Oracle(ctx context.Context, tx *sqlTx, workspace string) ([]me
 		if err := json.Unmarshal(raw, &team); err != nil {
 			return nil, err
 		}
-		encoded, err := json.Marshal(scaleP21SW23TeamPolicyOnly(team))
+		encoded, err := json.Marshal(teamPolicyOnly(team))
 		if err != nil {
 			return nil, err
 		}
@@ -94,20 +94,20 @@ func scaleP21SW310Oracle(ctx context.Context, tx *sqlTx, workspace string) ([]me
 	return result, rows.Err()
 }
 
-func scaleP21SW310Header(query string) bool {
+func teamPolicyTransportHeader(query string) bool {
 	return strings.HasPrefix(query, "SELECT record_key,") &&
 		strings.Contains(query, "FROM workspace_metadata_records") &&
 		strings.Contains(query, "field='teams'") &&
 		strings.Contains(query, "ORDER BY collection_order,record_key LIMIT 32")
 }
 
-func scaleP21SW310Chunk(query string) bool {
+func teamPolicyTransportChunk(query string) bool {
 	return strings.HasPrefix(query, "SELECT SUBSTR(") &&
 		strings.Contains(query, "FROM workspace_metadata_records") &&
 		strings.Contains(query, "field='teams'")
 }
 
-func scaleP21SW310Closed(t *testing.T, view *SQLiteStore, read *scaleP21SW23TeamPolicyRowsRead) {
+func teamPolicyTransportClosed(t *testing.T, view *SQLiteStore, read *teamPolicyRowsRead) {
 	t.Helper()
 	read.Close()
 	read.Close()
@@ -116,12 +116,12 @@ func scaleP21SW310Closed(t *testing.T, view *SQLiteStore, read *scaleP21SW23Team
 	}
 }
 
-func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
+func TestTeamPolicySmallRowTransport(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	// SW23's fixture creates unique account/workspace identities and honors
+	// team-policy projection's fixture creates unique account/workspace identities and honors
 	// FLOW_TEST_DATABASE_DRIVER/FLOW_TEST_DATABASE_URL, including persistence.
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
@@ -140,21 +140,21 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 	}
 	for _, test := range []scenario{
 		{name: "empty"},
-		{name: "below-cutoff", count: 1, size: scaleP21SW310Cutoff - 1},
-		{name: "at-cutoff", count: 1, size: scaleP21SW310Cutoff},
-		{name: "above-cutoff", count: 1, size: scaleP21SW310Cutoff + 1},
-		{name: "unicode-at-byte-cutoff", count: 1, size: scaleP21SW310Cutoff, unicode: true},
-		{name: "unicode-above-byte-cutoff", count: 1, size: scaleP21SW310Cutoff + 1, unicode: true},
-		{name: "32-full-small-rows", count: 32, size: scaleP21SW310Cutoff},
+		{name: "below-cutoff", count: 1, size: teamPolicyTransportCutoff - 1},
+		{name: "at-cutoff", count: 1, size: teamPolicyTransportCutoff},
+		{name: "above-cutoff", count: 1, size: teamPolicyTransportCutoff + 1},
+		{name: "unicode-at-byte-cutoff", count: 1, size: teamPolicyTransportCutoff, unicode: true},
+		{name: "unicode-above-byte-cutoff", count: 1, size: teamPolicyTransportCutoff + 1, unicode: true},
+		{name: "32-full-small-rows", count: 32, size: teamPolicyTransportCutoff},
 		{name: "33-small-rows", count: 33, size: 256},
 		{name: "physical-key-cursor", count: 33, size: 256, physical: true},
-		{name: "folded-repeated-small", count: 1, size: scaleP21SW310Cutoff,
+		{name: "folded-repeated-small", count: 1, size: teamPolicyTransportCutoff,
 			object: `{"id":"first","ID":null,"\u212aey":"folded","key":"last","externalSource":"old","external\u017fource":"new","private":false,"PRIVATE":true,"Private":null,"archivedAt":"2026-11-17T01:02:03+05:45","ARCHIVEDAT":null,"retiredAt":"2026-11-17T01:02:03.123456789Z","unknown":{"private":"ignored"}}`},
-		{name: "folded-repeated-large", count: 1, size: scaleP21SW310Cutoff + 1,
+		{name: "folded-repeated-large", count: 1, size: teamPolicyTransportCutoff + 1,
 			object: `{"ID":"first","id":"last","private":true,"PRIVATE":false,"name":"ignored","createdAt":"2026-11-17T01:02:03Z","createdAt":null}`},
-		{name: "malformed-known-small", count: 1, size: scaleP21SW310Cutoff, bad: true,
+		{name: "malformed-known-small", count: 1, size: teamPolicyTransportCutoff, bad: true,
 			object: `{"id":"bad","name":7}`},
-		{name: "malformed-known-large", count: 1, size: scaleP21SW310Cutoff + 1, bad: true,
+		{name: "malformed-known-large", count: 1, size: teamPolicyTransportCutoff + 1, bad: true,
 			object: `{"id":"bad","private":"true"}`},
 		{name: "earlier-type-error-survives-repeat", count: 1, size: 256, bad: true,
 			object: `{"id":{},"id":"later"}`},
@@ -165,15 +165,15 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
-			var rows []scaleP21SW310Row
+			var rows []teamPolicyTransportRow
 			for index := range test.count {
 				key := fmt.Sprintf("physical-%03d", index)
 				object := test.object
 				if object == "" {
 					object = fmt.Sprintf(`{"id":"native-%03d","key":"K%03d","private":%t}`, index%7, index, index%2 == 0)
 				}
-				row := scaleP21SW310Row{key: key, order: index%5 - 2,
-					raw: scaleP21SW310Raw(t, object, test.size, test.unicode), text: test.unicode && f.dialect == "sqlite"}
+				row := teamPolicyTransportRow{key: key, order: index%5 - 2,
+					raw: teamPolicyTransportRaw(t, object, test.size, test.unicode), text: test.unicode && f.dialect == "sqlite"}
 				if test.physical {
 					row.order = -7
 					switch index {
@@ -196,21 +196,21 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 				}
 				rows = append(rows, row)
 			}
-			scaleP21SW310Seed(t, tx, workspace, rows)
-			want, oldErr := scaleP21SW310Oracle(t.Context(), tx, workspace)
+			teamPolicyTransportSeed(t, tx, workspace, rows)
+			want, oldErr := teamPolicyTransportOracle(t.Context(), tx, workspace)
 			if (oldErr != nil) != test.bad {
 				t.Fatal("literal typed fixture lost its success/error witness", oldErr)
 			}
 			headers, chunks := 0, 0
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) {
-				if scaleP21SW310Header(query) {
+				if teamPolicyTransportHeader(query) {
 					headers++
 				}
-				if scaleP21SW310Chunk(query) {
+				if teamPolicyTransportChunk(query) {
 					chunks++
 				}
 			})
-			read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+			read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 			if test.bad {
 				if err == nil || read != nil || view.MetadataWorkUsedForTesting() != 0 {
 					t.Fatal("malformed typed row succeeded or retained its partial output/owners", err)
@@ -234,9 +234,9 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 						t.Fatal("fixture did not cross the SQLite BLOB cursor boundary")
 					}
 				}
-				scaleP21SW310Closed(t, view, read)
+				teamPolicyTransportClosed(t, view, read)
 			}
-			if test.count > 0 && test.size > scaleP21SW310Cutoff {
+			if test.count > 0 && test.size > teamPolicyTransportCutoff {
 				if chunks == 0 {
 					t.Fatal("large row did not use the existing SQL ReaderAt fallback")
 				}
@@ -263,23 +263,23 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 				if large {
 					count, size = 1, 64<<10
 				}
-				rows := make([]scaleP21SW310Row, count)
+				rows := make([]teamPolicyTransportRow, count)
 				for index := range rows {
-					rows[index] = scaleP21SW310Row{key: fmt.Sprintf("cancel-%03d", index), order: index,
-						raw: scaleP21SW310Raw(t, `{"id":"cancel","private":true}`, size, false)}
+					rows[index] = teamPolicyTransportRow{key: fmt.Sprintf("cancel-%03d", index), order: index,
+						raw: teamPolicyTransportRaw(t, `{"id":"cancel","private":true}`, size, false)}
 				}
-				scaleP21SW310Seed(t, tx, workspace, rows)
+				teamPolicyTransportSeed(t, tx, workspace, rows)
 				for _, before := range []bool{true, false} {
 					ctx, cancel := context.WithCancel(t.Context())
 					headers, chunks := 0, 0
 					ctx = WithSQLStatementObserver(ctx, func(query string) {
-						if scaleP21SW310Header(query) {
+						if teamPolicyTransportHeader(query) {
 							headers++
 							if !large && headers == 2 {
 								cancel()
 							}
 						}
-						if scaleP21SW310Chunk(query) {
+						if teamPolicyTransportChunk(query) {
 							chunks++
 							if large && chunks == 2 {
 								cancel()
@@ -289,7 +289,7 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 					if before {
 						cancel()
 					}
-					read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+					read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 					cancel()
 					if !errors.Is(err, context.Canceled) || read != nil || view.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("cancelled transport retained rows/projector/parent allowance", before, err)
@@ -299,11 +299,11 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 					}
 				}
 				// A fresh context on the caller-owned transaction still works.
-				read, err := view.scaleP21SW23ReadTeamPolicyRows(t.Context(), tx, workspace)
+				read, err := view.readTeamPolicyRows(t.Context(), tx, workspace)
 				if err != nil || read == nil || len(read.rows) != count {
 					t.Fatal("cancelled child closed caller transaction or prevented recovery", err)
 				}
-				scaleP21SW310Closed(t, view, read)
+				teamPolicyTransportClosed(t, view, read)
 			})
 		}
 	})
@@ -314,13 +314,13 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer seed.Rollback()
-		rows := make([]scaleP21SW310Row, 33)
+		rows := make([]teamPolicyTransportRow, 33)
 		for index := range rows {
-			rows[index] = scaleP21SW310Row{key: fmt.Sprintf("snapshot-%03d", index), order: index,
-				raw: scaleP21SW310Raw(t, fmt.Sprintf(`{"id":"before-%03d","private":true}`, index), 256, false)}
+			rows[index] = teamPolicyTransportRow{key: fmt.Sprintf("snapshot-%03d", index), order: index,
+				raw: teamPolicyTransportRaw(t, fmt.Sprintf(`{"id":"before-%03d","private":true}`, index), 256, false)}
 		}
-		rows[0].raw = scaleP21SW310Raw(t, `{"id":"before-000","private":true}`, 64<<10, false)
-		scaleP21SW310Seed(t, seed, workspace, rows)
+		rows[0].raw = teamPolicyTransportRaw(t, `{"id":"before-000","private":true}`, 64<<10, false)
+		teamPolicyTransportSeed(t, seed, workspace, rows)
 		if err := seed.Commit(); err != nil {
 			t.Fatal(err)
 		}
@@ -329,17 +329,17 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer tx.Rollback()
-		want, err := scaleP21SW310Oracle(t.Context(), tx, workspace)
+		want, err := teamPolicyTransportOracle(t.Context(), tx, workspace)
 		if err != nil {
 			t.Fatal(err)
 		}
 		chunks, headers := 0, 0
 		changed := false
 		ctx := WithSQLStatementObserver(t.Context(), func(query string) {
-			if scaleP21SW310Header(query) {
+			if teamPolicyTransportHeader(query) {
 				headers++
 			}
-			if !scaleP21SW310Chunk(query) {
+			if !teamPolicyTransportChunk(query) {
 				return
 			}
 			chunks++
@@ -369,7 +369,7 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 			}
 			changed = true
 		})
-		read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+		read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 		if err != nil || read == nil {
 			t.Fatal("same-snapshot transport must succeed after a genuine peer commit", err)
 		}
@@ -377,7 +377,7 @@ func TestScaleP21SW310TeamPolicySmallRowTransport(t *testing.T) {
 		if !changed || chunks < 2 || headers != 3 || !reflect.DeepEqual(read.rows, want) {
 			t.Fatal("small later-page row or chunked body mixed peer generations", changed, chunks, headers)
 		}
-		scaleP21SW310Closed(t, view, read)
+		teamPolicyTransportClosed(t, view, read)
 		for _, index := range []int{0, 32} {
 			var raw []byte
 			if err := f.db.QueryRowContext(t.Context(),

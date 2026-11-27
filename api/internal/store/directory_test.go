@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func scaleP10Equal(t *testing.T, want, got any) {
+func scaleEqual(t *testing.T, want, got any) {
 	t.Helper()
 	a, err := json.Marshal(want)
 	if err != nil {
@@ -21,10 +21,10 @@ func scaleP10Equal(t *testing.T, want, got any) {
 	}
 }
 
-func TestScaleP10DirectoryDifferential(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Projects(t, s, workspace, 21)
-	scaleP05Finish(t, s, workspace, "projects")
+func TestScaleDirectoryDifferential(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	scaleProjects(t, s, workspace, 21)
+	scaleFinish(t, s, workspace, "projects")
 	queries := []ProjectRecordQuery{
 		{}, {Admin: true}, {AllowedTeamIDs: nil}, {AllowedTeamIDs: []string{}},
 		{AllowedTeamIDs: []string{"public"}}, {AllowedTeamIDs: []string{"private"}},
@@ -71,19 +71,19 @@ func TestScaleP10DirectoryDifferential(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					scaleP10Equal(t, want, got)
+					scaleEqual(t, want, got)
 				}
 			}
 		})
 	}
 }
 
-func TestScaleP10DirectoryUnreadyFallback(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	projects := scaleP05Projects(t, s, workspace, 3)
-	scaleP05Finish(t, s, workspace, "projects")
+func TestScaleDirectoryUnreadyFallback(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	projects := scaleProjects(t, s, workspace, 3)
+	scaleFinish(t, s, workspace, "projects")
 	projects[0].Name = "Canonical update from an old writer"
-	scaleP05Put(t, s, workspace, "projects", projects[0].ID, 0, projects[0])
+	catalogScalePut(t, s, workspace, "projects", projects[0].ID, 0, projects[0])
 	q := ProjectRecordQuery{Workspace: workspace, Admin: true, Archived: "all", IncludeTotal: true}
 	want, err := s.queryProjectDirectoryLegacy(t.Context(), q)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestScaleP10DirectoryUnreadyFallback(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP10Equal(t, want, got)
+		scaleEqual(t, want, got)
 		if mode != "shadow" && bodies != 0 {
 			t.Fatal("unready catalog was consulted for a served directory")
 		}
@@ -114,13 +114,13 @@ func TestScaleP10DirectoryUnreadyFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP10Equal(t, want, got)
+	scaleEqual(t, want, got)
 }
 
-func BenchmarkScaleP10CatalogDirectory(b *testing.B) {
+func BenchmarkScaleCatalogDirectory(b *testing.B) {
 	for _, scale := range []int{1, 10} {
 		b.Run(fmt.Sprintf("body%d", scale), func(b *testing.B) {
-			s := scaleP05BenchmarkStore(b, scale)
+			s := scaleBenchmarkStore(b, scale)
 			ctx := context.Background()
 			if _, err := s.db.ExecContext(ctx, `CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)`); err != nil {
 				b.Fatal(err)

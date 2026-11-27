@@ -13,9 +13,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21ColdTeamFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string, string) {
+func scaleColdTeamFixture(t *testing.T) (scaleFixture, *SQLiteStore, string, string) {
 	t.Helper()
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+	f, view, workspace := scaleColdWriteFixture(t)
 	team := idgen.New("p21-cold-team-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: team, Name: "warm\x00team", Key: "COLD", Color: "before"})
@@ -31,11 +31,11 @@ func scaleP21ColdTeamFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, strin
 	return f, view, workspace, team
 }
 
-func scaleP21RunColdTeam(ctx context.Context, view *SQLiteStore, workspace, event string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+func scaleRunColdTeam(ctx context.Context, view *SQLiteStore, workspace, event string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	return view.withColdMutation(ctx, workspace, event, payload, mutate)
 }
 
-func scaleP21ColdTeamNative(t *testing.T, view *SQLiteStore, workspace string) domain.Bootstrap {
+func scaleColdTeamNative(t *testing.T, view *SQLiteStore, workspace string) domain.Bootstrap {
 	t.Helper()
 	var result domain.Bootstrap
 	if err := view.withColdMetadataRead(t.Context(), func(_ context.Context, facade *SQLiteStore) error {
@@ -51,10 +51,10 @@ func scaleP21ColdTeamNative(t *testing.T, view *SQLiteStore, workspace string) d
 	return result
 }
 
-func TestScaleP21ColdTeamDispatchDifferential(t *testing.T) {
+func TestScaleColdTeamDispatchDifferential(t *testing.T) {
 	for _, mode := range []string{"created", "updated", "settings", "deleted", "teams-import", "users-import", "projects-import", "untracked"} {
 		t.Run(mode, func(t *testing.T) {
-			f, view, workspace, team := scaleP21ColdTeamFixture(t)
+			f, view, workspace, team := scaleColdTeamFixture(t)
 			event, aggregate, payload := "team.settings_updated", team, any(map[string]any{"timezone": "Asia/Shanghai"})
 			change := func(data *domain.Bootstrap) error {
 				value := data.TeamSettings[team]
@@ -108,7 +108,7 @@ func TestScaleP21ColdTeamDispatchDifferential(t *testing.T) {
 			f.mu.RLock()
 			original := cloneBootstrap(f.workspaces[workspace])
 			f.mu.RUnlock()
-			saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			ctx := withMutationAggregateID(ContextWithActor(t.Context(), f.data.Viewer), aggregate)
 			oldSQL, coldSQL, coldCalls, oldEvents, coldEvents := 0, 0, 0, 0, 0
 			var inputs []domain.Bootstrap
@@ -133,9 +133,9 @@ func TestScaleP21ColdTeamDispatchDifferential(t *testing.T) {
 			if err := f.MutateWorkspaceWithAggregate(WithSQLStatementObserver(ctx, func(string) { oldSQL++ }), workspace, event, payload, callback(false)); err != nil {
 				t.Fatal(err)
 			}
-			wantSQL := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			wantSQL := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			wantNative, _ := f.WorkspaceMetadata(workspace)
-			scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
+			scaleColdPreferenceRestore(t, f, workspace, saved, original)
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -155,13 +155,13 @@ func TestScaleP21ColdTeamDispatchDifferential(t *testing.T) {
 					t.Error("cold slot released before synchronous sink")
 				}
 			})
-			if err := scaleP21RunColdTeam(WithSQLStatementObserver(ctx, func(string) { coldSQL++ }), view, workspace, event, payload, callback(true)); err != nil {
+			if err := scaleRunColdTeam(WithSQLStatementObserver(ctx, func(string) { coldSQL++ }), view, workspace, event, payload, callback(true)); err != nil {
 				t.Fatal(err)
 			}
-			if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, wantSQL) {
+			if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, wantSQL) {
 				t.Fatal("cold team canonical/search rows differ")
 			}
-			if got := scaleP21ColdTeamNative(t, view, workspace); !reflect.DeepEqual(got, cloneBootstrap(wantNative)) {
+			if got := scaleColdTeamNative(t, view, workspace); !reflect.DeepEqual(got, cloneBootstrap(wantNative)) {
 				t.Fatal("cold final native image differs from original")
 			}
 			if coldCalls != len(inputs) || oldEvents != coldEvents || mode != "untracked" && coldEvents != 1 {
@@ -175,10 +175,10 @@ func TestScaleP21ColdTeamDispatchDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdTeamMergedAndSkippedPostimage(t *testing.T) {
+func TestScaleColdTeamMergedAndSkippedPostimage(t *testing.T) {
 	for _, mode := range []string{"merged", "skipped"} {
 		t.Run(mode, func(t *testing.T) {
-			f, view, workspace, team := scaleP21ColdTeamFixture(t)
+			f, view, workspace, team := scaleColdTeamFixture(t)
 			f.mu.RLock()
 			original := cloneBootstrap(f.workspaces[workspace])
 			f.mu.RUnlock()
@@ -194,14 +194,14 @@ func TestScaleP21ColdTeamMergedAndSkippedPostimage(t *testing.T) {
 					t.Fatal(err)
 				}
 				peer.CreatedAt = &fresh
-				scaleP09Put(t, tx, workspace, "teams", team, peer)
+				journalScalePut(t, tx, workspace, "teams", team, peer)
 			} else if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' AND record_key=?`, workspace, team); err != nil {
 				t.Fatal(err)
 			}
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
-			saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			ctx := withMutationAggregateID(ContextWithActor(t.Context(), f.data.Viewer), team)
 			change := func(data *domain.Bootstrap) (string, error) {
 				data.Teams[domain.TeamIndex(data, team)].Name = "mine"
@@ -212,8 +212,8 @@ func TestScaleP21ColdTeamMergedAndSkippedPostimage(t *testing.T) {
 				t.Fatal(err)
 			}
 			want, _ := f.WorkspaceMetadata(workspace)
-			wantSQL := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
-			scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
+			wantSQL := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			scaleColdPreferenceRestore(t, f, workspace, saved, original)
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -235,20 +235,20 @@ func TestScaleP21ColdTeamMergedAndSkippedPostimage(t *testing.T) {
 				}
 			}})
 			defer f.db.commitHooks.Store(hooks)
-			if err := scaleP21RunColdTeam(ctx, view, workspace, "team.updated", payload, change); err != nil {
+			if err := scaleRunColdTeam(ctx, view, workspace, "team.updated", payload, change); err != nil {
 				t.Fatal(err)
 			}
-			if !prepared || !reflect.DeepEqual(scaleP21ColdTeamNative(t, view, workspace), cloneBootstrap(want)) ||
-				!reflect.DeepEqual(scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace), wantSQL) {
+			if !prepared || !reflect.DeepEqual(scaleColdTeamNative(t, view, workspace), cloneBootstrap(want)) ||
+				!reflect.DeepEqual(scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace), wantSQL) {
 				t.Fatal("cold installed speculative team instead of final row image", prepared)
 			}
 		})
 	}
 }
 
-func TestScaleP21ColdTeamFailurePublication(t *testing.T) {
-	f, view, workspace, team := scaleP21ColdTeamFixture(t)
-	before := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+func TestScaleColdTeamFailurePublication(t *testing.T) {
+	f, view, workspace, team := scaleColdTeamFixture(t)
+	before := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 	prior, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestScaleP21ColdTeamFailurePublication(t *testing.T) {
 				}})
 			}
 			callbackErr := errors.New("team callback rejected")
-			err := scaleP21RunColdTeam(ctx, view, workspace, "team.updated", map[string]any{"name": "failed"}, func(data *domain.Bootstrap) (string, error) {
+			err := scaleRunColdTeam(ctx, view, workspace, "team.updated", map[string]any{"name": "failed"}, func(data *domain.Bootstrap) (string, error) {
 				data.Teams[domain.TeamIndex(data, team)].Name = "failed"
 				switch mode {
 				case "callback":
@@ -305,7 +305,7 @@ func TestScaleP21ColdTeamFailurePublication(t *testing.T) {
 			}
 			same := current == prior
 			current.Release()
-			if !same || !reflect.DeepEqual(scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace), before) ||
+			if !same || !reflect.DeepEqual(scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace), before) ||
 				len(view.metadataResidency.coldSlot) != 0 || !view.writeMu.TryLock() {
 				t.Fatal("failed team write changed parent/SQL or leaked locks")
 			}
@@ -314,9 +314,9 @@ func TestScaleP21ColdTeamFailurePublication(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdTeamLatestParentAndDefaultBinding(t *testing.T) {
-	f, view, workspace, team := scaleP21ColdTeamFixture(t)
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-team-second-")).Workspace.URLKey
+func TestScaleColdTeamLatestParentAndDefaultBinding(t *testing.T) {
+	f, view, workspace, team := scaleColdTeamFixture(t)
+	second := selectedExtraWorkspace(t, f, idgen.New("p21-cold-team-second-")).Workspace.URLKey
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
 	}
@@ -334,14 +334,14 @@ func TestScaleP21ColdTeamLatestParentAndDefaultBinding(t *testing.T) {
 			return err
 		}
 		var locked string
-		facade.coordinator = scaleP21ColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
+		facade.coordinator = scaleColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
 			locked = key
 			view.mu.Lock()
 			view.lastWorkspaceKey = second
 			view.mu.Unlock()
 			return apply()
 		})
-		return scaleP21RunColdTeam(bound, view, "", "team.updated", map[string]any{"name": "latest"}, func(data *domain.Bootstrap) (string, error) {
+		return scaleRunColdTeam(bound, view, "", "team.updated", map[string]any{"name": "latest"}, func(data *domain.Bootstrap) (string, error) {
 			if locked != workspace || data.Workspace.URLKey != workspace {
 				t.Error("default target escaped acquired coordinator key", locked, data.Workspace.URLKey)
 			}
@@ -355,7 +355,7 @@ func TestScaleP21ColdTeamLatestParentAndDefaultBinding(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	data := scaleP21ColdTeamNative(t, view, workspace)
+	data := scaleColdTeamNative(t, view, workspace)
 	if !slices.ContainsFunc(data.Teams, func(value domain.Team) bool { return value.ID == team && value.Name == "latest" }) {
 		t.Fatal("team write installed into wrong workspace")
 	}

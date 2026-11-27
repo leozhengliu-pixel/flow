@@ -10,9 +10,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21PolicyMemoFixture(t *testing.T) (*SQLiteStore, *sqlTx, context.Context) {
+func scalePolicyMemoFixture(t *testing.T) (*SQLiteStore, *sqlTx, context.Context) {
 	t.Helper()
-	view := scaleP21HotLogoStore(t, nil)
+	view := scaleHotLogoStore(t, nil)
 	view.db = &sqlDatabase{}
 	view.db.journalReady.Store(true)
 	tx := &sqlTx{database: view.db}
@@ -20,8 +20,8 @@ func scaleP21PolicyMemoFixture(t *testing.T) (*SQLiteStore, *sqlTx, context.Cont
 	return view, tx, ctx
 }
 
-func TestScaleP21SW0ResourcePolicyMemoBindingAndLifetime(t *testing.T) {
-	view, tx, ctx := scaleP21PolicyMemoFixture(t)
+func TestResourcePolicyMemoBindingAndLifetime(t *testing.T) {
+	view, tx, ctx := scalePolicyMemoFixture(t)
 	owner := &ResourceRead{store: view}
 	ctx, closeMemo := withResourcePolicyMemo(ctx, owner)
 	defer owner.Close()
@@ -94,8 +94,8 @@ func TestScaleP21SW0ResourcePolicyMemoBindingAndLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResourcePolicyMemoFailuresAndOwners(t *testing.T) {
-	view, _, base := scaleP21PolicyMemoFixture(t)
+func TestResourcePolicyMemoFailuresAndOwners(t *testing.T) {
+	view, _, base := scalePolicyMemoFixture(t)
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "identity"}}
 	for _, owner := range []*ResourceRead{nil, {}, {store: &SQLiteStore{}}} {
 		ctx, close := withResourcePolicyMemo(base, owner)

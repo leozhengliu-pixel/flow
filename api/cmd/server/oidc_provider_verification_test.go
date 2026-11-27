@@ -20,17 +20,17 @@ import (
 	"flow/api/internal/store"
 )
 
-const scaleP21SW9Issuer = "https://example.com/issuer"
+const oidcProviderVerificationIssuer = "https://example.com/issuer"
 
-type scaleP21SW9Discovery struct {
+type oidcProviderVerificationDiscovery struct {
 	mode   string
 	calls  int
 	before func(*http.Request)
 }
 
-func scaleP21SW9Outbound(t *testing.T) *scaleP21SW9Discovery {
+func oidcProviderVerificationOutbound(t *testing.T) *oidcProviderVerificationDiscovery {
 	t.Helper()
-	fixture := &scaleP21SW9Discovery{}
+	fixture := &oidcProviderVerificationDiscovery{}
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != "example.com" {
 			t.Error("unexpected outbound host in SW9 fixture")
@@ -65,15 +65,15 @@ func scaleP21SW9Outbound(t *testing.T) *scaleP21SW9Discovery {
 			status = http.StatusBadGateway
 		}
 		metadata := map[string]any{
-			"issuer":                                scaleP21SW9Issuer,
-			"authorization_endpoint":                scaleP21SW9Issuer + "/authorize",
-			"token_endpoint":                        scaleP21SW9Issuer + "/token",
-			"jwks_uri":                              scaleP21SW9Issuer + "/keys",
+			"issuer":                                oidcProviderVerificationIssuer,
+			"authorization_endpoint":                oidcProviderVerificationIssuer + "/authorize",
+			"token_endpoint":                        oidcProviderVerificationIssuer + "/token",
+			"jwks_uri":                              oidcProviderVerificationIssuer + "/keys",
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 		}
 		switch fixture.mode {
 		case "different-issuer":
-			metadata["issuer"] = scaleP21SW9Issuer + "/different"
+			metadata["issuer"] = oidcProviderVerificationIssuer + "/different"
 		case "unsafe-authorization":
 			metadata["authorization_endpoint"] = "http://example.com/authorize"
 		case "unsafe-token":
@@ -98,7 +98,7 @@ func scaleP21SW9Outbound(t *testing.T) *scaleP21SW9Discovery {
 	return fixture
 }
 
-func scaleP21SW9Value(t *testing.T, value any) any {
+func oidcProviderVerificationValue(t *testing.T, value any) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -129,7 +129,7 @@ func scaleP21SW9Value(t *testing.T, value any) any {
 	return result
 }
 
-func scaleP21SW9Hash(t *testing.T, repo *store.SQLiteStore, workspace, kind, exclude string) [32]byte {
+func oidcProviderVerificationHash(t *testing.T, repo *store.SQLiteStore, workspace, kind, exclude string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	if err := repo.StreamMetadataRecords(t.Context(), workspace, kind, func(key store.RecordKey, reader io.Reader) error {
@@ -147,12 +147,12 @@ func scaleP21SW9Hash(t *testing.T, repo *store.SQLiteStore, workspace, kind, exc
 	return [32]byte(hash.Sum(nil))
 }
 
-func scaleP21SW9Providers(t *testing.T, repo *store.SQLiteStore, workspace string) domain.IdentityProvider {
+func oidcProviderVerificationProviders(t *testing.T, repo *store.SQLiteStore, workspace string) domain.IdentityProvider {
 	t.Helper()
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	target := domain.IdentityProvider{
 		ID: idgen.New("idp_sw9_"), Type: "oidc", Name: "SW9 provider",
-		Issuer: scaleP21SW9Issuer + "///", ClientID: "sw9-client",
+		Issuer: oidcProviderVerificationIssuer + "///", ClientID: "sw9-client",
 		Enabled: true, DiscoveryStatus: "verified", Scopes: []string{"profile"},
 		Domains: []string{"example.test"}, DefaultRole: "member",
 		RoleMapping: map[string]string{"developer": "member"},
@@ -174,7 +174,7 @@ func scaleP21SW9Providers(t *testing.T, repo *store.SQLiteStore, workspace strin
 	return target
 }
 
-func scaleP21SW9Reset(t *testing.T, repo *store.SQLiteStore, workspace string, target domain.IdentityProvider) {
+func oidcProviderVerificationReset(t *testing.T, repo *store.SQLiteStore, workspace string, target domain.IdentityProvider) {
 	t.Helper()
 	if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
@@ -193,18 +193,18 @@ func scaleP21SW9Reset(t *testing.T, repo *store.SQLiteStore, workspace string, t
 	}
 }
 
-func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
+func TestEnterpriseOIDCClientDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_IDP_SW9_FIXTURE", "sw9-fake-client-secret")
 	t.Setenv("FLOW_IDP_SW9_MISSING", "")
-	upstream := scaleP21SW9Outbound(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	upstream := oidcProviderVerificationOutbound(t)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		original := scaleP21SW9Providers(t, repo, workspace)
-		unrelated := scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID)
+		original := oidcProviderVerificationProviders(t, repo, workspace)
+		unrelated := oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID)
 		for _, spec := range []struct {
 			name, discovery, wantError string
 			change                     func(*domain.IdentityProvider)
@@ -237,7 +237,7 @@ func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
 				if spec.change != nil {
 					spec.change(&target)
 				}
-				scaleP21SW9Reset(t, repo, workspace, target)
+				oidcProviderVerificationReset(t, repo, workspace, target)
 				upstream.mode = spec.discovery
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 					var outcomes []any
@@ -289,7 +289,7 @@ func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
 				t.Fatalf("missing workspace: %v", err)
 			}
 		}
-		scaleP21SW9Reset(t, repo, workspace, original)
+		oidcProviderVerificationReset(t, repo, workspace, original)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		before := upstream.calls
@@ -301,39 +301,39 @@ func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		beforeRows := scaleP21SW9Hash(t, repo, workspace, "identityProviders", "")
+		beforeRows := oidcProviderVerificationHash(t, repo, workspace, "identityProviders", "")
 		owned.Domains[0], owned.Scopes[0], owned.RoleMapping["developer"] = "changed.example.test", "changed", "guest"
 		client.oauth.Scopes[0] = "changed"
-		if scaleP21SW9Hash(t, repo, workspace, "identityProviders", "") != beforeRows {
+		if oidcProviderVerificationHash(t, repo, workspace, "identityProviders", "") != beforeRows {
 			t.Fatal("returned provider configuration aliases canonical data")
 		}
 		large := original
 		large.Name = strings.Repeat("large selected provider ", 18000)
-		scaleP21SW9Reset(t, repo, workspace, large)
+		oidcProviderVerificationReset(t, repo, workspace, large)
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
 		if _, _, err := (&server{store: f.probe}).enterpriseOIDCClient(t.Context(), workspace, original.ID); !errors.Is(err, store.ErrMetadataPageBudget) {
 			t.Fatalf("large selected provider was silently omitted: %v", err)
 		}
-		if scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID) != unrelated || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID) != unrelated || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("provider lookup changed unrelated rows or decoded complete metadata")
 		}
 	}
 }
 
-func TestScaleP21SW9ProviderVerificationDifferential(t *testing.T) {
+func TestProviderVerificationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	upstream := scaleP21SW9Outbound(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	upstream := oidcProviderVerificationOutbound(t)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		original := scaleP21SW9Providers(t, repo, workspace)
-		unrelated := scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID)
-		projects := scaleP21SW9Hash(t, repo, workspace, "projects", "")
-		settings := scaleP21SW9Hash(t, repo, workspace, "settings", "")
+		original := oidcProviderVerificationProviders(t, repo, workspace)
+		unrelated := oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID)
+		projects := oidcProviderVerificationHash(t, repo, workspace, "projects", "")
+		settings := oidcProviderVerificationHash(t, repo, workspace, "settings", "")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, discovery string
@@ -367,7 +367,7 @@ func TestScaleP21SW9ProviderVerificationDifferential(t *testing.T) {
 						if spec.unsafe {
 							target.Issuer = "http://sw9-idp.example.test/issuer"
 						}
-						scaleP21SW9Reset(t, repo, workspace, target)
+						oidcProviderVerificationReset(t, repo, workspace, target)
 						upstream.mode = spec.discovery
 						var webhook domain.DomainEvent
 						var realtime domain.RealtimeEvent
@@ -380,7 +380,7 @@ func TestScaleP21SW9ProviderVerificationDifferential(t *testing.T) {
 						}
 						r.SetPathValue("id", id)
 						started := time.Now().UTC()
-						scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+						callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 						if w.Code != spec.status {
 							t.Fatalf("verification status=%d want=%d body=%s", w.Code, spec.status, w.Body.String())
 						}
@@ -398,37 +398,37 @@ func TestScaleP21SW9ProviderVerificationDifferential(t *testing.T) {
 						if err != nil || len(entries) != 0 {
 							t.Fatal("verification changed audit semantics", err)
 						}
-						outcomes = append(outcomes, scaleP21SW9Value(t, []any{
-							w.Code, scaleP21M3JSON(t, w.Body.Bytes()), data,
+						outcomes = append(outcomes, oidcProviderVerificationValue(t, []any{
+							w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes()), data,
 							webhook.Type, webhook.AggregateID, webhook.Payload, webhook.PreviousValues, webhook.Snapshot,
 							realtime.Type, realtime.AggregateID, realtime.ActorID, realtime.Payload, entries,
 						}))
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("verification differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("verification differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
 		})
-		if scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID) != unrelated ||
-			scaleP21SW9Hash(t, repo, workspace, "projects", "") != projects ||
-			scaleP21SW9Hash(t, repo, workspace, "settings", "") != settings ||
+		if oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID) != unrelated ||
+			oidcProviderVerificationHash(t, repo, workspace, "projects", "") != projects ||
+			oidcProviderVerificationHash(t, repo, workspace, "settings", "") != settings ||
 			f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("verification changed unrelated rows or decoded complete metadata")
 		}
 	}
 }
 
-func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
+func TestProviderVerificationRacesAndBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	upstream := scaleP21SW9Outbound(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	upstream := oidcProviderVerificationOutbound(t)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		original := scaleP21SW9Providers(t, repo, workspace)
-		unrelated := scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID)
+		original := oidcProviderVerificationProviders(t, repo, workspace)
+		unrelated := oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID)
 		actor := f.principals[1].user
 		resume := func() {
 			t.Helper()
@@ -458,7 +458,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 					resume()
 					target := original
 					target.DiscoveryStatus = "unverified"
-					scaleP21SW9Reset(t, repo, workspace, target)
+					oidcProviderVerificationReset(t, repo, workspace, target)
 					r, w := f.request(actor, nil, nil), httptest.NewRecorder()
 					r.SetPathValue("id", target.ID)
 					ctx, cancel := context.WithCancel(r.Context())
@@ -489,7 +489,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 										case "updated":
 											data.IdentityProviders[i].UpdatedAt = original.UpdatedAt.Add(time.Hour)
 										case "issuer":
-											data.IdentityProviders[i].Issuer = scaleP21SW9Issuer + "/changed"
+											data.IdentityProviders[i].Issuer = oidcProviderVerificationIssuer + "/changed"
 										case "deleted":
 											data.IdentityProviders = append(data.IdentityProviders[:i], data.IdentityProviders[i+1:]...)
 										}
@@ -517,7 +517,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 						finished := make(chan struct{})
 						go func() {
 							defer close(finished)
-							scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+							callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 						}()
 						select {
 						case <-held:
@@ -527,7 +527,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 							t.Fatalf("verification returned before held outbound stage: %d %s", w.Code, w.Body.String())
 						}
 					} else {
-						scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+						callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 					}
 					cancel()
 					if w.Code != spec.status {
@@ -546,25 +546,25 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 						}
 						rows = append(rows, []any{item.Key, item.Missing, item.Data})
 					}
-					outcomes = append(outcomes, scaleP21SW9Value(t, []any{
-						w.Code, scaleP21M3JSON(t, w.Body.Bytes()), rows,
+					outcomes = append(outcomes, oidcProviderVerificationValue(t, []any{
+						w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes()), rows,
 						webhook.Type, webhook.AggregateID, webhook.Payload, webhook.PreviousValues, webhook.Snapshot,
 						realtime.Type, realtime.AggregateID, realtime.ActorID, realtime.Payload,
 					}))
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("held verification differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("held verification differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}
 		resume()
-		scaleP21SW9Reset(t, repo, workspace, original)
+		oidcProviderVerificationReset(t, repo, workspace, original)
 		withoutAdmin := &domain.APIKey{ID: "sw9-read-key", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}}
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
 			r, w := f.request(f.data.Viewer, withoutAdmin, nil), httptest.NewRecorder()
 			r.SetPathValue("id", original.ID)
 			before := upstream.calls
-			scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 			if w.Code != http.StatusNotFound || upstream.calls != before {
 				t.Fatalf("key without admin scope exposed provider: %d %s", w.Code, w.Body.String())
 			}
@@ -573,7 +573,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", original.Name)
 			before := upstream.calls
-			scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 			if w.Code != http.StatusNotFound || upstream.calls != before {
 				t.Fatal("provider name was treated as a canonical ID")
 			}
@@ -586,7 +586,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		f.resources.workspaces = append(f.resources.workspaces, foreign.Workspace.URLKey)
-		foreignProvider := scaleP21SW9Providers(t, repo, foreign.Workspace.URLKey)
+		foreignProvider := oidcProviderVerificationProviders(t, repo, foreign.Workspace.URLKey)
 		f.probe, err = repo.BoundedMetadataViewForTesting(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -604,7 +604,7 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 				r.SetPathValue("workspaceKey", binding.workspace)
 				r.SetPathValue("workspace", binding.workspace)
 				r.SetPathValue("id", binding.provider)
-				scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+				callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 				if w.Code != http.StatusNotFound || upstream.calls != before {
 					t.Fatalf("cross-workspace provider verification: %d %s", w.Code, w.Body.String())
 				}
@@ -615,12 +615,12 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, phase := range []string{"queued", "replayed"} {
-			for _, credential := range scaleP21M3Credentials() {
+			for _, credential := range pointSettingsCredentialCases() {
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					r, w := f.request(member, credential.key, nil), httptest.NewRecorder()
 					r.SetPathValue("id", original.ID)
 					before := upstream.calls
-					scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 					if w.Code != http.StatusForbidden || upstream.calls != before {
 						t.Fatalf("%s verification reused revoked authority: %d %s", phase, w.Code, w.Body.String())
 					}
@@ -629,32 +629,32 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 		}
 		large := original
 		large.Name = strings.Repeat("large verification provider ", 18000)
-		scaleP21SW9Reset(t, repo, workspace, large)
-		beforeRows := scaleP21SW9Hash(t, repo, workspace, "identityProviders", "")
+		oidcProviderVerificationReset(t, repo, workspace, large)
+		beforeRows := oidcProviderVerificationHash(t, repo, workspace, "identityProviders", "")
 		before := upstream.calls
 		for _, source := range []*store.SQLiteStore{repo, f.probe} {
 			r, w := f.request(f.data.Viewer, withoutAdmin, nil), httptest.NewRecorder()
 			r.SetPathValue("id", original.ID)
-			scaleP21M3Call(&server{store: source}, w, r, (*server).verifyIdentityProvider)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).verifyIdentityProvider)
 			if w.Code != http.StatusNotFound || upstream.calls != before {
 				t.Fatalf("restricted key learned an oversized provider exists: %d %s", w.Code, w.Body.String())
 			}
 		}
 		r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 		r.SetPathValue("id", original.ID)
-		scaleP21M3Call(&server{store: f.probe}, w, r, (*server).verifyIdentityProvider)
+		callPointSettingsHandler(&server{store: f.probe}, w, r, (*server).verifyIdentityProvider)
 		if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
-			upstream.calls != before || scaleP21SW9Hash(t, repo, workspace, "identityProviders", "") != beforeRows {
+			upstream.calls != before || oidcProviderVerificationHash(t, repo, workspace, "identityProviders", "") != beforeRows {
 			t.Fatalf("oversized selected provider did not fail before external work: %d %s", w.Code, w.Body.String())
 		}
-		scaleP21SW9Reset(t, repo, workspace, original)
+		oidcProviderVerificationReset(t, repo, workspace, original)
 		r, w = f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 		r.SetPathValue("id", original.ID)
-		scaleP21M3Call(&server{store: f.probe}, w, r, (*server).verifyIdentityProvider)
+		callPointSettingsHandler(&server{store: f.probe}, w, r, (*server).verifyIdentityProvider)
 		if w.Code != http.StatusOK {
 			t.Fatalf("request after budget failure did not recover: %d %s", w.Code, w.Body.String())
 		}
-		if scaleP21SW9Hash(t, repo, workspace, "identityProviders", original.ID) != unrelated || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if oidcProviderVerificationHash(t, repo, workspace, "identityProviders", original.ID) != unrelated || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("race verification changed unrelated providers or decoded full metadata")
 		}
 	}

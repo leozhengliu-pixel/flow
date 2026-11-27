@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW23CoreManifestGuardCanonicalRows(t *testing.T) {
+func TestCoreManifestGuardCanonicalRows(t *testing.T) {
 	for _, field := range []string{"workspace", "viewer", "viewerRole"} {
 		for _, hasRow := range []bool{false, true} {
 			t.Run(field+map[bool]string{false: "-empty", true: "-row"}[hasRow], func(t *testing.T) {
-				f, view, tx := scaleP21SW0ResidentScannerFixture(t)
+				f, view, tx := residentScannerFixture(t)
 				workspace := f.data.Workspace.URLKey
 				var raw []byte
 				if err := tx.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -70,8 +70,8 @@ func TestScaleP21SW23CoreManifestGuardCanonicalRows(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23CoreManifestGuardInlineParity(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentScannerFixture(t)
+func TestCoreManifestGuardInlineParity(t *testing.T) {
+	f, view, tx := residentScannerFixture(t)
 	workspace := f.data.Workspace.URLKey
 	var raw []byte
 	if err := tx.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -114,7 +114,7 @@ func TestScaleP21SW23CoreManifestGuardInlineParity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23CoreManifestGuardOtherCollections(t *testing.T) {
+func TestCoreManifestGuardOtherCollections(t *testing.T) {
 	for _, shape := range []string{"array", "map", "updates"} {
 		root := map[string]any{
 			"workspace": map[string]any{"id": "inline-workspace"},

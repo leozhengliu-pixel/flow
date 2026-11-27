@@ -14,13 +14,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW244ColdTemplateLargeDifferential(t *testing.T) {
+func TestColdTemplateLargeDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	role, status, err := repo.WorkspaceRole(t.Context(), f.data.Workspace.ID, f.data.Viewer.ID)
 	if err != nil || status != "active" || !workspaceAdminRole(role) {
@@ -65,7 +65,7 @@ func TestScaleP21SW244ColdTemplateLargeDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	template := func(state scaleP21SW207Outcome, id string) json.RawMessage {
+	template := func(state coldSettingsOutcome, id string) json.RawMessage {
 		t.Helper()
 		for _, row := range state.Metadata {
 			if row[0] == "documentTemplates" && row[1] == id {
@@ -86,56 +86,56 @@ func TestScaleP21SW244ColdTemplateLargeDifferential(t *testing.T) {
 			var expectedOrders [][]any
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				reset()
-				orders := scaleP21SW207Rows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
+				orders := coldSettingsRows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 				if source == repo {
 					expectedOrders = orders
 				} else {
-					scaleP21SW207RestoreOrders(t, f, expectedOrders)
+					restoreOrders(t, f, expectedOrders)
 					if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 						t.Fatal(err)
 					}
 					if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 						t.Fatal(err)
 					}
-					orders = scaleP21SW207Rows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
+					orders = coldSettingsRows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 					if !reflect.DeepEqual(expectedOrders, orders) {
 						t.Fatal("large template legs began with different canonical collection orders")
 					}
 				}
-				before := scaleP21SW207State(t, f)
+				before := coldSettingsState(t, f)
 				retainedBefore := template(before, retained)
 				if len(template(before, target)) <= 256<<10 || len(retainedBefore) == 0 {
 					t.Fatal("large target or unrelated durable template is missing")
 				}
 				prior := map[any]bool{}
-				for _, row := range scaleP21SW207Rows(t, f, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
+				for _, row := range coldSettingsRows(t, f, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
 					prior[row[0]] = true
 				}
-				got := scaleP21SW207Outcome{}
+				got := coldSettingsOutcome{}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot}))
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot}))
 				})
 				source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "clientId": event.ClientID, "payload": event.Payload}))
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "clientId": event.ClientID, "payload": event.Payload}))
 				})
 				t.Cleanup(func() {
 					source.SetWebhookSink(nil)
 					source.SetRealtimeSink(nil)
 				})
 				started := time.Now().UTC()
-				response := scaleP21SW207Serve(t, source, workspace, f.data.Viewer.ID, session, test.method, "/api/document-templates/"+target, test.body, nil)
+				response := coldSettingsServe(t, source, workspace, f.data.Viewer.ID, session, test.method, "/api/document-templates/"+target, test.body, nil)
 				finished := time.Now().UTC()
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
-				state := scaleP21SW207State(t, f)
+				state := coldSettingsState(t, f)
 				state.Code, state.Header = response.Code, response.Header().Clone()
 				if response.Body.Len() != 0 {
 					state.Response = bytes.Clone(response.Body.Bytes())
 				}
 				state.Webhooks, state.Realtime = got.Webhooks, got.Realtime
-				for _, row := range scaleP21SW207Rows(t, f, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID, 3, 4) {
+				for _, row := range coldSettingsRows(t, f, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID, 3, 4) {
 					if !prior[row[0]] {
-						state.Events = append(state.Events, scaleP21SW106Envelope(t, row[1:]))
+						state.Events = append(state.Events, discussionRoutesEnvelope(t, row[1:]))
 					}
 				}
 				if state.Code != test.code || len(state.Events) != 1 || len(state.Webhooks) != 1 || len(state.Realtime) != 1 {
@@ -158,11 +158,11 @@ func TestScaleP21SW244ColdTemplateLargeDifferential(t *testing.T) {
 				} else if response.Body.Len() != 0 || template(state, target) != nil {
 					t.Fatal("large delete returned a body or retained its durable target")
 				}
-				actual := scaleP21SW207Normalize(t, state, "", started, finished)
+				actual := coldSettingsNormalize(t, state, "", started, finished)
 				if source == repo {
 					expected = actual
 				} else if !reflect.DeepEqual(expected, actual) {
-					t.Fatalf("large template output/SQL/publication differs: %s", scaleP21M2Diff(expected, actual))
+					t.Fatalf("large template output/SQL/publication differs: %s", policyFirstDifference(expected, actual))
 				}
 				if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 					t.Fatal("large template route retained output ownership or entered HOT hydration")

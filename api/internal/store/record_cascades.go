@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP16CascadePageSize = 32
+const scaleCascadePageSize = 32
 
 // Match inspects immutable record headers under mu; Apply owns only one page.
 // SQL rows are locked and all pages publish in the parent's transaction.
@@ -32,7 +32,7 @@ func WithProjectRecordPageObserver(ctx context.Context, visit func(string, int) 
 	return context.WithValue(ctx, projectRecordPageObserverKey{}, visit)
 }
 
-func scaleP16CascadeField(data *domain.Bootstrap, name string) (reflect.Value, error) {
+func scaleCascadeField(data *domain.Bootstrap, name string) (reflect.Value, error) {
 	for _, field := range persistedMetadataFields() {
 		if field.name == name {
 			return reflect.ValueOf(data).Elem().Field(field.index), nil
@@ -41,12 +41,12 @@ func scaleP16CascadeField(data *domain.Bootstrap, name string) (reflect.Value, e
 	return reflect.Value{}, fmt.Errorf("unknown cascade field %s", name)
 }
 
-func scaleP16CascadeKeys(source *domain.Bootstrap, plan ProjectRecordCascade, start int) ([]string, int, error) {
-	value, err := scaleP16CascadeField(source, plan.Field)
+func scaleCascadeKeys(source *domain.Bootstrap, plan ProjectRecordCascade, start int) ([]string, int, error) {
+	value, err := scaleCascadeField(source, plan.Field)
 	if err != nil {
 		return nil, 0, err
 	}
-	keys := make([]string, 0, scaleP16CascadePageSize)
+	keys := make([]string, 0, scaleCascadePageSize)
 	index := start
 	for ; index < value.Len(); index++ {
 		if !plan.Match(source, index) {
@@ -57,7 +57,7 @@ func scaleP16CascadeKeys(source *domain.Bootstrap, plan ProjectRecordCascade, st
 			return nil, 0, ErrMetadataRecordQuery
 		}
 		keys = append(keys, id)
-		if len(keys) == scaleP16CascadePageSize {
+		if len(keys) == scaleCascadePageSize {
 			index++
 			break
 		}
@@ -65,9 +65,9 @@ func scaleP16CascadeKeys(source *domain.Bootstrap, plan ProjectRecordCascade, st
 	return keys, index, nil
 }
 
-func scaleP16ReadCascadePage(ctx context.Context, reader metadataReader, workspace, field string, keys []string, lock string) (domain.Bootstrap, error) {
+func scaleReadCascadePage(ctx context.Context, reader metadataReader, workspace, field string, keys []string, lock string) (domain.Bootstrap, error) {
 	page := domain.Bootstrap{}
-	value, err := scaleP16CascadeField(&page, field)
+	value, err := scaleCascadeField(&page, field)
 	if err != nil {
 		return page, err
 	}
@@ -92,23 +92,23 @@ func scaleP16ReadCascadePage(ctx context.Context, reader metadataReader, workspa
 	return page, rows.Err()
 }
 
-func (s *SQLiteStore) scaleP16RunCascade(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
+func (s *SQLiteStore) scaleRunCascade(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
 	if plan.Field == "issues" {
-		return s.scaleP16CascadeIssues(ctx, tx, workspace, source, plan)
+		return s.scaleCascadeIssues(ctx, tx, workspace, source, plan)
 	}
 	if plan.Field == "documents" {
-		return s.scaleP16CascadeDocumentScopes(ctx, tx, workspace, source, plan)
+		return s.scaleCascadeDocumentScopes(ctx, tx, workspace, source, plan)
 	}
 	lock := ""
 	if s.dialect != "sqlite" {
 		lock = " FOR UPDATE"
 	}
 	for cursor, pageNumber := 0, 1; ; pageNumber++ {
-		keys, next, err := scaleP16CascadeKeys(source, plan, cursor)
+		keys, next, err := scaleCascadeKeys(source, plan, cursor)
 		if err != nil || len(keys) == 0 {
 			return err
 		}
-		page, err := scaleP16ReadCascadePage(ctx, tx, workspace, plan.Field, keys, lock)
+		page, err := scaleReadCascadePage(ctx, tx, workspace, plan.Field, keys, lock)
 		if err != nil {
 			return err
 		}
@@ -116,14 +116,14 @@ func (s *SQLiteStore) scaleP16RunCascade(ctx context.Context, tx *sqlTx, workspa
 		if err := plan.Apply(source, &page); err != nil {
 			return err
 		}
-		changes, root, err := scaleP16RecordChanges(before, page)
+		changes, root, err := scaleRecordChanges(before, page)
 		if err != nil {
 			return err
 		}
 		if len(root) != 0 {
 			return ErrMetadataRecordQuery
 		}
-		if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{Users: source.Users}), changes); err != nil {
+		if err := scaleWriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{Users: source.Users}), changes); err != nil {
 			return err
 		}
 		if visit, ok := ctx.Value(projectRecordPageObserverKey{}).(func(string, int) error); ok {
@@ -135,7 +135,7 @@ func (s *SQLiteStore) scaleP16RunCascade(ctx context.Context, tx *sqlTx, workspa
 	}
 }
 
-func (s *SQLiteStore) scaleP16CascadeIssues(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
+func (s *SQLiteStore) scaleCascadeIssues(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
 	lock := ""
 	if s.dialect != "sqlite" {
 		lock = " FOR UPDATE"
@@ -200,23 +200,23 @@ func (s *SQLiteStore) scaleP16CascadeIssues(ctx context.Context, tx *sqlTx, work
 	}
 }
 
-func (s *SQLiteStore) scaleP16InstallCascade(ctx context.Context, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
+func (s *SQLiteStore) scaleInstallCascade(ctx context.Context, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
 	if plan.Field == "issues" {
 		return nil
 	}
 	if plan.Field == "documents" {
-		return s.scaleP16InstallDocumentScopes(ctx, workspace, source, plan)
+		return s.scaleInstallDocumentScopes(ctx, workspace, source, plan)
 	}
 	for cursor := 0; ; {
-		keys, next, err := scaleP16CascadeKeys(source, plan, cursor)
+		keys, next, err := scaleCascadeKeys(source, plan, cursor)
 		if err != nil || len(keys) == 0 {
 			return err
 		}
-		page, err := scaleP16ReadCascadePage(ctx, s.db, workspace, plan.Field, keys, "")
+		page, err := scaleReadCascadePage(ctx, s.db, workspace, plan.Field, keys, "")
 		if err != nil {
 			return err
 		}
-		value, _ := scaleP16CascadeField(&page, plan.Field)
+		value, _ := scaleCascadeField(&page, plan.Field)
 		present := map[string]json.RawMessage{}
 		for index := 0; index < value.Len(); index++ {
 			id, _ := metadataRecordValueKey(value.Index(index))
@@ -235,7 +235,7 @@ func (s *SQLiteStore) scaleP16InstallCascade(ctx context.Context, workspace stri
 				dropped++
 			}
 		}
-		if err := scaleP16InstallChanges(source, *source, changes); err != nil {
+		if err := scaleInstallChanges(source, *source, changes); err != nil {
 			return err
 		}
 		cursor = next - dropped

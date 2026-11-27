@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
+func TestDiscussionOrdinalScopeDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -22,11 +22,11 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 		for _, shape := range []string{"empty-id", "overlong-id", "many-keys"} {
 			for _, mode := range []string{"changed", "rollback", "canceled"} {
 				t.Run(fmt.Sprintf("reload=%t/%s/%s", reload, shape, mode), func(t *testing.T) {
-					f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+					f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 					workspace := f.data.Workspace.URLKey
 					at := time.Date(2026, 11, 16, 4, 5, 6, 7, time.UTC)
 					type outcome struct {
-						Business                   scaleP21SW63Business
+						Business                   discussionWriterBusiness
 						Installed                  []domain.ThreadSubscription
 						Events, Webhooks, Realtime []any
 						Calls                      int
@@ -34,7 +34,7 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 					}
 					var results []any
 					for _, bounded := range []bool{false, true} {
-						scaleP21SW63Seed(t, f, issue, at)
+						discussionWriterSeed(t, f, issue, at)
 						if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw196_seed", "", nil, func(data *domain.Bootstrap) error {
 							selected, foreign := data.ThreadSubscriptions[0], data.ThreadSubscriptions[1]
 							count := 1
@@ -58,9 +58,9 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 						}); err != nil {
 							t.Fatal(err)
 						}
-						repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
-						before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						prior := scaleP21SW63EventIDs(t, repo, workspace)
+						repo := scaleIssuePersistenceView(t, f, bounded, reload)
+						before := businessRows(t, repo, workspace, issue.ID)
+						prior := eventIDs(t, repo, workspace)
 						var closes []func()
 						closeOutput := func() {
 							for _, close := range closes {
@@ -141,9 +141,9 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 						if got.Calls != 1 {
 							t.Fatal("callback count", got.Calls)
 						}
-						got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-						got.Installed = scaleP21SW98Installed(t, repo, workspace).ThreadSubscriptions
-						got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+						got.Business = businessRows(t, repo, workspace, issue.ID)
+						got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace).ThreadSubscriptions
+						got.Events = newEvents(t, repo, workspace, prior)
 						wantEvents := 1
 						if mode != "changed" {
 							wantEvents = 0
@@ -154,7 +154,7 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 						if len(got.Events) != wantEvents || len(got.Webhooks) != wantEvents || len(got.Realtime) != wantEvents {
 							t.Fatal("discussion publication counts", len(got.Events), len(got.Webhooks), len(got.Realtime))
 						}
-						results = append(results, scaleP21SW63JSON(t, got))
+						results = append(results, discussionWriterJSON(t, got))
 						if bounded && (len(closes) != 1 || repo.MetadataWorkUsedForTesting() == 0 || captured == nil) {
 							t.Fatal("discussion output lost response ownership")
 						}
@@ -165,7 +165,7 @@ func TestScaleP21SW196DiscussionOrdinalScopeDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatal("literal/bounded discussion differs", scaleP21SW98FirstDiff(results[0], results[1], "discussion"))
+						t.Fatal("literal/bounded discussion differs", firstDiff(results[0], results[1], "discussion"))
 					}
 				})
 			}

@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW19NativeSCIMTeamRead(t *testing.T) {
+func TestNativeSCIMTeamRead(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	first, second, mapped := idgen.New("team_sw19_first_"), idgen.New("team_sw19_second_"), idgen.New("team_sw19_mapped_")

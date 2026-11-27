@@ -11,10 +11,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21HotWebhookInstalledDifferential(t *testing.T) {
+func TestScaleHotWebhookInstalledDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, unrelated := f.data.Workspace.URLKey, idgen.New("hot-webhook-unrelated-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.hot_webhook_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: unrelated, Description: strings.Repeat("unrelated body ", 30000)})
@@ -123,7 +123,7 @@ func TestScaleP21HotWebhookInstalledDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotWebhookIdentityAndLifetime(t *testing.T) {
+func TestScaleHotWebhookIdentityAndLifetime(t *testing.T) {
 	physical := "physical\x00key"
 	data := domain.Bootstrap{Workspace: domain.Workspace{URLKey: "logical-key"}, Loops: []domain.Loop{{Enabled: true, Status: "dra\x00ft", TriggerType: "event"}}}
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
@@ -200,17 +200,17 @@ func TestScaleP21HotWebhookIdentityAndLifetime(t *testing.T) {
 	checkReleased()
 }
 
-type scaleP21HotWebhookContext struct {
+type scaleHotWebhookContext struct {
 	context.Context
 	check func()
 }
 
-func (ctx scaleP21HotWebhookContext) Err() error {
+func (ctx scaleHotWebhookContext) Err() error {
 	ctx.check()
 	return ctx.Context.Err()
 }
 
-func TestScaleP21HotWebhookRetainedTraversal(t *testing.T) {
+func TestScaleHotWebhookRetainedTraversal(t *testing.T) {
 	for _, phase := range []string{"replace", "cancel"} {
 		t.Run(phase, func(t *testing.T) {
 			workspace := "hot-webhook-retained"
@@ -231,7 +231,7 @@ func TestScaleP21HotWebhookRetainedTraversal(t *testing.T) {
 			parent, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			entered := false
-			ctx := scaleP21HotWebhookContext{Context: parent, check: func() {
+			ctx := scaleHotWebhookContext{Context: parent, check: func() {
 				source.mu.Lock()
 				refs := source.refs
 				source.mu.Unlock()
@@ -278,12 +278,12 @@ func TestScaleP21HotWebhookRetainedTraversal(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotWebhookPointWriterWarmPreviousValues(t *testing.T) {
+func TestScaleHotWebhookPointWriterWarmPreviousValues(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("hot-webhook-target-")
 	loop := idgen.New("hot-webhook-loop-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects", "loops", "webhooks", "integrationConnections"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -359,9 +359,9 @@ func TestScaleP21HotWebhookPointWriterWarmPreviousValues(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotWebhookMissingApplicationFallback(t *testing.T) {
+func TestScaleHotWebhookMissingApplicationFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if err := f.EnsureChatIntegrationsSchema(t.Context()); err != nil {
 		t.Fatal(err)
 	}

@@ -8,12 +8,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP16PermissionSideEffectsDifferential(t *testing.T) {
+func TestScalePermissionSideEffectsDifferential(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	scaleP16PermissionMatrix(t, true)
+	permissionsScalePermissionMatrix(t, true)
 }
 
-type scaleP16PermissionProbe struct {
+type scalePermissionProbe struct {
 	repo                   *store.SQLiteStore
 	workspace, workspaceID string
 	baseline               []byte
@@ -21,7 +21,7 @@ type scaleP16PermissionProbe struct {
 	auditSeq               int64
 }
 
-func newScaleP16PermissionProbe(t *testing.T, repo *store.SQLiteStore, workspace string, enabled bool) *scaleP16PermissionProbe {
+func newScalePermissionProbe(t *testing.T, repo *store.SQLiteStore, workspace string, enabled bool) *scalePermissionProbe {
 	t.Helper()
 	if !enabled {
 		return nil
@@ -31,7 +31,7 @@ func newScaleP16PermissionProbe(t *testing.T, repo *store.SQLiteStore, workspace
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &scaleP16PermissionProbe{repo: repo, workspace: workspace, workspaceID: data.Workspace.ID, baseline: raw}
+	p := &scalePermissionProbe{repo: repo, workspace: workspace, workspaceID: data.Workspace.ID, baseline: raw}
 	repo.SetRealtimeSink(func(key string, event domain.RealtimeEvent) {
 		if key != workspace {
 			return
@@ -49,7 +49,7 @@ func newScaleP16PermissionProbe(t *testing.T, repo *store.SQLiteStore, workspace
 	return p
 }
 
-func (p *scaleP16PermissionProbe) reset(t *testing.T) {
+func (p *scalePermissionProbe) reset(t *testing.T) {
 	t.Helper()
 	var data domain.Bootstrap
 	if err := json.Unmarshal(p.baseline, &data); err != nil {
@@ -72,7 +72,7 @@ func (p *scaleP16PermissionProbe) reset(t *testing.T) {
 	}
 }
 
-func (p *scaleP16PermissionProbe) result(t *testing.T) map[string]string {
+func (p *scalePermissionProbe) result(t *testing.T) map[string]string {
 	t.Helper()
 	data, _ := p.repo.BootstrapFor(p.workspace)
 	entries, err := p.repo.ListAuditEntries(t.Context(), p.workspaceID, store.AuditQuery{Limit: 100})
@@ -96,7 +96,7 @@ func (p *scaleP16PermissionProbe) result(t *testing.T) map[string]string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result[name] = scaleP04Normalize(raw)
+		result[name] = scaleNormalize(raw)
 	}
 	return result
 }

@@ -7,9 +7,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-// The instruction-derived values come from scaleP21LoopText; Instructions may
+// The instruction-derived values come from scaleLoopText; Instructions may
 // remain an opaque body marker until the owning bootstrap reader binds output.
-func scaleP21PresentLoop(counts map[string]int, loop domain.Loop, instructionsHash, fallbackDescription string) domain.Loop {
+func scalePresentLoop(counts map[string]int, loop domain.Loop, instructionsHash, fallbackDescription string) domain.Loop {
 	if loop.Status == "" {
 		loop.Status = "published"
 	}
@@ -40,7 +40,7 @@ func scaleP21PresentLoop(counts map[string]int, loop domain.Loop, instructionsHa
 
 // The owner supplies decoded raw instruction bytes without materializing a
 // string. A failed read keeps the original loop slice, never a presented prefix.
-func scaleP21SanitizeBootstrap(ctx context.Context, data *domain.Bootstrap, chunks func(context.Context, string, func([]byte) error) error) error {
+func scaleSanitizeBootstrap(ctx context.Context, data *domain.Bootstrap, chunks func(context.Context, string, func([]byte) error) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -56,13 +56,13 @@ func scaleP21SanitizeBootstrap(ctx context.Context, data *domain.Bootstrap, chun
 	}
 	presented := make([]domain.Loop, len(loops))
 	for index, loop := range loops {
-		hash, description, err := scaleP21LoopText(ctx, loop.Name, func(visit func([]byte) error) error {
+		hash, description, err := scaleLoopText(ctx, loop.Name, func(visit func([]byte) error) error {
 			return chunks(ctx, loop.Instructions, visit)
 		})
 		if err != nil {
 			return err
 		}
-		presented[index] = scaleP21PresentLoop(nil, loop, hash, description)
+		presented[index] = scalePresentLoop(nil, loop, hash, description)
 	}
 	if err := ctx.Err(); err != nil {
 		return err

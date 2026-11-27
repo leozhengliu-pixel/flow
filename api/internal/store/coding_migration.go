@@ -16,11 +16,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW17JSONRange struct{ start, size int64 }
+type legacyCodingJSONRange struct{ start, size int64 }
 
 // The detached input preserves one read snapshot while each native environment
 // insert keeps its original autocommit behavior, including on one SQL connection.
-func (s *SQLiteStore) scaleP21SW17MigrateCodingEnvironments(ctx context.Context, workspace string) (int, error) {
+func (s *SQLiteStore) migrateCodingEnvironmentsBounded(ctx context.Context, workspace string) (int, error) {
 	scanCtx, scanRelease, err := s.admitMetadataWork(ctx, metadataPolicyBytes+(8<<20))
 	if err != nil {
 		return 0, err
@@ -37,7 +37,7 @@ func (s *SQLiteStore) scaleP21SW17MigrateCodingEnvironments(ctx context.Context,
 		return 0, err
 	}
 	defer input.Close()
-	size, createdAt, err := s.scaleP21SW17DetachCodingSettings(scanCtx, workspace, input)
+	size, createdAt, err := s.detachLegacyCodingSettings(scanCtx, workspace, input)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
@@ -47,12 +47,12 @@ func (s *SQLiteStore) scaleP21SW17MigrateCodingEnvironments(ctx context.Context,
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
-	read := func(part scaleP21SW17JSONRange) io.Reader {
+	read := func(part legacyCodingJSONRange) io.Reader {
 		return io.NewSectionReader(input, part.start, part.size)
 	}
-	scanner := scaleP21SW17JSONScanner{ctx: ctx, reader: bufio.NewReaderSize(read(scaleP21SW17JSONRange{size: size}), metadataRecordChunkBytes), readRange: read}
+	scanner := legacyCodingJSONScanner{ctx: ctx, reader: bufio.NewReaderSize(read(legacyCodingJSONRange{size: size}), metadataRecordChunkBytes), readRange: read}
 	migrated := 0
-	_, count, err := scanner.settings(func(index int, part scaleP21SW17JSONRange) error {
+	_, count, err := scanner.settings(func(index int, part legacyCodingJSONRange) error {
 		if part.size > (metadataPolicyBytes+(8<<20)-(2<<20))/3 {
 			return ErrMetadataWorkBudget
 		}
@@ -102,7 +102,7 @@ func (s *SQLiteStore) scaleP21SW17MigrateCodingEnvironments(ctx context.Context,
 		return migrated, err
 	}
 	defer release()
-	if err := s.scaleP21SW17ClearCodingEnvironments(workCtx, workspace, read, size); err != nil {
+	if err := s.clearLegacyCodingEnvironments(workCtx, workspace, read, size); err != nil {
 		return migrated, err
 	}
 	s.dropMetadataCache(workCtx, workspace)
@@ -114,7 +114,7 @@ func (s *SQLiteStore) scaleP21SW17MigrateCodingEnvironments(ctx context.Context,
 	return migrated, nil
 }
 
-func (s *SQLiteStore) scaleP21SW17DetachCodingSettings(ctx context.Context, workspace string, dst io.Writer) (int64, time.Time, error) {
+func (s *SQLiteStore) detachLegacyCodingSettings(ctx context.Context, workspace string, dst io.Writer) (int64, time.Time, error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return 0, time.Time{}, err
@@ -146,7 +146,7 @@ func (s *SQLiteStore) scaleP21SW17DetachCodingSettings(ctx context.Context, work
 	return size, createdAt, tx.Rollback()
 }
 
-func (s *SQLiteStore) scaleP21SW17ClearCodingEnvironments(ctx context.Context, workspace string, baseRead func(scaleP21SW17JSONRange) io.Reader, baseSize int64) error {
+func (s *SQLiteStore) clearLegacyCodingEnvironments(ctx context.Context, workspace string, baseRead func(legacyCodingJSONRange) io.Reader, baseSize int64) error {
 	tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 	if err != nil {
 		return err
@@ -170,8 +170,8 @@ func (s *SQLiteStore) scaleP21SW17ClearCodingEnvironments(ctx context.Context, w
 	var remaining bytes.Buffer
 	remaining.WriteByte('{')
 	fields := 0
-	scanner := scaleP21SW17JSONScanner{ctx: ctx, reader: bufio.NewReaderSize(baseRead(scaleP21SW17JSONRange{size: baseSize}), metadataRecordChunkBytes), readRange: baseRead}
-	_, _, err = scanner.settings(nil, func(name string, part scaleP21SW17JSONRange) error {
+	scanner := legacyCodingJSONScanner{ctx: ctx, reader: bufio.NewReaderSize(baseRead(legacyCodingJSONRange{size: baseSize}), metadataRecordChunkBytes), readRange: baseRead}
+	_, _, err = scanner.settings(nil, func(name string, part legacyCodingJSONRange) error {
 		encoded, _ := json.Marshal(name)
 		if int64(remaining.Len()+len(encoded)+3)+part.size > MetadataRecordPageMaxBytes {
 			return ErrMetadataPageBudget
@@ -235,14 +235,14 @@ func (s *SQLiteStore) scaleP21SW17ClearCodingEnvironments(ctx context.Context, w
 	return s.installResidentPolicy(workspace, policy, stamp, head, cost)
 }
 
-type scaleP21SW17JSONScanner struct {
+type legacyCodingJSONScanner struct {
 	ctx       context.Context
 	reader    *bufio.Reader
-	readRange func(scaleP21SW17JSONRange) io.Reader
+	readRange func(legacyCodingJSONRange) io.Reader
 	offset    int64
 }
 
-func (s *scaleP21SW17JSONScanner) byte() (byte, error) {
+func (s *legacyCodingJSONScanner) byte() (byte, error) {
 	if s.offset&((4<<10)-1) == 0 && s.ctx != nil {
 		if err := s.ctx.Err(); err != nil {
 			return 0, err
@@ -255,7 +255,7 @@ func (s *scaleP21SW17JSONScanner) byte() (byte, error) {
 	return c, err
 }
 
-func (s *scaleP21SW17JSONScanner) peek() (byte, error) {
+func (s *legacyCodingJSONScanner) peek() (byte, error) {
 	p, err := s.reader.Peek(1)
 	if err != nil {
 		return 0, err
@@ -263,7 +263,7 @@ func (s *scaleP21SW17JSONScanner) peek() (byte, error) {
 	return p[0], nil
 }
 
-func (s *scaleP21SW17JSONScanner) spaces() error {
+func (s *legacyCodingJSONScanner) spaces() error {
 	for {
 		c, err := s.peek()
 		if err != nil {
@@ -278,7 +278,7 @@ func (s *scaleP21SW17JSONScanner) spaces() error {
 	}
 }
 
-func (s *scaleP21SW17JSONScanner) expect(want byte) error {
+func (s *legacyCodingJSONScanner) expect(want byte) error {
 	if err := s.spaces(); err != nil {
 		return err
 	}
@@ -295,11 +295,11 @@ func (s *scaleP21SW17JSONScanner) expect(want byte) error {
 // Find value boundaries without decoding skipped arrays or strings. Canonical
 // typed settings have bounded field names; each selected environment is decoded
 // separately after its complete encoded size is known.
-func (s *scaleP21SW17JSONScanner) value() (scaleP21SW17JSONRange, error) {
+func (s *legacyCodingJSONScanner) value() (legacyCodingJSONRange, error) {
 	if err := s.spaces(); err != nil {
-		return scaleP21SW17JSONRange{}, err
+		return legacyCodingJSONRange{}, err
 	}
-	part := scaleP21SW17JSONRange{start: s.offset}
+	part := legacyCodingJSONRange{start: s.offset}
 	first, err := s.peek()
 	if err != nil {
 		return part, err
@@ -353,8 +353,8 @@ func (s *scaleP21SW17JSONScanner) value() (scaleP21SW17JSONRange, error) {
 	return part, nil
 }
 
-func (s *scaleP21SW17JSONScanner) settings(environment func(int, scaleP21SW17JSONRange) error, field func(string, scaleP21SW17JSONRange) error) (scaleP21SW17JSONRange, int, error) {
-	var environments scaleP21SW17JSONRange
+func (s *legacyCodingJSONScanner) settings(environment func(int, legacyCodingJSONRange) error, field func(string, legacyCodingJSONRange) error) (legacyCodingJSONRange, int, error) {
+	var environments legacyCodingJSONRange
 	count := 0
 	seen := map[string]bool{}
 	if err := s.expect('{'); err != nil {

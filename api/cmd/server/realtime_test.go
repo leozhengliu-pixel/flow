@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP08TestStore(t *testing.T) *store.SQLiteStore {
+func scaleTestStore(t *testing.T) *store.SQLiteStore {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
@@ -38,7 +38,7 @@ func scaleP08TestStore(t *testing.T) *store.SQLiteStore {
 	return repository
 }
 
-func scaleP08OwnedWorkspace(t *testing.T, repository *store.SQLiteStore) (domain.User, domain.Bootstrap) {
+func realtimeScaleOwnedWorkspace(t *testing.T, repository *store.SQLiteStore) (domain.User, domain.Bootstrap) {
 	t.Helper()
 	user, token, err := repository.Register(t.Context(), "P08 owner", idgen.New("scale-p08-owner-")+"@example.test", "p08-fixture-password")
 	if err != nil {
@@ -69,9 +69,9 @@ func scaleP08OwnedWorkspace(t *testing.T, repository *store.SQLiteStore) (domain
 	return user, data
 }
 
-func TestScaleP08AuthDisabledRealtimeRetainsViewer(t *testing.T) {
-	repository := scaleP08TestStore(t)
-	viewer, data := scaleP08OwnedWorkspace(t, repository)
+func TestScaleAuthDisabledRealtimeRetainsViewer(t *testing.T) {
+	repository := scaleTestStore(t)
+	viewer, data := realtimeScaleOwnedWorkspace(t, repository)
 	now := time.Now().UTC()
 	notificationID := fmt.Sprintf("scale-p08-notification-%d", now.UnixNano())
 	if err := repository.MutateWorkspace(workspaceFixtureContext(t.Context()), data.Workspace.URLKey, "scale_p08.fixture", notificationID, nil, func(next *domain.Bootstrap) error {
@@ -97,12 +97,12 @@ func TestScaleP08AuthDisabledRealtimeRetainsViewer(t *testing.T) {
 	}
 }
 
-func TestScaleP08FixturePreservesExistingState(t *testing.T) {
-	repository := scaleP08TestStore(t)
-	existing, data := scaleP08OwnedWorkspace(t, repository)
+func TestScaleFixturePreservesExistingState(t *testing.T) {
+	repository := scaleTestStore(t)
+	existing, data := realtimeScaleOwnedWorkspace(t, repository)
 	var owned domain.Bootstrap
 	t.Run("isolated-fixture", func(t *testing.T) {
-		viewer, workspace := scaleP08OwnedWorkspace(t, repository)
+		viewer, workspace := realtimeScaleOwnedWorkspace(t, repository)
 		owned = workspace
 		if viewer.ID == existing.ID || workspace.Workspace.ID == data.Workspace.ID {
 			t.Fatal("P08 fixture reused an existing principal or workspace")

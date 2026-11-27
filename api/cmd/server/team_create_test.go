@@ -31,20 +31,20 @@ import (
 // webhooks, realtime and the installed image must agree byte for byte except
 // generated IDs and clocks.
 
-type scaleP21TeamCreateState struct {
+type scaleTeamCreateState struct {
 	Metadata, Root, Memberships, Members, Audit, Account, Installations, Events [][]any
 }
 
-type scaleP21TeamCreateOutcome struct {
+type scaleTeamCreateOutcome struct {
 	Code                int
 	Body                json.RawMessage
-	State               scaleP21TeamCreateState
+	State               scaleTeamCreateState
 	Webhooks, Realtime  []json.RawMessage
 	Installed, Reloaded json.RawMessage
 }
 
-type scaleP21TeamCreateFixture struct {
-	scaleP21TeamMoveFixture
+type scaleTeamCreateFixture struct {
+	scaleTeamMoveFixture
 	baselineTeams map[string]bool
 	installations map[string]bool
 	auditSeq      int64
@@ -53,7 +53,7 @@ type scaleP21TeamCreateFixture struct {
 	wrap func(context.Context) context.Context
 }
 
-type scaleP21TeamCreateCase struct {
+type scaleTeamCreateCase struct {
 	name        string
 	user        domain.User
 	body        map[string]any
@@ -62,12 +62,12 @@ type scaleP21TeamCreateCase struct {
 	agent       bool
 	setup       func(*testing.T)
 	code        int
-	check       func(*testing.T, scaleP21TeamCreateOutcome)
+	check       func(*testing.T, scaleTeamCreateOutcome)
 }
 
-func scaleP21TeamCreateSetup(t *testing.T) scaleP21TeamCreateFixture {
+func scaleTeamCreateSetup(t *testing.T) scaleTeamCreateFixture {
 	t.Helper()
-	f := scaleP21TeamCreateFixture{scaleP21TeamMoveFixture: scaleP21TeamMoveSetup(t), baselineTeams: map[string]bool{}, installations: map[string]bool{}}
+	f := scaleTeamCreateFixture{scaleTeamMoveFixture: scaleTeamMoveSetup(t), baselineTeams: map[string]bool{}, installations: map[string]bool{}}
 	for _, row := range f.rows(t, `SELECT id FROM application_installations WHERE workspace_key=?`, f.data.Workspace.URLKey) {
 		f.installations[fmt.Sprint(row[0])] = true
 	}
@@ -75,7 +75,7 @@ func scaleP21TeamCreateSetup(t *testing.T) scaleP21TeamCreateFixture {
 		f.baselineTeams[fmt.Sprint(row[0])] = true
 	}
 	if rows := f.rows(t, `SELECT COALESCE(MAX(seq),0) FROM audit_events WHERE workspace_id=?`, f.data.Workspace.ID); len(rows) == 1 {
-		f.auditSeq = scaleP21TeamMoveInt(t, rows[0][0])
+		f.auditSeq = scaleTeamMoveInt(t, rows[0][0])
 	}
 	if rows := f.rows(t, `SELECT seq,hash,pruned_seq,pruned_hash FROM audit_chain_heads WHERE workspace_id=?`, f.data.Workspace.ID); len(rows) == 1 {
 		f.auditHead = rows[0]
@@ -86,8 +86,8 @@ func scaleP21TeamCreateSetup(t *testing.T) scaleP21TeamCreateFixture {
 // prepare seeds the team-move teams, removes what earlier runs created
 // outside the workspace document (memberships, audit rows) and applies the
 // case's setup.
-func (f scaleP21TeamCreateFixture) prepare(setup func(*testing.T)) func(*testing.T) {
-	seed := f.scaleP21TeamMoveFixture.prepare(scaleP21TeamMoveOptions{})
+func (f scaleTeamCreateFixture) prepare(setup func(*testing.T)) func(*testing.T) {
+	seed := f.scaleTeamMoveFixture.prepare(scaleTeamMoveOptions{})
 	return func(t *testing.T) {
 		seed(t)
 		workspaceID := f.data.Workspace.ID
@@ -115,7 +115,7 @@ func (f scaleP21TeamCreateFixture) prepare(setup func(*testing.T)) func(*testing
 	}
 }
 
-func scaleP21TeamCreateDigest(rows [][]any) [][]any {
+func scaleTeamCreateDigest(rows [][]any) [][]any {
 	for _, row := range rows {
 		for index, value := range row {
 			if text, ok := value.(string); ok && len(text) > 4096 {
@@ -127,9 +127,9 @@ func scaleP21TeamCreateDigest(rows [][]any) [][]any {
 	return rows
 }
 
-// scaleP21TeamCreateRoot lists the stored root's members in key order, each
+// scaleTeamCreateRoot lists the stored root's members in key order, each
 // large value by its digest.
-func scaleP21TeamCreateRoot(t *testing.T, rows [][]any) [][]any {
+func scaleTeamCreateRoot(t *testing.T, rows [][]any) [][]any {
 	t.Helper()
 	if len(rows) != 1 {
 		t.Fatalf("workspace root rows %d", len(rows))
@@ -155,12 +155,12 @@ func scaleP21TeamCreateRoot(t *testing.T, rows [][]any) [][]any {
 	return result
 }
 
-func (f scaleP21TeamCreateFixture) state(t *testing.T) scaleP21TeamCreateState {
+func (f scaleTeamCreateFixture) state(t *testing.T) scaleTeamCreateState {
 	t.Helper()
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
-	return scaleP21TeamCreateState{
-		Metadata:      scaleP21TeamCreateDigest(f.rows(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)),
-		Root:          scaleP21TeamCreateRoot(t, f.rows(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace)),
+	return scaleTeamCreateState{
+		Metadata:      scaleTeamCreateDigest(f.rows(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)),
+		Root:          scaleTeamCreateRoot(t, f.rows(t, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace)),
 		Memberships:   f.rows(t, `SELECT team_id,user_id,role,origin,joined_at FROM team_memberships WHERE workspace_id=? ORDER BY team_id,user_id`, workspaceID),
 		Members:       f.rows(t, `SELECT user_id,role,status,joined_at FROM workspace_memberships WHERE workspace_id=? ORDER BY user_id`, workspaceID),
 		Audit:         f.rows(t, `SELECT seq,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,result,metadata FROM audit_events WHERE workspace_id=? ORDER BY seq`, workspaceID),
@@ -170,11 +170,11 @@ func (f scaleP21TeamCreateFixture) state(t *testing.T) scaleP21TeamCreateState {
 	}
 }
 
-var scaleP21TeamCreateInstalledFields = []string{"teams", "teamSettings", "cycleSettings", "states", "cycles", "members", "teamMembers", "users"}
+var scaleTeamCreateInstalledFields = []string{"teams", "teamSettings", "cycleSettings", "states", "cycles", "members", "teamMembers", "users"}
 
 // installed reads the fields a team creation writes from repo's installed
 // image: the legacy snapshot or a bounded view's installed logical source.
-func (f scaleP21TeamCreateFixture) installed(t *testing.T, repo *store.SQLiteStore) json.RawMessage {
+func (f scaleTeamCreateFixture) installed(t *testing.T, repo *store.SQLiteStore) json.RawMessage {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	result := map[string]json.RawMessage{}
@@ -191,7 +191,7 @@ func (f scaleP21TeamCreateFixture) installed(t *testing.T, repo *store.SQLiteSto
 		if err := json.Unmarshal(raw, &fields); err != nil {
 			t.Fatal(err)
 		}
-		for _, name := range scaleP21TeamCreateInstalledFields {
+		for _, name := range scaleTeamCreateInstalledFields {
 			result[name] = fields[name]
 		}
 	} else {
@@ -199,7 +199,7 @@ func (f scaleP21TeamCreateFixture) installed(t *testing.T, repo *store.SQLiteSto
 		if err != nil || !found {
 			t.Fatal("installed read", err)
 		}
-		for _, name := range scaleP21TeamCreateInstalledFields {
+		for _, name := range scaleTeamCreateInstalledFields {
 			var raw strings.Builder
 			if err := read.StreamFieldJSON(t.Context(), name, &raw); err != nil {
 				t.Fatal(err)
@@ -234,7 +234,7 @@ func (f scaleP21TeamCreateFixture) installed(t *testing.T, repo *store.SQLiteSto
 	return raw
 }
 
-func scaleP21TeamCreateEntries(t *testing.T, raw json.RawMessage) map[string][]string {
+func scaleTeamCreateEntries(t *testing.T, raw json.RawMessage) map[string][]string {
 	t.Helper()
 	var fields map[string]any
 	if err := json.Unmarshal(raw, &fields); err != nil {
@@ -276,15 +276,15 @@ func scaleP21TeamCreateEntries(t *testing.T, raw json.RawMessage) map[string][]s
 	return result
 }
 
-// scaleP21TeamCreateInstalledDelta lists, per field, the installed entries a
+// scaleTeamCreateInstalledDelta lists, per field, the installed entries a
 // call added or changed, in installed order. The load normalizes some values
 // (team and cycle settings defaults) that both writers install as written, so
 // the deltas are compared between sources and SQL by the reload.
-func scaleP21TeamCreateInstalledDelta(t *testing.T, before, after json.RawMessage) json.RawMessage {
+func scaleTeamCreateInstalledDelta(t *testing.T, before, after json.RawMessage) json.RawMessage {
 	t.Helper()
-	previous, current := scaleP21TeamCreateEntries(t, before), scaleP21TeamCreateEntries(t, after)
+	previous, current := scaleTeamCreateEntries(t, before), scaleTeamCreateEntries(t, after)
 	result := map[string][]string{}
-	for _, name := range scaleP21TeamCreateInstalledFields {
+	for _, name := range scaleTeamCreateInstalledFields {
 		old := map[string]string{}
 		for _, entry := range previous[name] {
 			key, value, _ := strings.Cut(entry, "\t")
@@ -304,7 +304,7 @@ func scaleP21TeamCreateInstalledDelta(t *testing.T, before, after json.RawMessag
 	return raw
 }
 
-func (f scaleP21TeamCreateFixture) create(service *server, user domain.User, body map[string]any, development, cancelled bool, agent ...bool) *httptest.ResponseRecorder {
+func (f scaleTeamCreateFixture) create(service *server, user domain.User, body map[string]any, development, cancelled bool, agent ...bool) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
 	workspace := f.data.Workspace.URLKey
 	r := httptest.NewRequest(http.MethodPost, "/api/workspaces/"+workspace+"/teams", bytes.NewReader(raw))
@@ -341,7 +341,7 @@ func (f scaleP21TeamCreateFixture) create(service *server, user domain.User, bod
 // SQL, as a running server holds it: the legacy snapshot, a warm bounded view
 // of it, or a bounded view loaded afresh. (The fixture's own store keeps the
 // reset callback's values, which a load normalizes.)
-func (f scaleP21TeamCreateFixture) service(t *testing.T, source string) *server {
+func (f scaleTeamCreateFixture) service(t *testing.T, source string) *server {
 	t.Helper()
 	f.reset(t, "legacy")
 	owner, err := store.OpenDatabase(f.reader.config)
@@ -366,16 +366,16 @@ func (f scaleP21TeamCreateFixture) service(t *testing.T, source string) *server 
 	return &server{store: view}
 }
 
-func (f scaleP21TeamCreateFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleP21TeamCreateOutcome, time.Time) {
+func (f scaleTeamCreateFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleTeamCreateOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.service(t, source)
-	got := scaleP21TeamCreateOutcome{}
+	got := scaleTeamCreateOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -383,7 +383,7 @@ func (f scaleP21TeamCreateFixture) run(t *testing.T, source string, call func(*s
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -420,30 +420,30 @@ func (f scaleP21TeamCreateFixture) run(t *testing.T, source string, call func(*s
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
-	got.Installed = scaleP21TeamCreateInstalledDelta(t, before, got.Installed)
+	got.Installed = scaleTeamCreateInstalledDelta(t, before, got.Installed)
 	return got, started
 }
 
-func (f scaleP21TeamCreateFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21TeamCreateOutcome {
+func (f scaleTeamCreateFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleTeamCreateOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21TeamCreateOutcome
+	var outcomes []scaleTeamCreateOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
 			if dir := os.Getenv("FLOW_TEAM_CREATE_DUMP"); dir != "" {
 				_ = os.WriteFile(dir+"/"+name+"-legacy.json", []byte(normalized[0]), 0o600)
 				_ = os.WriteFile(dir+"/"+name+"-"+source+".json", []byte(normalized[len(normalized)-1]), 0o600)
 			}
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func (f scaleP21TeamCreateFixture) mutate(t *testing.T, event string, change func(*domain.Bootstrap)) {
+func (f scaleTeamCreateFixture) mutate(t *testing.T, event string, change func(*domain.Bootstrap)) {
 	t.Helper()
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, event, "", nil, func(data *domain.Bootstrap) error {
 		change(data)
@@ -453,7 +453,7 @@ func (f scaleP21TeamCreateFixture) mutate(t *testing.T, event string, change fun
 	}
 }
 
-func scaleP21TeamCreateTeam(t *testing.T, outcome scaleP21TeamCreateOutcome) domain.Team {
+func scaleTeamCreateTeam(t *testing.T, outcome scaleTeamCreateOutcome) domain.Team {
 	t.Helper()
 	var team domain.Team
 	if err := json.Unmarshal(outcome.Body, &team); err != nil || team.ID == "" {
@@ -462,7 +462,7 @@ func scaleP21TeamCreateTeam(t *testing.T, outcome scaleP21TeamCreateOutcome) dom
 	return team
 }
 
-func scaleP21TeamCreateRecords(t *testing.T, outcome scaleP21TeamCreateOutcome, field, prefix string) []string {
+func scaleTeamCreateRecords(t *testing.T, outcome scaleTeamCreateOutcome, field, prefix string) []string {
 	t.Helper()
 	var keys []string
 	for _, row := range outcome.State.Metadata {
@@ -473,11 +473,11 @@ func scaleP21TeamCreateRecords(t *testing.T, outcome scaleP21TeamCreateOutcome, 
 	return keys
 }
 
-func TestScaleP21TeamCreateDifferential(t *testing.T) {
+func TestScaleTeamCreateDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	owner, admin, member, guest := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user
 	workspaceID := f.data.Workspace.ID
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -510,22 +510,22 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 			f.exec(t, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='teamMembers'`, workspace)
 		}
 	}
-	created := func(code int) func(*testing.T, scaleP21TeamCreateOutcome) {
-		return func(t *testing.T, outcome scaleP21TeamCreateOutcome) {
+	created := func(code int) func(*testing.T, scaleTeamCreateOutcome) {
+		return func(t *testing.T, outcome scaleTeamCreateOutcome) {
 			if outcome.Code != code {
 				t.Fatalf("legacy status %d, want %d: %s", outcome.Code, code, outcome.Body)
 			}
 		}
 	}
-	statesOf := func(want int) func(*testing.T, scaleP21TeamCreateOutcome) {
-		return func(t *testing.T, outcome scaleP21TeamCreateOutcome) {
-			team := scaleP21TeamCreateTeam(t, outcome)
-			if got := scaleP21TeamCreateRecords(t, outcome, "states", team.ID); len(got) != want {
+	statesOf := func(want int) func(*testing.T, scaleTeamCreateOutcome) {
+		return func(t *testing.T, outcome scaleTeamCreateOutcome) {
+			team := scaleTeamCreateTeam(t, outcome)
+			if got := scaleTeamCreateRecords(t, outcome, "states", team.ID); len(got) != want {
 				t.Fatalf("copied statuses %v, want %d", got, want)
 			}
 		}
 	}
-	cases := []scaleP21TeamCreateCase{
+	cases := []scaleTeamCreateCase{
 		{name: "top-level", user: owner, body: map[string]any{"name": "Created", "key": "crt"}, check: statesOf(0)},
 		{name: "top-level-member", user: member, body: map[string]any{"name": "Member team", "key": "MBR"}},
 		{name: "top-level-guest", user: guest, body: map[string]any{"name": "Guest team", "key": "GST"}},
@@ -547,8 +547,8 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 			enabled, weeks := true, 1
 			domain.SetCreationDefaults(domain.CreationDefaults{Team: domain.TeamCreationDefaults{Cycles: domain.CycleCreationDefaults{Enabled: &enabled, DurationWeeks: &weeks}}})
 			t.Cleanup(func() { domain.SetCreationDefaults(domain.CreationDefaults{}) })
-		}, check: func(t *testing.T, outcome scaleP21TeamCreateOutcome) {
-			team := scaleP21TeamCreateTeam(t, outcome)
+		}, check: func(t *testing.T, outcome scaleTeamCreateOutcome) {
+			team := scaleTeamCreateTeam(t, outcome)
 			cycles := 0
 			for _, row := range outcome.State.Metadata {
 				if row[0] == "cycles" && strings.Contains(fmt.Sprint(row[3]), team.ID) {
@@ -606,9 +606,9 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 			f.mutate(t, "scale_p21.team_create_inline", func(data *domain.Bootstrap) {
 				data.States = append(data.States, domain.WorkflowState{ID: "tmp-done", TeamID: "tm-other", Name: "Duplicate", Type: "completed", Position: 9})
 			})
-		}, check: func(t *testing.T, outcome scaleP21TeamCreateOutcome) {
+		}, check: func(t *testing.T, outcome scaleTeamCreateOutcome) {
 			// Inline statuses have no rows: the root holds them whole.
-			team := scaleP21TeamCreateTeam(t, outcome)
+			team := scaleTeamCreateTeam(t, outcome)
 			var delta map[string][]string
 			if err := json.Unmarshal(outcome.Installed, &delta); err != nil {
 				t.Fatal(err)
@@ -619,7 +619,7 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 					copied++
 				}
 			}
-			if copied != 4 || len(scaleP21TeamCreateRecords(t, outcome, "states", team.ID)) != 0 {
+			if copied != 4 || len(scaleTeamCreateRecords(t, outcome, "states", team.ID)) != 0 {
 				t.Fatalf("inline copied statuses %d", copied)
 			}
 		}},
@@ -651,8 +651,8 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test.setup)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test.setup)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				return f.create(service, test.user, test.body, test.development, test.cancelled, test.agent)
 			})
@@ -675,12 +675,12 @@ func TestScaleP21TeamCreateDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
+func TestScaleTeamCreateConcurrentDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(nil)
+	f := scaleTeamCreateSetup(t)
+	f.scaleTriageWriterFixture.prepare = f.prepare(nil)
 	for _, test := range []struct {
 		name  string
 		keys  []string
@@ -705,7 +705,7 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 							body := map[string]any{"name": "Concurrent " + strings.ToUpper(key), "key": key, "copyFromTeamId": "tm-parent"}
 							// No client retry: every first answer is final. A
 							// committed creation answers 201 even when its
-							// creator membership lost a write race (SW280).
+							// creator membership lost a write race.
 							w := f.create(service, f.data.Viewer, body, false, false)
 							if w.Code != http.StatusCreated {
 								t.Logf("%s %s: %d %s", source, key, w.Code, w.Body.String())
@@ -726,7 +726,7 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 				// Concurrent creators commit in any order: created rows keep
 				// their content but not their relative position or sequence.
 				for _, row := range got.State.Metadata {
-					if scaleP21TriageStamp.MatchString(fmt.Sprint(row[1])) {
+					if scaleTriageStamp.MatchString(fmt.Sprint(row[1])) {
 						row[2] = "<order>"
 					}
 				}
@@ -737,20 +737,20 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 					slices.SortFunc(*rows, func(a, b []any) int {
 						left, _ := json.Marshal(a)
 						right, _ := json.Marshal(b)
-						return strings.Compare(scaleP21IssueUpdateNormalize(t, json.RawMessage(left), started), scaleP21IssueUpdateNormalize(t, json.RawMessage(right), started))
+						return strings.Compare(scaleIssueUpdateNormalize(t, json.RawMessage(left), started), scaleIssueUpdateNormalize(t, json.RawMessage(right), started))
 					})
 				}
-				got.Webhooks = scaleP21IssueUpdateSorted(t, got.Webhooks, started)
-				got.Realtime = scaleP21IssueUpdateSorted(t, got.Realtime, started)
+				got.Webhooks = scaleIssueUpdateSorted(t, got.Webhooks, started)
+				got.Realtime = scaleIssueUpdateSorted(t, got.Realtime, started)
 				// The installed images were each compared with their SQL reload.
 				got.Installed, got.Reloaded = nil, nil
-				normalized := scaleP21IssueUpdateNormalize(t, map[string]any{"codes": codes, "outcome": got}, started)
+				normalized := scaleIssueUpdateNormalize(t, map[string]any{"codes": codes, "outcome": got}, started)
 				if expected != "" && expected != normalized {
 					if dir := os.Getenv("FLOW_TEAM_CREATE_DUMP"); dir != "" {
 						_ = os.WriteFile(dir+"/concurrent-"+test.name+"-expected.json", []byte(expected), 0o600)
 						_ = os.WriteFile(dir+"/concurrent-"+test.name+"-"+source+".json", []byte(normalized), 0o600)
 					}
-					t.Fatalf("%s concurrent creation changed: %s", source, scaleP21M2Diff(expected, normalized))
+					t.Fatalf("%s concurrent creation changed: %s", source, policyFirstDifference(expected, normalized))
 				}
 				expected = normalized
 			}
@@ -758,9 +758,9 @@ func TestScaleP21TeamCreateConcurrentDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21TeamCreateCoordinator struct{ mu *sync.Mutex }
+type scaleTeamCreateCoordinator struct{ mu *sync.Mutex }
 
-func (c scaleP21TeamCreateCoordinator) WithWorkspaceLock(_ context.Context, _ string, run func() error) error {
+func (c scaleTeamCreateCoordinator) WithWorkspaceLock(_ context.Context, _ string, run func() error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return run()
@@ -769,12 +769,12 @@ func (c scaleP21TeamCreateCoordinator) WithWorkspaceLock(_ context.Context, _ st
 // Two servers share the database under a workspace lock. Each creation must
 // first take the other server's committed teams, statuses and keys (peer
 // refresh by metadata revision), as the legacy writer's copy refresh does.
-func TestScaleP21TeamCreatePeerDifferential(t *testing.T) {
+func TestScaleTeamCreatePeerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(nil)
+	f := scaleTeamCreateSetup(t)
+	f.scaleTriageWriterFixture.prepare = f.prepare(nil)
 	var expected string
 	for _, bounded := range []bool{false, true} {
 		f.reset(t, "legacy")
@@ -792,7 +792,7 @@ func TestScaleP21TeamCreatePeerDifferential(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			repo.SetWorkspaceCoordinator(scaleP21TeamCreateCoordinator{lock})
+			repo.SetWorkspaceCoordinator(scaleTeamCreateCoordinator{lock})
 			peers[index] = &server{store: repo}
 		}
 		prior := map[any]bool{}
@@ -828,9 +828,9 @@ func TestScaleP21TeamCreatePeerDifferential(t *testing.T) {
 				t.Fatalf("bounded peer %d decoded full metadata or retained work", index)
 			}
 		}
-		normalized := scaleP21IssueUpdateNormalize(t, map[string]any{"responses": responses, "state": state}, started)
+		normalized := scaleIssueUpdateNormalize(t, map[string]any{"responses": responses, "state": state}, started)
 		if expected != "" && expected != normalized {
-			t.Fatalf("bounded peers changed: %s", scaleP21M2Diff(expected, normalized))
+			t.Fatalf("bounded peers changed: %s", policyFirstDifference(expected, normalized))
 		}
 		expected = normalized
 	}

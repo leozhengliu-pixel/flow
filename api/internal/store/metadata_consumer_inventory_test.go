@@ -7,7 +7,7 @@ import (
 	"testing/fstest"
 )
 
-func TestScaleP21InventoryPartitionTotals(t *testing.T) {
+func TestScaleInventoryPartitionTotals(t *testing.T) {
 	inventory, err := metadataConsumerReviews()
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestScaleP21InventoryPartitionTotals(t *testing.T) {
 	}
 }
 
-func TestScaleP21InventoryPartitionRejectsInvalidReviews(t *testing.T) {
+func TestScaleInventoryPartitionRejectsInvalidReviews(t *testing.T) {
 	base := metadataConsumerFile{Source: "server/example.go", Unmigrated: 1, Consumers: map[string]metadataConsumerReview{"read": {Owner: "P21", Status: "unmigrated", Accessors: []string{"workspaceData"}}}}
 	for _, test := range []struct {
 		name string

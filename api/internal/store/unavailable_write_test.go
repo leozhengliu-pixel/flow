@@ -10,13 +10,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW29LogicalWriteRejectsNewUnavailableBeforeCommit(t *testing.T) {
+func TestLogicalWriteRejectsNewUnavailableBeforeCommit(t *testing.T) {
 	for _, kind := range []string{"map-existing", "map-new", "complete-field", "array-existing"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			key, emoji := "sw29RejectTimestamp", "sw29-reject-emoji"
 			if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "settings", "customEmojis"), workspace, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
@@ -105,7 +105,7 @@ func TestScaleP21SW29LogicalWriteRejectsNewUnavailableBeforeCommit(t *testing.T)
 	}
 }
 
-func TestScaleP21SW29LogicalWriteKeepsUntouchedOpaqueArraySibling(t *testing.T) {
+func TestLogicalWriteKeepsUntouchedOpaqueArraySibling(t *testing.T) {
 	ctx := t.Context()
 	data := domain.Bootstrap{CustomEmojis: []domain.CustomEmoji{
 		{ID: "opaque", UpdatedAt: time.Date(2026, 11, 13, 1, 2, 3, 4, time.FixedZone("unproven", 7331))},

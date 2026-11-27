@@ -23,18 +23,18 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW510Coordinator is a pass-through workspace lock. It counts the
+// deliveryOutcomesCoordinator is a pass-through workspace lock. It counts the
 // worker's lock acquisitions and runs an injected peer write on the worker's
 // claim lock, before the claim callback reloads its preimage. Peer writes are
 // not themselves intercepted.
-type scaleP21SW510Coordinator struct {
+type deliveryOutcomesCoordinator struct {
 	mu     sync.Mutex
 	peer   bool
 	locks  int
 	before func(lock int)
 }
 
-func (c *scaleP21SW510Coordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
+func (c *deliveryOutcomesCoordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
 	c.mu.Lock()
 	if c.peer {
 		c.mu.Unlock()
@@ -53,13 +53,13 @@ func (c *scaleP21SW510Coordinator) WithWorkspaceLock(ctx context.Context, worksp
 	return apply()
 }
 
-type scaleP21SW510Request struct {
+type deliveryOutcomesRequest struct {
 	Path, ContentType, Delivery, Event, Authorization string
 	Timestamp, Signature                              string
 	Body                                              string
 }
 
-type scaleP21SW510Case struct {
+type deliveryOutcomesCase struct {
 	name string
 	// seed edits the common fixture: duplicate delivery and connection IDs
 	// with the selected first occurrences, a Document shadow and a webhook.
@@ -75,11 +75,11 @@ type scaleP21SW510Case struct {
 	peerNetwork func(data *domain.Bootstrap)
 }
 
-func scaleP21SW510Cases() []scaleP21SW510Case {
+func deliveryOutcomesCases() []deliveryOutcomesCase {
 	deleteDelivery := func(data *domain.Bootstrap) { data.IntegrationDeliveries = data.IntegrationDeliveries[:0] }
 	promoteDuplicate := func(data *domain.Bootstrap) { data.IntegrationDeliveries = data.IntegrationDeliveries[1:] }
 	deleteConnection := func(data *domain.Bootstrap) { data.IntegrationConnections = data.IntegrationConnections[2:] }
-	return []scaleP21SW510Case{
+	return []deliveryOutcomesCase{
 		{name: "delivered-signed-token", secret: "sw510-config-value", status: http.StatusNoContent,
 			env: map[string]string{"FLOW_INTEGRATION_SW510_TOKEN": "sw510-token-value"}},
 		{name: "failed-retry", secret: "sw510-config-value", status: http.StatusBadGateway},
@@ -167,7 +167,7 @@ func scaleP21SW510Cases() []scaleP21SW510Case {
 	}
 }
 
-func scaleP21SW510Seed(t *testing.T, repo *store.SQLiteStore, workspace, id, connection, replacement, endpoint, other string, test scaleP21SW510Case) {
+func deliveryOutcomesSeed(t *testing.T, repo *store.SQLiteStore, workspace, id, connection, replacement, endpoint, other string, test deliveryOutcomesCase) {
 	t.Helper()
 	at := time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw510_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -198,7 +198,7 @@ func scaleP21SW510Seed(t *testing.T, repo *store.SQLiteStore, workspace, id, con
 
 // The peer is the independent literal store. It first reloads the canonical
 // generation, which the bounded worker's writes reached only through SQL.
-func scaleP21SW510Mutate(t *testing.T, repo *store.SQLiteStore, workspace string, edit func(*domain.Bootstrap)) {
+func deliveryOutcomesMutate(t *testing.T, repo *store.SQLiteStore, workspace string, edit func(*domain.Bootstrap)) {
 	t.Helper()
 	// Runs on the destination's handler goroutine too: report, never FailNow.
 	if err := repo.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
@@ -219,20 +219,20 @@ func scaleP21SW510Mutate(t *testing.T, repo *store.SQLiteStore, workspace string
 	}
 }
 
-// TestScaleP21SW510DeliveryOutcomesDifferential runs the retry route against
+// TestDeliveryOutcomesDifferential runs the retry route against
 // the literal worker and the bounded worker, warm and actually SQL-reloaded,
 // with a workspace coordinator: responses, outbound requests (endpoint, body,
 // HMAC/token headers), native and reloaded stored state and published events
 // must be identical for every outcome.
-func TestScaleP21SW510DeliveryOutcomesDifferential(t *testing.T) {
+func TestDeliveryOutcomesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw510-")
 		id, connection, replacement := prefix+"delivery", prefix+"connection", prefix+"replacement"
-		for _, test := range scaleP21SW510Cases() {
+		for _, test := range deliveryOutcomesCases() {
 			for _, reload := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/reload=%t", test.name, reload), func(t *testing.T) {
 					for name, value := range test.env {
@@ -240,10 +240,10 @@ func TestScaleP21SW510DeliveryOutcomesDifferential(t *testing.T) {
 					}
 					var results []any
 					for _, bounded := range []bool{false, true} {
-						results = append(results, scaleP21SW510Run(t, repo, workspace, id, connection, replacement, test, reload, bounded))
+						results = append(results, deliveryOutcomesRun(t, repo, workspace, id, connection, replacement, test, reload, bounded))
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatal("literal/bounded delivery outcome differs:", scaleP21SW202Difference(results[0], results[1]))
+						t.Fatal("literal/bounded delivery outcome differs:", deliveryWorkerDifference(results[0], results[1]))
 					}
 				})
 			}
@@ -251,9 +251,9 @@ func TestScaleP21SW510DeliveryOutcomesDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, connection, replacement string, test scaleP21SW510Case, reload, bounded bool) any {
+func deliveryOutcomesRun(t *testing.T, repo *store.SQLiteStore, workspace, id, connection, replacement string, test deliveryOutcomesCase, reload, bounded bool) any {
 	t.Helper()
-	var requests []scaleP21SW510Request
+	var requests []deliveryOutcomesRequest
 	var requestMu sync.Mutex
 	var wrongEndpoint atomic.Bool
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +263,7 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 	defer other.Close()
 	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		request := scaleP21SW510Request{
+		request := deliveryOutcomesRequest{
 			Path: r.URL.Path, ContentType: r.Header.Get("Content-Type"), Delivery: r.Header.Get("X-Flow-Delivery"),
 			Event: r.Header.Get("X-Flow-Event"), Authorization: r.Header.Get("Authorization"), Body: string(body),
 		}
@@ -282,14 +282,14 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 		requests = append(requests, request)
 		requestMu.Unlock()
 		if test.peerNetwork != nil {
-			scaleP21SW510Mutate(t, repo, workspace, test.peerNetwork)
+			deliveryOutcomesMutate(t, repo, workspace, test.peerNetwork)
 		}
 		w.WriteHeader(test.status)
 	}))
 	defer destination.Close()
-	scaleP21SW510Seed(t, repo, workspace, id, connection, replacement, destination.URL, other.URL, test)
+	deliveryOutcomesSeed(t, repo, workspace, id, connection, replacement, destination.URL, other.URL, test)
 	if reload {
-		scaleP21SW202ReloadOracle(t, repo, workspace)
+		deliveryWorkerReloadOracle(t, repo, workspace)
 	}
 	source := repo
 	if bounded {
@@ -313,7 +313,7 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 	type outcome struct {
 		Status             int
 		Body               any
-		Requests           []scaleP21SW510Request
+		Requests           []deliveryOutcomesRequest
 		WrongEndpoint      bool
 		Deliveries         []domain.IntegrationDelivery
 		Connections        []domain.IntegrationConnection
@@ -338,9 +338,9 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 		got.Realtime = append(got.Realtime, []any{event.Type, event.AggregateID, event.ActorID, event.Payload})
 		eventsMu.Unlock()
 	})
-	coordinator := &scaleP21SW510Coordinator{before: func(lock int) {
+	coordinator := &deliveryOutcomesCoordinator{before: func(lock int) {
 		if lock == 1 && test.peerClaim != nil {
-			scaleP21SW510Mutate(t, repo, workspace, test.peerClaim)
+			deliveryOutcomesMutate(t, repo, workspace, test.peerClaim)
 		}
 	}}
 	source.SetWorkspaceCoordinator(coordinator)
@@ -361,9 +361,9 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got.Body); err != nil {
 		t.Fatal("response body is not JSON", err, recorder.Body.String())
 	}
-	native, closeNative := scaleP21SW202Native(t, source, workspace)
+	native, closeNative := deliveryWorkerNative(t, source, workspace)
 	got.Native = native
-	scaleP21SW202ReloadOracle(t, repo, workspace)
+	deliveryWorkerReloadOracle(t, repo, workspace)
 	state, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
 	got.Deliveries, got.Connections = state.IntegrationDeliveries, state.IntegrationConnections
 	finished := time.Now().UTC()
@@ -383,21 +383,21 @@ func scaleP21SW510Run(t *testing.T, repo *store.SQLiteStore, workspace, id, conn
 	// Lock acquisitions are not compared: with a coordinator the literal
 	// writer runs a failed callback once more on reloaded records.
 	t.Logf("bounded=%t status=%d requests=%d locks=%d webhooks=%d", bounded, got.Status, len(got.Requests), coordinator.locks, len(got.Webhooks))
-	return scaleP21SW202Normalize(t, got, started, finished, map[string]string{
+	return deliveryWorkerNormalize(t, got, started, finished, map[string]string{
 		destination.URL: "<captured-endpoint>", other.URL: "<other-endpoint>",
 	})
 }
 
-// TestScaleP21SW510ConcurrentWorkers proves two workers on one delivery: the
+// TestConcurrentWorkers proves two workers on one delivery: the
 // sequenced run holds the first worker's outbound request while the second
 // worker runs to completion (exact literal refusal), and the racing run starts
 // both together (one request and one conflict, in either claim order).
-func TestScaleP21SW510ConcurrentWorkers(t *testing.T) {
+func TestConcurrentWorkers(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw510-workers-")
 		id, connection, replacement := prefix+"delivery", prefix+"connection", prefix+"replacement"
 		for _, racing := range []bool{false, true} {
@@ -414,7 +414,7 @@ func TestScaleP21SW510ConcurrentWorkers(t *testing.T) {
 						<-release
 						w.WriteHeader(http.StatusNoContent)
 					}))
-					scaleP21SW510Seed(t, repo, workspace, id, connection, replacement, destination.URL, destination.URL, scaleP21SW510Case{})
+					deliveryOutcomesSeed(t, repo, workspace, id, connection, replacement, destination.URL, destination.URL, deliveryOutcomesCase{})
 					source := repo
 					if bounded {
 						var err error
@@ -474,14 +474,14 @@ func TestScaleP21SW510ConcurrentWorkers(t *testing.T) {
 					}
 					destination.Close()
 					source.SetWebhookSink(nil)
-					scaleP21SW202ReloadOracle(t, repo, workspace)
+					deliveryWorkerReloadOracle(t, repo, workspace)
 					state, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
 					finished := time.Now().UTC()
 					if requests.Load() != 1 || calls[0].err != nil || calls[0].value.Status != "delivered" || events.Load() != 2 {
 						t.Fatal("concurrent workers did not deliver exactly once", requests.Load(), calls[0].err, events.Load())
 					}
 					errorsText := []string{fmt.Sprint(calls[0].err), fmt.Sprint(calls[1].err)}
-					results = append(results, scaleP21SW202Normalize(t, []any{
+					results = append(results, deliveryWorkerNormalize(t, []any{
 						calls[0].value, calls[1].value, errorsText, state.IntegrationDeliveries, state.IntegrationConnections,
 					}, started, finished, map[string]string{destination.URL: "<endpoint>"}))
 					if bounded && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
@@ -489,7 +489,7 @@ func TestScaleP21SW510ConcurrentWorkers(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatal("literal/bounded concurrent workers differ:", scaleP21SW202Difference(results[0], results[1]))
+					t.Fatal("literal/bounded concurrent workers differ:", deliveryWorkerDifference(results[0], results[1]))
 				}
 			})
 		}

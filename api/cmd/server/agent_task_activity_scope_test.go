@@ -71,7 +71,7 @@ func agentTaskActivityPrompts(t *testing.T, repo *store.SQLiteStore, workspace, 
 // the reply was never saved.
 func TestAgentTaskActivityPostSavesWithoutWorkspaceProjection(t *testing.T) {
 	agentTaskDetailLegacyEnv(t)
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
 			f := agentTaskDetailSetup(t, repo)
 			workspace := f.data.Workspace.URLKey
@@ -223,7 +223,7 @@ var agentTaskActivityTimes = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\
 // copy of the session, so every stack starts from the same state.
 func TestAgentTaskActivityScopedAuthorizationDifferential(t *testing.T) {
 	agentTaskDetailLegacyEnv(t)
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
 			f := agentTaskDetailSetup(t, repo)
 			ctx := t.Context()
@@ -278,7 +278,7 @@ func TestAgentTaskActivityScopedAuthorizationDifferential(t *testing.T) {
 			// A member outside the public team reads its issues but may not
 			// edit them: the activity's edit-access rule.
 			origin, _ := url.Parse(f.host.URL)
-			outsider, _ := scaleP03Join(t, f.scaleP03PlatformFixture, "Activity team outsider", prefix+"-outsider@example.test", "member")
+			outsider, _ := resourceAccessScaleJoin(t, f.scalePlatformFixture, "Activity team outsider", prefix+"-outsider@example.test", "member")
 			principals = append(principals, agentTaskDetailPrincipal{name: "team-outsider", cookies: outsider.Jar.Cookies(origin)})
 			read := httptest.NewRecorder()
 			newHandler(agentTaskDetailService(repo, newMetadataReadGate(4, 8, 5*time.Second, 0), t)).ServeHTTP(read, agentTaskDetailRequest(f, principals[len(principals)-1], "/api/agent-tasks/"+f.tasks["member-reply"]))

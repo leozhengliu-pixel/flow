@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW211FormerMembersInstalledLogicalDifferential(t *testing.T) {
+func TestFormerMembersInstalledLogicalDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=?`, f.data.Workspace.ID); err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestScaleP21SW211FormerMembersInstalledLogicalDifferential(t *testing.T) {
 		_ = tx.Rollback()
 		f.db.SetMaxOpenConns(4)
 		limit := probe.metadataResidency.work.limit
-		probe.metadataResidency.work.limit = scaleP21SW16FormerWorkBytes - 1
+		probe.metadataResidency.work.limit = formerWorkBytes - 1
 		read, err = probe.BeginFormerMembersRead(t.Context(), workspace)
 		probe.metadataResidency.work.limit = limit
 		if read == nil || !errors.Is(err, ErrMetadataWorkBudget) {
@@ -120,9 +120,9 @@ func TestScaleP21SW211FormerMembersInstalledLogicalDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW211FormerMembersPinsBeforeMembershipQuery(t *testing.T) {
+func TestFormerMembersPinsBeforeMembershipQuery(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := f.db.ExecContext(t.Context(), `DELETE FROM workspace_memberships WHERE workspace_id=?`, f.data.Workspace.ID); err != nil {
 		t.Fatal(err)

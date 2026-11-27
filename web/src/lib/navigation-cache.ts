@@ -2,7 +2,7 @@ import type { BootstrapData, Issue } from '@/types/flow'
 import { issueCacheSummary, mergeIssueRecords } from '@/lib/issue-detail-cache'
 import { agentSessionSummary } from '@/lib/agent-session-merge'
 import { clearSessionCaches } from '@/lib/session-cache-registry'
-import { boundedBrowserCacheEnabled, cacheStringBytes, NAVIGATION_CACHE_MAX_BYTES } from '@/lib/scale-p08'
+import { boundedBrowserCacheEnabled, cacheStringBytes, NAVIGATION_CACHE_MAX_BYTES } from '@/lib/realtime-cache-limits'
 
 export interface NavigationCacheRecord {
   viewerId: string

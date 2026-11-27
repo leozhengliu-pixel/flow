@@ -17,11 +17,11 @@ import (
 // Authorization and aliased point writes have their own differential tables.
 // Invoke the real handlers with the harness's authenticated actor context so
 // this table reaches the ordinary Tier A writer without an issue-record marker.
-func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
+func TestDiscussionRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
 			var outcomes []any
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				reset(t, test.resolved)
-				before := scaleP21SW59SQL(t, f)
+				before := discussionWriteSql(t, f)
 				prior, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -143,15 +143,15 @@ func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
 				for _, event := range prior {
 					priorIDs[event.ID] = true
 				}
-				got := scaleP21SW59Outcome{}
+				got := discussionWriteOutcome{}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 						"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 						"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot, "createdAt": event.CreatedAt,
 					}))
 				})
 				captureRealtime := func(_ string, event domain.RealtimeEvent) {
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 						"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 						"seq": event.Seq, "clientId": event.ClientID, "payload": event.Payload, "createdAt": event.CreatedAt,
 					}))
@@ -182,7 +182,7 @@ func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
 					call := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { test.handler(service, w, r) })
 					mux := http.NewServeMux()
 					mux.Handle(test.method+" /api/issues/{id}/comments"+test.pattern, call)
-					response := &scaleP21SW59ResponseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: code < 400 || code == http.StatusConflict}
+					response := &responseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: code < 400 || code == http.StatusConflict}
 					mux.ServeHTTP(response, request)
 					got.Code, got.Header = response.Code, response.Header().Clone()
 					if response.Body.Len() > 0 {
@@ -192,7 +192,7 @@ func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
 				repo.SetRealtimeSink(nil)
-				got.Rows = scaleP21SW59SQL(t, f)
+				got.Rows = discussionWriteSql(t, f)
 				after, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -211,16 +211,16 @@ func TestScaleP21SW106DiscussionRoutesDifferential(t *testing.T) {
 				if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 					t.Fatal("ordinary discussion route retained work or decoded full workspace metadata")
 				}
-				outcomes = append(outcomes, scaleP21SW59Normalized(t, got, before, started, time.Now().UTC()))
+				outcomes = append(outcomes, discussionWriteNormalized(t, got, before, started, time.Now().UTC()))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("ordinary discussion route/SQL/event/realtime/webhook differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("ordinary discussion route/SQL/event/realtime/webhook differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		})
 	}
 }
 
-func scaleP21SW106Envelope(t *testing.T, value any) json.RawMessage {
+func discussionRoutesEnvelope(t *testing.T, value any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {

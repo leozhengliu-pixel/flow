@@ -12,7 +12,7 @@ import (
 // The original transaction boundaries are unknowable, so
 // the repair publishes a workspace invalidation, never a partial upsert set.
 // Continue while remaining is true. Normal serving still rejects gaps until
-// every batch has committed. P05's bounded catalog pass seeds untouched legacy
+// every batch has committed. metadata catalog's bounded catalog pass seeds untouched legacy
 // metadata versions; this method reconciles writes made during that pass.
 func (s *SQLiteStore) RepairRecordJournal(ctx context.Context, workspaceID string) (remaining bool, err error) {
 	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {

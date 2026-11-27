@@ -23,7 +23,7 @@ import (
 // An opt-in output-path measurement: four readers of one resident 10x
 // workspace. Include the fixture in the heap peak, but exclude its creation
 // from request latency. No HTTP recorder retains the response bytes.
-func TestScaleP15BMeasureConcurrent10xBootstrap(t *testing.T) {
+func TestScaleBMeasureConcurrent10xBootstrap(t *testing.T) {
 	if os.Getenv("FLOW_P15B_MEASURE") != "on" {
 		t.Skip("set FLOW_P15B_MEASURE=on for the four-reader 10x measurement")
 	}
@@ -114,7 +114,7 @@ func TestScaleP15BMeasureConcurrent10xBootstrap(t *testing.T) {
 			firstWrites.Wait()
 			began := time.Now()
 			first := true
-			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+			w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 				if first {
 					first = false
 					sample()

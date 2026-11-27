@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP07DatabaseConfig(t *testing.T) store.DatabaseConfig {
+func admissionScaleDatabaseConfig(t *testing.T) store.DatabaseConfig {
 	t.Helper()
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if driver == "" && databaseURL == "" {
@@ -35,16 +35,16 @@ func scaleP07DatabaseConfig(t *testing.T) store.DatabaseConfig {
 	return config
 }
 
-func scaleP07Fixture(t *testing.T) *mcpContractFixture {
+func admissionScaleFixture(t *testing.T) *mcpContractFixture {
 	t.Helper()
-	config := scaleP07DatabaseConfig(t)
+	config := admissionScaleDatabaseConfig(t)
 	if config.Driver == "sqlite" {
 		config.URL = config.Path
 	}
-	return scaleP07ExternalFixture(t, config.Driver, config.URL)
+	return scaleExternalFixture(t, config.Driver, config.URL)
 }
 
-func scaleP07Wait(t *testing.T, condition func() bool) {
+func scaleWait(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.NewTimer(5 * time.Second)
 	defer deadline.Stop()
@@ -59,7 +59,7 @@ func scaleP07Wait(t *testing.T, condition func() bool) {
 	}
 }
 
-func TestScaleP07ExistingLimits(t *testing.T) {
+func TestScaleExistingLimits(t *testing.T) {
 	for _, name := range []string{"FLOW_METADATA_READ_CONCURRENCY", "FLOW_METADATA_READ_QUEUE_LIMIT", "FLOW_METADATA_READ_QUEUE_TIMEOUT", "FLOW_RESOURCE_READ_CONCURRENCY", "FLOW_RESOURCE_READ_QUEUE_LIMIT", "FLOW_RESOURCE_READ_QUEUE_TIMEOUT"} {
 		t.Setenv(name, "")
 	}
@@ -102,10 +102,10 @@ func TestColdProjectionMemoryConcurrency(t *testing.T) {
 	}
 }
 
-func TestScaleP07RecordReadsBypassSaturatedProjectionGate(t *testing.T) {
+func TestScaleRecordReadsBypassSaturatedProjectionGate(t *testing.T) {
 	// The legacy point readers bypass the legacy full projection gate.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP07Fixture(t)
+	f := admissionScaleFixture(t)
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
 	gate := f.service.projectionGate
 	servedBefore := gate.served.Load()
@@ -127,7 +127,7 @@ func TestScaleP07RecordReadsBypassSaturatedProjectionGate(t *testing.T) {
 	}
 }
 
-func TestScaleP07ExistingGateCancellation(t *testing.T) {
+func TestScaleExistingGateCancellation(t *testing.T) {
 	for _, projection := range []bool{false, true} {
 		name := "bootstrap"
 		if projection {
@@ -152,7 +152,7 @@ func TestScaleP07ExistingGateCancellation(t *testing.T) {
 				defer close(done)
 				handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/projects/p07", nil).WithContext(ctx))
 			}()
-			scaleP07Wait(t, func() bool { return gate.queued.Load() == 1 })
+			scaleWait(t, func() bool { return gate.queued.Load() == 1 })
 			cancel()
 			select {
 			case <-done:
@@ -171,7 +171,7 @@ func TestScaleP07ExistingGateCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP07ExistingGatePanicAndNesting(t *testing.T) {
+func TestScaleExistingGatePanicAndNesting(t *testing.T) {
 	for _, projection := range []bool{false, true} {
 		gate := newMetadataReadGate(1, 4, time.Second, 0)
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +200,7 @@ func TestScaleP07ExistingGatePanicAndNesting(t *testing.T) {
 	}
 }
 
-func TestScaleP07ExistingMCPLimiterCancellationAndNesting(t *testing.T) {
+func TestScaleExistingMCPLimiterCancellationAndNesting(t *testing.T) {
 	limiter := newToolCallLimiter(1)
 	ctx, release, err := limiter.acquire(t.Context())
 	if err != nil {
@@ -223,13 +223,13 @@ func TestScaleP07ExistingMCPLimiterCancellationAndNesting(t *testing.T) {
 	}
 }
 
-func TestScaleP07PermissionMatrix(t *testing.T) {
+func TestScalePermissionMatrixAdmission(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	scaleP01PermissionMatrix(t, scaleP07DatabaseConfig(t))
+	checkScalePermissionMatrix(t, admissionScaleDatabaseConfig(t))
 }
 
-func TestScaleP07FixturePreservesUnrelatedAccount(t *testing.T) {
-	config := scaleP07DatabaseConfig(t)
+func TestScaleFixturePreservesUnrelatedAccount(t *testing.T) {
+	config := admissionScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestScaleP07FixturePreservesUnrelatedAccount(t *testing.T) {
 		if config.Driver == "sqlite" {
 			url = config.Path
 		}
-		f := scaleP07ExternalFixture(t, config.Driver, url)
+		f := scaleExternalFixture(t, config.Driver, url)
 		owned = f.data
 		if owned.Viewer.ID == user.ID || owned.Workspace.URLKey == data.Workspace.URLKey {
 			t.Fatal("fixture reused an unrelated principal")
@@ -266,7 +266,7 @@ func TestScaleP07FixturePreservesUnrelatedAccount(t *testing.T) {
 		client := &http.Client{Transport: issueReadKeyTransport{secret: f.secret}}
 		authRequest[domain.Project](t, client, "GET", f.host.URL+"/api/projects/"+f.data.Projects[0].ID, nil, f.data.Workspace.URLKey, http.StatusOK)
 	})
-	if _, _, err = repo.Login(t.Context(), owned.Viewer.Email, scaleP01FixturePassword); err == nil {
+	if _, _, err = repo.Login(t.Context(), owned.Viewer.Email, databaseScaleFixturePassword); err == nil {
 		t.Fatal("owned fixture account survived cleanup")
 	}
 	if session, _, err := repo.Login(t.Context(), user.Email, password); err != nil || session.User.ID != user.ID {

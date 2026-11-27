@@ -16,9 +16,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW21PersonalSeed(t *testing.T) (scaleP09Fixture, *SQLiteStore, domain.User) {
+func personalSeed(t *testing.T) (scaleFixture, *SQLiteStore, domain.User) {
 	t.Helper()
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	subject, token, err := f.Register(t.Context(), "SW21 subject", idgen.New("sw21-person-")+"@example.test", "sw21-identity-password")
 	if err != nil {
@@ -62,7 +62,7 @@ func scaleP21SW21PersonalSeed(t *testing.T) (scaleP09Fixture, *SQLiteStore, doma
 	return f, probe, subject
 }
 
-func scaleP21SW21MetadataHash(t *testing.T, repo *SQLiteStore, workspace string) [32]byte {
+func metadataHash(t *testing.T, repo *SQLiteStore, workspace string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)
@@ -86,11 +86,11 @@ func scaleP21SW21MetadataHash(t *testing.T, repo *SQLiteStore, workspace string)
 	return [32]byte(hash.Sum(nil))
 }
 
-func TestScaleP21SW21PersonalErasureUsesResidentIdentity(t *testing.T) {
+func TestPersonalErasureUsesResidentIdentity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, probe, subject := scaleP21SW21PersonalSeed(t)
+	f, probe, subject := personalSeed(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Format(time.RFC3339Nano)
 	actionID := idgen.New("sw21-action-")
@@ -112,7 +112,7 @@ func TestScaleP21SW21PersonalErasureUsesResidentIdentity(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id) VALUES(?,'notification','',?,?,?,?)`, workspace, unrelatedID, stamp, []byte(`{"id":"retained","actor":{"id":"hidden"},"count":99}`), f.data.Viewer.ID); err != nil {
 		t.Fatal(err)
 	}
-	metadata := scaleP21SW21MetadataHash(t, f.SQLiteStore, workspace)
+	metadata := metadataHash(t, f.SQLiteStore, workspace)
 	reset := func() {
 		t.Helper()
 		for _, statement := range []struct {
@@ -195,7 +195,7 @@ func TestScaleP21SW21PersonalErasureUsesResidentIdentity(t *testing.T) {
 				if !reflect.DeepEqual(got.Counts, []int{0, 0, 0, 0, 0, 0}) || got.Role != DepartureRoleErased || len(got.Events) != 1 || len(got.Realtime) != 1 || !reflect.DeepEqual(got.Access, []any{subject.ID}) {
 					t.Fatalf("erasure scope or publication changed: %+v", got)
 				}
-				if scaleP21SW21MetadataHash(t, f.SQLiteStore, workspace) != metadata {
+				if metadataHash(t, f.SQLiteStore, workspace) != metadata {
 					t.Fatal("identity-only erasure changed unrelated canonical metadata")
 				}
 				if _, status, err := f.WorkspaceRole(t.Context(), foreign.Workspace.ID, subject.ID); err != nil || status != "active" {
@@ -231,13 +231,13 @@ func TestScaleP21SW21PersonalErasureUsesResidentIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW21PersonalLeakCheckUsesResidentIdentity(t *testing.T) {
+func TestPersonalLeakCheckUsesResidentIdentity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, probe, subject := scaleP21SW21PersonalSeed(t)
+	f, probe, subject := personalSeed(t)
 	workspace := f.data.Workspace.URLKey
-	before := scaleP21SW21MetadataHash(t, f.SQLiteStore, workspace)
+	before := metadataHash(t, f.SQLiteStore, workspace)
 	for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 		source.SetRealtimeSink(func(string, domain.RealtimeEvent) { t.Error("leak check published realtime") })
 		source.SetWebhookSink(func(string, domain.DomainEvent) { t.Error("leak check published webhook") })
@@ -273,7 +273,7 @@ func TestScaleP21SW21PersonalLeakCheckUsesResidentIdentity(t *testing.T) {
 			t.Fatal("cancelled leak check changed error-as-leak behavior")
 		}
 	}
-	if scaleP21SW21MetadataHash(t, f.SQLiteStore, workspace) != before || probe.WorkspaceMetadataDecodes() != 0 || probe.metadataResidency.work.used != 0 {
+	if metadataHash(t, f.SQLiteStore, workspace) != before || probe.WorkspaceMetadataDecodes() != 0 || probe.metadataResidency.work.used != 0 {
 		t.Fatal("leak check changed canonical data, decoded metadata or leaked work")
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW19JSON(t *testing.T, value any, clocks ...time.Time) any {
+func automationJSON(t *testing.T, value any, clocks ...time.Time) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -43,7 +43,7 @@ func scaleP21SW19JSON(t *testing.T, value any, clocks ...time.Time) any {
 	return replace(decoded)
 }
 
-func scaleP21SW19Hash(t *testing.T, repo *store.SQLiteStore, workspace, kind, exclude string) [32]byte {
+func automationHash(t *testing.T, repo *store.SQLiteStore, workspace, kind, exclude string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	if err := repo.StreamMetadataRecords(t.Context(), workspace, kind, func(key store.RecordKey, reader io.Reader) error {

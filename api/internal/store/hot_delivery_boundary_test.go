@@ -379,7 +379,7 @@ func deliveryBoundaryCheck(c deliveryBoundaryCatalog, function *ast.FuncDecl, sp
 	return nil
 }
 
-func TestScaleP21HotDeliveryLegacyBoundaryAST(t *testing.T) {
+func TestScaleHotDeliveryLegacyBoundaryAST(t *testing.T) {
 	catalog := deliveryBoundaryCatalog{fields: map[string]map[string]ast.Expr{}, embedded: map[string][]ast.Expr{}, result: map[string][]ast.Expr{}}
 	functions := map[string]*ast.FuncDecl{}
 	for prefix, directory := range map[string]string{"store": ".", "server": "../../cmd/server", "domain": "../domain"} {
@@ -494,7 +494,7 @@ func TestScaleP21HotDeliveryLegacyBoundaryAST(t *testing.T) {
 	t.Log("audited 7 legacy selectors across 6 production boundaries; bounded paths use owned readers")
 }
 
-func TestScaleP21HotDeliveryLegacyBoundaryRejectsNewEdges(t *testing.T) {
+func TestScaleHotDeliveryLegacyBoundaryRejectsNewEdges(t *testing.T) {
 	catalog := deliveryBoundaryCatalog{
 		fields: map[string]map[string]ast.Expr{"server": {"store": &ast.StarExpr{X: ast.NewIdent("SQLiteStore")}}},
 		result: map[string][]ast.Expr{},
@@ -536,10 +536,10 @@ func TestScaleP21HotDeliveryLegacyBoundaryRejectsNewEdges(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotDeliveryLegacyRejectsAndColdFacade(t *testing.T) {
+func TestScaleHotDeliveryLegacyRejectsAndColdFacade(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, now := f.data.Workspace.URLKey, time.Now().UTC()
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.delivery_boundary", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "delivery-boundary-large", Description: strings.Repeat("cold", 100000)})

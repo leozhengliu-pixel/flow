@@ -45,12 +45,12 @@ func measureWrite(t *testing.T, peers peerServers, step func()) writeCost {
 // for B's events: it catches up when its next request asks.
 func writeLoadFixture(t *testing.T) (peers peerServers, adminA, adminB *http.Client, team domain.Team, issue domain.Issue) {
 	t.Helper()
-	peers = scaleP01NewPeers(t)
+	peers = scaleNewPeers(t)
 	first, second := peers.first.URL, peers.second.URL
 	adminA, adminB = peerAdmin(t, first), peerAdmin(t, second)
 	team = authRequest[domain.Team](t, adminB, http.MethodPost, second+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Write Load", "key": "WLD"}, "", http.StatusCreated)
 	issue = authRequest[domain.Issue](t, adminB, http.MethodPost, second+"/api/issues", map[string]any{"title": "Write load issue", "teamId": team.ID}, "test-workspace", http.StatusCreated)
-	spec := scaleP01MetadataSpec(t, []string{team.ID}, nil)
+	spec := scaleMetadataSpec(t, []string{team.ID}, nil)
 	spec.Relations = false
 	if err := peers.stores[1].SeedSyntheticMetadata(context.Background(), "test-workspace", spec); err != nil {
 		t.Fatal(err)
@@ -135,11 +135,11 @@ func TestLoadWriteDecodes(t *testing.T) {
 	}
 	report := map[string]map[string]any{}
 	for _, phase := range phases {
-		var writer, reader scaleP01WriteCost
+		var writer, reader scaleWriteCost
 		for index := range writes {
-			cost := scaleP01MeasureWrite(t, peers, func() { phase.write(index) })
+			cost := scaleMeasureWrite(t, peers, func() { phase.write(index) })
 			writer.add(cost)
-			cost = scaleP01MeasureWrite(t, peers, func() {
+			cost = scaleMeasureWrite(t, peers, func() {
 				authRequest[domain.Issue](t, adminA, http.MethodGet, first+"/api/issue-records/"+issue.ID, nil, "test-workspace", http.StatusOK)
 			})
 			reader.add(cost)
@@ -151,23 +151,23 @@ func TestLoadWriteDecodes(t *testing.T) {
 			"writerMiBPerWrite":          float64(writer.bytes) / n / (1 << 20),
 			"peerRequestDecodesPerWrite": float64(reader.decodes) / n,
 			"peerRequestMiBPerWrite":     float64(reader.bytes) / n / (1 << 20),
-			"writerCost":                 scaleP01WriteMetrics(writer, writes),
-			"peerRequestCost":            scaleP01WriteMetrics(reader, writes),
+			"writerCost":                 scaleWriteMetrics(writer, writes),
+			"peerRequestCost":            scaleWriteMetrics(reader, writes),
 		}
 	}
 	// Both replicas write the same team in turn: each write follows the
 	// other replica's, so both decode.
-	var alternating scaleP01WriteCost
+	var alternating scaleWriteCost
 	for index := range writes {
 		base, client := second, adminB
 		if index%2 == 1 {
 			base, client = first, adminA
 		}
-		cost := scaleP01MeasureWrite(t, peers, func() {
+		cost := scaleMeasureWrite(t, peers, func() {
 			authRequest[domain.Team](t, client, http.MethodPatch, base+teamsURL+"/"+team.ID, map[string]any{"name": fmt.Sprintf("Write Load Alt %d", index)}, "", http.StatusOK)
 		})
 		alternating.add(cost)
 	}
-	report["team name alternating A/B"] = map[string]any{"writes": writes, "decodesPerWrite": float64(alternating.decodes) / float64(writes), "MiBPerWrite": float64(alternating.bytes) / float64(writes) / (1 << 20), "cost": scaleP01WriteMetrics(alternating, writes)}
-	scaleP01SaveReport(t, report)
+	report["team name alternating A/B"] = map[string]any{"writes": writes, "decodesPerWrite": float64(alternating.decodes) / float64(writes), "MiBPerWrite": float64(alternating.bytes) / float64(writes) / (1 << 20), "cost": scaleWriteMetrics(alternating, writes)}
+	scaleSaveReport(t, report)
 }

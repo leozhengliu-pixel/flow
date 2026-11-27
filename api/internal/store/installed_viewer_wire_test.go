@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func sw15ViewerWireUsed(s *SQLiteStore) int {
+func viewerWireUsed(s *SQLiteStore) int {
 	if s.metadataResidency == nil {
 		return 0
 	}
@@ -21,7 +21,7 @@ func sw15ViewerWireUsed(s *SQLiteStore) int {
 	return s.metadataResidency.work.used
 }
 
-func sw15ViewerWireFull(until *time.Time) domain.User {
+func viewerWireFull(until *time.Time) domain.User {
 	var user domain.User
 	value := reflect.ValueOf(&user).Elem()
 	for index := range value.NumField() {
@@ -40,7 +40,7 @@ func sw15ViewerWireFull(until *time.Time) domain.User {
 	return user
 }
 
-func sw15ViewerWireAssert(t *testing.T, actual, expected domain.User) {
+func viewerWireAssert(t *testing.T, actual, expected domain.User) {
 	t.Helper()
 	want := cloneBootstrap(domain.Bootstrap{Viewer: expected}).Viewer
 	actualTime, expectedTime := actual.OutOfOfficeUntil, want.OutOfOfficeUntil
@@ -89,7 +89,7 @@ func sw15ViewerWireAssert(t *testing.T, actual, expected domain.User) {
 	}
 }
 
-func TestScaleP21SW15InstalledViewerWireTimeDifferential(t *testing.T) {
+func TestInstalledViewerWireTimeDifferential(t *testing.T) {
 	var timestampFields []string
 	kind := reflect.TypeFor[domain.User]()
 	for index := range kind.NumField() {
@@ -130,19 +130,19 @@ func TestScaleP21SW15InstalledViewerWireTimeDifferential(t *testing.T) {
 		}
 	}
 	for _, until := range fixtures {
-		viewer := sw15ViewerWireFull(until)
+		viewer := viewerWireFull(until)
 		var original time.Time
 		if until != nil {
 			original = *until
 		}
 		repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Viewer: viewer}}, lastWorkspaceKey: "workspace", metadataResidency: newMetadataResidency()}
-		expected, found := scaleP21ResidentOracle(repo, "workspace")
+		expected, found := scaleResidentOracle(repo, "workspace")
 		read, ok, err := repo.BeginInstalledViewerRead(t.Context(), "")
 		if err != nil || !found || !ok {
 			t.Fatal("viewer wire read failed", err)
 		}
 		actual := read.Viewer()
-		sw15ViewerWireAssert(t, actual, expected.Viewer)
+		viewerWireAssert(t, actual, expected.Viewer)
 		if until != nil {
 			if *until != original || actual.OutOfOfficeUntil == until {
 				t.Fatal("source timestamp changed or pointer was borrowed")
@@ -156,24 +156,24 @@ func TestScaleP21SW15InstalledViewerWireTimeDifferential(t *testing.T) {
 			}
 		}
 		read.Close()
-		if sw15ViewerWireUsed(repo) != 0 {
+		if viewerWireUsed(repo) != 0 {
 			t.Fatal("wire viewer leaked admission")
 		}
 	}
 }
 
-func TestScaleP21SW15InstalledViewerWireGenerationAndCost(t *testing.T) {
+func TestInstalledViewerWireGenerationAndCost(t *testing.T) {
 	name := strings.Repeat("retired-owned-zone", 100000)
 	when := time.Date(2026, 11, 3, 12, 13, 14, 15, time.FixedZone(name, 3661))
 	original := when
-	viewer := sw15ViewerWireFull(&when)
+	viewer := viewerWireFull(&when)
 	without := viewer
 	without.OutOfOfficeUntil = nil
-	baseCost, err := scaleP21SW20ViewerCost(without)
+	baseCost, err := installedViewerViewerCost(without)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cost, err := scaleP21SW20ViewerCost(viewer)
+	cost, err := installedViewerViewerCost(viewer)
 	if err != nil || cost-baseCost != 4096 {
 		t.Fatal("owned fixed-offset location lacks explicit pre-clone charge", cost-baseCost, err)
 	}
@@ -190,7 +190,7 @@ func TestScaleP21SW15InstalledViewerWireGenerationAndCost(t *testing.T) {
 	defer read.Close()
 	releaseParent()
 	got := read.Viewer()
-	charged := sw15ViewerWireUsed(repo)
+	charged := viewerWireUsed(repo)
 	if charged != cost || charged >= len(name) {
 		t.Fatal("invalid retained source fixture/admission", charged, cost, len(name))
 	}
@@ -219,24 +219,24 @@ func TestScaleP21SW15InstalledViewerWireGenerationAndCost(t *testing.T) {
 	if got.OutOfOfficeUntil.Location() == when.Location() || got.OutOfOfficeUntil.Location().String() != "" || got.OutOfOfficeUntil == &when {
 		t.Fatal("retired source location escaped into owned viewer")
 	}
-	if when != original || sw15ViewerWireUsed(repo) != charged {
+	if when != original || viewerWireUsed(repo) != charged {
 		t.Fatal("source replacement changed source or revoked result allowance")
 	}
-	sw15ViewerWireAssert(t, got, viewer)
+	viewerWireAssert(t, got, viewer)
 	read.Close()
 	read.Close()
-	if sw15ViewerWireUsed(repo) != 0 {
+	if viewerWireUsed(repo) != 0 {
 		t.Fatal("retired viewer charge leaked")
 	}
 }
 
-func TestScaleP21SW15InstalledViewerWirePersistent(t *testing.T) {
+func TestInstalledViewerWirePersistent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	when := time.Date(2026, 11, 1, 1, 30, 0, 123456789, time.FixedZone("source-viewer-zone", -4*3600))
-	expected := sw15ViewerWireFull(&when)
+	expected := viewerWireFull(&when)
 	expected.ID = f.data.Viewer.ID
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "viewer"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Viewer = expected
@@ -262,16 +262,16 @@ func TestScaleP21SW15InstalledViewerWirePersistent(t *testing.T) {
 		// stays opaque to native decoding; the oracle is each store's
 		// resident viewer, which the installed read selects.
 		for _, store := range []*SQLiteStore{f.SQLiteStore, probe} {
-			source, found := scaleP21ResidentOracle(store, workspace)
+			source, found := scaleResidentOracle(store, workspace)
 			read, ok, err := store.BeginInstalledViewerRead(t.Context(), workspace)
 			if err != nil || !ok || !found {
 				t.Fatal(stage, err)
 			}
-			sw15ViewerWireAssert(t, read.Viewer(), source.Viewer)
+			viewerWireAssert(t, read.Viewer(), source.Viewer)
 			read.Close()
 		}
 	}
-	if sw15ViewerWireUsed(f.SQLiteStore) != 0 || sw15ViewerWireUsed(probe) != 0 || probe.WorkspaceMetadataDecodes() != 0 {
+	if viewerWireUsed(f.SQLiteStore) != 0 || viewerWireUsed(probe) != 0 || probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("persistent wire viewer leaked admission")
 	}
 }

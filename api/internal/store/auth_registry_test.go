@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW17WorkspaceByIDActualInstalledSource(t *testing.T) {
+func TestWorkspaceByIDActualInstalledSource(t *testing.T) {
 	large := strings.Repeat("unrelated full body ", 200000)
 	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
 		t.Run(dialect, func(t *testing.T) {
@@ -80,10 +80,10 @@ func TestScaleP21SW17WorkspaceByIDActualInstalledSource(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17WorkspaceByIDAuthorizationCallers(t *testing.T) {
+func TestWorkspaceByIDAuthorizationCallers(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("sw17-auth-registry-")
 	parent, child, public := prefix+"-private", prefix+"-child", prefix+"-public"

@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW18IssueSearchMigrationDifferential(t *testing.T) {
+func TestIssueSearchMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	prefix := idgen.New("sw18-index-")
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)

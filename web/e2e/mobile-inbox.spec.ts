@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto'
 import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
-import { openWorkspaceWithNetworkRecovery } from './scale-p14-workspace-navigation'
+import { openWorkspaceWithNetworkRecovery } from './workspace-network-recovery'
 
 async function workspaceTeamId(request: APIRequestContext, workspaceKey: string) {
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })

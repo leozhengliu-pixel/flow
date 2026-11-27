@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW570: the loop run read routes answer the same status and the same bytes
+// The loop run read routes answer the same status and the same bytes
 // with bounded metadata on, warm and after a SQL reload, as flag off, with
 // authentication disabled (development mode) and enabled: the run list (runs
 // present or absent, the viewer's own feedback), one run, its event log, and a
 // loop that does not exist.
-func TestScaleP21SW570LoopRunReads(t *testing.T) {
+func TestLoopRunReads(t *testing.T) {
 	for _, mode := range []string{"auth-disabled", "auth-enabled"} {
 		t.Run(mode, func(t *testing.T) {
 			authEnabled := mode == "auth-enabled"
@@ -55,7 +55,7 @@ func TestScaleP21SW570LoopRunReads(t *testing.T) {
 				}
 				recorder := httptest.NewRecorder()
 				handler.ServeHTTP(recorder, request)
-				return recorder.Code, sw570RequestID.ReplaceAllString(recorder.Body.String(), `"requestId":"-"`)
+				return recorder.Code, loopRunsReadRequestID.ReplaceAllString(recorder.Body.String(), `"requestId":"-"`)
 			}
 			viewerID := ""
 			if authEnabled {
@@ -153,4 +153,4 @@ func TestScaleP21SW570LoopRunReads(t *testing.T) {
 	}
 }
 
-var sw570RequestID = regexp.MustCompile(`"requestId":"[0-9a-f]*"`)
+var loopRunsReadRequestID = regexp.MustCompile(`"requestId":"[0-9a-f]*"`)

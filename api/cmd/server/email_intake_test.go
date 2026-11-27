@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW15IntakeRequest(f scaleP21M2Fixture, user domain.User, key *domain.APIKey, team, address string, body any) *http.Request {
+func intakeRequest(f policyDifferentialFixture, user domain.User, key *domain.APIKey, team, address string, body any) *http.Request {
 	r := f.request(user, key, body)
 	r.URL.Path = "/api/teams/" + team + "/email-intake-addresses"
 	r.SetPathValue("id", team)
@@ -22,12 +22,12 @@ func scaleP21SW15IntakeRequest(f scaleP21M2Fixture, user domain.User, key *domai
 	return r
 }
 
-func TestScaleP21SW15EmailIntakeLegacySourceMatrix(t *testing.T) {
+func TestEmailIntakeLegacySourceMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		addressID := idgen.New("email_intake_sw15_")
 		stamp := time.Date(2026, 11, 13, 1, 2, 3, 4, time.FixedZone("wire-zone", 3661))
@@ -47,7 +47,7 @@ func TestScaleP21SW15EmailIntakeLegacySourceMatrix(t *testing.T) {
 		service := &server{store: repo}
 		var expected []byte
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
-			r := scaleP21SW15IntakeRequest(f, user, key, f.public, addressID, nil)
+			r := intakeRequest(f, user, key, f.public, addressID, nil)
 			r.Method = http.MethodGet
 			w := httptest.NewRecorder()
 			service.listEmailIntakeAddresses(w, r)
@@ -78,7 +78,7 @@ func TestScaleP21SW15EmailIntakeLegacySourceMatrix(t *testing.T) {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
-		r := scaleP21SW15IntakeRequest(f, f.data.Viewer, nil, f.public, addressID, nil)
+		r := intakeRequest(f, f.data.Viewer, nil, f.public, addressID, nil)
 		r.Method = http.MethodGet
 		(&server{store: probe, authDisabled: true}).listEmailIntakeAddresses(w, r)
 		if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "[]" {
@@ -100,12 +100,12 @@ func TestScaleP21SW15EmailIntakeLegacySourceMatrix(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW15EmailIntakeLegacyAggregateClosure(t *testing.T) {
+func TestEmailIntakeLegacyAggregateClosure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		addressID := idgen.New("email_intake_sw15_")
 		stamp := time.Date(2026, 11, 13, 1, 2, 3, 0, time.UTC)
@@ -141,7 +141,7 @@ func TestScaleP21SW15EmailIntakeLegacyAggregateClosure(t *testing.T) {
 				var realtime domain.RealtimeEvent
 				repo.SetWebhookSink(func(_ string, next domain.DomainEvent) { event = next })
 				repo.SetRealtimeSink(func(_ string, next domain.RealtimeEvent) { realtime = next })
-				r := scaleP21SW15IntakeRequest(f, f.data.Viewer, nil, f.public, addressID, operation.body)
+				r := intakeRequest(f, f.data.Viewer, nil, f.public, addressID, operation.body)
 				w := httptest.NewRecorder()
 				operation.call(&server{store: repo, authDisabled: true}, w, r)
 				if w.Code != operation.want {

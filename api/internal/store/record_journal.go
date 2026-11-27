@@ -62,7 +62,7 @@ func journalDatabaseReady(db domainEventExecer) bool {
 }
 
 // recordJournalCommitHook receives every changed record in bounded batches
-// inside the writer's transaction. P14 can register its recipient overlay
+// inside the writer's transaction. inbox recipients can register its recipient overlay
 // here; an error rolls back every side effect, including the journal.
 type recordJournalCommitHook func(context.Context, *sqlTx, string, []RecordDelta) error
 
@@ -909,7 +909,7 @@ func (s *SQLiteStore) committedMetadataRecordVersion(ctx context.Context, reader
 
 // ReadCommittedChanges returns complete transactions, never partial record
 // sets. Missing old-writer coverage is an error; oversized transactions become
-// one bounded invalidation. P11/P12 must authorize/redact this trusted stream.
+// one bounded invalidation. journal peer sync/recipient delivery must authorize/redact this trusted stream.
 func (s *SQLiteStore) ReadCommittedChanges(ctx context.Context, workspaceID, after string, limit, maxBytes int) (CommittedPage, error) {
 	page := CommittedPage{Next: after, Head: "0", Transactions: []CommittedChange{}}
 	if !s.db.journalReady.Load() || recordJournalMode(s.dialect) == "off" {

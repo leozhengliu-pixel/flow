@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP15PermissionDifferential(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScalePermissionDifferentialRecordHydrationPermissions(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			ctx := t.Context()
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -38,14 +38,14 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamMembership(ctx, f.data.Workspace.ID, "p15-private", f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			member, memberUser := scaleP03Join(t, f, "P15 member", idgen.New("p15-member-")+"@example.test", "member", "p15-public")
-			admin, _ := scaleP03Join(t, f, "P15 outside admin", idgen.New("p15-admin-")+"@example.test", "admin", "p15-public")
-			guest, guestUser := scaleP03Join(t, f, "P15 guest", idgen.New("p15-guest-")+"@example.test", "guest", "p15-public")
-			inherited, _ := scaleP03Join(t, f, "P15 inherited", idgen.New("p15-inherited-")+"@example.test", "member", "p15-private")
+			member, memberUser := resourceAccessScaleJoin(t, f, "P15 member", idgen.New("p15-member-")+"@example.test", "member", "p15-public")
+			admin, _ := resourceAccessScaleJoin(t, f, "P15 outside admin", idgen.New("p15-admin-")+"@example.test", "admin", "p15-public")
+			guest, guestUser := resourceAccessScaleJoin(t, f, "P15 guest", idgen.New("p15-guest-")+"@example.test", "guest", "p15-public")
+			inherited, _ := resourceAccessScaleJoin(t, f, "P15 inherited", idgen.New("p15-inherited-")+"@example.test", "member", "p15-private")
 			issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Private granted issue", "teamId": "p15-private", "projectId": "p15-secret"}, workspace, http.StatusCreated)
 			authRequest[[]domain.IssuePermission](t, f.admin, http.MethodPut, f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{"p15-public"})
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{"p15-public"})
 			empty := idgen.New("p15-empty-")
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p15-empty", Name: "Selected empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -70,9 +70,9 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 			compare := func(t *testing.T, client *http.Client, token, path, key string) {
 				t.Helper()
 				t.Setenv("FLOW_RECORD_HYDRATION", "off")
-				old := scaleP03Read(t, f, client, token, http.MethodGet, path, key)
+				old := resourceAccessScaleRead(t, f, client, token, http.MethodGet, path, key)
 				t.Setenv("FLOW_RECORD_HYDRATION", "on")
-				got := scaleP03Read(t, f, client, token, http.MethodGet, path, key)
+				got := resourceAccessScaleRead(t, f, client, token, http.MethodGet, path, key)
 				var left, right any
 				if err := json.Unmarshal(old.Body.Bytes(), &left); err != nil {
 					t.Fatalf("legacy JSON: %v", err)
@@ -98,7 +98,7 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 				t.Run(principal.name, func(t *testing.T) {
 					if principal.token != "" {
 						t.Setenv("FLOW_RECORD_HYDRATION", "off")
-						_ = scaleP03Read(t, f, principal.client, principal.token, http.MethodGet, "/api/bootstrap", workspace)
+						_ = resourceAccessScaleRead(t, f, principal.client, principal.token, http.MethodGet, "/api/bootstrap", workspace)
 						deadline := time.Now().Add(2 * time.Second)
 						for {
 							keys, _ := repo.WorkspaceMetadataFields(workspace, "apiKeys")
@@ -163,15 +163,15 @@ func TestScaleP15PermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP15ReadSnapshotReleasedBeforeSocket(t *testing.T) {
+func TestScaleReadSnapshotReleasedBeforeSocket(t *testing.T) {
 	// This exercises the legacy bootstrap serializer and SQL read snapshot.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("TMPDIR", t.TempDir())
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		released := false
-		w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+		w := &scaleCountingWriter{header: make(http.Header), onWrite: func() error {
 			if !released {
 				t.Fatal("SQL read snapshot outlived the producer")
 			}

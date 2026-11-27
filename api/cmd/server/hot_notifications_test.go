@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotNotificationsDifferential(t *testing.T) {
+func TestScaleHotNotificationsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	config.MaxOpenConns = 1
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
@@ -34,10 +34,10 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 		{"Notification member", "member"},
 		{"Notification guest", "guest"},
 	} {
-		_, user := scaleP03Join(t, f, spec.name, idgen.New("hot-notification-user-")+"@example.test", spec.role, "scope-public")
+		_, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("hot-notification-user-")+"@example.test", spec.role, "scope-public")
 		users = append(users, user)
 	}
-	_, inherited := scaleP03Join(t, f, "Notification inherited", idgen.New("hot-notification-user-")+"@example.test", "member", "scope-private")
+	_, inherited := resourceAccessScaleJoin(t, f, "Notification inherited", idgen.New("hot-notification-user-")+"@example.test", "member", "scope-private")
 	users = append(users, inherited)
 	_, installedKey := apiKeyScopeCredential(t, f, "app", "selected", []string{"scope-public"}, []string{"read", "initiative:read"})
 	users = append(users, domain.User{ID: installedKey.SubjectID()})
@@ -190,7 +190,7 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 				} {
 					query.Workspace, query.UserID = workspace, user.ID
 					for pageIndex := 0; pageIndex < 20; pageIndex++ {
-						want := scaleP21OldNotificationPage(t, f.service, user.ID, key, query)
+						want := scaleOldNotificationPage(t, f.service, user.ID, key, query)
 						read, err := view.BeginNotificationVisibilityRead(outputContext, boundedAccess)
 						if err != nil {
 							t.Fatal(err)
@@ -237,7 +237,7 @@ func TestScaleP21HotNotificationsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21OldNotificationPage(t *testing.T, service *server, principal string, key domain.APIKey, query store.NotificationQuery) store.NotificationPage {
+func scaleOldNotificationPage(t *testing.T, service *server, principal string, key domain.APIKey, query store.NotificationQuery) store.NotificationPage {
 	t.Helper()
 	ctx, release, err := service.store.BeginWorkspaceRead(t.Context(), query.Workspace)
 	if err != nil {

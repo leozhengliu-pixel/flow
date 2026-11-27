@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW127AccountSettingsAdapter(t *testing.T) {
+func TestAccountSettingsAdapter(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, other := f.data.Workspace.URLKey, idgen.New("sw127-other-")
 		at, disabled := time.Now(), false
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw127_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -40,7 +40,7 @@ func TestScaleP21SW127AccountSettingsAdapter(t *testing.T) {
 		}
 		literal, bounded := &server{store: repo}, &server{store: view}
 		// This adapter is a trusted lookup, with no principal or key policy.
-		// SW122 proves its primitive; only transfer and off/on adaptation belong here.
+		// account collection read proves its primitive; only transfer and off/on adaptation belong here.
 		for _, test := range []struct{ name, workspace, user string }{
 			{"viewer", workspace, f.data.Viewer.ID},
 			{"other-map-key", workspace, other},

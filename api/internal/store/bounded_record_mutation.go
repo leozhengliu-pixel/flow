@@ -16,7 +16,7 @@ import (
 )
 
 // Only existing point edits are ready here. Creates, deletes, complete-field
-// writes, issue/content side effects and P17's snapshot selectors stay blocked.
+// writes, issue/content side effects and resource windows's snapshot selectors stay blocked.
 func residentRecordEvent(event string) bool {
 	switch event {
 	case "project.updated", "project.resource_created", "project.resource_updated", "project.resource_deleted",

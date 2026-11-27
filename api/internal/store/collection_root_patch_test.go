@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW328CollectionRootPatchLifetime(t *testing.T) {
+func TestCollectionRootPatchLifetime(t *testing.T) {
 	for _, cycle := range []bool{false, true} {
 		first, err := newMetadataLogicalRecordSpool(t.Context())
 		if err != nil {

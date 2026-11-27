@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW0InstalledIdentity(t *testing.T, source *SQLiteStore, ref string) (InstalledWorkspaceIdentity, bool) {
+func installedIdentity(t *testing.T, source *SQLiteStore, ref string) (InstalledWorkspaceIdentity, bool) {
 	t.Helper()
 	read, found, err := source.BeginInstalledWorkspaceIdentityRead(t.Context(), ref)
 	if err != nil {
@@ -29,13 +29,13 @@ func scaleP21SW0InstalledIdentity(t *testing.T, source *SQLiteStore, ref string)
 	}, found
 }
 
-// scaleP21ResidentOracle answers what the installed reads select from: the
+// scaleResidentOracle answers what the installed reads select from: the
 // store's resident image under the legacy key rules (an empty key is the
 // default workspace). A flag-off store answers its legacy accessor. A bounded
-// store's legacy accessor no longer reads that image (SW531 refuses it on a
+// store's legacy accessor no longer reads that image (skeletal workspace read refusal refuses it on a
 // store that requires coverage; a store with an installed logical source
 // answers from a legacy view of it), so the oracle reads the image itself.
-func scaleP21ResidentOracle(source *SQLiteStore, workspace string) (domain.Bootstrap, bool) {
+func scaleResidentOracle(source *SQLiteStore, workspace string) (domain.Bootstrap, bool) {
 	if source.metadataResidency == nil {
 		return source.WorkspaceMetadata(workspace)
 	}
@@ -51,7 +51,7 @@ func scaleP21ResidentOracle(source *SQLiteStore, workspace string) (domain.Boots
 	return cloneBootstrap(data), true
 }
 
-func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
+func TestInstalledWorkspaceExactRegistry(t *testing.T) {
 	for _, bounded := range []bool{false, true} {
 		source := &SQLiteStore{
 			lastWorkspaceKey: "physical\x00default",
@@ -67,12 +67,12 @@ func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 			source.metadataResidency.stamps["Case"] = copyStamp{workspaceID: "stale", revision: -1}
 		}
 		for _, ref := range []string{"", "physical\x00default", "physicaldefault", "Case", "case", "CASE", "different-body-key", "trail ", "trail", " ", "missing"} {
-			identity, found := scaleP21SW0InstalledIdentity(t, source, ref)
+			identity, found := installedIdentity(t, source, ref)
 			selected := ref
 			if selected == "" {
 				selected = source.lastWorkspaceKey
 			}
-			legacy, wantFound := scaleP21ResidentOracle(source, ref)
+			legacy, wantFound := scaleResidentOracle(source, ref)
 			if found != wantFound {
 				t.Fatalf("bounded=%v ref=%q found=%v want=%v", bounded, ref, found, wantFound)
 			}
@@ -109,14 +109,14 @@ func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 		if err := (&InstalledWorkspaceIdentityRead{}).Close(); err != nil {
 			t.Fatal("empty close", err)
 		}
-		if _, found := scaleP21SW0InstalledIdentity(t, source, "physical\x00default"); found {
+		if _, found := installedIdentity(t, source, "physical\x00default"); found {
 			t.Fatal("removed registry key remained installed")
 		}
-		if next, found := scaleP21SW0InstalledIdentity(t, source, ""); !found || next.RegistryKey != "Case" {
+		if next, found := installedIdentity(t, source, ""); !found || next.RegistryKey != "Case" {
 			t.Fatal("default did not follow installed publication")
 		}
 		source.lastWorkspaceKey = "deleted"
-		if _, found := scaleP21SW0InstalledIdentity(t, source, ""); found {
+		if _, found := installedIdentity(t, source, ""); found {
 			t.Fatal("missing default invented a first-workspace fallback")
 		}
 	}
@@ -125,7 +125,7 @@ func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 		{workspaces: map[string]domain.Bootstrap{}},
 		{workspaces: map[string]domain.Bootstrap{"": {Workspace: domain.Workspace{ID: "empty-key-id"}}}},
 	} {
-		identity, found := scaleP21SW0InstalledIdentity(t, source, "")
+		identity, found := installedIdentity(t, source, "")
 		_, emptyExists := source.workspaces[""]
 		if identity.RegistryKey != "" || found != emptyExists || found && identity.ID != "empty-key-id" {
 			t.Fatal("empty installed key differs from legacy map semantics")
@@ -133,7 +133,7 @@ func TestScaleP21SW0InstalledWorkspaceExactRegistry(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0InstalledWorkspaceOwnedAdmission(t *testing.T) {
+func TestInstalledWorkspaceOwnedAdmission(t *testing.T) {
 	source := &SQLiteStore{
 		lastWorkspaceKey: "key", metadataResidency: newMetadataResidency(),
 		workspaces: map[string]domain.Bootstrap{"key": {Workspace: domain.Workspace{ID: "id", URLKey: "logical"}}},
@@ -201,7 +201,7 @@ func TestScaleP21SW0InstalledWorkspaceOwnedAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0InstalledWorkspaceConstantWork(t *testing.T) {
+func TestInstalledWorkspaceConstantWork(t *testing.T) {
 	var previous float64
 	for _, size := range []int{64 << 10, 8 << 20} {
 		large := strings.Repeat("x", size)
@@ -233,16 +233,16 @@ func TestScaleP21SW0InstalledWorkspaceConstantWork(t *testing.T) {
 	source := &SQLiteStore{lastWorkspaceKey: long, workspaces: map[string]domain.Bootstrap{
 		long: {Workspace: domain.Workspace{ID: "long-id", URLKey: long}},
 	}}
-	if identity, found := scaleP21SW0InstalledIdentity(t, source, ""); !found || identity.RegistryKey != long || identity.URLKey != long {
+	if identity, found := installedIdentity(t, source, ""); !found || identity.RegistryKey != long || identity.URLKey != long {
 		t.Fatal("installed key gained an unsupported byte-size validation")
 	}
 }
 
-func TestScaleP21SW0InstalledWorkspaceProducer(t *testing.T) {
+func TestInstalledWorkspaceProducer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect == "postgres" {
 		t.Skip("PostgreSQL text columns cannot retain a physical NUL key")
 	}
@@ -270,14 +270,14 @@ func TestScaleP21SW0InstalledWorkspaceProducer(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy, ok := f.WorkspaceMetadata("")
-	canonical, found, err := scaleP21SW30CanonicalMetadataWitness(t.Context(), probe, "", MetadataRecordScope{})
+	canonical, found, err := canonicalMetadataWitness(t.Context(), probe, "", MetadataRecordScope{})
 	if !ok || !found || err != nil || legacy.Workspace.URLKey != physical || canonical.Workspace.URLKey != strings.ReplaceAll(physical, "\x00", "") {
 		t.Fatal("producer did not exercise physical/body distinction", err)
 	}
 	for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 		old, ok := source.WorkspaceMetadata("")
 		for _, ref := range []string{physical, ""} {
-			identity, found := scaleP21SW0InstalledIdentity(t, source, ref)
+			identity, found := installedIdentity(t, source, ref)
 			if !found || !ok || identity.RegistryKey != physical || identity.ID != created.Workspace.ID || identity.URLKey != old.Workspace.URLKey {
 				t.Fatalf("installed identity=%+v legacy logical=%q", identity, old.Workspace.URLKey)
 			}
@@ -287,14 +287,14 @@ func TestScaleP21SW0InstalledWorkspaceProducer(t *testing.T) {
 		t.Fatal(err)
 	}
 	reloaded, ok := f.WorkspaceMetadata("")
-	identity, found := scaleP21SW0InstalledIdentity(t, f.SQLiteStore, "")
+	identity, found := installedIdentity(t, f.SQLiteStore, "")
 	if !ok || !found || identity.RegistryKey != physical || identity.URLKey != reloaded.Workspace.URLKey || identity.URLKey != canonical.Workspace.URLKey {
 		t.Fatal("reload changed source selection semantics")
 	}
 	if err := f.RemoveWorkspaceFromCatalog(t.Context(), physical, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, found := scaleP21SW0InstalledIdentity(t, f.SQLiteStore, physical); found {
+	if _, found := installedIdentity(t, f.SQLiteStore, physical); found {
 		t.Fatal("catalog removal left a stale installed identity")
 	}
 }

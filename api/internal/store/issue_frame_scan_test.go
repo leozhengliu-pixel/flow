@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW237Row struct {
+type issueFrameScanRow struct {
 	physical string
 	raw      []byte
 	order    int
@@ -24,7 +24,7 @@ type scaleP21SW237Row struct {
 	textData bool
 }
 
-func scaleP21SW237Seed(t *testing.T, f scaleP09Fixture, rows []scaleP21SW237Row) {
+func issueFrameScanSeed(t *testing.T, f scaleFixture, rows []issueFrameScanRow) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	tx, err := f.db.BeginTx(t.Context(), nil)
@@ -67,11 +67,11 @@ func scaleP21SW237Seed(t *testing.T, f scaleP09Fixture, rows []scaleP21SW237Row)
 	}
 }
 
-func scaleP21SW237View(f scaleP09Fixture) *SQLiteStore {
+func issueFrameScanView(f scaleFixture) *SQLiteStore {
 	return &SQLiteStore{db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes, metadataResidency: newMetadataResidency()}
 }
 
-func scaleP21SW237Wire(t *testing.T, issue domain.Issue) []byte {
+func issueFrameScanWire(t *testing.T, issue domain.Issue) []byte {
 	t.Helper()
 	raw, err := json.Marshal(issue)
 	if err != nil {
@@ -80,12 +80,12 @@ func scaleP21SW237Wire(t *testing.T, issue domain.Issue) []byte {
 	return raw
 }
 
-func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
+func TestIssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
-	records := make([]scaleP21SW237Row, 0, 126)
+	f := journalScaleDatabase(t)
+	records := make([]issueFrameScanRow, 0, 126)
 	for index := range 62 {
-		records = append(records, scaleP21SW237Row{
+		records = append(records, issueFrameScanRow{
 			physical: fmt.Sprintf("physical-%03d", index),
 			raw:      []byte(fmt.Sprintf(` { "id":"json-duplicate", "title":"text-%03d", "description":"unicode \u4e2d\u6587 <>& \u0000", "documentContent":{"content":"body","contentData":{"n":9007199254740993}} } `, index)),
 			order:    0, textData: f.dialect == "sqlite" && index%2 == 0,
@@ -93,24 +93,24 @@ func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 	}
 	if f.dialect == "sqlite" {
 		for index := range 60 {
-			records = append(records, scaleP21SW237Row{
+			records = append(records, issueFrameScanRow{
 				physical: fmt.Sprintf("physical-%03d", index), blob: true,
 				raw: []byte(fmt.Sprintf(`{"id":"json-duplicate","title":"blob-%03d","description":"raw"}`, index)), order: 0,
 			})
 		}
-		records = append(records, scaleP21SW237Row{
+		records = append(records, issueFrameScanRow{
 			physical: "physical-wide-text", textData: true, order: 1,
 			raw: []byte(`{"id":"json-wide-text","description":"` + strings.Repeat("\u4e2d", 20000) + `"}`),
 		})
 	}
-	records = append(records, scaleP21SW237Row{physical: "physical-later", raw: []byte(`{"id":"json-later","title":"later order"}`), order: 1})
-	scaleP21SW237Seed(t, f, records)
+	records = append(records, issueFrameScanRow{physical: "physical-later", raw: []byte(`{"id":"json-later","title":"later order"}`), order: 1})
+	issueFrameScanSeed(t, f, records)
 	oracleBase := &recordBase{}
 	oracle, err := f.readIssueRecordsWithBase(t.Context(), f.data.Workspace.URLKey, oracleBase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21SW237View(f)
+	view := issueFrameScanView(f)
 	tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +166,7 @@ func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 		if count >= len(oracle) || row.PhysicalID != physical[count] {
 			t.Fatal("streamed frame changed physical SQL page/order identity", count, row.PhysicalID)
 		}
-		scaleP21SW234CompareFrame(t, view, row.Node, oracle[count], scaleP21SW237Wire(t, oracle[count]), true)
+		compareFrame(t, view, row.Node, oracle[count], issueFrameScanWire(t, oracle[count]), true)
 		if row.StoredHash != stored[count] {
 			t.Fatal("raw receipt was keyed by the JSON ID instead of physical ID")
 		}
@@ -186,28 +186,28 @@ func TestScaleP21SW237IssueFrameScanOracleAndPhysicalOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW237IssueImageUsesStreamedRawReceipts(t *testing.T) {
+func TestIssueImageUsesStreamedRawReceipts(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
-	records := []scaleP21SW237Row{
+	f := journalScaleDatabase(t)
+	records := []issueFrameScanRow{
 		{physical: "physical-first", raw: []byte(` {"id":"embedded-other","description":"first","labels":null} `), order: 0},
 		{physical: "physical-second", raw: []byte(`{"id":"embedded-other","description":"second","version":0}`), order: 0},
 	}
 	if f.dialect == "sqlite" {
-		records = append(records, scaleP21SW237Row{
+		records = append(records, issueFrameScanRow{
 			physical: "physical-first", blob: true,
 			raw: []byte(" \n" + `{"id":"embedded-blob","description":"last physical string receipt"}`), order: 0,
 		})
 	}
-	scaleP21SW237Seed(t, f, records)
+	issueFrameScanSeed(t, f, records)
 	workspace := f.data.Workspace.URLKey
 	oracleBase := &recordBase{}
 	oracle, err := f.readIssueRecordsWithBase(t.Context(), workspace, oracleBase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21SW237View(f)
+	view := issueFrameScanView(f)
 	data := cloneBootstrap(f.data)
 	data.Issues = nil
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID})
@@ -248,7 +248,7 @@ func TestScaleP21SW237IssueImageUsesStreamedRawReceipts(t *testing.T) {
 		if index.Int() != int64(count) || count >= len(oracle) {
 			t.Fatal("legacy image lost SQL order")
 		}
-		scaleP21SW234CompareFrame(t, view, node, oracle[count], scaleP21SW237Wire(t, oracle[count]), true)
+		compareFrame(t, view, node, oracle[count], issueFrameScanWire(t, oracle[count]), true)
 		count++
 		return nil
 	}); err != nil {
@@ -265,14 +265,14 @@ func TestScaleP21SW237IssueImageUsesStreamedRawReceipts(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW237HybridBatchBytesAndThreshold(t *testing.T) {
+func TestHybridBatchBytesAndThreshold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	sized := func(size int) []byte {
 		const prefix, suffix = `{"id":"embedded","description":"`, `"}`
 		return []byte(prefix + strings.Repeat("x", size-len(prefix)-len(suffix)) + suffix)
 	}
-	records := []scaleP21SW237Row{
+	records := []issueFrameScanRow{
 		{physical: "a-0", raw: sized(80 << 10)},
 		{physical: "a-1", raw: sized(80 << 10)},
 		{physical: "a-2", raw: sized(80 << 10)},
@@ -285,12 +285,12 @@ func TestScaleP21SW237HybridBatchBytesAndThreshold(t *testing.T) {
 	if len(records[4].raw) != MetadataRecordPageMaxBytes || len(records[5].raw) <= MetadataRecordPageMaxBytes {
 		t.Fatal("hybrid threshold fixture did not straddle its existing boundary")
 	}
-	scaleP21SW237Seed(t, f, records)
+	issueFrameScanSeed(t, f, records)
 	oracle, err := f.readIssueRecordsWithBase(t.Context(), f.data.Workspace.URLKey, &recordBase{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21SW237View(f)
+	view := issueFrameScanView(f)
 	tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
 	if err != nil {
 		t.Fatal(err)
@@ -317,7 +317,7 @@ func TestScaleP21SW237HybridBatchBytesAndThreshold(t *testing.T) {
 		if count >= len(records) || row.PhysicalID != records[count].physical || row.StoredHash != sha256.Sum256(records[count].raw) {
 			t.Fatal("hybrid threshold routing changed row identity/order/raw receipt", count, row.PhysicalID)
 		}
-		scaleP21SW234CompareFrame(t, view, row.Node, oracle[count], scaleP21SW237Wire(t, oracle[count]), false)
+		compareFrame(t, view, row.Node, oracle[count], issueFrameScanWire(t, oracle[count]), false)
 		count++
 		return nil
 	})
@@ -330,22 +330,22 @@ func TestScaleP21SW237HybridBatchBytesAndThreshold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW237IssueFrameScanSupportedEditorRow(t *testing.T) {
+func TestIssueFrameScanSupportedEditorRow(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
-	raw, requestBytes, stateBytes := scaleP21SW234EditorProducerRow(t)
-	records := []scaleP21SW237Row{
+	f := journalScaleDatabase(t)
+	raw, requestBytes, stateBytes := editorProducerRow(t)
+	records := []issueFrameScanRow{
 		{physical: "a-small", raw: []byte(`{"id":"small-before","description":"before"}`)},
 		{physical: "physical-editor", raw: raw},
 		{physical: "z-small", raw: []byte(`{"id":"small-after","description":"after"}`)},
 	}
-	scaleP21SW237Seed(t, f, records)
+	issueFrameScanSeed(t, f, records)
 	oracleBase := &recordBase{}
 	oracle, err := f.readIssueRecordsWithBase(t.Context(), f.data.Workspace.URLKey, oracleBase)
 	if err != nil || len(oracle) != len(records) {
 		t.Fatal("literal editor row oracle", err, len(oracle))
 	}
-	view := scaleP21SW237View(f)
+	view := issueFrameScanView(f)
 	view.maxStateBytes = 1 << 20
 	view.metadataResidency.work.limit = 16 << 20
 	if len(raw) <= view.maxStateBytes {
@@ -375,7 +375,7 @@ func TestScaleP21SW237IssueFrameScanSupportedEditorRow(t *testing.T) {
 		if count >= len(records) || row.PhysicalID != records[count].physical || row.StoredHash != sha256.Sum256(records[count].raw) {
 			t.Fatal("large editor row lost physical/raw identity")
 		}
-		scaleP21SW234CompareFrame(t, view, row.Node, oracle[count], scaleP21SW237Wire(t, oracle[count]), false)
+		compareFrame(t, view, row.Node, oracle[count], issueFrameScanWire(t, oracle[count]), false)
 		count++
 		return nil
 	})
@@ -401,7 +401,7 @@ func TestScaleP21SW237IssueFrameScanSupportedEditorRow(t *testing.T) {
 			if index.Int() != int64(count) || count >= len(oracle) {
 				t.Fatal("large Issue image changed literal SQL order")
 			}
-			scaleP21SW234CompareFrame(t, view, node, oracle[count], scaleP21SW237Wire(t, oracle[count]), false)
+			compareFrame(t, view, node, oracle[count], issueFrameScanWire(t, oracle[count]), false)
 			count++
 			return nil
 		}); err != nil || count != len(oracle) {
@@ -416,15 +416,15 @@ func TestScaleP21SW237IssueFrameScanSupportedEditorRow(t *testing.T) {
 		requestBytes, len(raw), stateBytes, chunks, batches, view.maxStateBytes, view.metadataResidency.work.limit)
 }
 
-func TestScaleP21SW237IssueFrameScanCancellationIOAndChangedSize(t *testing.T) {
+func TestIssueFrameScanCancellationIOAndChangedSize(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	raw := []byte(`{"id":"embedded","description":"` + strings.Repeat("large body ", 100000) + `"}`)
-	view := scaleP21SW237View(f)
+	view := issueFrameScanView(f)
 	sentinel := errors.New("sw237 callback failed")
 	for _, scenario := range []string{"cancel-before", "cancel-during", "closed-tx", "grow-after-header", "shrink-after-header", "work-denied", "callback"} {
 		t.Run(scenario, func(t *testing.T) {
-			scaleP21SW237Seed(t, f, []scaleP21SW237Row{{physical: "physical-io", raw: raw}})
+			issueFrameScanSeed(t, f, []issueFrameScanRow{{physical: "physical-io", raw: raw}})
 			tx, err := f.db.BeginTx(t.Context(), nil)
 			if err != nil {
 				t.Fatal(err)

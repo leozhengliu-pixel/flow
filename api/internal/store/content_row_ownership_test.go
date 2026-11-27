@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW351ContentRowOwnership(t *testing.T) {
+func TestContentRowOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, resource := f.data.Workspace.URLKey, idgen.New("sw351-resource-")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -173,16 +173,16 @@ func TestScaleP21SW351ContentRowOwnership(t *testing.T) {
 		if held <= 0 || held >= beforeClose || !reflect.DeepEqual(materialized, wantDisplay) {
 			t.Fatal("early content close discarded displayed native values or retained their source allowance", beforeClose, held)
 		}
-		scaleP21SW72Compare(t, selected, scope, wantSelected)
-		scaleP21SW72Compare(t, display, scope, wantDisplay)
+		legacyIssueImageCompare(t, selected, scope, wantSelected)
+		legacyIssueImageCompare(t, display, scope, wantDisplay)
 		cancel()
 		index, _, _ := metadataLogicalField("activities")
 		if _, err := owned.collectionValue(ctx, display.fields[index]); !errors.Is(err, context.Canceled) ||
 			view.MetadataWorkUsedForTesting() != held || !reflect.DeepEqual(materialized, wantDisplay) {
 			t.Fatal("cancellation discarded still-owned frames/native output", err)
 		}
-		scaleP21SW72Compare(t, selected, scope, wantSelected)
-		scaleP21SW72Compare(t, display, scope, wantDisplay)
+		legacyIssueImageCompare(t, selected, scope, wantSelected)
+		legacyIssueImageCompare(t, display, scope, wantDisplay)
 		owned.Close()
 		display.Release()
 		display = nil

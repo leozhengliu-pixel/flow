@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP02Response struct {
+type scaleResponse struct {
 	status int
 	body   any
 }
 
-func scaleP02Difference(left, right any) string {
+func scaleDifference(left, right any) string {
 	if reflect.DeepEqual(left, right) {
 		return ""
 	}
@@ -32,7 +32,7 @@ func scaleP02Difference(left, right any) string {
 		other, ok := right.(map[string]any)
 		if ok {
 			for key, item := range value {
-				if difference := scaleP02Difference(item, other[key]); difference != "" {
+				if difference := scaleDifference(item, other[key]); difference != "" {
 					return "." + key + difference
 				}
 			}
@@ -41,7 +41,7 @@ func scaleP02Difference(left, right any) string {
 		other, ok := right.([]any)
 		if ok && len(value) == len(other) {
 			for i, item := range value {
-				if difference := scaleP02Difference(item, other[i]); difference != "" {
+				if difference := scaleDifference(item, other[i]); difference != "" {
 					return fmt.Sprintf("[%d]%s", i, difference)
 				}
 			}
@@ -50,7 +50,7 @@ func scaleP02Difference(left, right any) string {
 	return " (value or shape)"
 }
 
-func scaleP02Read(t *testing.T, client *http.Client, endpoint, workspace string) scaleP02Response {
+func sessionTouchScaleRead(t *testing.T, client *http.Client, endpoint, workspace string) scaleResponse {
 	t.Helper()
 	r, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -71,19 +71,19 @@ func scaleP02Read(t *testing.T, client *http.Client, endpoint, workspace string)
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("non-JSON response from %s: %v", endpoint, err)
 	}
-	return scaleP02Response{status: response.StatusCode, body: body}
+	return scaleResponse{status: response.StatusCode, body: body}
 }
 
 // Compare every response field against interval=0 on the same canonical data.
 // Session activity is absent from these resource responses by contract.
-func TestScaleP02SessionTouchPermissionDifferential(t *testing.T) {
+func TestScaleSessionTouchPermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	testScaleP02SessionTouchPermissionDifferential(t, scaleP02ServerStore(t))
+	testScaleSessionTouchPermissionDifferential(t, scaleServerStore(t))
 }
 
-func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQLiteStore) {
+func testScaleSessionTouchPermissionDifferential(t *testing.T, repo *store.SQLiteStore) {
 	suffix := fmt.Sprint(time.Now().UnixNano())
-	fixture := scaleP02NewServerFixture(t, repo)
+	fixture := scaleNewServerFixture(t, repo)
 	srv, host, admin := fixture.srv, fixture.host, fixture.admin
 	workspace := fixture.data.Workspace.URLKey
 	publicTeam := fixture.data.Teams[0].ID
@@ -146,7 +146,7 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 		}
 		client := &http.Client{Transport: issueReadKeyTransport{secret: key.Secret}}
 		keyClients[item.name] = client
-		if response := scaleP02Read(t, client, base+"/api/issue-records", workspace); response.status != http.StatusOK {
+		if response := sessionTouchScaleRead(t, client, base+"/api/issue-records", workspace); response.status != http.StatusOK {
 			t.Fatalf("warm %s API key: status=%d", item.name, response.status)
 		}
 		// Finish each initial telemetry write before mutating the key collection
@@ -177,11 +177,11 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 		t.Run(who.name, func(t *testing.T) {
 			for _, endpoint := range []string{"/api/bootstrap", "/api/issue-records", "/api/issue-records/" + public.ID, "/api/issue-records/" + public.ID + "/history", "/api/issue-records/" + hidden.ID, "/api/issue-records/" + shared.ID, "/api/issue-records/" + inherited.ID, "/api/projects/" + project.SlugID, "/api/realtime/changes?since=0"} {
 				t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "0")
-				legacy := scaleP02Read(t, who.client, base+endpoint, workspace)
+				legacy := sessionTouchScaleRead(t, who.client, base+endpoint, workspace)
 				t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-				current := scaleP02Read(t, who.client, base+endpoint, workspace)
+				current := sessionTouchScaleRead(t, who.client, base+endpoint, workspace)
 				if !reflect.DeepEqual(current, legacy) {
-					t.Fatalf("response differs at %s%s: legacy status=%d current status=%d", endpoint, scaleP02Difference(legacy.body, current.body), legacy.status, current.status)
+					t.Fatalf("response differs at %s%s: legacy status=%d current status=%d", endpoint, scaleDifference(legacy.body, current.body), legacy.status, current.status)
 				}
 				want := 0
 				switch endpoint {
@@ -197,9 +197,9 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 				}
 			}
 			t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "0")
-			legacy := scaleP02Read(t, who.client, base+"/api/issue-records/"+hidden.ID, other.Workspace.URLKey)
+			legacy := sessionTouchScaleRead(t, who.client, base+"/api/issue-records/"+hidden.ID, other.Workspace.URLKey)
 			t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-			current := scaleP02Read(t, who.client, base+"/api/issue-records/"+hidden.ID, other.Workspace.URLKey)
+			current := sessionTouchScaleRead(t, who.client, base+"/api/issue-records/"+hidden.ID, other.Workspace.URLKey)
 			if !reflect.DeepEqual(current, legacy) || current.status == http.StatusOK {
 				t.Fatal("cross-workspace response changed or exposed the issue")
 			}
@@ -245,14 +245,14 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 	}
 	for _, mode := range []string{"0", ""} {
 		t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", mode)
-		response := scaleP02Read(t, member, base+"/api/realtime/changes?since=0", workspace)
+		response := sessionTouchScaleRead(t, member, base+"/api/realtime/changes?since=0", workspace)
 		if response.status != http.StatusUnauthorized {
 			t.Fatalf("revoked session replay status=%d", response.status)
 		}
 	}
 }
 
-func TestScaleP02SessionTouchExistingSecurityRegressions(t *testing.T) {
+func TestScaleSessionTouchExistingSecurityRegressions(t *testing.T) {
 	for _, mode := range []string{"0", ""} {
 		t.Run("interval="+mode, func(t *testing.T) {
 			t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", mode)

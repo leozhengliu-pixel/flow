@@ -15,16 +15,16 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
+func TestScalePermissionDifferentialAndQueuedRevocation(t *testing.T) {
 	for _, mode := range []string{"shadow", "on", "off"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_PEER_SYNC", mode)
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			peers, config := scaleP11HTTPPeers(t)
+			peers, config := scaleHTTPPeers(t)
 			for i := range 2 {
 				peers.stopListening(i)
 			}
-			f := scaleP03CreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
+			f := scaleCreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
 			workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 			suffix := idgen.New("p11-")
 			public, private, child := "p11-public", "p11-private", "p11-child"
@@ -46,15 +46,15 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			if err := f.repository.SetTeamMembership(ctx, workspaceID, private, f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			outsideAdmin, _ := scaleP03Join(t, f, "P11 outside admin", suffix+"-admin@example.test", "admin", public)
-			member, memberUser := scaleP03Join(t, f, "P11 member", suffix+"-member@example.test", "member", public, private)
-			guest, guestUser := scaleP03Join(t, f, "P11 guest", suffix+"-guest@example.test", "guest", public)
-			outsider, _ := scaleP03Join(t, f, "P11 outsider", suffix+"-outsider@example.test", "member", public)
+			outsideAdmin, _ := resourceAccessScaleJoin(t, f, "P11 outside admin", suffix+"-admin@example.test", "admin", public)
+			member, memberUser := resourceAccessScaleJoin(t, f, "P11 member", suffix+"-member@example.test", "member", public, private)
+			guest, guestUser := resourceAccessScaleJoin(t, f, "P11 guest", suffix+"-guest@example.test", "guest", public)
+			outsider, _ := resourceAccessScaleJoin(t, f, "P11 outsider", suffix+"-outsider@example.test", "member", public)
 			seedDifferentialPreferences(t, f.repository, workspace, f.resources.users)
 			issue := authRequest[domain.Issue](t, f.admin, "POST", f.host.URL+"/api/issue-records", map[string]any{"title": "P11 grant", "teamId": private, "projectId": "p11-secret"}, workspace, http.StatusCreated)
 			authRequest[[]domain.IssuePermission](t, f.admin, "PUT", f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{public})
 			empty := idgen.New("p11-selected-empty-")
 			if err := f.repository.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "test.p11_matrix", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p11-empty", Name: "P11 empty", SecretHash: secretHash(empty), CreatorID: data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -113,7 +113,7 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			// comparing complete bootstrap bodies, including lastUsedAt.
 			for _, repo := range []*store.SQLiteStore{oracleRepo, remote.repository} {
 				for _, secret := range []string{unrestricted, selected, empty} {
-					scaleP11WarmCredential(t, repo, workspace, secret)
+					scaleWarmCredential(t, repo, workspace, secret)
 				}
 				if err := repo.ReloadWorkspace(ctx, workspace); err != nil {
 					t.Fatal(err)
@@ -131,15 +131,15 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 			for _, principal := range principals {
 				t.Run(principal.name, func(t *testing.T) {
 					for _, path := range paths {
-						want := scaleP03Read(t, oracle, principal.client, principal.token, "GET", path, workspace)
-						got := scaleP03Read(t, remote, principal.client, principal.token, "GET", path, workspace)
+						want := resourceAccessScaleRead(t, oracle, principal.client, principal.token, "GET", path, workspace)
+						got := resourceAccessScaleRead(t, remote, principal.client, principal.token, "GET", path, workspace)
 						if want.Code != got.Code {
 							t.Fatalf("%s status=%d, oracle=%d", path, got.Code, want.Code)
 						}
-						scaleP01EqualJSON(t, json.RawMessage(want.Body.Bytes()), json.RawMessage(got.Body.Bytes()))
+						scaleEqualJSON(t, json.RawMessage(want.Body.Bytes()), json.RawMessage(got.Body.Bytes()))
 					}
-					want := scaleP03Read(t, oracle, principal.client, principal.token, "GET", "/api/projects/p11-open", other.Workspace.URLKey)
-					got := scaleP03Read(t, remote, principal.client, principal.token, "GET", "/api/projects/p11-open", other.Workspace.URLKey)
+					want := resourceAccessScaleRead(t, oracle, principal.client, principal.token, "GET", "/api/projects/p11-open", other.Workspace.URLKey)
+					got := resourceAccessScaleRead(t, remote, principal.client, principal.token, "GET", "/api/projects/p11-open", other.Workspace.URLKey)
 					if want.Code != got.Code || got.Code == http.StatusOK {
 						t.Fatal("cross-workspace access differs")
 					}
@@ -186,10 +186,10 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 	}
 }
 
-func scaleP11HTTPPeers(t *testing.T) (peerServers, store.DatabaseConfig) {
+func scaleHTTPPeers(t *testing.T) (peerServers, store.DatabaseConfig) {
 	t.Helper()
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	f := scaleP11NewFixture(t, 0)
+	f := scaleNewFixture(t, 0)
 	var peers peerServers
 	for i, repo := range []*store.SQLiteStore{f.writer, f.peer} {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -209,7 +209,7 @@ func scaleP11HTTPPeers(t *testing.T) (peerServers, store.DatabaseConfig) {
 	return peers, f.config
 }
 
-func scaleP11WarmCredential(t *testing.T, repo *store.SQLiteStore, workspace, secret string) {
+func scaleWarmCredential(t *testing.T, repo *store.SQLiteStore, workspace, secret string) {
 	t.Helper()
 	ctx, finish := beginMetadataOutputReads(t.Context())
 	defer finish()

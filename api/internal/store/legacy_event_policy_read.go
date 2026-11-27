@@ -40,7 +40,7 @@ func (s *SQLiteStore) readLegacyEventPolicyRecords(ctx context.Context, workspac
 		TeamSettings: map[string]domain.TeamSettings{},
 	}
 	budget := newMetadataHydrationBudget()
-	teams, err := s.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+	teams, err := s.readTeamPolicyRows(ctx, tx, workspace)
 	if err != nil {
 		return data, err
 	}

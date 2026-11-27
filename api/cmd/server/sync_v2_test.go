@@ -15,13 +15,13 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP12JournalFunc func(context.Context, string, string, int, int) (store.CommittedPage, error)
+type scaleJournalFunc func(context.Context, string, string, int, int) (store.CommittedPage, error)
 
-func (read scaleP12JournalFunc) ReadCommittedChanges(ctx context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
+func (read scaleJournalFunc) ReadCommittedChanges(ctx context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
 	return read(ctx, workspace, after, limit, maxBytes)
 }
 
-func scaleP12Changes(t *testing.T, f scaleP12Fixture, principal scaleP12Principal, transactions []store.CommittedChange, next string, hasMore bool) (*httptest.ResponseRecorder, syncV2ChangesResponse) {
+func syncV2ScaleChanges(t *testing.T, f eventSourceScaleFixture, principal scalePrincipal, transactions []store.CommittedChange, next string, hasMore bool) (*httptest.ResponseRecorder, syncV2ChangesResponse) {
 	t.Helper()
 	r := principal.request(f.data.Workspace.URLKey)
 	r.URL.Path = "/api/sync/changes"
@@ -32,7 +32,7 @@ func scaleP12Changes(t *testing.T, f scaleP12Fixture, principal scaleP12Principa
 	if err != nil {
 		t.Fatal(err)
 	}
-	journal := scaleP12JournalFunc(func(_ context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
+	journal := scaleJournalFunc(func(_ context.Context, workspace, after string, limit, maxBytes int) (store.CommittedPage, error) {
 		if workspace != f.data.Workspace.ID || after != "0" || limit <= 0 || maxBytes != syncV2DeltaBytes {
 			t.Fatal("journal request escaped its scope or budget")
 		}
@@ -53,7 +53,7 @@ func scaleP12Changes(t *testing.T, f scaleP12Fixture, principal scaleP12Principa
 	return w, result
 }
 
-func TestScaleP12SummaryBoundsAndPartialRecordContract(t *testing.T) {
+func TestScaleSummaryBoundsAndPartialRecordContract(t *testing.T) {
 	for _, kind := range []string{"issue.updated", "document.updated", "project.updated", "initiative.updated"} {
 		t.Run(kind, func(t *testing.T) {
 			for _, title := range []string{"Small title", strings.Repeat("quoted \" < > ", 5000)} {
@@ -97,9 +97,9 @@ func TestScaleP12SummaryBoundsAndPartialRecordContract(t *testing.T) {
 	}
 }
 
-func TestScaleP12SparseInvisibleChangesAdvanceScannedCursor(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleSparseInvisibleChangesAdvanceScannedCursor(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		issue, err := repo.IssueRecord(t.Context(), f.data.Workspace.URLKey, f.secret.ID)
 		if err != nil {
 			t.Fatal(err)
@@ -108,16 +108,16 @@ func TestScaleP12SparseInvisibleChangesAdvanceScannedCursor(t *testing.T) {
 		for i := range 20 {
 			transactions = append(transactions, store.CommittedChange{TxID: fmt.Sprintf("sparse-%d", i), Seq: strconv.Itoa(i + 1), Records: []store.RecordDelta{{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}}})
 		}
-		w, result := scaleP12Changes(t, f, f.principals[2], transactions, "4200", false)
+		w, result := syncV2ScaleChanges(t, f, f.principals[2], transactions, "4200", false)
 		if result.Next != "4200" || result.HasMore || result.ResyncRequired || len(result.Transactions) != 0 || strings.Contains(w.Body.String(), issue.ID) || strings.Contains(w.Body.String(), f.data.Viewer.ID) {
 			t.Fatalf("invisible log did not scan safely: %s", w.Body)
 		}
 	}
 }
 
-func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleDeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		issue, err := repo.IssueRecord(t.Context(), f.data.Workspace.URLKey, f.open.ID)
 		if err != nil {
 			t.Fatal(err)
@@ -130,7 +130,7 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 			}
 			record.Version = version
 		}
-		_, normal := scaleP12Changes(t, f, f.principals[0], []store.CommittedChange{{TxID: "small", Seq: "1", Records: []store.RecordDelta{record}}}, "1", false)
+		_, normal := syncV2ScaleChanges(t, f, f.principals[0], []store.CommittedChange{{TxID: "small", Seq: "1", Records: []store.RecordDelta{record}}}, "1", false)
 		if len(normal.Transactions) != 1 || len(normal.Transactions[0].Upserts) != 1 {
 			t.Fatal("small delta did not upsert its summary")
 		}
@@ -138,7 +138,7 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 		for range 2000 {
 			large.Records = append(large.Records, record)
 		}
-		w, result := scaleP12Changes(t, f, f.principals[0], []store.CommittedChange{large}, "2", false)
+		w, result := syncV2ScaleChanges(t, f, f.principals[0], []store.CommittedChange{large}, "2", false)
 		if result.Next != "2" || len(result.Transactions) != 1 || len(result.Transactions[0].Upserts) != 0 || len(result.Transactions[0].Removals) != 0 || len(result.Transactions[0].Invalidations) != 1 || w.Body.Len() > 2048 {
 			t.Fatalf("oversize invalidation: %s", w.Body)
 		}
@@ -146,24 +146,24 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 		// transaction. The entire transaction becomes an invalidation.
 		stale := record
 		stale.Version = "0"
-		_, result = scaleP12Changes(t, f, f.principals[0], []store.CommittedChange{{TxID: "stale", Seq: "3", Records: []store.RecordDelta{record, stale}}}, "3", false)
+		_, result = syncV2ScaleChanges(t, f, f.principals[0], []store.CommittedChange{{TxID: "stale", Seq: "3", Records: []store.RecordDelta{record, stale}}}, "3", false)
 		if len(result.Transactions) != 1 || len(result.Transactions[0].Upserts) != 0 || len(result.Transactions[0].Invalidations) == 0 {
 			t.Fatal("transaction mixed stale and current versions")
 		}
 	}
 }
 
-func TestScaleP12TombstonesUseRecordedGrantsAndStringVersions(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+func TestScaleTombstonesUseRecordedGrantsAndStringVersions(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		authRequest[any](t, f.admin, http.MethodDelete, f.host.URL+"/api/issues/"+f.secret.ID, nil, f.data.Workspace.URLKey, http.StatusNoContent)
 		head, err := repo.WorkspaceChangeHead(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
 		}
 		change := store.CommittedChange{TxID: "tombstone", Seq: strconv.FormatInt(head, 10), Records: []store.RecordDelta{{Key: store.RecordKey{Kind: "issues", ID: f.secret.ID}, Version: "9007199254740993", Deleted: true}, {Key: store.RecordKey{Kind: "issues", ID: f.descendant.ID}, Version: "9007199254740994", Deleted: true}}}
-		for _, principal := range []scaleP12Principal{f.principals[0], f.principals[2], f.principals[3], f.principals[6]} {
-			w, result := scaleP12Changes(t, f, principal, []store.CommittedChange{change}, change.Seq, false)
+		for _, principal := range []scalePrincipal{f.principals[0], f.principals[2], f.principals[3], f.principals[6]} {
+			w, result := syncV2ScaleChanges(t, f, principal, []store.CommittedChange{change}, change.Seq, false)
 			if principal.name == "admin" || principal.name == "guest-explicit-grant" {
 				if len(result.Transactions) != 1 || len(result.Transactions[0].Removals) != 2 || result.Transactions[0].Removals[0].Version != "9007199254740993" {
 					t.Fatalf("authorized tombstone: %s", w.Body)
@@ -175,10 +175,10 @@ func TestScaleP12TombstonesUseRecordedGrantsAndStringVersions(t *testing.T) {
 	}
 }
 
-func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
+func TestScaleRevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		principal := f.principals[4]
 		before, err := repo.WorkspaceChangeHead(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
@@ -191,7 +191,7 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+		journal := scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
 			if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, f.private, principal.user.ID, "member", false); err != nil {
 				t.Fatal(err)
 			}
@@ -214,18 +214,18 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 	}
 }
 
-func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
+func TestScaleOldServerAndRollbackWireFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := newScaleP12Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := newScaleFixture(t, repo)
 		for _, mode := range []string{"off", "on"} {
 			t.Setenv("FLOW_SYNC_V2", mode)
 			request := f.principals[0].request(f.data.Workspace.URLKey)
 			request.Header.Set("X-Flow-Sync", "summary")
 			event := domain.RealtimeEvent{ID: "legacy-shape", Type: "issue.updated", AggregateID: f.open.ID, Payload: json.RawMessage(`{"title":"Title"}`)}
-			scaleP12EqualEvent(t, f.service, request, event)
+			scaleEqualEvent(t, f.service, request, event)
 			w := httptest.NewRecorder()
 			f.service.syncChanges(w, request)
 			if w.Code != http.StatusNotFound {
@@ -235,13 +235,13 @@ func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
+func TestScaleSyncRaceProofAndCoverageReset(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		access, err := repo.ResolveEventAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -261,7 +261,7 @@ func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
 		if !errors.Is(stale, errRealtimeProjectionStale) {
 			t.Fatal("source movement did not acquire the stale proof")
 		}
-		journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+		journal := scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
 			return store.CommittedPage{
 				Head:       "7",
 				AuthzEpoch: access.AuthzEpoch,
@@ -280,7 +280,7 @@ func TestScaleP12SyncRaceProofAndCoverageReset(t *testing.T) {
 		if err != nil || authzEpoch != settledAccess.AuthzEpoch {
 			t.Fatalf("settled stale-source setup moved authorization: epoch=%q expected=%q err=%v", authzEpoch, settledAccess.AuthzEpoch, err)
 		}
-		settledJournal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+		settledJournal := scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
 			return store.CommittedPage{
 				Head:       "8",
 				AuthzEpoch: settledAccess.AuthzEpoch,

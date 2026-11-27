@@ -1642,7 +1642,7 @@ export interface WorkspaceSettings {
   scimDefaultRole?: string;
   /** What a SCIM deprovision does: suspend the member (default) or remove them from the workspace. */
   scimDeprovisionAction?: "suspend" | "remove";
-  /** Wave 10 LS-0094 — none | allowlist */
+  /** none | allowlist */
   trustedSourcesMode?: "none" | "allowlist";
   trustedSourcesAllowlist?: string[];
 }

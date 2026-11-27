@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21RequestReadClosers(t *testing.T) {
+func TestScaleRequestReadClosers(t *testing.T) {
 	for _, exit := range []string{"normal", "cancel", "panic"} {
 		t.Run(exit, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -54,7 +54,7 @@ func TestScaleP21RequestReadClosers(t *testing.T) {
 	}
 }
 
-func TestScaleP21RequestReadCloserRace(t *testing.T) {
+func TestScaleRequestReadCloserRace(t *testing.T) {
 	request, release := beginRequestResourceReads(httptest.NewRequest("GET", "/", nil))
 	var calls atomic.Int64
 	var workers sync.WaitGroup
@@ -80,7 +80,7 @@ func TestScaleP21RequestReadCloserRace(t *testing.T) {
 	}
 }
 
-func TestScaleP21RequestHandoffOwnership(t *testing.T) {
+func TestScaleRequestHandoffOwnership(t *testing.T) {
 	for _, consumed := range []bool{false, true} {
 		request, release := beginRequestResourceReads(httptest.NewRequest("GET", "/", nil))
 		input := domain.Bootstrap{Projects: []domain.Project{{ID: "owned", Description: "response"}}}

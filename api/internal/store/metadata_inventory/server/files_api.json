@@ -5,7 +5,7 @@
     "serveUploadOrAsset": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned-image resolution and permission use the bounded scalar visitor boundary when enabled; the literal resolver and readable closure run when disabled. Resolution errors fail at the existing not-found boundary before attachment fallback. TestScaleP21HotOAuthLogoAccessDifferential and OwnedImageBoundary verify shared resolution and authorization.",
+      "reason": "Owned-image resolution and permission use the bounded scalar visitor boundary when enabled; the literal resolver and readable closure run when disabled. Resolution errors fail at the existing not-found boundary before attachment fallback. TestScaleHotOAuthLogoAccessDifferential and OwnedImageBoundary verify shared resolution and authorization.",
       "accessors": ["ownedImageAccess"],
       "temperature": "hot",
       "temperatureReason": "GET /uploads/{name} serves ordinary view images.",
@@ -14,7 +14,7 @@
     "serveSignedFile": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "After the unchanged signature check, owned images use the bounded scalar resolution boundary without repeating membership authorization, matching the original signed URL behavior. Flag-off retains the literal resolver. TestScaleP21HotOAuthLogoOwnedImageBoundary covers the no-permission resolution mode.",
+      "reason": "After the unchanged signature check, owned images use the bounded scalar resolution boundary without repeating membership authorization, matching the original signed URL behavior. Flag-off retains the literal resolver. TestScaleHotOAuthLogoOwnedImageBoundary covers the no-permission resolution mode.",
       "accessors": ["ownedImageAccess"],
       "temperature": "hot",
       "temperatureReason": "Signed files are reached by ordinary image views.",
@@ -23,7 +23,7 @@
     "fileReadableContext": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Owned-image permission uses the bounded pinned scalar visitor and rejects errors before the unchanged account/attachment fallback. Flag-off invokes the original image resolver/readable closure. TestScaleP21HotOAuthLogoAccessDifferential and OwnedImageBoundary exercise the identical shared boundary.",
+      "reason": "Owned-image permission uses the bounded pinned scalar visitor and rejects errors before the unchanged account/attachment fallback. Flag-off invokes the original image resolver/readable closure. TestScaleHotOAuthLogoAccessDifferential and OwnedImageBoundary exercise the identical shared boundary.",
       "accessors": ["ownedImageAccess"],
       "temperature": "hot",
       "temperatureReason": "File signing and reads authorize images during ordinary views.",
@@ -32,7 +32,7 @@
     "createFileUpload": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted identity-only scope resolves the workspace key; original actor, filename/type/size validation and durable upload quota writer remain unchanged. TestScaleP21M2CredentialsAndUploadDifferential compares response fields and canonical uploader/workspace/purpose binding with zero full decodes.",
+      "reason": "Trusted identity-only scope resolves the workspace key; original actor, filename/type/size validation and durable upload quota writer remain unchanged. TestScaleCredentialsAndUploadDifferential compares response fields and canonical uploader/workspace/purpose binding with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]

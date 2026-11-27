@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW31CatalogScalar(t *testing.T, f scaleP09Fixture, raw string) (metadataCatalogRow, int, error) {
+func catalogScalar(t *testing.T, f scaleFixture, raw string) (metadataCatalogRow, int, error) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -33,11 +33,11 @@ func scaleP21SW31CatalogScalar(t *testing.T, f scaleP09Fixture, raw string) (met
 	return row, queries, err
 }
 
-func TestScaleP21SW31CatalogScalarEOF(t *testing.T) {
+func TestCatalogScalarEOF(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	values := []string{"0", "-0", "1", "-1", "12", "0.0", "-0.125", "1e0", "1E+2", "1e-2", "-12.5E-7", "1e309", "1e-1000", " 1", "\n-0.125", "1 \t\r\n"}
 	for _, size := range []int{4095, 4096, 4097, metadataRecordChunkBytes - 1, metadataRecordChunkBytes, metadataRecordChunkBytes + 1} {
 		values = append(values, "0."+strings.Repeat("0", size-3)+"1")
@@ -47,7 +47,7 @@ func TestScaleP21SW31CatalogScalarEOF(t *testing.T) {
 			if !json.Valid([]byte(raw)) {
 				t.Fatal("invalid oracle case")
 			}
-			row, queries, err := scaleP21SW31CatalogScalar(t, f, raw)
+			row, queries, err := catalogScalar(t, f, raw)
 			if err != nil {
 				t.Fatalf("legal scalar number bytes=%d: %v", len(raw), err)
 			}
@@ -61,37 +61,37 @@ func TestScaleP21SW31CatalogScalarEOF(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31CatalogScalarInvalidEOF(t *testing.T) {
+func TestCatalogScalarInvalidEOF(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	for index, raw := range []string{"", " ", "-", "+", ".", "1.", "1e", "1E", "1e+", "1e-", "--1", "01", "-01", "+1", ".1", "00", "-00", "1.e1", "1e1e1", "1..0", "NaN", "Infinity", "-Infinity", "1+2", "1e+e", "[1", "{", "tru", "nul", "]", "0." + strings.Repeat("0", 4094) + "e"} {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			if json.Valid([]byte(raw)) {
 				t.Fatal("valid oracle in malformed corpus")
 			}
-			if _, _, err := scaleP21SW31CatalogScalar(t, f, raw); err == nil {
+			if _, _, err := catalogScalar(t, f, raw); err == nil {
 				t.Fatalf("malformed EOF scalar accepted: %q", raw)
 			}
 		})
 	}
 }
 
-func TestScaleP21SW31CatalogScalarOtherBranches(t *testing.T) {
+func TestCatalogScalarOtherBranches(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	for _, raw := range []string{`null`, `true`, `false`, `"scalar"`, `[]`, `[1,2]`, `{}`, `{"id":"source-id","name":"Name","description":"Private body"}`} {
-		row, _, err := scaleP21SW31CatalogScalar(t, f, raw)
+		row, _, err := catalogScalar(t, f, raw)
 		if err != nil || row.version != metadataFingerprint([]byte(raw)) {
 			t.Fatal("unrelated projector branch changed", raw, err)
 		}
 	}
 	// Existing trailing-data behavior is outside this exact-EOF correction.
 	for _, raw := range []string{"1 2", "1,2", "1}garbage", "0x1", "1_0", "1\x00", "1\xff", "1\\"} {
-		if _, _, err := scaleP21SW31CatalogScalar(t, f, raw); err != nil {
+		if _, _, err := catalogScalar(t, f, raw); err != nil {
 			t.Fatal("scalar fix expanded preexisting non-EOF parsing behavior", raw, err)
 		}
 	}
@@ -112,14 +112,14 @@ func TestScaleP21SW31CatalogScalarOtherBranches(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31CatalogWorkspaceSettingsLifecycle(t *testing.T) {
+func TestCatalogWorkspaceSettingsLifecycle(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	probe.metadataResidency.requireCoverage = true
 	t.Cleanup(probe.releaseMetadataLogicalSources)
 	for _, duration := range []int{47, 93} {

@@ -5,7 +5,7 @@
     "BeginOAuthApplicationsRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Decodes only the oauthApplications field of the retained installed logical source (BeginInstalledMetadataRead: exact installed generation, unpinned, work-admitted), keeping source order and nil versus empty; the read owns the decoded value until Close. Trusted lookup only; the route authorization and the API key admin-scope filter stay in the caller. Off mode refuses (callers keep their literal accessor). Covered by TestScaleP21SW450APIKeyAndMCPSettingsRoutes legacy vs warm vs SQL-reloaded.",
+      "reason": "Decodes only the oauthApplications field of the retained installed logical source (BeginInstalledMetadataRead: exact installed generation, unpinned, work-admitted), keeping source order and nil versus empty; the read owns the decoded value until Close. Trusted lookup only; the route authorization and the API key admin-scope filter stay in the caller. Off mode refuses (callers keep their literal accessor). Covered by TestAPIKeyAndMCPSettingsRoutes legacy vs warm vs SQL-reloaded.",
       "accessors": [
         "BeginInstalledMetadataRead"
       ],

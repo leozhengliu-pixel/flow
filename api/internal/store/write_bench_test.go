@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func BenchmarkScaleP09IssueUpdate(b *testing.B) {
-	b.Run("10Teams", benchmarkScaleP09IssueUpdate)
+func BenchmarkScaleIssueUpdate(b *testing.B) {
+	b.Run("10Teams", benchmarkScaleIssueUpdate)
 }
 
-func benchmarkScaleP09IssueUpdate(b *testing.B) {
-	scaleP09QuietBenchmark(b)
+func benchmarkScaleIssueUpdate(b *testing.B) {
+	scaleQuietBenchmark(b)
 	repo, workspace := benchmarkWorkspace(b, "p09-issue", 10)
 	issue := repo.Bootstrap().Issues[0]
 	ctx := context.Background()
@@ -36,12 +36,12 @@ func benchmarkScaleP09IssueUpdate(b *testing.B) {
 	}
 }
 
-func BenchmarkScaleP09CommentCreate(b *testing.B) {
-	b.Run("10Teams", benchmarkScaleP09CommentCreate)
+func BenchmarkScaleCommentCreate(b *testing.B) {
+	b.Run("10Teams", benchmarkScaleCommentCreate)
 }
 
-func benchmarkScaleP09CommentCreate(b *testing.B) {
-	scaleP09QuietBenchmark(b)
+func benchmarkScaleCommentCreate(b *testing.B) {
+	scaleQuietBenchmark(b)
 	repo, workspace := benchmarkWorkspace(b, "p09-comment", 10)
 	issue := repo.Bootstrap().Issues[0]
 	run := benchmarkRunSeq.Add(1)
@@ -59,13 +59,13 @@ func benchmarkScaleP09CommentCreate(b *testing.B) {
 	}
 }
 
-func scaleP09QuietBenchmark(b *testing.B) {
+func scaleQuietBenchmark(b *testing.B) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})))
 	b.Cleanup(func() { slog.SetDefault(previous) })
 }
 
-func BenchmarkScaleP09TeamHotProfile(b *testing.B) {
+func BenchmarkScaleTeamHotProfile(b *testing.B) {
 	profilePath := os.Getenv("FLOW_SCALE_P09_CPU_PROFILE")
 	if profilePath == "" {
 		b.Skip("set FLOW_SCALE_P09_CPU_PROFILE for the setup-free CPU profile")

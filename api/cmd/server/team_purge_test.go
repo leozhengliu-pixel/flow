@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW20PurgeExpiredTeamInputs(t *testing.T) {
+func TestPurgeExpiredTeamInputs(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		now := time.Date(2026, 11, 13, 1, 2, 3, 0, time.UTC)
 		old, boundary, future := now.Add(-teamRestoreWindow-time.Nanosecond), now.Add(-teamRestoreWindow), now.Add(-teamRestoreWindow+time.Nanosecond)

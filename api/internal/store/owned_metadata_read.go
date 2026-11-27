@@ -241,7 +241,7 @@ func (r *InstalledMetadataRead) VisitAPIKeys(ctx context.Context, visit func(con
 			return ErrMetadataRecordQuery
 		}
 		return node.Children(bound, func(_ reflect.Value, child metadataLogicalNode) error {
-			cost := max(int(child.cost), sw17CredentialFixedWork)
+			cost := max(int(child.cost), credentialFixedWork)
 			if cost > metadataWorkBytes() {
 				return ErrMetadataPageBudget
 			}

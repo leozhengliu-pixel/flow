@@ -15,8 +15,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW219WorkflowCanonicalFrames(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestWorkflowCanonicalFrames(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	for _, raw := range []string{
 		`null`,
 		`{"id":"run","error":"first","ERROR":null,"output":null}`,
@@ -64,7 +64,7 @@ func TestScaleP21SW219WorkflowCanonicalFrames(t *testing.T) {
 	}
 }
 
-type scaleP21SW219Result struct {
+type workflowStreamResult struct {
 	native   json.RawMessage
 	root     json.RawMessage
 	rows     [][]any
@@ -72,7 +72,7 @@ type scaleP21SW219Result struct {
 	peak     int
 }
 
-func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, before, requested domain.Bootstrap, peer []byte, deleted, bounded, cancelRead, cancelWrite bool) scaleP21SW219Result {
+func workflowStreamExecute(t *testing.T, fixture scaleFixture, view *SQLiteStore, before, requested domain.Bootstrap, peer []byte, deleted, bounded, cancelRead, cancelWrite bool) workflowStreamResult {
 	t.Helper()
 	workspace := before.Workspace.URLKey
 	if err := fixture.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -110,11 +110,11 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 	}
 	defer tx.Rollback()
 	ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: fixture.db, workspace: workspace, reader: tx})
-	var cancelledBaseline scaleP21SW77SQLImage
+	var cancelledBaseline sqlImage
 	if cancelRead || cancelWrite {
-		cancelledBaseline = scaleP21SW77Image(t, tx, workspace)
+		cancelledBaseline = legacyDeltaBudgetImage(t, tx, workspace)
 	}
-	result := scaleP21SW219Result{}
+	result := workflowStreamResult{}
 	if !bounded {
 		target := cloneBootstrap(requested)
 		_, err = fixture.writeWorkspaceMetadataDelta(ctx, tx, workspace, cloneBootstrap(before), &target)
@@ -175,7 +175,7 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			if err != nil {
 				t.Fatal(err)
 			}
-			unchanged := reflect.DeepEqual(cancelledBaseline, scaleP21SW77Image(t, verify, workspace))
+			unchanged := reflect.DeepEqual(cancelledBaseline, legacyDeltaBudgetImage(t, verify, workspace))
 			verify.Rollback()
 			if !unchanged {
 				t.Fatal("cancelled retry clear changed durable metadata")
@@ -208,7 +208,7 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			t.Fatal("retry clear retained native work")
 		}
 	}
-	image := scaleP21SW77Image(t, tx, workspace)
+	image := legacyDeltaBudgetImage(t, tx, workspace)
 	result.root = json.RawMessage(image.Root)
 	for key, row := range image.Rows {
 		if key.field == "workflowRuns" {
@@ -223,20 +223,20 @@ func scaleP21SW219Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 	return result
 }
 
-func TestScaleP21SW219WorkflowRetryStreamDifferential(t *testing.T) {
-	scaleP21SW219WorkflowRetryStream(t, false)
+func TestWorkflowRetryStreamDifferential(t *testing.T) {
+	workflowRetryStream(t, false)
 }
 
-func TestScaleP21SW219WorkflowRetryStreamPeerDifferential(t *testing.T) {
-	scaleP21SW219WorkflowRetryStream(t, true)
+func TestWorkflowRetryStreamPeerDifferential(t *testing.T) {
+	workflowRetryStream(t, true)
 }
 
-func scaleP21SW219WorkflowRetryStream(t *testing.T, peerCases bool) {
+func workflowRetryStream(t *testing.T, peerCases bool) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	view := &SQLiteStore{db: fixture.db, dialect: fixture.dialect, maxStateBytes: fixture.maxStateBytes, metadataResidency: newMetadataResidency()}
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	base := domain.WorkflowRun{ID: "sw219-run", WorkflowID: "sw219-workflow", Status: "failed", Attempt: 2, Error: "before\x00" + string([]byte{0xff}),
@@ -298,8 +298,8 @@ func scaleP21SW219WorkflowRetryStream(t *testing.T, peerCases bool) {
 				peer, _ = json.Marshal(before.WorkflowRuns[0])
 				peer = bytes.ReplaceAll(peer, []byte("\ufffd"), []byte(`\ufffd`))
 			}
-			literal := scaleP21SW219Execute(t, fixture, view, before, requested, peer, test.deleted, false, false, false)
-			bounded := scaleP21SW219Execute(t, fixture, view, before, requested, peer, test.deleted, true, false, false)
+			literal := workflowStreamExecute(t, fixture, view, before, requested, peer, test.deleted, false, false, false)
+			bounded := workflowStreamExecute(t, fixture, view, before, requested, peer, test.deleted, true, false, false)
 			if literal.conflict != bounded.conflict {
 				t.Fatal("streamed conflict differs", literal.conflict, bounded.conflict)
 			}
@@ -323,7 +323,7 @@ func scaleP21SW219WorkflowRetryStream(t *testing.T, peerCases bool) {
 			before.WorkflowRuns = []domain.WorkflowRun{base}
 			requested := cloneBootstrap(before)
 			requested.WorkflowRuns[0].NextRetryAt = nil
-			scaleP21SW219Execute(t, fixture, view, before, requested, nil, false, true, phase == "read", phase == "write")
+			workflowStreamExecute(t, fixture, view, before, requested, nil, false, true, phase == "read", phase == "write")
 		})
 	}
 	if metadataSearchFieldSet["workflowRuns"] {
@@ -337,11 +337,11 @@ func scaleP21SW219WorkflowRetryStream(t *testing.T, peerCases bool) {
 	}
 }
 
-func TestScaleP21SW219WorkflowLargeConflictRefresh(t *testing.T) {
+func TestWorkflowLargeConflictRefresh(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := fixture.data.Workspace.URLKey
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	for _, deleted := range []bool{false, true} {
@@ -366,7 +366,7 @@ func TestScaleP21SW219WorkflowLargeConflictRefresh(t *testing.T) {
 		if deleted {
 			err = deleteMetadataRecordRow(t.Context(), tx, workspace, metadataRecordKey{"workflowRuns", peer.ID})
 		} else {
-			scaleP09Put(t, tx, workspace, "workflowRuns", peer.ID, peer)
+			journalScalePut(t, tx, workspace, "workflowRuns", peer.ID, peer)
 		}
 		if err != nil {
 			tx.Rollback()
@@ -375,7 +375,7 @@ func TestScaleP21SW219WorkflowLargeConflictRefresh(t *testing.T) {
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{workspace: before})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{workspace: before})
 		view.db, view.dialect = fixture.db, fixture.dialect
 		failure := &metadataConflictError{keys: []metadataRecordKey{{"workflowRuns", peer.ID}}}
 		if err := view.refreshWorkflowRunStreamConflict(t.Context(), workspace)(failure); err != nil {
@@ -401,11 +401,11 @@ func TestScaleP21SW219WorkflowLargeConflictRefresh(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW219WorkflowLargeConflictRetrySuccess(t *testing.T) {
+func TestWorkflowLargeConflictRetrySuccess(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := fixture.data.Workspace.URLKey
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	base := domain.WorkflowRun{
@@ -433,7 +433,7 @@ func TestScaleP21SW219WorkflowLargeConflictRetrySuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP09Put(t, tx, workspace, "workflowRuns", peer.ID, peer)
+	journalScalePut(t, tx, workspace, "workflowRuns", peer.ID, peer)
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -500,10 +500,10 @@ func TestScaleP21SW219WorkflowLargeConflictRetrySuccess(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW219WorkflowInlineRootLifecycleFieldDifferential(t *testing.T) {
+func TestWorkflowInlineRootLifecycleFieldDifferential(t *testing.T) {
 	for _, mode := range []string{"agent-default", "workflow-inline", "workflow-split"} {
 		t.Run(mode, func(t *testing.T) {
-			f, view, before := scaleP21SW77Fixture(t)
+			f, view, before := legacyDeltaBudgetFixture(t)
 			at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 			before.Asks = []domain.Ask{{ID: "duplicate", Title: "before"}, {ID: "duplicate", Title: "keep second"}}
 			before.AgentSessions = []domain.AgentSession{{ID: "session", Title: "keep first"}, {ID: "session", Title: "keep second"}}
@@ -525,20 +525,20 @@ func TestScaleP21SW219WorkflowInlineRootLifecycleFieldDifferential(t *testing.T)
 			} else if !split {
 				target.WorkflowRuns[0].NextRetryAt = nil
 			}
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			want := cloneBootstrap(target)
 			if _, err := f.writeWorkspaceMetadataDelta(ctx, tx, before.Workspace.URLKey, before, &want); err != nil {
 				t.Fatal("literal inline/lifecycle oracle", err)
 			}
-			expected := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey)
+			expected := metadataImage(t, tx, before.Workspace.URLKey)
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}
 
-			tx, ctx = scaleP21SW77Begin(t, f, before)
+			tx, ctx = legacyDeltaBudgetBegin(t, f, before)
 			defer tx.Rollback()
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			plan, selected, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
+			plan, selected, release := inlineFieldsSelected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
 			released := false
 			closeSelected := func() {
 				if !released {
@@ -574,7 +574,7 @@ func TestScaleP21SW219WorkflowInlineRootLifecycleFieldDifferential(t *testing.T)
 			if err := owner.reserve(ctx, 2<<20); err != nil {
 				t.Fatal(err)
 			}
-			size, _ := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+			size, _ := inlineFieldsShapes(t, ctx, tx, before.Workspace.URLKey)
 			root, err := view.scanMetadataInlineRoot(ctx, tx, before.Workspace.URLKey, size)
 			if err != nil {
 				t.Fatal(err)
@@ -589,14 +589,14 @@ func TestScaleP21SW219WorkflowInlineRootLifecycleFieldDifferential(t *testing.T)
 			defer closeRoot()
 			writes := 0
 			ctx = WithSQLStatementObserver(ctx, func(query string) {
-				if _, root := scaleP21SW83MetadataWrite(query); root {
+				if _, root := isLegacyMetadataWriteStatement(query); root {
 					writes++
 				}
 			})
 			if err := view.writeLegacyInlineFieldsRootPatch(ctx, tx, before.Workspace.URLKey, target.Workspace.ID, root, nil, owner, true, patch); err != nil {
 				t.Fatal("combined inline/lifecycle root write", err)
 			}
-			if got := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) || writes != 1 {
+			if got := metadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) || writes != 1 {
 				t.Fatal("lifecycle field replaced the wrong root collection or changed canonical rows", kind, writes)
 			}
 			closeRoot()

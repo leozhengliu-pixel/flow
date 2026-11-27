@@ -13,9 +13,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW27KnownWarmReloadFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, MetadataRecordScope) {
+func knownWarmReloadFixture(t *testing.T) (scaleFixture, *SQLiteStore, MetadataRecordScope) {
 	t.Helper()
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+	f, _, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
@@ -44,8 +44,8 @@ func scaleP21SW27KnownWarmReloadFixture(t *testing.T) (scaleP09Fixture, *SQLiteS
 	return f, view, MetadataRecordScope{Fields: []string{"integrationConnections", "cycles", "userSettings"}}
 }
 
-func TestScaleP21SW27LogicalReloadWarmPeerAndRetainedHandoff(t *testing.T) {
-	f, view, scope := scaleP21SW27KnownWarmReloadFixture(t)
+func TestLogicalReloadWarmPeerAndRetainedHandoff(t *testing.T) {
+	f, view, scope := knownWarmReloadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	full, found := f.WorkspaceMetadata(workspace)
 	expected := metadataRecordSnapshot(full, scope, metadataRecordFields(scope))
@@ -148,8 +148,8 @@ func TestScaleP21SW27LogicalReloadWarmPeerAndRetainedHandoff(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalReloadFailureLeavesPublishedPair(t *testing.T) {
-	f, view, scope := scaleP21SW27KnownWarmReloadFixture(t)
+func TestLogicalReloadFailureLeavesPublishedPair(t *testing.T) {
+	f, view, scope := knownWarmReloadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	policyBefore, found := view.WorkspaceSettingsMetadata(workspace)
 	if !found {
@@ -192,7 +192,7 @@ func TestScaleP21SW27LogicalReloadFailureLeavesPublishedPair(t *testing.T) {
 			startDisk, startDescriptors, startSpool := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 			switch mode {
 			case "cancelled":
-				request = scaleP21SW27CancelledContext(t)
+				request = cancelledContext(t)
 			case "source-disk-budget":
 				injected = metadataLogicalDiskCap() - metadataLogicalDiskUsed.Load()
 				if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, injected, metadataLogicalDiskCap()) {
@@ -252,8 +252,8 @@ func TestScaleP21SW27LogicalReloadFailureLeavesPublishedPair(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalReloadPrivateScratchDirectory(t *testing.T) {
-	f, view, _ := scaleP21SW27KnownWarmReloadFixture(t)
+func TestLogicalReloadPrivateScratchDirectory(t *testing.T) {
+	f, view, _ := knownWarmReloadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	before, found := f.WorkspaceMetadata(workspace)
 	if !found {
@@ -296,8 +296,8 @@ func TestScaleP21SW27LogicalReloadPrivateScratchDirectory(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW27LogicalReloadWorkspaceKeyRecreation(t *testing.T) {
-	f, view, scope := scaleP21SW27KnownWarmReloadFixture(t)
+func TestLogicalReloadWorkspaceKeyRecreation(t *testing.T) {
+	f, view, scope := knownWarmReloadFixture(t)
 	workspace, oldID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	oldSource, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {

@@ -22,9 +22,9 @@ import (
 
 // The full bootstrap is the frozen semantic oracle for later packages. Compare
 // serialized fields without normalizing null/empty or dropping unknown fields.
-func scaleP01EqualJSON(t *testing.T, expected, actual any) {
+func scaleEqualJSON(t *testing.T, expected, actual any) {
 	t.Helper()
-	want, got := scaleP01ComparableJSON(t, expected), scaleP01ComparableJSON(t, actual)
+	want, got := scaleComparableJSON(t, expected), scaleComparableJSON(t, actual)
 	if !reflect.DeepEqual(want, got) {
 		fields := []string{}
 		if a, ok := want.(map[string]any); ok {
@@ -40,7 +40,7 @@ func scaleP01EqualJSON(t *testing.T, expected, actual any) {
 	}
 }
 
-func scaleP01ComparableJSON(t *testing.T, value any) any {
+func scaleComparableJSON(t *testing.T, value any) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -54,7 +54,7 @@ func scaleP01ComparableJSON(t *testing.T, value any) any {
 }
 
 // Frozen adapter for the existing REST list shape; details keep these fields.
-func scaleP01LegacyProjectList(project domain.Project) domain.Project {
+func scaleLegacyProjectList(project domain.Project) domain.Project {
 	project.Comments, project.CommentAttachments, project.DescriptionRevisions = nil, nil, nil
 	project.IssueCountHistory, project.ScopeHistory, project.CompletedScopeHistory, project.InProgressScopeHistory, project.ProgressHistory = nil, nil, nil, nil, nil
 	project.Milestones = slices.Clone(project.Milestones)
@@ -64,14 +64,14 @@ func scaleP01LegacyProjectList(project domain.Project) domain.Project {
 	return project
 }
 
-type scaleP01PermissionViewer struct {
+type scalePermissionViewer struct {
 	name            string
 	client          *http.Client
 	secret          string
 	private, shared bool
 }
 
-func scaleP01TestDatabaseConfig(t *testing.T, config store.DatabaseConfig, externalConnections int) store.DatabaseConfig {
+func scaleTestDatabaseConfig(t *testing.T, config store.DatabaseConfig, externalConnections int) store.DatabaseConfig {
 	t.Helper()
 	driver := strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_TEST_DATABASE_DRIVER")))
 	if driver == "" {
@@ -92,7 +92,7 @@ func scaleP01TestDatabaseConfig(t *testing.T, config store.DatabaseConfig, exter
 	return config
 }
 
-func scaleP01PermissionRead(t *testing.T, viewer scaleP01PermissionViewer, base, workspace, path string) (int, []byte) {
+func scalePermissionRead(t *testing.T, viewer scalePermissionViewer, base, workspace, path string) (int, []byte) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, base+path, nil)
 	if err != nil {
@@ -114,31 +114,31 @@ func scaleP01PermissionRead(t *testing.T, viewer scaleP01PermissionViewer, base,
 	return response.StatusCode, raw
 }
 
-func TestScaleP01PermissionMatrix(t *testing.T) {
+func TestScalePermissionMatrix(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	for name, config := range scaleP01PermissionConfigs(t) {
-		t.Run(name, func(t *testing.T) { scaleP01PermissionMatrix(t, config) })
+	for name, config := range scalePermissionConfigs(t) {
+		t.Run(name, func(t *testing.T) { checkScalePermissionMatrix(t, config) })
 	}
 }
 
-func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
+func checkScalePermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	t.Helper()
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repo.Close() })
-	srv, host, admin, data, owned := scaleP01OwnedWorkspace(t, repo)
+	srv, host, admin, data, owned := databaseScaleOwnedWorkspace(t, repo)
 	base, workspace := host.URL, data.Workspace.URLKey
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	teamsURL := base + "/api/workspaces/" + workspace + "/teams"
 	public := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 public " + suffix, "key": "P1A" + suffix[len(suffix)-4:]}, "", http.StatusCreated)
 	private := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 private " + suffix, "key": "P1B" + suffix[len(suffix)-4:], "private": true}, "", http.StatusCreated)
 	child := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 child " + suffix, "key": "P1C" + suffix[len(suffix)-4:], "parentTeamId": private.ID}, "", http.StatusCreated)
-	outsideAdmin, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outside admin", "admin", public.ID)
-	member, memberUser := scaleP01Join(t, owned, base, workspace, admin, "P01 member", "member", public.ID, private.ID)
-	guest, guestUser := scaleP01Join(t, owned, base, workspace, admin, "P01 guest", "guest", public.ID)
-	outsider, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outsider", "member", public.ID)
+	outsideAdmin, _ := databaseScaleJoin(t, owned, base, workspace, admin, "P01 outside admin", "admin", public.ID)
+	member, memberUser := databaseScaleJoin(t, owned, base, workspace, admin, "P01 member", "member", public.ID, private.ID)
+	guest, guestUser := databaseScaleJoin(t, owned, base, workspace, admin, "P01 guest", "guest", public.ID)
+	outsider, _ := databaseScaleJoin(t, owned, base, workspace, admin, "P01 outsider", "member", public.ID)
 	projectID, hiddenID, childID := "p01-shared-"+suffix, "p01-hidden-"+suffix, "p01-child-"+suffix
 	if err := repo.MutateWorkspace(workspaceFixtureContext(store.ContextWithActor(t.Context(), data.Viewer)), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects,
@@ -152,7 +152,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	}
 	issue := authRequest[domain.Issue](t, admin, "POST", base+"/api/issues", map[string]any{"title": "P01 explicitly granted", "teamId": private.ID, "projectId": projectID}, workspace, http.StatusCreated)
 	authRequest[[]domain.IssuePermission](t, admin, "PUT", base+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
-	viewers := []scaleP01PermissionViewer{
+	viewers := []scalePermissionViewer{
 		{"admin", admin, "", true, true}, {"admin-outside-private", outsideAdmin, "", false, true},
 		{"member-and-subteam-inheritance", member, "", true, true}, {"guest-explicit-grant", guest, "", false, true}, {"private-outsider", outsider, "", false, true},
 	}
@@ -185,11 +185,11 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 				t.Fatal(err)
 			}
 		}
-		viewers = append(viewers, scaleP01PermissionViewer{"key-" + spec.name, &http.Client{Timeout: 10 * time.Second}, key.Secret, spec.private, spec.shared})
+		viewers = append(viewers, scalePermissionViewer{"key-" + spec.name, &http.Client{Timeout: 10 * time.Second}, key.Secret, spec.private, spec.shared})
 	}
 	for _, viewer := range viewers {
 		t.Run(viewer.name, func(t *testing.T) {
-			code, raw := scaleP01PermissionRead(t, viewer, base, workspace, "/api/bootstrap")
+			code, raw := scalePermissionRead(t, viewer, base, workspace, "/api/bootstrap")
 			if code != http.StatusOK {
 				t.Fatalf("bootstrap status=%d", code)
 			}
@@ -200,7 +200,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 			// REST list nodes and detail records share their field contract.
 			// Bootstrap's scoped-key team reference shape is a separate legacy
 			// contract, so it remains a visibility oracle only.
-			code, raw = scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects?first=100")
+			code, raw = scalePermissionRead(t, viewer, base, workspace, "/api/projects?first=100")
 			var listed connection[json.RawMessage]
 			if code != http.StatusOK {
 				t.Fatalf("project list status=%d", code)
@@ -221,7 +221,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 					refs = append(refs, "old-p01-"+suffix, "stale-prefix-000000000002")
 				}
 				for _, ref := range refs {
-					code, raw := scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects/"+ref)
+					code, raw := scalePermissionRead(t, viewer, base, workspace, "/api/projects/"+ref)
 					if !target.allowed {
 						if code != http.StatusNotFound && code != http.StatusForbidden {
 							t.Fatalf("hidden record status=%d", code)
@@ -248,7 +248,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 					if expected == nil {
 						t.Fatal("visible record absent from REST list")
 					}
-					scaleP01EqualJSON(t, expected, scaleP01LegacyProjectList(actual))
+					scaleEqualJSON(t, expected, scaleLegacyProjectList(actual))
 					wantDetail := oracle.Projects[index]
 					// The existing detail/list routes retain the stored aggregate
 					// zero; full bootstrap derives its count from visible issues.
@@ -256,7 +256,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 					if viewer.name == "key-selected-set" {
 						wantDetail.TeamIDs = []string{public.ID}
 					}
-					scaleP01EqualJSON(t, wantDetail, json.RawMessage(raw))
+					scaleEqualJSON(t, wantDetail, json.RawMessage(raw))
 					visibleCount := 0
 					for _, item := range oracle.Issues {
 						if item.Project != nil && item.Project.ID == target.id {
@@ -275,7 +275,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 			}
 			// Explicit issue grants are independent of private project visibility.
 			issueIndex := slices.IndexFunc(oracle.Issues, func(item domain.Issue) bool { return item.ID == issue.ID })
-			code, _ = scaleP01PermissionRead(t, viewer, base, workspace, "/api/issue-records/"+issue.ID)
+			code, _ = scalePermissionRead(t, viewer, base, workspace, "/api/issue-records/"+issue.ID)
 			if (code == http.StatusOK) != (issueIndex >= 0) {
 				t.Fatalf("issue grant differs: bootstrap=%v record=%d", issueIndex >= 0, code)
 			}
@@ -319,19 +319,19 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	authRequest[domain.Bootstrap](t, admin, "POST", base+"/api/workspaces", map[string]string{"name": "P01 other", "urlKey": otherKey}, "", http.StatusCreated)
 	owned.workspaces = append(owned.workspaces, otherKey)
 	for _, viewer := range viewers {
-		code, raw := scaleP01PermissionRead(t, viewer, base, otherKey, "/api/projects/"+projectID)
+		code, raw := scalePermissionRead(t, viewer, base, otherKey, "/api/projects/"+projectID)
 		if code == http.StatusOK || bytes.Contains(raw, []byte(projectID)) {
 			t.Fatalf("cross-workspace access by %s", viewer.name)
 		}
 	}
 }
 
-func TestScaleP01DifferentialPreservesEmptyAndNull(t *testing.T) {
-	if reflect.DeepEqual(scaleP01ComparableJSON(t, []string{}), scaleP01ComparableJSON(t, []string(nil))) {
+func TestScaleDifferentialPreservesEmptyAndNull(t *testing.T) {
+	if reflect.DeepEqual(scaleComparableJSON(t, []string{}), scaleComparableJSON(t, []string(nil))) {
 		t.Fatal("differential normalized empty and null collections")
 	}
-	if reflect.DeepEqual(scaleP01ComparableJSON(t, map[string]any{}), scaleP01ComparableJSON(t, map[string]any{"extra": nil})) {
+	if reflect.DeepEqual(scaleComparableJSON(t, map[string]any{}), scaleComparableJSON(t, map[string]any{"extra": nil})) {
 		t.Fatal("differential discarded an additional field")
 	}
-	scaleP01EqualJSON(t, map[string]any{"list": []string{}, "nullable": nil}, map[string]any{"list": []string{}, "nullable": nil})
+	scaleEqualJSON(t, map[string]any{"list": []string{}, "nullable": nil}, map[string]any{"list": []string{}, "nullable": nil})
 }

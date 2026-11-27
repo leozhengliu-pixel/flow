@@ -2,7 +2,7 @@ package store
 
 import "testing"
 
-func TestScaleP15HeapSpoolSizeCheckUsesSharedAllowance(t *testing.T) {
+func TestScaleHeapSpoolSizeCheckUsesSharedAllowance(t *testing.T) {
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", "10")
 	t.Setenv("TMPDIR", t.TempDir())
 	first, err := NewRecordSpool()

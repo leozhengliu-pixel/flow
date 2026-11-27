@@ -18,19 +18,19 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP16MutationSideEffectsDifferential(t *testing.T) {
+func TestScaleMutationSideEffectsDifferentialMutations(t *testing.T) {
 	for _, journal := range []string{"off", "on"} {
 		t.Run(journal, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_JOURNAL", journal)
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "off")
 			t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "off")
-			old := scaleP16MutationScript(t)
+			old := scaleMutationScript(t)
 			t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
 			t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "on")
-			got := scaleP16MutationScript(t)
-			scaleP16SaveDifferential(t, journal+"-old", old)
-			scaleP16SaveDifferential(t, journal+"-new", got)
+			got := scaleMutationScript(t)
+			scaleSaveDifferential(t, journal+"-old", old)
+			scaleSaveDifferential(t, journal+"-new", got)
 			for name, value := range old {
 				if got[name] != value {
 					i := 0
@@ -47,9 +47,9 @@ func TestScaleP16MutationSideEffectsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP16MutationScript(t *testing.T) map[string]string {
+func scaleMutationScript(t *testing.T) map[string]string {
 	t.Helper()
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	baseHandler := db.handler(t, true)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("X-Request-ID", "scale-p16-differential")
@@ -75,7 +75,7 @@ func scaleP16MutationScript(t *testing.T) map[string]string {
 	slugSuffix := regexp.MustCompile(`-[a-f0-9]{12}`)
 	normalize := func(raw []byte) string {
 		identity := strings.NewReplacer(replacements...)
-		return scaleP04Normalize([]byte(slugSuffix.ReplaceAllString(identity.Replace(string(raw)), "-fixture-suffix")))
+		return scaleNormalize([]byte(slugSuffix.ReplaceAllString(identity.Replace(string(raw)), "-fixture-suffix")))
 	}
 	outputs := map[string][]json.RawMessage{}
 	previousValues := 0
@@ -265,8 +265,8 @@ func scaleP16MutationScript(t *testing.T) map[string]string {
 	return result
 }
 
-func TestScaleP16InvalidRecordKeysKeepBusinessErrors(t *testing.T) {
-	db := newScaleP04Database(t)
+func TestScaleInvalidRecordKeysKeepBusinessErrors(t *testing.T) {
+	db := newScaleDatabase(t)
 	fixture, _ := db.repo.WorkspaceMetadata(db.key)
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, test := range []struct {

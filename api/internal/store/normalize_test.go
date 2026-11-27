@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW28LogicalNormalizationAdversarial(t *testing.T) {
+func TestLogicalNormalizationAdversarial(t *testing.T) {
 	stamp := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	current := domain.User{ID: "usr_sw28_current", Name: "Fresh", DisplayName: "Fresh display", AppTeamIDs: []string{"team_private"}}
 	stale := current
@@ -160,8 +160,8 @@ func TestScaleP21SW28LogicalNormalizationAdversarial(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer normalized.Release()
-			got := scaleP21SW28DecodeLogicalSource(t, normalized)
-			scaleP21SW28CompareNormalized(t, want, got)
+			got := decodeLogicalSource(t, normalized)
+			compareNormalized(t, want, got)
 			if normalized.Stamp() != raw.Stamp() || repo.metadataResidency.work.used != 0 {
 				t.Fatal("normalization changed generation or leaked admission")
 			}
@@ -169,7 +169,7 @@ func TestScaleP21SW28LogicalNormalizationAdversarial(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW28LogicalNormalizationSynthesizedDefaults(t *testing.T) {
+func TestLogicalNormalizationSynthesizedDefaults(t *testing.T) {
 	user := domain.User{ID: "usr_sw28_default", Name: "Defaults", DisplayName: "Defaults"}
 	original := domain.Bootstrap{
 		Viewer: user, Users: []domain.User{user},
@@ -190,7 +190,7 @@ func TestScaleP21SW28LogicalNormalizationSynthesizedDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer normalized.Release()
-	got := scaleP21SW28DecodeLogicalSource(t, normalized)
+	got := decodeLogicalSource(t, normalized)
 	finish := time.Now().UTC()
 	clock := func(name string, expected, actual time.Time) {
 		t.Helper()
@@ -235,13 +235,13 @@ func TestScaleP21SW28LogicalNormalizationSynthesizedDefaults(t *testing.T) {
 	clock("documentPermission.updated", want.Documents[0].Permissions[0].UpdatedAt, got.Documents[0].Permissions[0].UpdatedAt)
 	want.Documents[0].Permissions[0].CreatedAt = got.Documents[0].Permissions[0].CreatedAt
 	want.Documents[0].Permissions[0].UpdatedAt = got.Documents[0].Permissions[0].UpdatedAt
-	scaleP21SW28CompareNormalized(t, want, got)
+	compareNormalized(t, want, got)
 	if repo.metadataResidency.work.used != 0 {
 		t.Fatal("synthesized defaults leaked work admission")
 	}
 }
 
-func scaleP21SW28DecodeLogicalSource(t *testing.T, source *metadataLogicalSource) domain.Bootstrap {
+func decodeLogicalSource(t *testing.T, source *metadataLogicalSource) domain.Bootstrap {
 	t.Helper()
 	var result domain.Bootstrap
 	target := reflect.ValueOf(&result).Elem()
@@ -264,7 +264,7 @@ func scaleP21SW28DecodeLogicalSource(t *testing.T, source *metadataLogicalSource
 	return result
 }
 
-func scaleP21SW28CompareNormalized(t *testing.T, want, got domain.Bootstrap) {
+func compareNormalized(t *testing.T, want, got domain.Bootstrap) {
 	t.Helper()
 	expected, actual := reflect.ValueOf(want), reflect.ValueOf(got)
 	for index := 0; index < actual.NumField(); index++ {

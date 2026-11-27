@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW20JiraRemoteInstalledSourceHold(t *testing.T) {
+func TestJiraRemoteInstalledSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		service := &server{store: repo}
 		completed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -64,7 +64,7 @@ func TestScaleP21SW20JiraRemoteInstalledSourceHold(t *testing.T) {
 						request.Method, request.URL.Path = http.MethodGet, endpoint.path
 						request.SetPathValue("projectId", " project ")
 						response := httptest.NewRecorder()
-						scaleP21M3Call(service, response, request, endpoint.handler)
+						callPointSettingsHandler(service, response, request, endpoint.handler)
 						var body map[string]any
 						if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body["error"] != endpoint.wantError || body["status"] != "unavailable" {
 							t.Fatal("actual handler lost exact installed decision", response.Code, response.Body.String())
@@ -86,12 +86,12 @@ func TestScaleP21SW20JiraRemoteInstalledSourceHold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20JiraLinksInstalledSourceHold(t *testing.T) {
+func TestJiraLinksInstalledSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		link := domain.JiraLink{
 			ID: idgen.New("sw20-jira-link-"), JiraProjectID: "project\x00id", JiraProjectName: "warm\x00name",
@@ -116,7 +116,7 @@ func TestScaleP21SW20JiraLinksInstalledSourceHold(t *testing.T) {
 			request := f.request(user, key, nil)
 			request.Method, request.URL.Path = http.MethodGet, "/api/jira/links"
 			response := httptest.NewRecorder()
-			scaleP21M3Call(service, response, request, (*server).listJiraLinks)
+			callPointSettingsHandler(service, response, request, (*server).listJiraLinks)
 			var actual []domain.JiraLink
 			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &actual) != nil || !reflect.DeepEqual(actual, []domain.JiraLink{link}) {
 				t.Fatal("actual list lost exact installed body or changed credential projection", response.Code, response.Body.String())

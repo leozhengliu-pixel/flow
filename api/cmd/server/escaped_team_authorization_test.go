@@ -16,15 +16,15 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW330EscapedTeamAuthorizationDifferential(t *testing.T) {
+func TestEscapedTeamAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for driver, repository := range scaleP03ServerTestStores(t) {
+	for driver, repository := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			foreign := scaleP03Fixture(t, repository)
-			f := scaleP21M2Setup(t, repository)
+			foreign := resourceAccessScaleFixture(t, repository)
+			f := setupPolicyDifferential(t, repository)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw330-")
 			data, found := repository.WorkspaceMetadata(workspace)
 			if !found {
@@ -160,8 +160,8 @@ func TestScaleP21SW330EscapedTeamAuthorizationDifferential(t *testing.T) {
 									t.Fatal("resource adapter changed the literal off path")
 								}
 							} else {
-								memberRef, member := scaleP21SW315TeamMembershipAuthorizationRequest(request)
-								resourceRef, resource := scaleP21SW307TeamResourceAuthorizationRequest(request)
+								memberRef, member := teamMembershipAuthorizationRequest(request)
+								resourceRef, resource := teamResourceAuthorizationRequest(request)
 								parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
 								if member == resource || member && memberRef != parts[2] || resource && resourceRef != parts[2] {
 									t.Fatal("escaped family failed to select its literal decoded first reference")
@@ -256,7 +256,7 @@ func TestScaleP21SW330EscapedTeamAuthorizationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW330EscapedTeamFamilyBoundary(t *testing.T) {
+func TestEscapedTeamFamilyBoundary(t *testing.T) {
 	for _, row := range []struct{ method, path string }{
 		{http.MethodGet, "/api/teams/a%2Fresources/members"},
 		{http.MethodHead, "/api/teams/a%2Fresource-sections/members"},
@@ -271,8 +271,8 @@ func TestScaleP21SW330EscapedTeamFamilyBoundary(t *testing.T) {
 		{http.MethodDelete, "/api/teams/a%2Fb/resource-sections/item%2Fname"},
 	} {
 		request := httptest.NewRequest(row.method, row.path, nil)
-		_, member := scaleP21SW315TeamMembershipAuthorizationRequest(request)
-		_, resource := scaleP21SW307TeamResourceAuthorizationRequest(request)
+		_, member := teamMembershipAuthorizationRequest(request)
+		_, resource := teamResourceAuthorizationRequest(request)
 		if member == resource {
 			t.Fatal("escaped registered route was not selected exactly once", row)
 		}
@@ -287,10 +287,10 @@ func TestScaleP21SW330EscapedTeamFamilyBoundary(t *testing.T) {
 		{http.MethodPut, "/api/teams/a%2Fb/members/"},
 	} {
 		request := httptest.NewRequest(row.method, row.path, nil).WithContext(context.Background())
-		if _, selected := scaleP21SW315TeamMembershipAuthorizationRequest(request); selected {
+		if _, selected := teamMembershipAuthorizationRequest(request); selected {
 			t.Fatal("membership adapter captured another escaped family", row)
 		}
-		if _, selected := scaleP21SW307TeamResourceAuthorizationRequest(request); selected {
+		if _, selected := teamResourceAuthorizationRequest(request); selected {
 			t.Fatal("resource adapter captured another escaped family", row)
 		}
 	}

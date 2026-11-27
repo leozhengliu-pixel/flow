@@ -5,7 +5,7 @@ import { isAgentIdentifier } from '@/components/agent/agent-entity-refs'
 import { listIssueRecords } from '@/lib/api'
 import type { Issue, User } from '@/types/flow'
 import { mentionOptions, type MentionOption } from './mention-options'
-import { useResourceMentionDocuments, useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
+import { useResourceMentionDocuments, useResourcePeople } from '@/hooks/resource-pickers'
 
 const TYPED_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
 

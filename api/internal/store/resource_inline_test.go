@@ -10,15 +10,15 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW540: project and initiative collections whose IDs repeat are kept inline
+// Project and initiative collections whose IDs repeat are kept inline
 // in the workspace row (no per-record rows). The bounded point readers must
 // answer exactly as the hydrated literal copy, also on their canonical
 // (non-resident) path.
-func TestScaleP21SW540ResourceReadInlineCollections(t *testing.T) {
+func TestResourceReadInlineCollections(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("sw540-")
 	public, private := prefix+"public", prefix+"private"

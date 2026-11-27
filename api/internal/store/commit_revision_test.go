@@ -8,11 +8,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP09FinalFlushPreservesCopyRevision(t *testing.T) {
+func TestScaleFinalFlushPreservesCopyRevision(t *testing.T) {
 	for _, mode := range []string{"shadow", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_JOURNAL", mode)
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			before, err := readMetadataStamp(t.Context(), f.db, workspace)
 			if err != nil {
@@ -24,7 +24,7 @@ func TestScaleP09FinalFlushPreservesCopyRevision(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Rollback()
-			scaleP09Put(t, tx, workspace, "projects", "revision-project", map[string]string{"id": "revision-project", "name": "Committed"})
+			journalScalePut(t, tx, workspace, "projects", "revision-project", map[string]string{"id": "revision-project", "name": "Committed"})
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
@@ -41,9 +41,9 @@ func TestScaleP09FinalFlushPreservesCopyRevision(t *testing.T) {
 	}
 }
 
-func TestScaleP09FinalFlushFailureRollsBackRevisions(t *testing.T) {
+func TestScaleFinalFlushFailureRollsBackRevisions(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite fused statement failure")
 	}
@@ -68,7 +68,7 @@ func TestScaleP09FinalFlushFailureRollsBackRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	scaleP09Put(t, tx, workspace, "projects", "failed-revision", map[string]string{"id": "failed-revision", "name": "Rolled back"})
+	journalScalePut(t, tx, workspace, "projects", "failed-revision", map[string]string{"id": "failed-revision", "name": "Rolled back"})
 	if err := tx.Commit(); err == nil {
 		t.Fatal("journal failure did not abort the write")
 	}

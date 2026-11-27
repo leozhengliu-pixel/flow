@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ApplicationAccessServerLifetimeDifferential(t *testing.T) {
+func TestScaleApplicationAccessServerLifetimeDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		app, err := repo.InstallApplication(store.ContextWithActor(t.Context(), f.data.Viewer), workspace, domain.ApplicationInstallation{
 			ClientID: idgen.New("p21-app-access-"), Name: "Application", Active: true, InstalledBy: f.data.Viewer.ID,

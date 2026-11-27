@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW20TeamLabelAggregateClosure(t *testing.T) {
+func TestTeamLabelAggregateClosure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		baseline, ok := repo.WorkspaceMetadata(workspace)
@@ -136,7 +136,7 @@ func TestScaleP21SW20TeamLabelAggregateClosure(t *testing.T) {
 						if spec.name != "label-prefix-large-hidden-predecessor" {
 							keys = append(keys, key)
 						}
-						before[kind] = scaleP21SW6RecordHash(t, repo, workspace, kind, id)
+						before[kind] = recordHash(t, repo, workspace, kind, id)
 					}
 					var events []domain.DomainEvent
 					var realtime []domain.RealtimeEvent
@@ -145,12 +145,12 @@ func TestScaleP21SW20TeamLabelAggregateClosure(t *testing.T) {
 					r, w := f.request(f.data.Viewer, nil, map[string]any{"name": "After", "description": "New", "color": "#334455"}), httptest.NewRecorder()
 					r.SetPathValue("id", f.public)
 					r.SetPathValue("labelId", id)
-					scaleP21M3Call(&server{store: source}, w, r, (*server).updateTeamLabel)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).updateTeamLabel)
 					if w.Code != http.StatusOK || len(events) != 1 || len(realtime) != 1 {
 						t.Fatal("label edit status/publication", w.Code, len(events), len(realtime), w.Body.String())
 					}
 					for _, kind := range spec.kinds {
-						if before[kind] != scaleP21SW6RecordHash(t, repo, workspace, kind, id) {
+						if before[kind] != recordHash(t, repo, workspace, kind, id) {
 							t.Fatal("enrichment changed read-only collision row", kind)
 						}
 					}
@@ -167,10 +167,10 @@ func TestScaleP21SW20TeamLabelAggregateClosure(t *testing.T) {
 							t.Fatal("metadata-only label writer hydrated an issue aggregate")
 						}
 					}
-					outcomes = append(outcomes, []any{w.Code, scaleP21SW10Response(t, w, false), scaleP21SW20Rows(t, repo, workspace, keys...), scaleP21SW20Effects(events, realtime)})
+					outcomes = append(outcomes, []any{w.Code, notificationsResponse(t, w, false), helpersRows(t, repo, workspace, keys...), helpersEffects(events, realtime)})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("label aggregate closure differs: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("label aggregate closure differs: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}
@@ -180,12 +180,12 @@ func TestScaleP21SW20TeamLabelAggregateClosure(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20TeamLabelProjectReferences(t *testing.T) {
+func TestTeamLabelProjectReferences(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		baseline, ok := repo.WorkspaceMetadata(workspace)
 		if !ok {
@@ -230,7 +230,7 @@ func TestScaleP21SW20TeamLabelProjectReferences(t *testing.T) {
 						}); err != nil {
 							t.Fatal(err)
 						}
-						projectBefore := scaleP21SW6RecordHash(t, repo, workspace, "projects", id)
+						projectBefore := recordHash(t, repo, workspace, "projects", id)
 						var events []domain.DomainEvent
 						var realtime []domain.RealtimeEvent
 						source.SetWebhookSink(func(_ string, event domain.DomainEvent) { events = append(events, event) })
@@ -238,21 +238,21 @@ func TestScaleP21SW20TeamLabelProjectReferences(t *testing.T) {
 						r, w := f.request(actor, key, map[string]any{"name": "After"}), httptest.NewRecorder()
 						r.SetPathValue("id", f.public)
 						r.SetPathValue("labelId", id)
-						scaleP21M3Call(&server{store: source}, w, r, (*server).updateTeamLabel)
+						callPointSettingsHandler(&server{store: source}, w, r, (*server).updateTeamLabel)
 						if w.Code != http.StatusOK || len(events) != 1 || len(realtime) != 1 {
 							t.Fatal("reference-aware label edit", w.Code, w.Body.String())
 						}
-						if scaleP21SW6RecordHash(t, repo, workspace, "projects", id) != projectBefore {
+						if recordHash(t, repo, workspace, "projects", id) != projectBefore {
 							t.Fatal("event-only display refresh persisted project fields")
 						}
 						outcomes = append(outcomes, []any{
-							w.Code, scaleP21SW10Response(t, w, false),
-							scaleP21SW20Rows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: id}, store.RecordKey{Kind: "projects", ID: id}, store.RecordKey{Kind: "users", ID: principal.ID}),
-							scaleP21SW20Effects(events, realtime),
+							w.Code, notificationsResponse(t, w, false),
+							helpersRows(t, repo, workspace, store.RecordKey{Kind: "labels", ID: id}, store.RecordKey{Kind: "projects", ID: id}, store.RecordKey{Kind: "users", ID: principal.ID}),
+							helpersEffects(events, realtime),
 						})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("project reference differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("project reference differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}

@@ -42,7 +42,7 @@ type metadataLogicalRecovery struct {
 	tx                *sqlTx
 	workspace         string
 	read              *MetadataCollectionRead
-	stage             *sw26MigrationStage
+	stage             *migrationStage
 	builder           *metadataLogicalBuilder
 	typed             *metadataLogicalBuilder
 	manifest          map[string]string
@@ -137,7 +137,7 @@ func (s *SQLiteStore) recoverRawMetadataLogicalSource(ctx context.Context, tx *s
 	defer builder.Close()
 	recovery := &metadataLogicalRecovery{store: s, ctx: ctx, tx: tx, workspace: workspace, read: read, builder: builder, manifest: map[string]string{}, part: part}
 	if part == nil || len(part) != 0 {
-		stage, err := sw26NewMigrationStage(ctx)
+		stage, err := newMigrationStage(ctx)
 		if err != nil {
 			return nil, err
 		}

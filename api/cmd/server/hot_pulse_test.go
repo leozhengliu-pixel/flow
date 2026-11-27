@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
+func TestScaleHotPulseSeenDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		seen := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
 		reset := func(userID string, exists, enabled bool, instructions string) {
@@ -58,7 +58,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				r = r.WithContext(store.WithSQLStatementObserver(r.Context(), sqlSink))
 			}
 			w := httptest.NewRecorder()
-			scaleP21CallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
+			scaleCallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
 			return w
 		}
 		var sqlCounts [2][2]int
@@ -95,8 +95,8 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				var outcomes []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					reset(user.ID, exists, true, "Retained instructions")
-					unrelated := scaleP21M3Fingerprint(t, repo, workspace, "projects")
-					settings := scaleP21M3Fingerprint(t, repo, workspace, "settings")
+					unrelated := pointRecordFingerprint(t, repo, workspace, "projects")
+					settings := pointRecordFingerprint(t, repo, workspace, "settings")
 					var effects []any
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						effects = append(effects, []any{"webhook", event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})
@@ -115,7 +115,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 						if w.Code != want {
 							t.Fatalf("seen exists=%t status=%d body=%s", exists, w.Code, w.Body.String())
 						}
-						response := scaleP21M2Response(t, w, false)
+						response := policyDifferentialResponse(t, w, false)
 						if want == http.StatusOK {
 							expected := at
 							if at.Before(seen) {
@@ -130,15 +130,15 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 							t.Fatal("backward acknowledgement published a mutation")
 						}
 					}
-					persisted := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: user.ID})
-					outcomes = append(outcomes, scaleP21M2JSON(t, []any{responses, persisted, effects}, false))
-					if unrelated != scaleP21M3Fingerprint(t, repo, workspace, "projects") ||
-						settings != scaleP21M3Fingerprint(t, repo, workspace, "settings") {
+					persisted := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: user.ID})
+					outcomes = append(outcomes, normalizePolicyJSON(t, []any{responses, persisted, effects}, false))
+					if unrelated != pointRecordFingerprint(t, repo, workspace, "projects") ||
+						settings != pointRecordFingerprint(t, repo, workspace, "settings") {
 						t.Fatal("Pulse acknowledgement changed unrelated canonical rows")
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("seen exists=%t differential: %s", exists, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("seen exists=%t differential: %s", exists, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})
@@ -149,14 +149,14 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				t.Fatalf("disabled Pulse accepted acknowledgement: %d %s", w.Code, w.Body.String())
 			}
 			reset(f.data.Viewer.ID, true, true, "")
-			before := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})
+			before := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})
 			r := f.literalRequest(f.data.Viewer, nil, map[string]time.Time{"at": seen})
 			ctx, cancel := context.WithCancel(r.Context())
 			cancel()
 			w = httptest.NewRecorder()
-			scaleP21CallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).postPulseSeen)
+			scaleCallWithOutputOwner(&server{store: source}, w, r.WithContext(ctx), (*server).postPulseSeen)
 			if w.Code != http.StatusRequestTimeout || w.Header().Get("Retry-After") != "" ||
-				!reflect.DeepEqual(before, scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})) {
+				!reflect.DeepEqual(before, policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "userSettings", ID: f.data.Viewer.ID})) {
 				t.Fatalf("canceled acknowledgement returned %d or changed state", w.Code)
 			}
 			// A canceled request must leave the next acknowledgement usable.
@@ -168,10 +168,10 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 		// canonical value; the oversized unrelated project in the M fixture is
 		// ignored throughout every normal acknowledgement above.
 		reset(f.data.Viewer.ID, true, true, strings.Repeat("large instructions ", 20000))
-		before := scaleP21M3Fingerprint(t, repo, workspace, "userSettings")
+		before := pointRecordFingerprint(t, repo, workspace, "userSettings")
 		w := call(f.probe, f.data.Viewer, nil, seen)
 		if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
-			before != scaleP21M3Fingerprint(t, repo, workspace, "userSettings") {
+			before != pointRecordFingerprint(t, repo, workspace, "userSettings") {
 			t.Fatalf("oversized selected settings silently changed: %d %s", w.Code, w.Body.String())
 		}
 		reset(f.data.Viewer.ID, true, true, "")
@@ -209,7 +209,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 				r.SetPathValue("workspace", key)
 				r.SetPathValue("workspaceKey", key)
 				w := httptest.NewRecorder()
-				scaleP21CallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
+				scaleCallWithOutputOwner(&server{store: source}, w, r, (*server).postPulseSeen)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s accepted acknowledgement: %d %s", phase, w.Code, w.Body.String())
 				}

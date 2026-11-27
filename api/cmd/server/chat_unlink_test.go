@@ -17,12 +17,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ChatUnlinkDifferential(t *testing.T) {
+func TestScaleChatUnlinkDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {

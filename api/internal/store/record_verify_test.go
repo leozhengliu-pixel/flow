@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP16OracleResetsCapturesAndKeepsPayloadAliases(t *testing.T) {
+func TestScaleOracleResetsCapturesAndKeepsPayloadAliases(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "on")
 	data := domain.Bootstrap{Projects: []domain.Project{{ID: "p", Name: "before"}, {ID: "other", Name: "unrelated"}}, AuditLog: []domain.AuditLogEntry{{ID: "historical"}}}
@@ -42,7 +42,7 @@ func TestScaleP16OracleResetsCapturesAndKeepsPayloadAliases(t *testing.T) {
 	}
 }
 
-func TestScaleP16OracleDetectsMissingInputsAndPreviousValues(t *testing.T) {
+func TestScaleOracleDetectsMissingInputsAndPreviousValues(t *testing.T) {
 	before := domain.Bootstrap{Projects: []domain.Project{{ID: "p"}, {ID: "dependency", Name: "must be present"}}}
 	ctx := WithMetadataRecords(context.Background(), MetadataRecordScope{Write: []RecordKey{{Kind: "projects", ID: "p"}}})
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
@@ -68,8 +68,8 @@ func TestScaleP16OracleDetectsMissingInputsAndPreviousValues(t *testing.T) {
 	}
 }
 
-func TestScaleP16RecordInputOwnershipAtTwentyThousandProjects(t *testing.T) {
-	data := scaleP16RecordFixture()
+func TestScaleRecordInputOwnershipAtTwentyThousandProjects(t *testing.T) {
+	data := scaleRecordFixture()
 	selected := metadataRecordSnapshot(data, MetadataRecordScope{Write: []RecordKey{{Kind: "projects", ID: "target"}}}, []string{"projects"})
 	if len(selected.Projects) != 1 {
 		t.Fatalf("loaded %d projects", len(selected.Projects))
@@ -80,7 +80,7 @@ func TestScaleP16RecordInputOwnershipAtTwentyThousandProjects(t *testing.T) {
 	}
 }
 
-func TestScaleP16OracleNormalizesGeneratedSlugsOnly(t *testing.T) {
+func TestScaleOracleNormalizesGeneratedSlugsOnly(t *testing.T) {
 	first := mutationCallbackResult{Data: domain.Bootstrap{Projects: []domain.Project{{ID: "p", SlugID: "new-123456789012"}}}}
 	second := mutationCallbackResult{Data: domain.Bootstrap{Projects: []domain.Project{{ID: "p", SlugID: "new-abcdef123456"}}}}
 	if path := compareMetadataRecordCallbacks(first, second, nil); path != "" {
@@ -92,7 +92,7 @@ func TestScaleP16OracleNormalizesGeneratedSlugsOnly(t *testing.T) {
 	}
 }
 
-func TestScaleP16RecordInputsPreserveOwnedAttribution(t *testing.T) {
+func TestScaleRecordInputsPreserveOwnedAttribution(t *testing.T) {
 	for _, mode := range []string{"off", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
@@ -109,7 +109,7 @@ func TestScaleP16RecordInputsPreserveOwnedAttribution(t *testing.T) {
 	}
 }
 
-func TestScaleP16OracleRepeatedClocksRetainExactSemantics(t *testing.T) {
+func TestScaleOracleRepeatedClocksRetainExactSemantics(t *testing.T) {
 	known := time.Date(2026, 11, 12, 8, 0, 0, 123, time.UTC)
 	generated := known.Add(time.Hour)
 	result := mutationCallbackResult{Data: domain.Bootstrap{Projects: make([]domain.Project, 128)}}
@@ -135,9 +135,9 @@ func TestScaleP16OracleRepeatedClocksRetainExactSemantics(t *testing.T) {
 	}
 }
 
-func TestScaleP16RecordReloadScopeIsolation(t *testing.T) {
+func TestScaleRecordReloadScopeIsolation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	fixture := repo.Bootstrap()
 	workspace, target := fixture.Workspace.URLKey, fixture.Projects[0].ID
 	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p16.reload_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -179,7 +179,7 @@ func TestScaleP16RecordReloadScopeIsolation(t *testing.T) {
 	}
 }
 
-func scaleP16RecordFixture() domain.Bootstrap {
+func scaleRecordFixture() domain.Bootstrap {
 	data := domain.Bootstrap{Projects: make([]domain.Project, 20000)}
 	for i := range data.Projects {
 		data.Projects[i] = domain.Project{ID: "p16-" + strconv.Itoa(i), Description: strings.Repeat("body", 512), Comments: []domain.Comment{{Body: "thread", Reactions: map[string][]string{"+1": {"viewer"}}}}}
@@ -188,8 +188,8 @@ func scaleP16RecordFixture() domain.Bootstrap {
 	return data
 }
 
-func BenchmarkScaleP16RecordInputs(b *testing.B) {
-	data := scaleP16RecordFixture()
+func BenchmarkScaleRecordInputs(b *testing.B) {
+	data := scaleRecordFixture()
 	for _, mode := range []string{"full", "record"} {
 		b.Run(mode, func(b *testing.B) {
 			b.ReportAllocs()

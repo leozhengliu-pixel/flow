@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotPreferenceReviewVisible(t *testing.T) {
+func TestScaleHotPreferenceReviewVisible(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		metadata, found := repo.WorkspaceMetadata(workspace)
 		if !found {
@@ -56,7 +56,7 @@ func TestScaleP21HotPreferenceReviewVisible(t *testing.T) {
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "reviews")
+		before := pointRecordFingerprint(t, repo, workspace, "reviews")
 		call := func(source *store.SQLiteStore, user domain.User, key *domain.APIKey, ref string, observe func(string)) bool {
 			t.Helper()
 			r := f.literalRequest(user, key, nil)
@@ -147,7 +147,7 @@ func TestScaleP21HotPreferenceReviewVisible(t *testing.T) {
 				}
 			}
 		}
-		if f.probe.WorkspaceMetadataDecodes() != 0 || before != scaleP21M3Fingerprint(t, repo, workspace, "reviews") {
+		if f.probe.WorkspaceMetadataDecodes() != 0 || before != pointRecordFingerprint(t, repo, workspace, "reviews") {
 			t.Fatal("review predicate decoded full metadata or changed canonical rows")
 		}
 	}

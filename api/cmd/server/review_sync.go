@@ -503,7 +503,7 @@ func (s *server) queueReviewSync(workspace, reviewID string) {
 	if !reviewSyncRunner(s, func(lifetime context.Context) {
 		defer reviewSyncInFlight.Delete(key)
 		// COLD work with bounded metadata on: the review sync is a COLD
-		// consumer and runs after the webhook request ends (SW557).
+		// consumer and runs after the webhook request ends.
 		ctx, cancel := context.WithTimeout(store.WithColdWork(lifetime, "review-sync"), 2*time.Minute)
 		defer cancel()
 		if _, err := s.syncReview(ctx, workspace, reviewID, true); err != nil && !errors.Is(err, errReviewNotSynced) {

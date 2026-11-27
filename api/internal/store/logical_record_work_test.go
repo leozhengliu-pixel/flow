@@ -196,7 +196,7 @@ func TestBoundedMetadataStartupLargeRecordWork(t *testing.T) {
 		}
 		path := filepath.Join(dir, name+".db")
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			scaleP21SW557CopyDatabase(t, seedPath, path)
+			copyDatabase(t, seedPath, path)
 		}
 		return func() *SQLiteStore {
 			repo, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path})

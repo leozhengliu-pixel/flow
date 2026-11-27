@@ -14,11 +14,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW22VisibilityKeysDifferential(t *testing.T) {
+func TestVisibilityKeysDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	prefix := idgen.New("sw22-visibility-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
@@ -293,7 +293,7 @@ func TestScaleP21SW22VisibilityKeysDifferential(t *testing.T) {
 	}
 	func() {
 		defer appBudgetTx.Rollback()
-		large, err := json.Marshal(map[string]string{"userId": app.UserID, "unrelated": strings.Repeat("\u4e2d", scaleP21SW22VisibilityApp/2)})
+		large, err := json.Marshal(map[string]string{"userId": app.UserID, "unrelated": strings.Repeat("\u4e2d", visibilityApp/2)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -341,11 +341,11 @@ func TestScaleP21SW22VisibilityKeysDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
+func TestVisibilityKeysBoundsAndRecovery(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -354,7 +354,7 @@ func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
 	view.mu.Lock()
 	original := view.workspaces[workspace]
 	large := original
-	large.Teams = []domain.Team{{ID: "large-header", Key: strings.Repeat("x", scaleP21SW22VisibilityPolicy)}}
+	large.Teams = []domain.Team{{ID: "large-header", Key: strings.Repeat("x", visibilityPolicy)}}
 	view.workspaces[workspace] = large
 	view.mu.Unlock()
 	_, budgetErr := view.BeginViewerVisibilityKeysRead(t.Context(), workspace)
@@ -373,7 +373,7 @@ func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
 		}
 		func() {
 			defer tx.Rollback()
-			if _, err := tx.ExecContext(t.Context(), `UPDATE auth_users SET avatar_url=? WHERE id=?`, strings.Repeat("x", scaleP21SW22VisibilityRow+1), f.data.Viewer.ID); err != nil {
+			if _, err := tx.ExecContext(t.Context(), `UPDATE auth_users SET avatar_url=? WHERE id=?`, strings.Repeat("x", visibilityRow+1), f.data.Viewer.ID); err != nil {
 				t.Fatal(err)
 			}
 			ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
@@ -395,7 +395,7 @@ func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
 	view.metadataResidency.work.mu.Lock()
 	held := view.metadataResidency.work.used
 	view.metadataResidency.work.mu.Unlock()
-	if held != scaleP21SW22VisibilityWork {
+	if held != visibilityWork {
 		t.Fatal("returned visibility map is not admitted through consumption", held)
 	}
 	if err := read.Close(); err != nil || read.Keys != nil {
@@ -432,7 +432,7 @@ func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
 	if _, err := view.ViewerVisibilityKeys(t.Context(), workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("legacy map API accepted an uncharged bounded result", err)
 	}
-	parentCtx, releaseParent, err := view.admitMetadataWork(t.Context(), scaleP21SW22VisibilityWork)
+	parentCtx, releaseParent, err := view.admitMetadataWork(t.Context(), visibilityWork)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestScaleP21SW22VisibilityKeysBoundsAndRecovery(t *testing.T) {
 	view.metadataResidency.work.mu.Lock()
 	remaining := view.metadataResidency.work.used
 	view.metadataResidency.work.mu.Unlock()
-	if remaining != scaleP21SW22VisibilityWork || !reflect.DeepEqual(parentRead.Keys, want) {
+	if remaining != visibilityWork || !reflect.DeepEqual(parentRead.Keys, want) {
 		t.Fatal("parent release revoked an owned result reservation", remaining)
 	}
 	if err := parentRead.Close(); err != nil {

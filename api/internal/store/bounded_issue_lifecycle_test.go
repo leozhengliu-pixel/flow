@@ -16,7 +16,7 @@ func TestBoundedIssueLifecycleTransaction(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := fixture.data.Workspace.URLKey
 	actor := fixture.data.Viewer
 	issue := domain.Issue{ID: "bounded-delete", Identifier: "DEL-123", Number: 123,
@@ -46,7 +46,7 @@ func TestBoundedIssueLifecycleTransaction(t *testing.T) {
 		}
 		return issues, trash, comments
 	}
-	events := scaleP21SW63EventIDs(t, fixture.SQLiteStore, workspace)
+	events := eventIDs(t, fixture.SQLiteStore, workspace)
 	installed := view.metadataResidency.logical[workspace]
 	callbacks, webhooks, realtime := 0, 0, 0
 	view.SetWebhookSink(func(string, domain.DomainEvent) { webhooks++ })
@@ -78,7 +78,7 @@ func TestBoundedIssueLifecycleTransaction(t *testing.T) {
 	checkUnchanged := func() {
 		t.Helper()
 		issues, trash, comments := counts()
-		if issues != 1 || trash != 0 || comments != 1 || !maps.Equal(events, scaleP21SW63EventIDs(t, fixture.SQLiteStore, workspace)) ||
+		if issues != 1 || trash != 0 || comments != 1 || !maps.Equal(events, eventIDs(t, fixture.SQLiteStore, workspace)) ||
 			view.metadataResidency.logical[workspace] != installed || webhooks != 0 || realtime != 0 || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("aborted deletion changed stored rows, published, or retained work")
 		}
@@ -130,7 +130,7 @@ func TestBoundedIssueLifecycleTransaction(t *testing.T) {
 	}
 	fixture.db.commitHooks.Store(prior)
 	issues, trash, comments := counts()
-	if issues != 0 || trash != 1 || comments != 0 || len(scaleP21SW63EventIDs(t, fixture.SQLiteStore, workspace)) != len(events)+1 ||
+	if issues != 0 || trash != 1 || comments != 0 || len(eventIDs(t, fixture.SQLiteStore, workspace)) != len(events)+1 ||
 		view.metadataResidency.logical[workspace] == installed || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("retried deletion did not commit one complete postimage")
 	}

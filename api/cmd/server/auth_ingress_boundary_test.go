@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW305Text(t *testing.T, node ast.Node) string {
+func authIngressBoundaryText(t *testing.T, node ast.Node) string {
 	t.Helper()
 	var output bytes.Buffer
 	if err := format.Node(&output, token.NewFileSet(), node); err != nil {
@@ -22,7 +22,7 @@ func scaleP21SW305Text(t *testing.T, node ast.Node) string {
 	return output.String()
 }
 
-func scaleP21SW305Function(t *testing.T, file, receiver, name string) *ast.FuncDecl {
+func authIngressBoundaryFunction(t *testing.T, file, receiver, name string) *ast.FuncDecl {
 	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 	if err != nil {
@@ -35,7 +35,7 @@ func scaleP21SW305Function(t *testing.T, file, receiver, name string) *ast.FuncD
 		}
 		actual := ""
 		if function.Recv != nil {
-			actual = scaleP21SW305Text(t, function.Recv.List[0].Type)
+			actual = authIngressBoundaryText(t, function.Recv.List[0].Type)
 		}
 		if actual == receiver {
 			return function
@@ -45,10 +45,10 @@ func scaleP21SW305Function(t *testing.T, file, receiver, name string) *ast.FuncD
 	return nil
 }
 
-func scaleP21SW305HasStatement(t *testing.T, function *ast.FuncDecl, expected string) bool {
+func hasStatement(t *testing.T, function *ast.FuncDecl, expected string) bool {
 	t.Helper()
 	for _, statement := range function.Body.List {
-		if scaleP21SW305Text(t, statement) == expected {
+		if authIngressBoundaryText(t, statement) == expected {
 			return true
 		}
 	}
@@ -56,8 +56,8 @@ func scaleP21SW305HasStatement(t *testing.T, function *ast.FuncDecl, expected st
 }
 
 // This pins the current ingress and producer boundary. It does not declare
-// borrowed snapshots impossible or replace SW256's actual authorization table.
-func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
+// borrowed snapshots impossible or replace issue read authorization's actual authorization table.
+func TestAuthorizationIngressBoundaries(t *testing.T) {
 	t.Run("production-snapshot-producer-callset", func(t *testing.T) {
 		expected := map[string]int{
 			"main.go:bootstrap:BeginWorkspaceRead":                                   1,
@@ -101,7 +101,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 					if !ok || selector.Sel.Name != "BeginWorkspaceRead" && selector.Sel.Name != "BeginGeneralBootstrapRead" {
 						return true
 					}
-					if !calls[selector] || scaleP21SW305Text(t, selector.X) != "s.store" {
+					if !calls[selector] || authIngressBoundaryText(t, selector.X) != "s.store" {
 						t.Fatalf("captured or rebound snapshot producer in %s:%s", name, owner)
 					}
 					actual[name+":"+owner+":"+selector.Sel.Name]++
@@ -150,20 +150,20 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 	})
 
 	t.Run("outer-http-order-and-output-scope", func(t *testing.T) {
-		handler := scaleP21SW305Function(t, "main.go", "", "newHandler")
-		if !scaleP21SW305HasStatement(t, handler,
+		handler := authIngressBoundaryFunction(t, "main.go", "", "newHandler")
+		if !hasStatement(t, handler,
 			"handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.withColdMetadataRouteMux(mux, s.authenticate(s.limitAuthenticatedAPI(mux)))))))") {
 			t.Fatal("HTTP ingress order changed; review all pre-auth context producers")
 		}
-		authenticate := scaleP21SW305Function(t, "auth.go", "*server", "authenticate")
-		text := scaleP21SW305Text(t, authenticate.Body)
+		authenticate := authIngressBoundaryFunction(t, "auth.go", "*server", "authenticate")
+		text := authIngressBoundaryText(t, authenticate.Body)
 		if strings.Count(text, "s.authorizeWorkspaceRequest(w, r, ") != 2 ||
 			!strings.Contains(text, "r, release = beginRequestResourceReads(r)") ||
 			!strings.Contains(text, "defer release()") {
 			t.Fatal("authentication or containing output lifetime changed")
 		}
-		scope := scaleP21SW305Function(t, "request_resource_read.go", "", "beginRequestResourceReads")
-		if !scaleP21SW305HasStatement(t, scope, "return r.WithContext(ctx), scope.close") {
+		scope := authIngressBoundaryFunction(t, "request_resource_read.go", "", "beginRequestResourceReads")
+		if !hasStatement(t, scope, "return r.WithContext(ctx), scope.close") {
 			t.Fatal("request scope no longer closes its containing outputs")
 		}
 		storePath := filepath.Join("..", "..", "internal", "store")
@@ -172,8 +172,8 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 			{"json_output_read.go", "*MetadataJSONRead"},
 			{"collaboration_document_read.go", "*CollaborationDocumentRead"},
 		} {
-			function := scaleP21SW305Function(t, filepath.Join(storePath, item.file), item.receiver, "Context")
-			if strings.Contains(scaleP21SW305Text(t, function.Body), "workspaceReadKey") {
+			function := authIngressBoundaryFunction(t, filepath.Join(storePath, item.file), item.receiver, "Context")
+			if strings.Contains(authIngressBoundaryText(t, function.Body), "workspaceReadKey") {
 				t.Fatalf("%s.Context now lends a workspace snapshot; review pre-auth use", item.receiver)
 			}
 		}
@@ -181,23 +181,23 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 
 	t.Run("bounded-unborrowed-source-refuses-before-hydration", func(t *testing.T) {
 		storePath := filepath.Join("..", "..", "internal", "store")
-		source := scaleP21SW305Function(t, filepath.Join(storePath, "read_snapshot.go"), "*SQLiteStore", "workspaceReadSource")
+		source := authIngressBoundaryFunction(t, filepath.Join(storePath, "read_snapshot.go"), "*SQLiteStore", "workspaceReadSource")
 		if len(source.Body.List) < 3 {
 			t.Fatal("workspace source boundary changed")
 		}
 		borrowed, ok := source.Body.List[0].(*ast.IfStmt)
-		if !ok || scaleP21SW305Text(t, borrowed.Cond) !=
+		if !ok || authIngressBoundaryText(t, borrowed.Cond) !=
 			"ok && snapshot.database == s.db && (workspace == \"\" || workspace == snapshot.workspace)" ||
-			!scaleP21SW305HasStatement(t, &ast.FuncDecl{Body: borrowed.Body}, "return snapshot.reader, data, true") {
+			!hasStatement(t, &ast.FuncDecl{Body: borrowed.Body}, "return snapshot.reader, data, true") {
 			t.Fatal("matching borrowed workspace source precedence changed")
 		}
 		refusal, ok := source.Body.List[1].(*ast.IfStmt)
-		if !ok || refusal.Else != nil || scaleP21SW305Text(t, refusal.Cond) != "s.metadataResidency != nil" ||
+		if !ok || refusal.Else != nil || authIngressBoundaryText(t, refusal.Cond) != "s.metadataResidency != nil" ||
 			len(refusal.Body.List) != 1 ||
-			scaleP21SW305Text(t, refusal.Body.List[0]) != "return s.db, domain.Bootstrap{}, false" {
+			authIngressBoundaryText(t, refusal.Body.List[0]) != "return s.db, domain.Bootstrap{}, false" {
 			t.Fatal("bounded source may hydrate without a borrowed workspace snapshot")
 		}
-		paged := scaleP21SW305Function(t, filepath.Join(storePath, "issue_query.go"), "*SQLiteStore", "PagedWorkspaceMetadata")
+		paged := authIngressBoundaryFunction(t, filepath.Join(storePath, "issue_query.go"), "*SQLiteStore", "PagedWorkspaceMetadata")
 		// A COLD request (default COLD routing) reads the legacy projection
 		// only when a matching owned snapshot was not already supplied.
 		const cold = `if !pinned && coldCapable(ctx) {
@@ -211,23 +211,23 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 }`
 		body := paged.Body.List
 		if len(body) < 5 ||
-			scaleP21SW305Text(t, body[0]) != "snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead)" ||
-			scaleP21SW305Text(t, body[1]) != `pinned = pinned && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace)` ||
-			strings.Join(strings.Fields(scaleP21SW305Text(t, body[2])), " ") != strings.Join(strings.Fields(cold), " ") {
+			authIngressBoundaryText(t, body[0]) != "snapshot, pinned := ctx.Value(workspaceReadKey{}).(workspaceRead)" ||
+			authIngressBoundaryText(t, body[1]) != `pinned = pinned && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace)` ||
+			strings.Join(strings.Fields(authIngressBoundaryText(t, body[2])), " ") != strings.Join(strings.Fields(cold), " ") {
 			t.Fatal("paged metadata snapshot and COLD legacy-view boundary changed")
 		}
-		if scaleP21SW305Text(t, body[3]) != "_, data, ok := s.workspaceReadSource(ctx, workspace)" ||
-			scaleP21SW305Text(t, body[4]) != "if !ok {\n\treturn data, ErrAuthForbidden\n}" {
+		if authIngressBoundaryText(t, body[3]) != "_, data, ok := s.workspaceReadSource(ctx, workspace)" ||
+			authIngressBoundaryText(t, body[4]) != "if !ok {\n\treturn data, ErrAuthForbidden\n}" {
 			t.Fatal("paged metadata no-source refusal changed")
 		}
 	})
 
 	t.Run("ordinary-issue-denial-remains-before-role-checks", func(t *testing.T) {
-		function := scaleP21SW305Function(t, "auth.go", "*server", "resourceAllowedLegacy")
+		function := authIngressBoundaryFunction(t, "auth.go", "*server", "resourceAllowedLegacy")
 		var issue *ast.CaseClause
 		ast.Inspect(function.Body, func(node ast.Node) bool {
 			clause, ok := node.(*ast.CaseClause)
-			if ok && len(clause.List) == 1 && scaleP21SW305Text(t, clause.List[0]) == `"issues"` {
+			if ok && len(clause.List) == 1 && authIngressBoundaryText(t, clause.List[0]) == `"issues"` {
 				issue = clause
 			}
 			return true
@@ -249,7 +249,7 @@ func TestScaleP21SW305AuthorizationIngressBoundaries(t *testing.T) {
 			}
 			equal := true
 			for index, expected := range want {
-				actual := scaleP21SW305Text(t, issue.Body[start+index])
+				actual := authIngressBoundaryText(t, issue.Body[start+index])
 				equal = equal && strings.Join(strings.Fields(actual), " ") == strings.Join(strings.Fields(expected), " ")
 			}
 			matched = matched || equal

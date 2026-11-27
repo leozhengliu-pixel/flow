@@ -6,16 +6,16 @@ import (
 	"testing"
 )
 
-// SW531: a legacy whole-workspace read of a bounded store never answers from
+// A legacy whole-workspace read of a bounded store never answers from
 // the resident skeleton. WorkspaceMetadata, BootstrapFor and a field-only
 // read of a non-resident field answer the complete installed image from a
 // legacy view of the installed logical source (default COLD routing,
 // default_cold.go), on a test view and on a production store
-// (coverage required) alike, and report the read to the observer (SW530 and
-// SW550 fail a proven-bounded route that makes one). A resident field-only
+// (coverage required) alike, and report the read to the observer (flag-on route sweep and
+// route temperature guard fail a proven-bounded route that makes one). A resident field-only
 // read, the registered COLD facade and the flag-off store answer as before.
-func TestScaleP21SW531LegacyReadsAnswerTheInstalledImage(t *testing.T) {
-	f, view, workspace := scaleP21ColdReadFixture(t)
+func TestLegacyReadsAnswerTheInstalledImage(t *testing.T) {
+	f, view, workspace := scaleColdReadFixture(t)
 	full, found := f.WorkspaceMetadata(workspace)
 	if !found || len(full.IntegrationConnections) != 1 {
 		t.Fatal("flag-off store lost its complete image", found, len(full.IntegrationConnections))
@@ -62,7 +62,7 @@ func TestScaleP21SW531LegacyReadsAnswerTheInstalledImage(t *testing.T) {
 	// The registered COLD facade reads the complete image.
 	view.metadataResidency.work.limit = metadataWorkBytes()
 	view.metadataResidency.requireCoverage = false
-	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(_ context.Context, repo *SQLiteStore) error {
+	if err := view.WithColdMetadataRead(t.Context(), coldDispatchRead, func(_ context.Context, repo *SQLiteStore) error {
 		data, found := repo.WorkspaceMetadata(workspace)
 		if !found || len(data.IntegrationConnections) != 1 {
 			t.Fatal("COLD facade lost the complete image", found, len(data.IntegrationConnections))

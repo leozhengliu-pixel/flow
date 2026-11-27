@@ -8,8 +8,8 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M3IntegrationErrorDifferential(t *testing.T) {
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+func TestScaleIntegrationErrorDifferential(t *testing.T) {
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
 			name: "oauth-integration-error", kind: "integrationConnections", id: "m3-connection", body: `{}`,
 			seed: func(data *domain.Bootstrap, _ domain.User) {
@@ -26,14 +26,14 @@ func TestScaleP21M3IntegrationErrorDifferential(t *testing.T) {
 	})
 }
 
-func TestScaleP21M3JiraLinkDifferential(t *testing.T) {
+func TestScaleJiraLinkDifferential(t *testing.T) {
 	seed := func(data *domain.Bootstrap, _ domain.User) {
 		data.JiraLinks = []domain.JiraLink{
 			{ID: "m3-jira", JiraProjectID: "target", TeamID: data.Teams[0].ID, SyncDirection: "bidirectional"},
 			{ID: "m3-other-jira", JiraProjectID: "other", TeamID: data.Teams[0].ID, SyncDirection: "unidirectional", StatusMap: map[string]string{"Retained": ""}},
 		}
 	}
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
 			name: "jira-link-update", kind: "jiraLinks", id: "m3-jira", body: `{"syncDirection":"unidirectional","statusMap":{"Open":""}}`,
 			seed: seed, handler: (*server).updateJiraLink,

@@ -8,7 +8,7 @@ import (
 
 // Match fixed tokens and single-segment wildcards before unescaping slashes.
 // Return the literal authorizer's decoded parts, not wildcard PathValues.
-func scaleP21EscapedRouteParts(r *http.Request, pattern string) ([]string, bool) {
+func scaleEscapedRouteParts(r *http.Request, pattern string) ([]string, bool) {
 	if r == nil || r.URL == nil || !strings.HasPrefix(pattern, "/") || pattern == "/" {
 		return nil, false
 	}

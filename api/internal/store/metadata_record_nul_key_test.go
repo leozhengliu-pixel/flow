@@ -14,7 +14,7 @@ func TestMetadataRecordNULKeyIsReplaced(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	seed := func(sessions ...domain.AgentSession) {
 		t.Helper()

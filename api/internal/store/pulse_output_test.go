@@ -9,8 +9,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW0PulseOutputLifetime(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{
+func TestPulseOutputLifetime(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{
 		"physical": {
 			Workspace: domain.Workspace{URLKey: "logical"},
 			Projects:  []domain.Project{{ID: "project", Name: "Project"}},

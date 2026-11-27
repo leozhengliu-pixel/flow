@@ -17,7 +17,7 @@ import (
 // A comment posted after the personal setting is enabled through the API
 // starts the same comment-action generation flag off and flag on, with the
 // bounded source warm or reloaded from SQL.
-func TestScaleP21CommentActionSettingStartDifferential(t *testing.T) {
+func TestScaleCommentActionSettingStartDifferential(t *testing.T) {
 	for _, mode := range []string{"off", "on-warm", "on-reloaded"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")

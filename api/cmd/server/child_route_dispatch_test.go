@@ -16,12 +16,12 @@ import (
 	"flow/api/internal/store"
 )
 
-type sw48UnreadBody struct{}
+type unreadBody struct{}
 
-func (*sw48UnreadBody) Read([]byte) (int, error) { panic("off helper read the request body") }
-func (*sw48UnreadBody) Close() error             { panic("off helper closed the request body") }
+func (*unreadBody) Read([]byte) (int, error) { panic("off helper read the request body") }
+func (*unreadBody) Close() error             { panic("off helper closed the request body") }
 
-func TestScaleP21SW48ChildRouteDispatch(t *testing.T) {
+func TestChildRouteDispatch(t *testing.T) {
 	expected := map[string]bool{
 		"POST /api/issue-records/{id}/reactions":                           true,
 		"POST /api/issue-records/{id}/comments":                            true,
@@ -126,7 +126,7 @@ func TestScaleP21SW48ChildRouteDispatch(t *testing.T) {
 	}
 	service := &server{store: &store.SQLiteStore{}}
 	request := httptest.NewRequest(http.MethodPost, "/api/issue-records/issue_native/comments", nil)
-	body := &sw48UnreadBody{}
+	body := &unreadBody{}
 	request.Body = body
 	request.Header.Set("Content-Type", "application/json")
 	canceled, cancel := context.WithCancel(request.Context())

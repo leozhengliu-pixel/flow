@@ -19,16 +19,16 @@ import (
 	"time"
 )
 
-// scaleP21SW490LiteralFallbackRoutes lists registered routes that may still
+// literalFallbackRoutes lists registered routes that may still
 // reach resourceAllowedLegacy's whole-workspace projection with bounded
 // metadata on. It is empty: every non-public route is decided by a reviewed
 // bounded reader or a registered COLD facade. The walk below fails on any
 // difference in either direction. An entry suffixed "[escaped id]" would
 // mark a pattern reached only when an escaped "/" in an ID shifts the
 // decoded segments into another literal branch.
-var scaleP21SW490LiteralFallbackRoutes = []string{}
+var literalFallbackRoutes = []string{}
 
-func scaleP21SW490Patterns(t *testing.T) []string {
+func authFallbackClosurePatterns(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -72,7 +72,7 @@ func scaleP21SW490Patterns(t *testing.T) []string {
 	return patterns
 }
 
-func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
+func TestAuthorizationFallbackClosure(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -84,7 +84,7 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 		return output.String()
 	}
 	t.Run("hook-precedes-the-only-projection", func(t *testing.T) {
-		function := scaleP21SW305Function(t, "auth.go", "*server", "resourceAllowedLegacy")
+		function := authIngressBoundaryFunction(t, "auth.go", "*server", "resourceAllowedLegacy")
 		hooks, projections, acquisitions := 0, 0, 0
 		ast.Inspect(function.Body, func(node ast.Node) bool {
 			switch node := node.(type) {
@@ -120,79 +120,79 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 	t.Run("decoded-shape-table", func(t *testing.T) {
 		for _, row := range []struct {
 			method, path string
-			decision     scaleP21SW490Decision
+			decision     fallbackDecision
 			kind, ref    string
 			output       bool
 		}{
-			{http.MethodGet, "/api/webhooks", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/labels", scaleP21SW490Membership, "", "", false},
-			{http.MethodGet, "/api", scaleP21SW490Membership, "", "", false},
-			{http.MethodGet, "/uploads/projects", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/uploads/projects", scaleP21SW490Record, "projectsBody", "", true},
-			{http.MethodGet, "/api/issues", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/issues", scaleP21SW490Literal, "", "", false},
-			{http.MethodGet, "/api/issues/a/history", scaleP21SW490Literal, "", "", false},
-			{http.MethodGet, "/api/issue-records/a", scaleP21SW490Literal, "", "", false},
-			{http.MethodPost, "/api/projects", scaleP21SW490Record, "projectsBody", "", true},
-			{http.MethodPost, "/api/initiatives", scaleP21SW490Record, "initiativesBody", "", true},
-			{http.MethodGet, "/api/projects", scaleP21SW490Membership, "", "", false},
-			{http.MethodPut, "/api/initiatives", scaleP21SW490NonGuest, "", "", false},
-			{http.MethodDelete, "/api/projects/p", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodPost, "/api/projects/p/comments", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodPatch, "/api/projects/p", scaleP21SW490Record, "projectsBody", "p", false},
-			{http.MethodPatch, "/api/projects/p/comments/c", scaleP21SW490Record, "projectsBody", "p", false},
-			{http.MethodPost, "/api/projects/p/relations", scaleP21SW490Record, "projectsBody", "p", false},
-			{http.MethodPost, "/api/projects/p/relations/r", scaleP21SW490Record, "projectsBody", "p", false},
-			{http.MethodPatch, "/api/projects/p/relations/r", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodPatch, "/api/projects/p/relations", scaleP21SW490Record, "projectsBody", "p", false},
-			{http.MethodPatch, "/api/projects/a%2Fb/relations/r", scaleP21SW490Record, "projectsBody", "a", false},
-			{http.MethodDelete, "/api/initiatives/i/relations/r", scaleP21SW490Point, "initiatives", "i", false},
-			{http.MethodDelete, "/api/projects/a%2Fb", scaleP21SW490Point, "projects", "a", false},
-			{http.MethodPost, "/%61pi/%70rojects/p/%63omments", scaleP21SW490Point, "projects", "p", false},
-			{http.MethodGet, "/api/views", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/views", scaleP21SW490Record, "savedViews", "", true},
-			{http.MethodDelete, "/api/views/v", scaleP21SW490Record, "savedViews", "v", false},
-			{http.MethodPost, "/api/dashboards", scaleP21SW490Record, "dashboards", "", true},
-			{http.MethodGet, "/api/dashboards/d/results", scaleP21SW490Record, "dashboards", "d", false},
-			{http.MethodGet, "/api/asks", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/asks", scaleP21SW490Record, "asks", "", true},
-			{http.MethodPost, "/api/asks/a/decision", scaleP21SW490Record, "asks", "a", false},
-			{http.MethodPut, "/api/customers", scaleP21SW490NonGuest, "", "", false},
-			{http.MethodPatch, "/api/customers/c", scaleP21SW490Record, "customers", "c", false},
-			{http.MethodGet, "/api/customer-requests", scaleP21SW490NonGuest, "", "", false},
-			{http.MethodPost, "/api/customer-requests", scaleP21SW490Record, "customerRequests", "", true},
-			{http.MethodDelete, "/api/customer-requests/r/archive", scaleP21SW490Record, "customerRequests", "r", false},
-			{http.MethodGet, "/api/favorites", scaleP21SW490Membership, "", "", false},
+			{http.MethodGet, "/api/webhooks", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/labels", fallbackMembership, "", "", false},
+			{http.MethodGet, "/api", fallbackMembership, "", "", false},
+			{http.MethodGet, "/uploads/projects", fallbackMembership, "", "", false},
+			{http.MethodPost, "/uploads/projects", fallbackRecord, "projectsBody", "", true},
+			{http.MethodGet, "/api/issues", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/issues", fallbackLiteral, "", "", false},
+			{http.MethodGet, "/api/issues/a/history", fallbackLiteral, "", "", false},
+			{http.MethodGet, "/api/issue-records/a", fallbackLiteral, "", "", false},
+			{http.MethodPost, "/api/projects", fallbackRecord, "projectsBody", "", true},
+			{http.MethodPost, "/api/initiatives", fallbackRecord, "initiativesBody", "", true},
+			{http.MethodGet, "/api/projects", fallbackMembership, "", "", false},
+			{http.MethodPut, "/api/initiatives", fallbackNonGuest, "", "", false},
+			{http.MethodDelete, "/api/projects/p", fallbackPoint, "projects", "p", false},
+			{http.MethodPost, "/api/projects/p/comments", fallbackPoint, "projects", "p", false},
+			{http.MethodPatch, "/api/projects/p", fallbackRecord, "projectsBody", "p", false},
+			{http.MethodPatch, "/api/projects/p/comments/c", fallbackRecord, "projectsBody", "p", false},
+			{http.MethodPost, "/api/projects/p/relations", fallbackRecord, "projectsBody", "p", false},
+			{http.MethodPost, "/api/projects/p/relations/r", fallbackRecord, "projectsBody", "p", false},
+			{http.MethodPatch, "/api/projects/p/relations/r", fallbackPoint, "projects", "p", false},
+			{http.MethodPatch, "/api/projects/p/relations", fallbackRecord, "projectsBody", "p", false},
+			{http.MethodPatch, "/api/projects/a%2Fb/relations/r", fallbackRecord, "projectsBody", "a", false},
+			{http.MethodDelete, "/api/initiatives/i/relations/r", fallbackPoint, "initiatives", "i", false},
+			{http.MethodDelete, "/api/projects/a%2Fb", fallbackPoint, "projects", "a", false},
+			{http.MethodPost, "/%61pi/%70rojects/p/%63omments", fallbackPoint, "projects", "p", false},
+			{http.MethodGet, "/api/views", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/views", fallbackRecord, "savedViews", "", true},
+			{http.MethodDelete, "/api/views/v", fallbackRecord, "savedViews", "v", false},
+			{http.MethodPost, "/api/dashboards", fallbackRecord, "dashboards", "", true},
+			{http.MethodGet, "/api/dashboards/d/results", fallbackRecord, "dashboards", "d", false},
+			{http.MethodGet, "/api/asks", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/asks", fallbackRecord, "asks", "", true},
+			{http.MethodPost, "/api/asks/a/decision", fallbackRecord, "asks", "a", false},
+			{http.MethodPut, "/api/customers", fallbackNonGuest, "", "", false},
+			{http.MethodPatch, "/api/customers/c", fallbackRecord, "customers", "c", false},
+			{http.MethodGet, "/api/customer-requests", fallbackNonGuest, "", "", false},
+			{http.MethodPost, "/api/customer-requests", fallbackRecord, "customerRequests", "", true},
+			{http.MethodDelete, "/api/customer-requests/r/archive", fallbackRecord, "customerRequests", "r", false},
+			{http.MethodGet, "/api/favorites", fallbackMembership, "", "", false},
 
-			{http.MethodGet, "/api/reviews", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/reviews/r/comments", scaleP21SW490Record, "reviews", "r", false},
-			{http.MethodGet, "/api/documents", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/documents", scaleP21SW490Record, "documentCreate", "", true},
-			{http.MethodPatch, "/api/documents/d/comments/c", scaleP21SW490Literal, "", "", false},
-			{http.MethodGet, "/api/releases", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/releases/reorder", scaleP21SW490Record, "releases", "reorder", false},
-			{http.MethodPost, "/api/releases", scaleP21SW490Record, "releases", "", true},
-			{http.MethodGet, "/api/release-pipelines/p", scaleP21SW490Record, "releasePipelines", "p", false},
-			{http.MethodGet, "/api/cycles", scaleP21SW490Membership, "", "", false},
-			{http.MethodGet, "/api/cycles/c", scaleP21SW490Record, "cycles", "c", false},
-			{http.MethodPatch, "/api/cycles/c/x/y", scaleP21SW490Record, "cycles", "c", false},
-			{http.MethodGet, "/api/teams", scaleP21SW490Membership, "", "", false},
-			{http.MethodGet, "/api/teams/t", scaleP21SW490TeamRow, "", "t", false},
-			{http.MethodPatch, "/api/teams/t/settings", scaleP21SW490TeamRow, "", "t", false},
-			{http.MethodGet, "/api/teams/t/resources", scaleP21SW490TeamContent, "", "t", true},
-			{http.MethodHead, "/api/teams/t/resources", scaleP21SW490TeamContent, "", "t", false},
-			{http.MethodPost, "/api/teams/t/resources", scaleP21SW490TeamContent, "", "t", false},
-			{http.MethodGet, "/api/teams/t/resources/x", scaleP21SW490TeamContent, "", "t", false},
-			{http.MethodDelete, "/api/teams/t/resource-sections/s", scaleP21SW490TeamContent, "", "t", false},
-			{http.MethodGet, "/api/notifications/n", scaleP21SW490Literal, "", "", false},
-			{http.MethodPatch, "/api/workspaces/w", scaleP21SW490Membership, "", "", false},
-			{http.MethodPost, "/api/workspaces/w/teams", scaleP21SW490Membership, "", "", false},
-			{http.MethodPatch, "/api/workspaces/w/teams/t", scaleP21SW490TeamRow, "", "t", false},
-			{http.MethodPut, "/api/workspaces/w/teams/t/members/u", scaleP21SW490TeamRow, "", "t", false},
+			{http.MethodGet, "/api/reviews", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/reviews/r/comments", fallbackRecord, "reviews", "r", false},
+			{http.MethodGet, "/api/documents", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/documents", fallbackRecord, "documentCreate", "", true},
+			{http.MethodPatch, "/api/documents/d/comments/c", fallbackLiteral, "", "", false},
+			{http.MethodGet, "/api/releases", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/releases/reorder", fallbackRecord, "releases", "reorder", false},
+			{http.MethodPost, "/api/releases", fallbackRecord, "releases", "", true},
+			{http.MethodGet, "/api/release-pipelines/p", fallbackRecord, "releasePipelines", "p", false},
+			{http.MethodGet, "/api/cycles", fallbackMembership, "", "", false},
+			{http.MethodGet, "/api/cycles/c", fallbackRecord, "cycles", "c", false},
+			{http.MethodPatch, "/api/cycles/c/x/y", fallbackRecord, "cycles", "c", false},
+			{http.MethodGet, "/api/teams", fallbackMembership, "", "", false},
+			{http.MethodGet, "/api/teams/t", fallbackTeamRow, "", "t", false},
+			{http.MethodPatch, "/api/teams/t/settings", fallbackTeamRow, "", "t", false},
+			{http.MethodGet, "/api/teams/t/resources", fallbackTeamContent, "", "t", true},
+			{http.MethodHead, "/api/teams/t/resources", fallbackTeamContent, "", "t", false},
+			{http.MethodPost, "/api/teams/t/resources", fallbackTeamContent, "", "t", false},
+			{http.MethodGet, "/api/teams/t/resources/x", fallbackTeamContent, "", "t", false},
+			{http.MethodDelete, "/api/teams/t/resource-sections/s", fallbackTeamContent, "", "t", false},
+			{http.MethodGet, "/api/notifications/n", fallbackLiteral, "", "", false},
+			{http.MethodPatch, "/api/workspaces/w", fallbackMembership, "", "", false},
+			{http.MethodPost, "/api/workspaces/w/teams", fallbackMembership, "", "", false},
+			{http.MethodPatch, "/api/workspaces/w/teams/t", fallbackTeamRow, "", "t", false},
+			{http.MethodPut, "/api/workspaces/w/teams/t/members/u", fallbackTeamRow, "", "t", false},
 		} {
 			request := httptest.NewRequest(row.method, row.path, nil)
-			got := scaleP21SW490FallbackShape(request)
-			want := scaleP21SW490Shape{decision: row.decision, kind: row.kind, ref: row.ref, output: row.output}
+			got := fallbackShape(request)
+			want := fallbackRouteShape{decision: row.decision, kind: row.kind, ref: row.ref, output: row.output}
 			if got != want {
 				t.Fatalf("%s %s: shape %+v, want %+v", row.method, row.path, got, want)
 			}
@@ -202,34 +202,34 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 			{http.MethodDelete, "/api/subscriptions/%20Issue%20/i", "issue", "i"},
 			{http.MethodPatch, "/api/favorites/view/a%2Fb", "view", "a"},
 		} {
-			got := scaleP21SW490FallbackShape(httptest.NewRequest(row.method, row.path, nil))
-			if got != (scaleP21SW490Shape{decision: scaleP21SW490Record, kind: "references", ref: row.ref, target: row.target}) {
+			got := fallbackShape(httptest.NewRequest(row.method, row.path, nil))
+			if got != (fallbackRouteShape{decision: fallbackRecord, kind: "references", ref: row.ref, target: row.target}) {
 				t.Fatal("reference shape", row, got)
 			}
 		}
 		for _, body := range []struct {
 			text     string
-			decision scaleP21SW490Decision
+			decision fallbackDecision
 		}{
-			{`{"favorite":true}`, scaleP21SW490ReviewPreference},
-			{`{"favorite":false}`, scaleP21SW490ReviewPreference},
-			{`{"favorite":null}`, scaleP21SW490Record},
-			{`{"favorite":true,"title":"x"}`, scaleP21SW490Record},
-			{`{}`, scaleP21SW490Record},
+			{`{"favorite":true}`, fallbackReviewPreference},
+			{`{"favorite":false}`, fallbackReviewPreference},
+			{`{"favorite":null}`, fallbackRecord},
+			{`{"favorite":true,"title":"x"}`, fallbackRecord},
+			{`{}`, fallbackRecord},
 		} {
 			request := httptest.NewRequest(http.MethodPatch, "/api/reviews/r", strings.NewReader(body.text))
-			if got := scaleP21SW490FallbackShape(request); got.decision != body.decision || got.ref != "r" || got.decision == scaleP21SW490Record && got.kind != "reviews" {
+			if got := fallbackShape(request); got.decision != body.decision || got.ref != "r" || got.decision == fallbackRecord && got.kind != "reviews" {
 				t.Fatal("embedded review favorite shape", body.text, got)
 			}
 		}
 	})
 	t.Run("route-table-walk", func(t *testing.T) {
-		patterns := scaleP21SW490Patterns(t)
+		patterns := authFallbackClosurePatterns(t)
 		if len(patterns) < 800 {
 			t.Fatal("route table walk lost registrations", len(patterns))
 		}
-		for _, repo := range scaleP03ServerTestStores(t) {
-			f := scaleP21M2Setup(t, repo)
+		for _, repo := range scaleServerTestStores(t) {
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			mux := http.NewServeMux()
 			for _, pattern := range patterns {
@@ -305,7 +305,7 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 									if method == http.MethodHead && found {
 										key = http.MethodGet + " " + path
 									}
-									if _, selected := scaleP21ColdAuthorizationRoute(request); selected {
+									if _, selected := scaleColdAuthorizationRoute(request); selected {
 										cold[key] = true
 									} else if strings.Contains(value, "%") {
 										escapedOnly[key] = true
@@ -332,11 +332,11 @@ func TestScaleP21SW490AuthorizationFallbackClosure(t *testing.T) {
 			}
 			var unexpected, closed []string
 			for key := range reached {
-				if !slices.Contains(scaleP21SW490LiteralFallbackRoutes, key) {
+				if !slices.Contains(literalFallbackRoutes, key) {
 					unexpected = append(unexpected, key)
 				}
 			}
-			for _, key := range scaleP21SW490LiteralFallbackRoutes {
+			for _, key := range literalFallbackRoutes {
 				if !reached[key] {
 					closed = append(closed, key)
 				}

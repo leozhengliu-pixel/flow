@@ -1,5 +1,5 @@
 /**
- * Shared FilterBlock platform types (Wave 5 / LS-0273+).
+ * Shared FilterBlock platform types.
  * Shapes are REST-friendly: `{ and|or, field, operator, values }` — no GraphQL.
  */
 

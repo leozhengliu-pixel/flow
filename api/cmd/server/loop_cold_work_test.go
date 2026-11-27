@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW552: a loop run's tool call that no migrated writer serves (save_label,
+// A loop run's tool call that no migrated writer serves (save_label,
 // a label.created metadata write) succeeds with bounded metadata on, as it
 // does flag off: the loop work context is COLD work, so the write runs its
 // literal legacy dispatch on a COLD facade and publishes to the bounded
@@ -23,7 +23,7 @@ import (
 // the same fields. Runs are read back through each handler's own
 // GET /api/loops/{id}/runs (this harness disables authentication; bounded
 // metadata needs record hydration on, as production activation requires).
-func TestScaleP21SW552LoopRunColdToolWrite(t *testing.T) {
+func TestLoopRunColdToolWrite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	provider := &fakeLoopProvider{}

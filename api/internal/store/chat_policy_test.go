@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW19ChatTeamPolicySnapshot(t *testing.T) {
+func TestChatTeamPolicySnapshot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "teams", "teamSettings", "workspaceSettings"), workspace, "team.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -110,7 +110,7 @@ func TestScaleP21SW19ChatTeamPolicySnapshot(t *testing.T) {
 	view.mu.Lock()
 	source = view.workspaces[workspace]
 	settings = source.TeamSettings[source.Teams[0].ID]
-	settings.Access = strings.Repeat("required policy ", (scaleP21SW19ChatPolicyMaxWork/16)+1)
+	settings.Access = strings.Repeat("required policy ", (chatPolicyMaxWork/16)+1)
 	source.TeamSettings[source.Teams[0].ID] = settings
 	view.workspaces[workspace] = source
 	view.mu.Unlock()
@@ -135,10 +135,10 @@ func TestScaleP21SW19ChatTeamPolicySnapshot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatTeamPolicyAdmissionRecheck(t *testing.T) {
+func TestChatTeamPolicyAdmissionRecheck(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func TestScaleP21SW19ChatTeamPolicyAdmissionRecheck(t *testing.T) {
 	if got.err != nil || !got.found || !slices.ContainsFunc(got.read.Metadata().Teams, func(team domain.Team) bool { return team.ID == "sw19-grew-while-queued" }) {
 		t.Fatal("queued read did not snapshot the current source", got.found, got.err)
 	}
-	cost, err := scaleP21SW19ChatPolicyCost(t.Context(), source)
+	cost, err := chatPolicyCost(t.Context(), source)
 	if err != nil || view.metadataResidency.work.used != cost {
 		t.Fatal("grown source used a smaller admission allowance", err)
 	}
@@ -192,21 +192,21 @@ func TestScaleP21SW19ChatTeamPolicyAdmissionRecheck(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatTeamPolicyEncodedIDs(t *testing.T) {
+func TestChatTeamPolicyEncodedIDs(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	workspace := f.data.Workspace.URLKey
 	empty := domain.Bootstrap{Teams: []domain.Team{{}}}
-	base, err := scaleP21SW19ChatPolicyCost(t.Context(), empty)
+	base, err := chatPolicyCost(t.Context(), empty)
 	if err != nil {
 		t.Fatal(err)
 	}
-	maximum := (scaleP21SW19ChatPolicyMaxWork - base) / 33
+	maximum := (chatPolicyMaxWork - base) / 33
 	for _, spec := range []struct{ name, fragment, escaped string }{
 		{"html-quotes", "<&>\\\"", `\u003c`},
 		{"control", "\x00\x01\x1f\n\t", `\u0000`},
@@ -223,7 +223,7 @@ func TestScaleP21SW19ChatTeamPolicyEncodedIDs(t *testing.T) {
 				t.Fatal("large raw ID was truncated or changed before encoding", found, err)
 			}
 			defer read.Close()
-			cost, err := scaleP21SW19ChatPolicyCost(t.Context(), source)
+			cost, err := chatPolicyCost(t.Context(), source)
 			if err != nil || view.metadataResidency.work.used != cost {
 				t.Fatal("encoded ID allowance not held", err)
 			}
@@ -253,10 +253,10 @@ func TestScaleP21SW19ChatTeamPolicyEncodedIDs(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatTeamPolicyParentLease(t *testing.T) {
+func TestChatTeamPolicyParentLease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +264,7 @@ func TestScaleP21SW19ChatTeamPolicyParentLease(t *testing.T) {
 	workspace := f.data.Workspace.URLKey
 	view.mu.RLock()
 	source := view.workspaces[workspace]
-	want, err := scaleP21SW19ChatPolicyCost(t.Context(), source)
+	want, err := chatPolicyCost(t.Context(), source)
 	view.mu.RUnlock()
 	if err != nil {
 		t.Fatal(err)
@@ -317,7 +317,7 @@ func TestScaleP21SW19ChatTeamPolicyParentLease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19ChatTeamPolicyTimestampPresence(t *testing.T) {
+func TestChatTeamPolicyTimestampPresence(t *testing.T) {
 	dst, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {
 		t.Fatal(err)

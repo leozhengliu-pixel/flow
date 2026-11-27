@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW24IdentityIDsMaxWork = 64 << 20
+const identityIDsMaxWork = 64 << 20
 
 type applicationIdentityIDsRead struct {
 	ids     []string
@@ -37,8 +37,8 @@ func (s *SQLiteStore) beginApplicationIdentityIDsRead(ctx context.Context) (*app
 		for _, app := range apps {
 			// Include exact-sized string storage, list slots, error-list
 			// growth and errors.Join slots for the complete batch.
-			if cost > scaleP21SW24IdentityIDsMaxWork-128 ||
-				len(app.ClientID) > (scaleP21SW24IdentityIDsMaxWork-cost-128)/2 {
+			if cost > identityIDsMaxWork-128 ||
+				len(app.ClientID) > (identityIDsMaxWork-cost-128)/2 {
 				return ErrMetadataWorkBudget
 			}
 			cost += 128 + 2*len(app.ClientID)

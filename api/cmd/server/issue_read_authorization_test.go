@@ -18,14 +18,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW256LegacyIssueReadAndLabelAuthorization(t *testing.T) {
+func TestLegacyIssueReadAndLabelAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
 	t.Run("label-only-hook-and-literal-denial-boundary", func(t *testing.T) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
-			if !scaleP21SW256IssueLabelPointRequest(httptest.NewRequest(method, "/api/issue-labels/missing", nil)) {
+			if !issueLabelPointRequest(httptest.NewRequest(method, "/api/issue-labels/missing", nil)) {
 				t.Fatal("issue-label point not selected", method)
 			}
 		}
@@ -37,7 +37,7 @@ func TestScaleP21SW256LegacyIssueReadAndLabelAuthorization(t *testing.T) {
 			{http.MethodHead, "/api/issues/id/comment-actions"}, {http.MethodGet, "/api/issues/id/suggestions"},
 			{http.MethodGet, "/api/issue-records/id/permissions"},
 		} {
-			if scaleP21SW256IssueLabelPointRequest(httptest.NewRequest(request.method, request.path, nil)) {
+			if issueLabelPointRequest(httptest.NewRequest(request.method, request.path, nil)) {
 				t.Fatal("label helper captured another authorization contract", request)
 			}
 		}
@@ -88,7 +88,7 @@ func TestScaleP21SW256LegacyIssueReadAndLabelAuthorization(t *testing.T) {
 		Status  int
 		Body    string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			type sqlCounts struct {
 				pairs, legacy, bounded, legacyMax, boundedMax       int
@@ -126,8 +126,8 @@ func TestScaleP21SW256LegacyIssueReadAndLabelAuthorization(t *testing.T) {
 					t.Logf("authorization SQL %s pairs=%d legacy/bounded=%d/%d max=%d/%d regressed-pairs=%d worst-pair=%d/%d increase=%d", route, counts.pairs, counts.legacy, counts.bounded, counts.legacyMax, counts.boundedMax, counts.regressions, counts.worstLegacy, counts.worstBounded, counts.maxIncrease)
 				}
 			}()
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw256-")
 			public := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 				map[string]any{"title": "SW256 visible issue", "teamId": f.public}, workspace, http.StatusCreated)

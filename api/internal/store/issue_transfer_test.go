@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW254SizeScript struct {
+type sizeScript struct {
 	size       int64
 	payloads   int
 	maximums   int
@@ -25,27 +25,27 @@ type scaleP21SW254SizeScript struct {
 	onPayload  func()
 }
 
-type scaleP21SW254Connector struct{ script *scaleP21SW254SizeScript }
+type issueTransferConnector struct{ script *sizeScript }
 
-func (c scaleP21SW254Connector) Driver() driver.Driver { return c }
-func (c scaleP21SW254Connector) Open(string) (driver.Conn, error) {
+func (c issueTransferConnector) Driver() driver.Driver { return c }
+func (c issueTransferConnector) Open(string) (driver.Conn, error) {
 	return c.Connect(context.Background())
 }
-func (c scaleP21SW254Connector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c issueTransferConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &scaleP21SW254Conn{script: c.script}, nil
+	return &issueTransferConn{script: c.script}, nil
 }
 
-type scaleP21SW254Conn struct{ script *scaleP21SW254SizeScript }
+type issueTransferConn struct{ script *sizeScript }
 
-func (*scaleP21SW254Conn) Close() error { return nil }
-func (*scaleP21SW254Conn) Prepare(string) (driver.Stmt, error) {
+func (*issueTransferConn) Close() error { return nil }
+func (*issueTransferConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected SW254 prepared statement")
 }
-func (*scaleP21SW254Conn) Begin() (driver.Tx, error) { return scaleP21SW254Tx{}, nil }
-func (c *scaleP21SW254Conn) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (*issueTransferConn) Begin() (driver.Tx, error) { return issueTransferTx{}, nil }
+func (c *issueTransferConn) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (c *scaleP21SW254Conn) QueryContext(ctx context.Context, query string, _ []
 		if c.script.onSize != nil {
 			c.script.onSize()
 		}
-		return &scaleP21SW254Rows{columns: []string{"size"}, values: [][]driver.Value{{c.script.size}}}, nil
+		return &issueTransferRows{columns: []string{"size"}, values: [][]driver.Value{{c.script.size}}}, nil
 	}
 	if strings.HasPrefix(query, "SELECT id,CASE WHEN ") {
 		c.script.payloads++
@@ -67,25 +67,25 @@ func (c *scaleP21SW254Conn) QueryContext(ctx context.Context, query string, _ []
 		}
 		// No real row is allocated in a virtual size-boundary test. A
 		// separate database-backed root proves complete payload capture.
-		return &scaleP21SW254Rows{columns: []string{"id", "data", "size"}}, nil
+		return &issueTransferRows{columns: []string{"id", "data", "size"}}, nil
 	}
 	return nil, fmt.Errorf("unexpected SW254 query: %s", query)
 }
 
-type scaleP21SW254Tx struct{}
+type issueTransferTx struct{}
 
-func (scaleP21SW254Tx) Commit() error   { return nil }
-func (scaleP21SW254Tx) Rollback() error { return nil }
+func (issueTransferTx) Commit() error   { return nil }
+func (issueTransferTx) Rollback() error { return nil }
 
-type scaleP21SW254Rows struct {
+type issueTransferRows struct {
 	columns []string
 	values  [][]driver.Value
 	index   int
 }
 
-func (r *scaleP21SW254Rows) Columns() []string { return r.columns }
-func (*scaleP21SW254Rows) Close() error        { return nil }
-func (r *scaleP21SW254Rows) Next(values []driver.Value) error {
+func (r *issueTransferRows) Columns() []string { return r.columns }
+func (*issueTransferRows) Close() error        { return nil }
+func (r *issueTransferRows) Next(values []driver.Value) error {
 	if r.index == len(r.values) {
 		return io.EOF
 	}
@@ -94,9 +94,9 @@ func (r *scaleP21SW254Rows) Next(values []driver.Value) error {
 	return nil
 }
 
-func scaleP21SW254ScriptTx(t *testing.T, script *scaleP21SW254SizeScript) *sqlTx {
+func scriptTx(t *testing.T, script *sizeScript) *sqlTx {
 	t.Helper()
-	db := sql.OpenDB(scaleP21SW254Connector{script})
+	db := sql.OpenDB(issueTransferConnector{script})
 	t.Cleanup(func() { _ = db.Close() })
 	wrapped := &sqlDatabase{DB: db, dialect: "sqlite"}
 	tx, err := wrapped.BeginTx(t.Context(), nil)
@@ -107,7 +107,7 @@ func scaleP21SW254ScriptTx(t *testing.T, script *scaleP21SW254SizeScript) *sqlTx
 	return tx
 }
 
-func TestScaleP21SW254IssuePayloadTransferEnvelope(t *testing.T) {
+func TestIssuePayloadTransferEnvelope(t *testing.T) {
 	bound := int64((metadataWorkBytes() - (64 << 10)) / 3)
 	for _, test := range []struct {
 		name string
@@ -120,15 +120,15 @@ func TestScaleP21SW254IssuePayloadTransferEnvelope(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
-			script := &scaleP21SW254SizeScript{size: test.size}
+			script := &sizeScript{size: test.size}
 			script.onPayload = func() {
 				want := int(test.size*3 + 64<<10)
 				if repo.MetadataWorkUsedForTesting() != want {
 					t.Error("payload SELECT lost its exact three-copy transfer envelope", repo.MetadataWorkUsedForTesting(), want)
 				}
 			}
-			tx := scaleP21SW254ScriptTx(t, script)
-			stage, err := sw26NewMigrationStage(t.Context())
+			tx := scriptTx(t, script)
+			stage, err := newMigrationStage(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -147,7 +147,7 @@ func TestScaleP21SW254IssuePayloadTransferEnvelope(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW254IssueCurrentBodyEnvelope(t *testing.T) {
+func TestIssueCurrentBodyEnvelope(t *testing.T) {
 	bound := int64((metadataWorkBytes() - (64 << 10)) / 4)
 	reached := errors.New("SW254 admitted payload read")
 	for _, test := range []struct {
@@ -163,14 +163,14 @@ func TestScaleP21SW254IssueCurrentBodyEnvelope(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
-			script := &scaleP21SW254SizeScript{size: test.size, payloadErr: reached}
+			script := &sizeScript{size: test.size, payloadErr: reached}
 			script.onPayload = func() {
 				want := int(test.size*4 + 64<<10)
 				if repo.MetadataWorkUsedForTesting() != want {
 					t.Error("current body read lost its exact four-copy envelope", repo.MetadataWorkUsedForTesting(), want)
 				}
 			}
-			tx := scaleP21SW254ScriptTx(t, script)
+			tx := scriptTx(t, script)
 			work := &ResourceRead{store: repo}
 			_, found, err := (&legacyRecordBase{store: repo}).currentBody(t.Context(), tx, "owned", test.kind, "", "target", work)
 			work.Close()
@@ -183,7 +183,7 @@ func TestScaleP21SW254IssueCurrentBodyEnvelope(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW254IssuePayloadCancellationAndRemainingQuota(t *testing.T) {
+func TestIssuePayloadCancellationAndRemainingQuota(t *testing.T) {
 	for _, phase := range []string{"before", "after-size", "remaining-quota"} {
 		t.Run(phase, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
@@ -194,14 +194,14 @@ func TestScaleP21SW254IssuePayloadCancellationAndRemainingQuota(t *testing.T) {
 			defer releaseParent()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			script := &scaleP21SW254SizeScript{size: 1 << 20}
+			script := &sizeScript{size: 1 << 20}
 			if phase == "before" {
 				cancel()
 			} else if phase == "after-size" {
 				script.onSize = cancel
 			}
-			tx := scaleP21SW254ScriptTx(t, script)
-			stage, err := sw26NewMigrationStage(t.Context())
+			tx := scriptTx(t, script)
+			stage, err := newMigrationStage(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -237,12 +237,12 @@ func TestScaleP21SW254IssuePayloadCancellationAndRemainingQuota(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW254IssuePayloadOneSnapshotPer64Targets(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestIssuePayloadOneSnapshotPer64Targets(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for _, pressure := range []bool{false, true} {
 		t.Run(map[bool]string{false: "ordinary", true: "admission-flush"}[pressure], func(t *testing.T) {
 			prefix := idgen.New("sw254-")
-			data := scaleP21SW93Data(f, prefix, 0)
+			data := legacyRecordBaseData(f, prefix, 0)
 			seed := data.Issues[0]
 			data.Issues = make([]domain.Issue, 65)
 			for index := range data.Issues {
@@ -256,7 +256,7 @@ func TestScaleP21SW254IssuePayloadOneSnapshotPer64Targets(t *testing.T) {
 			if f.dialect == "postgres" {
 				// PostgreSQL rejects a key repeated in one UPSERT statement, so the
 				// literal writer refuses a duplicate within one 64-issue batch
-				// (SW93 duplicate-issues-one-batch proves the bounded writer
+				// (duplicate issue batch duplicate-issues-one-batch proves the bounded writer
 				// refuses it the same way). Keep the duplicate across the boundary.
 				data.Issues[31] = seed
 				data.Issues[31].ID, data.Issues[31].Identifier, data.Issues[31].Number, data.Issues[31].Version = fmt.Sprintf("%sissue-%02d", prefix, 31), "SW254-31", 32, 10
@@ -265,7 +265,7 @@ func TestScaleP21SW254IssuePayloadOneSnapshotPer64Targets(t *testing.T) {
 			var expectedHistory map[string]issueFieldHistory
 			var expectedCounts map[string]map[issueStatsKey]int64
 			for _, bounded := range []bool{false, true} {
-				tx, ctx := scaleP21SW93Begin(t, f, data)
+				tx, ctx := legacyRecordBaseBegin(t, f, data)
 				workspace := data.Workspace.URLKey
 				stamp := copyStamp{workspaceID: data.Workspace.ID, revision: -1}
 				source, err := captureMetadataLogicalSource(ctx, data, stamp)
@@ -325,7 +325,7 @@ func TestScaleP21SW254IssuePayloadOneSnapshotPer64Targets(t *testing.T) {
 				if err != nil {
 					t.Fatal("legal 65-target writer must succeed", bounded, pressure, err)
 				}
-				rows, history, counts := scaleP21SW93Rows(t, tx, workspace), scaleP21SW218History(t, tx, workspace, ""), scaleP21SW93Counts(tx)
+				rows, history, counts := legacyRecordBaseRows(t, tx, workspace), legacyIssueWorkHistory(t, tx, workspace, ""), legacyRecordBaseCounts(tx)
 				if bounded {
 					if payloads != 2 || lockedIssues != 0 || pressure && flushes <= 2 {
 						t.Fatal("preimage SELECT recaptured after flush or target boundary changed", payloads, lockedIssues, flushes)

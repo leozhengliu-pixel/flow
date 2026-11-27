@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21PulseLegacyFeedBoundary(t *testing.T) {
+func TestScalePulseLegacyFeedBoundary(t *testing.T) {
 	// The exceptional paths use state established earlier in the function or
 	// a legacy-only helper. Pin their reviewed ASTs so a changed invariant
 	// requires review instead of being accepted by a shallow guard matcher.
@@ -223,7 +223,7 @@ func pulseLegacySourcesBoundary(function *ast.FuncDecl, ownedMethod string) (leg
 	return
 }
 
-func TestScaleP21PulseLegacySourcesBoundary(t *testing.T) {
+func TestScalePulseLegacySourcesBoundary(t *testing.T) {
 	sites := map[string]string{
 		"internal/store/hot_pulse_read.go:beginPulseRead":              "BeginInstalledMetadataRead",
 		"cmd/server/realtime_entity_payloads.go:pagedPulseSourceEvent": "BeginPulseRead",

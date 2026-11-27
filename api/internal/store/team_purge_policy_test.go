@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW20ExpiredTeamPolicySnapshot(t *testing.T) {
+func TestExpiredTeamPolicySnapshot(t *testing.T) {
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	window := 30 * 24 * time.Hour
 	old, boundary, future := now.Add(-window-time.Nanosecond), now.Add(-window), now.Add(-window+time.Nanosecond)
@@ -78,10 +78,10 @@ func TestScaleP21SW20ExpiredTeamPolicySnapshot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20ExpiredTeamPolicySelectedBudget(t *testing.T) {
+func TestExpiredTeamPolicySelectedBudget(t *testing.T) {
 	now := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	old := now.Add(-31 * 24 * time.Hour)
-	huge := strings.Repeat("x", scaleP21SW20TeamPurgeMaxWork)
+	huge := strings.Repeat("x", teamPurgeMaxWork)
 	repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Teams: []domain.Team{{ID: huge, ArchivedAt: &old}}}}, metadataResidency: newMetadataResidency()}
 	if read, found, err := repo.BeginExpiredTeamPolicyRead(t.Context(), "workspace", now, 30*24*time.Hour); read != nil || !found || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("selected candidate IDs bypassed their work bound", found, err)
@@ -97,7 +97,7 @@ func TestScaleP21SW20ExpiredTeamPolicySelectedBudget(t *testing.T) {
 	read.Close()
 }
 
-func TestScaleP21SW20ExpiredTeamPolicyParentLease(t *testing.T) {
+func TestExpiredTeamPolicyParentLease(t *testing.T) {
 	now := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	old := now.Add(-31 * 24 * time.Hour)
 	repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Teams: []domain.Team{{ID: "expired", ArchivedAt: &old}}}}, metadataResidency: newMetadataResidency()}

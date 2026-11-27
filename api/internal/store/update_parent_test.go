@@ -12,15 +12,15 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW220Result struct {
-	image    scaleP21SW77SQLImage
+type updateParentResult struct {
+	image    sqlImage
 	native   map[string][]domain.ProjectUpdate
 	bill     int
 	peak     int
 	mentions int
 }
 
-func scaleP21SW220Canonical(t *testing.T, ctx context.Context, tx *sqlTx, workspace, parent, variant string, target domain.Bootstrap) {
+func updateParentCanonical(t *testing.T, ctx context.Context, tx *sqlTx, workspace, parent, variant string, target domain.Bootstrap) {
 	t.Helper()
 	switch variant {
 	case "deleted-parent":
@@ -76,14 +76,14 @@ func scaleP21SW220Canonical(t *testing.T, ctx context.Context, tx *sqlTx, worksp
 	}
 }
 
-func scaleP21SW220Run(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, before, target domain.Bootstrap, parent, variant string, bounded bool) scaleP21SW220Result {
+func updateParentRun(t *testing.T, fixture scaleFixture, view *SQLiteStore, before, target domain.Bootstrap, parent, variant string, bounded bool) updateParentResult {
 	t.Helper()
-	tx, ctx := scaleP21SW77Begin(t, fixture, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, fixture, before)
 	defer tx.Rollback()
 	ctx = context.WithValue(ctx, advancedScheduleStreamKey{}, true)
-	scaleP21SW220Canonical(t, ctx, tx, before.Workspace.URLKey, parent, variant, target)
+	updateParentCanonical(t, ctx, tx, before.Workspace.URLKey, parent, variant, target)
 	start := tx.writtenBytes
-	result := scaleP21SW220Result{}
+	result := updateParentResult{}
 	ctx = WithSQLStatementObserver(ctx, func(query string) {
 		if strings.Contains(query, "SELECT list_data FROM issue_records WHERE workspace_key=? AND id=?") {
 			result.mentions++
@@ -137,7 +137,7 @@ func scaleP21SW220Run(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, 
 		}
 	}
 	result.bill = tx.writtenBytes - start
-	result.image = scaleP21SW77Image(t, tx, before.Workspace.URLKey)
+	result.image = legacyDeltaBudgetImage(t, tx, before.Workspace.URLKey)
 	var stages int
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM bounded_metadata_write_stage").Scan(&stages); err != nil || stages != 0 {
 		t.Fatal("parent-map SQL scratch rows escaped", err, stages)
@@ -148,16 +148,16 @@ func scaleP21SW220Run(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, 
 // The parent-map differential runs its variants in two top-level tests so
 // the shards can spread them: each variant writes 5 MiB duplicate bodies
 // through both writers.
-func TestScaleP21SW220ProjectUpdateParentMapDifferential(t *testing.T) {
-	scaleP21SW220ParentMap(t, "duplicate", "empty-parent", "empty-id", "normalized-id", "normalized-parent", "deleted-parent", "foreign-parent")
+func TestProjectUpdateParentMapDifferential(t *testing.T) {
+	parentMap(t, "duplicate", "empty-parent", "empty-id", "normalized-id", "normalized-parent", "deleted-parent", "foreign-parent")
 }
 
-func TestScaleP21SW220ProjectUpdateParentMapCanonicalDifferential(t *testing.T) {
-	scaleP21SW220ParentMap(t, "canonical-unknown", "canonical-folded-id", "canonical-comments", "canonical-occurrences", "order-only", "hash-parent-null")
+func TestProjectUpdateParentMapCanonicalDifferential(t *testing.T) {
+	parentMap(t, "canonical-unknown", "canonical-folded-id", "canonical-comments", "canonical-occurrences", "order-only", "hash-parent-null")
 }
 
-func scaleP21SW220ParentMap(t *testing.T, variants ...string) {
-	f, view, seed := scaleP21SW77Fixture(t)
+func parentMap(t *testing.T, variants ...string) {
+	f, view, seed := legacyDeltaBudgetFixture(t)
 	clock := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	for _, variant := range variants {
 		t.Run(variant, func(t *testing.T) {
@@ -212,8 +212,8 @@ func scaleP21SW220ParentMap(t *testing.T, variants ...string) {
 						target.ProjectUpdates[name] = items
 					}
 				}
-				want := scaleP21SW220Run(t, f, view, before, target, parent, variant, false)
-				got := scaleP21SW220Run(t, f, view, before, target, parent, variant, true)
+				want := updateParentRun(t, f, view, before, target, parent, variant, false)
+				got := updateParentRun(t, f, view, before, target, parent, variant, true)
 				if !reflect.DeepEqual(want.image, got.image) || !reflect.DeepEqual(want.native, got.native) ||
 					want.bill != got.bill || want.mentions != got.mentions {
 					t.Fatalf("parent-map differs variant=%s bytes=%d image_equal=%v native_equal=%v bill=%d/%d mentions=%d/%d",
@@ -243,7 +243,7 @@ func scaleP21SW220ParentMap(t *testing.T, variants ...string) {
 	}
 }
 
-func TestScaleP21SW220ParentSQLStageDeclaration(t *testing.T) {
+func TestParentSQLStageDeclaration(t *testing.T) {
 	base := metadataSQLStageTarget{workspace: "workspace", field: "projectUpdates", searchBytes: -1, dataBytes: 2, projectUpdateParent: true}
 	if !base.valid() {
 		t.Fatal("legacy empty parent row identity was refused")
@@ -265,16 +265,16 @@ func TestScaleP21SW220ParentSQLStageDeclaration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW220ParentMapCancellationAndRelease(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestParentMapCancellationAndRelease(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	before.ProjectUpdates = map[string][]domain.ProjectUpdate{"ordinary": {{ID: "same", Body: strings.Repeat("x", 300<<10)}, {ID: "same"}}}
 	target := cloneBootstrap(before)
 	target.ProjectUpdates["ordinary"][0].Missing = true
 	for _, phase := range []string{"before", "append"} {
 		t.Run(phase, func(t *testing.T) {
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			defer tx.Rollback()
-			preimage := scaleP21SW77Image(t, tx, before.Workspace.URLKey)
+			preimage := legacyDeltaBudgetImage(t, tx, before.Workspace.URLKey)
 			left, err := captureMetadataLogicalSource(ctx, before, copyStamp{workspaceID: before.Workspace.ID})
 			if err != nil {
 				t.Fatal(err)
@@ -310,7 +310,7 @@ func TestScaleP21SW220ParentMapCancellationAndRelease(t *testing.T) {
 				metadataLogicalDescriptorsUsed.Load() != descriptors || tx.metadataSQLStages != 0 || len(tx.metadataSQLStageOwners) != 0 {
 				t.Fatal("cancelled parent-map mutation retained work/spools")
 			}
-			if got := scaleP21SW77Image(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(preimage, got) {
+			if got := legacyDeltaBudgetImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(preimage, got) {
 				t.Fatal("cancelled staging changed product metadata")
 			}
 			var stages int
@@ -321,8 +321,8 @@ func TestScaleP21SW220ParentMapCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW220ParentHashArrayErrorDifferential(t *testing.T) {
-	f, view, seed := scaleP21SW77Fixture(t)
+func TestParentHashArrayErrorDifferential(t *testing.T) {
+	f, view, seed := legacyDeltaBudgetFixture(t)
 	for _, size := range []int{32, 5 << 20} {
 		before := cloneBootstrap(seed)
 		item := domain.ProjectUpdate{ID: "duplicate", Body: strings.Repeat("x", size)}
@@ -333,8 +333,8 @@ func TestScaleP21SW220ParentHashArrayErrorDifferential(t *testing.T) {
 		target.ProjectUpdates["ordinary"][0].Missing = true
 		var outcomes []error
 		for _, bounded := range []bool{false, true} {
-			tx, ctx := scaleP21SW77Begin(t, f, before)
-			preimage := scaleP21SW77Image(t, tx, before.Workspace.URLKey)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
+			preimage := legacyDeltaBudgetImage(t, tx, before.Workspace.URLKey)
 			ctx = context.WithValue(ctx, advancedScheduleStreamKey{}, true)
 			var mutationErr error
 			if bounded {
@@ -360,7 +360,7 @@ func TestScaleP21SW220ParentHashArrayErrorDifferential(t *testing.T) {
 				_, _, mutationErr = f.rebaseMetadata(ctx, tx, before.Workspace.URLKey, &prior, &next, []metadataField{field}, nil)
 			}
 			outcomes = append(outcomes, mutationErr)
-			if got := scaleP21SW77Image(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(preimage, got) {
+			if got := legacyDeltaBudgetImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(preimage, got) {
 				t.Fatal("hash-parent array error changed product metadata")
 			}
 			if err := tx.Rollback(); err != nil {
@@ -378,8 +378,8 @@ func TestScaleP21SW220ParentHashArrayErrorDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW220ParentMapClosedEligibility(t *testing.T) {
-	f, view, seed := scaleP21SW77Fixture(t)
+func TestParentMapClosedEligibility(t *testing.T) {
+	f, view, seed := legacyDeltaBudgetFixture(t)
 	for _, variant := range []string{"no-marker", "body", "id", "order", "parent", "nil-list", "unique", "long-parent"} {
 		t.Run(variant, func(t *testing.T) {
 			before := cloneBootstrap(seed)
@@ -406,7 +406,7 @@ func TestScaleP21SW220ParentMapClosedEligibility(t *testing.T) {
 			case "nil-list":
 				target.ProjectUpdates[parent] = nil
 			}
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			defer tx.Rollback()
 			if variant != "no-marker" {
 				ctx = context.WithValue(ctx, advancedScheduleStreamKey{}, true)

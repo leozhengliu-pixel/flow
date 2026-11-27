@@ -17,24 +17,24 @@ import (
 )
 
 // Every fixture owns its workspace even on a shared persistent database.
-type scaleP21SW16TypedAttachmentFixture struct {
-	scaleP09Fixture
+type typedAttachmentFixture struct {
+	scaleFixture
 	probe *SQLiteStore
 	ids   []string
 }
 
-type scaleP21SW16TypedAttachmentOutcome struct {
+type typedAttachmentOutcome struct {
 	Rows     map[string][]string
 	Last     string
 	Complete int
 }
 
-func scaleP21SW16TypedAttachmentSeed(t *testing.T, count int) scaleP21SW16TypedAttachmentFixture {
+func typedAttachmentSeed(t *testing.T, count int) typedAttachmentFixture {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	prefix := idgen.New("sw16-typed-attachment-")
 	issues := make([]domain.Issue, count)
 	ids := make([]string, count)
@@ -60,10 +60,10 @@ func scaleP21SW16TypedAttachmentSeed(t *testing.T, count int) scaleP21SW16TypedA
 		source.workspaces = map[string]domain.Bootstrap{f.data.Workspace.URLKey: source.workspaces[f.data.Workspace.URLKey]}
 		source.mu.Unlock()
 	}
-	return scaleP21SW16TypedAttachmentFixture{f, probe, ids}
+	return typedAttachmentFixture{f, probe, ids}
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) reset(t *testing.T) {
+func (f typedAttachmentFixture) reset(t *testing.T) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	for _, table := range []string{"issue_attachment_records", "issue_attachment_migrations"} {
@@ -78,9 +78,9 @@ func (f scaleP21SW16TypedAttachmentFixture) reset(t *testing.T) {
 	}
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) outcome(t *testing.T) scaleP21SW16TypedAttachmentOutcome {
+func (f typedAttachmentFixture) outcome(t *testing.T) typedAttachmentOutcome {
 	t.Helper()
-	result := scaleP21SW16TypedAttachmentOutcome{Rows: map[string][]string{}}
+	result := typedAttachmentOutcome{Rows: map[string][]string{}}
 	workspace := f.data.Workspace.URLKey
 	rows, err := f.db.QueryContext(t.Context(), `SELECT issue_id,url_hash FROM issue_attachment_records WHERE workspace_key=? ORDER BY issue_id,url_hash`, workspace)
 	if err != nil {
@@ -103,14 +103,14 @@ func (f scaleP21SW16TypedAttachmentFixture) outcome(t *testing.T) scaleP21SW16Ty
 	return result
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) body(t *testing.T, i int, raw []byte) {
+func (f typedAttachmentFixture) body(t *testing.T, i int, raw []byte) {
 	t.Helper()
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE issue_records SET data=? WHERE workspace_key=? AND id=?`, raw, f.data.Workspace.URLKey, f.ids[i]); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) sourceHash(t *testing.T) [32]byte {
+func (f typedAttachmentFixture) sourceHash(t *testing.T) [32]byte {
 	t.Helper()
 	rows, err := f.db.QueryContext(t.Context(), `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY id`, f.data.Workspace.URLKey)
 	if err != nil {
@@ -134,22 +134,22 @@ func (f scaleP21SW16TypedAttachmentFixture) sourceHash(t *testing.T) [32]byte {
 	return [32]byte(hash.Sum(nil))
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) run(ctx context.Context, bounded bool) error {
+func (f typedAttachmentFixture) run(ctx context.Context, bounded bool) error {
 	if bounded {
-		return f.probe.scaleP21SW16MigrateTypedAttachmentIndex(ctx)
+		return f.probe.migrateTypedAttachmentIndex(ctx)
 	}
 	return f.SQLiteStore.migrateAttachmentIndex(ctx)
 }
 
-func (f scaleP21SW16TypedAttachmentFixture) clean(t *testing.T) {
+func (f typedAttachmentFixture) clean(t *testing.T) {
 	t.Helper()
 	if f.probe.WorkspaceMetadataDecodes() != 0 || f.probe.metadataResidency.work.used != 0 {
 		t.Fatal("typed attachment migration decoded full workspace or retained work")
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentDifferential(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 140)
+func TestTypedAttachmentDifferential(t *testing.T) {
+	f := typedAttachmentSeed(t, 140)
 	var body map[string]json.RawMessage
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, f.data.Workspace.URLKey, f.ids[65]).Scan(&saved); err != nil {
@@ -167,7 +167,7 @@ func TestScaleP21SW16TypedAttachmentDifferential(t *testing.T) {
 	}
 	f.body(t, 65, raw)
 	before := f.sourceHash(t)
-	var expected scaleP21SW16TypedAttachmentOutcome
+	var expected typedAttachmentOutcome
 	for pair := 0; pair < 3; pair++ {
 		for _, bounded := range []bool{false, true} {
 			f.reset(t)
@@ -206,8 +206,8 @@ func TestScaleP21SW16TypedAttachmentDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentCheckpointIdentity(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 140)
+func TestTypedAttachmentCheckpointIdentity(t *testing.T) {
+	f := typedAttachmentSeed(t, 140)
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, f.data.Workspace.URLKey, f.ids[63]).Scan(&saved); err != nil {
 		t.Fatal(err)
@@ -224,7 +224,7 @@ func TestScaleP21SW16TypedAttachmentCheckpointIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.body(t, 63, raw)
-			var prior scaleP21SW16TypedAttachmentOutcome
+			var prior typedAttachmentOutcome
 			for _, bounded := range []bool{false, true} {
 				f.reset(t)
 				if err := f.run(t.Context(), bounded); err != nil {
@@ -256,7 +256,7 @@ func TestScaleP21SW16TypedAttachmentCheckpointIdentity(t *testing.T) {
 	// original diff writer rather than one source replacing the other.
 	raw, _ := json.Marshal(domain.Issue{ID: f.ids[0], Attachments: []domain.Attachment{{URL: "https://example.test/same-page"}}})
 	f.body(t, 1, raw)
-	var prior scaleP21SW16TypedAttachmentOutcome
+	var prior typedAttachmentOutcome
 	for _, bounded := range []bool{false, true} {
 		f.reset(t)
 		if err := f.run(t.Context(), bounded); err != nil {
@@ -275,8 +275,8 @@ func TestScaleP21SW16TypedAttachmentCheckpointIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentJSONSemantics(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 140)
+func TestTypedAttachmentJSONSemantics(t *testing.T) {
+	f := typedAttachmentSeed(t, 140)
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, f.data.Workspace.URLKey, f.ids[65]).Scan(&saved); err != nil {
 		t.Fatal(err)
@@ -309,7 +309,7 @@ func TestScaleP21SW16TypedAttachmentJSONSemantics(t *testing.T) {
 			}
 			f.body(t, 65, []byte(raw))
 			before := f.sourceHash(t)
-			var prior scaleP21SW16TypedAttachmentOutcome
+			var prior typedAttachmentOutcome
 			priorError := ""
 			for _, bounded := range []bool{false, true} {
 				f.reset(t)
@@ -339,14 +339,14 @@ func TestScaleP21SW16TypedAttachmentJSONSemantics(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentAtomicity(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 140)
+func TestTypedAttachmentAtomicity(t *testing.T) {
+	f := typedAttachmentSeed(t, 140)
 	type faultKey struct{}
 	injected := errors.New("sw16 typed attachment precommit")
 	t.Cleanup(func() { f.db.commitHooks.Store(nil) })
 	for _, failAt := range []int{1, 2, 3} {
 		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
-			var prior scaleP21SW16TypedAttachmentOutcome
+			var prior typedAttachmentOutcome
 			for _, bounded := range []bool{false, true} {
 				f.reset(t)
 				commits := 0
@@ -376,7 +376,7 @@ func TestScaleP21SW16TypedAttachmentAtomicity(t *testing.T) {
 			}
 		})
 	}
-	var prior scaleP21SW16TypedAttachmentOutcome
+	var prior typedAttachmentOutcome
 	for _, bounded := range []bool{false, true} {
 		f.reset(t)
 		limit := f.db.maxTransactionBytes
@@ -430,8 +430,8 @@ func TestScaleP21SW16TypedAttachmentAtomicity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentAdmission(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 1)
+func TestTypedAttachmentAdmission(t *testing.T) {
+	f := typedAttachmentSeed(t, 1)
 	var saved []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, f.data.Workspace.URLKey, f.ids[0]).Scan(&saved); err != nil {
 		t.Fatal(err)
@@ -446,7 +446,7 @@ func TestScaleP21SW16TypedAttachmentAdmission(t *testing.T) {
 			transferred = true
 		}
 	})
-	err = f.probe.scaleP21SW16ReadAttachmentIssue(ctx, tx, f.data.Workspace.URLKey, scaleP21SW16AttachmentHeader{id: f.ids[0], size: int64(metadataWorkBytes())}, func(context.Context, domain.Issue) error {
+	err = f.probe.readAttachmentIssue(ctx, tx, f.data.Workspace.URLKey, attachmentHeader{id: f.ids[0], size: int64(metadataWorkBytes())}, func(context.Context, domain.Issue) error {
 		visited = true
 		return nil
 	})
@@ -489,8 +489,8 @@ func TestScaleP21SW16TypedAttachmentAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16TypedAttachmentImportedIdentity(t *testing.T) {
-	f := scaleP21SW16TypedAttachmentSeed(t, 1)
+func TestTypedAttachmentImportedIdentity(t *testing.T) {
+	f := typedAttachmentSeed(t, 1)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite accepted importer identity retains a NUL column")
 	}
@@ -504,7 +504,7 @@ func TestScaleP21SW16TypedAttachmentImportedIdentity(t *testing.T) {
 	if err := f.ImportIssues(t.Context(), f.data.Workspace.URLKey, []domain.Issue{issue}); err != nil {
 		t.Fatal("accepted source importer failed", err)
 	}
-	var prior scaleP21SW16TypedAttachmentOutcome
+	var prior typedAttachmentOutcome
 	for _, bounded := range []bool{false, true} {
 		f.reset(t)
 		if err := f.run(t.Context(), bounded); err != nil {

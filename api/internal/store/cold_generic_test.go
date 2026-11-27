@@ -13,15 +13,15 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW316ColdGenericFixture(t *testing.T, nested bool) (*SQLiteStore, *metadataLogicalSource, domain.Bootstrap) {
+func coldGenericFixture(t *testing.T, nested bool) (*SQLiteStore, *metadataLogicalSource, domain.Bootstrap) {
 	t.Helper()
-	repo := scaleP21SW248Repo(t)
+	repo := genericJSONRepo(t)
 	raw := `{"replace":{"old":true},"null":null,"emptyMap":{},"emptyArray":[],"number":9007199254740993,"negativeZero":-0,"text":"a\u0000<>&\u2028\ud800","deep":` +
 		strings.Repeat(`{"next":[`, 256) + `{"leaf":[null,{},[],true,"end"]}` + strings.Repeat(`]}`, 256) + `}`
-	builder := scaleP21SW248Builder(t)
-	node := scaleP21SW248Frame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
-	source := scaleP21SW248Source(t, builder, node, 1)
-	oracle, _ := scaleP21SW248Oracle(t, reflect.TypeFor[map[string]any](), raw)
+	builder := genericJsonBuilder(t)
+	node := genericJSONFrame(t, repo, builder, reflect.TypeFor[map[string]any](), raw)
+	source := genericJsonSource(t, builder, node, 1)
+	oracle, _ := genericJsonOracle(t, reflect.TypeFor[map[string]any](), raw)
 	want := domain.Bootstrap{Settings: oracle.Interface().(map[string]any)}
 	if nested {
 		replacement := map[string]any{
@@ -53,17 +53,17 @@ func scaleP21SW316ColdGenericFixture(t *testing.T, nested bool) (*SQLiteStore, *
 			t.Fatal("native fixture has no retained generic child", err)
 		}
 	}
-	scaleP21SW248Install(t, repo, source)
+	genericJsonInstall(t, repo, source)
 	return repo, source, want
 }
 
-func scaleP21SW316SourceRefs(source *metadataLogicalSource) int {
+func sourceRefs(source *metadataLogicalSource) int {
 	source.mu.Lock()
 	defer source.mu.Unlock()
 	return source.refs
 }
 
-func scaleP21SW316AssertColdGeneric(t *testing.T, read *ColdMetadataRead, want domain.Bootstrap) {
+func assertColdGeneric(t *testing.T, read *ColdMetadataRead, want domain.Bootstrap) {
 	t.Helper()
 	facade := read.Store()
 	if facade == nil {
@@ -83,7 +83,7 @@ func scaleP21SW316AssertColdGeneric(t *testing.T, read *ColdMetadataRead, want d
 	}
 }
 
-func scaleP21SW316AssertHotDenied(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, ctx context.Context) {
+func assertHotDenied(t *testing.T, repo *SQLiteStore, node metadataLogicalNode, ctx context.Context) {
 	t.Helper()
 	held := repo.MetadataWorkUsedForTesting()
 	for _, read := range []func(context.Context, int) (reflect.Value, error){node.Value, node.WireValue} {
@@ -97,31 +97,31 @@ func scaleP21SW316AssertHotDenied(t *testing.T, repo *SQLiteStore, node metadata
 	}
 }
 
-func TestScaleP21SW316ColdGenericIndependentOfHotQuota(t *testing.T) {
+func TestColdGenericIndependentOfHotQuota(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		nested bool
 	}{{"generic-root", false}, {"native-root-generic-child", true}} {
 		t.Run(test.name, func(t *testing.T) {
-			repo, source, want := scaleP21SW316ColdGenericFixture(t, test.nested)
+			repo, source, want := coldGenericFixture(t, test.nested)
 			index, _, _ := metadataLogicalField("settings")
 			node := source.fields[index]
-			refs := scaleP21SW316SourceRefs(source)
+			refs := sourceRefs(source)
 			limit := repo.metadataResidency.work.limit
 			_, release, err := repo.tryAdmitAdditionalMetadataWork(t.Context(), limit)
 			if err != nil {
 				t.Fatal("independently hold the entire HOT work quota", err)
 			}
 			defer release()
-			scaleP21SW316AssertHotDenied(t, repo, node, t.Context())
+			assertHotDenied(t, repo, node, t.Context())
 			read, err := repo.beginColdMetadataRead(t.Context())
 			if err != nil {
 				t.Fatal("COLD generic decode must succeed while the entire HOT quota is independently held", err)
 			}
 			defer read.Close()
-			scaleP21SW316AssertColdGeneric(t, read, want)
+			assertColdGeneric(t, read, want)
 			if repo.MetadataWorkUsedForTesting() != limit || len(repo.metadataResidency.coldSlot) != 1 ||
-				scaleP21SW316SourceRefs(source) != refs+1 {
+				sourceRefs(source) != refs+1 {
 				t.Fatal("cold generic decode borrowed HOT work or lost its slot/source pin")
 			}
 			for _, contextTest := range []struct {
@@ -143,41 +143,41 @@ func TestScaleP21SW316ColdGenericIndependentOfHotQuota(t *testing.T) {
 				})},
 			} {
 				t.Run(contextTest.name, func(t *testing.T) {
-					scaleP21SW316AssertHotDenied(t, repo, node, contextTest.ctx)
+					assertHotDenied(t, repo, node, contextTest.ctx)
 				})
 			}
 			facade, expired := read.Store(), read.Context()
 			read.Close()
 			read.Close()
 			if read.Store() != nil || len(facade.workspaces) != 0 || facade.coldParent != nil ||
-				len(repo.metadataResidency.coldSlot) != 0 || scaleP21SW316SourceRefs(source) != refs ||
+				len(repo.metadataResidency.coldSlot) != 0 || sourceRefs(source) != refs ||
 				repo.MetadataWorkUsedForTesting() != limit {
 				t.Fatal("double cold close retained graph/pins/slot or released the independent HOT owner")
 			}
-			scaleP21SW316AssertHotDenied(t, repo, node, expired)
+			assertHotDenied(t, repo, node, expired)
 			next, err := repo.beginColdMetadataRead(t.Context())
 			if err != nil {
 				t.Fatal("cold generic slot did not recover with HOT quota still held", err)
 			}
 			defer next.Close()
-			scaleP21SW316AssertColdGeneric(t, next, want)
+			assertColdGeneric(t, next, want)
 			next.Close()
 			release()
-			if repo.MetadataWorkUsedForTesting() != 0 || scaleP21SW316SourceRefs(source) != refs {
+			if repo.MetadataWorkUsedForTesting() != 0 || sourceRefs(source) != refs {
 				t.Fatal("independent HOT release or subsequent cold close leaked work/source ownership")
 			}
 			wire, err := json.Marshal(want.Settings)
 			if err != nil {
 				t.Fatal(err)
 			}
-			scaleP21SW248AssertValue(t, repo, node, reflect.ValueOf(want.Settings), wire)
+			assertValue(t, repo, node, reflect.ValueOf(want.Settings), wire)
 		})
 	}
 }
 
-func TestScaleP21SW316ColdGenericCancellationReleasesOwnership(t *testing.T) {
-	repo, source, want := scaleP21SW316ColdGenericFixture(t, true)
-	refs := scaleP21SW316SourceRefs(source)
+func TestColdGenericCancellationReleasesOwnership(t *testing.T) {
+	repo, source, want := coldGenericFixture(t, true)
+	refs := sourceRefs(source)
 	limit := repo.metadataResidency.work.limit
 	_, release, err := repo.tryAdmitAdditionalMetadataWork(t.Context(), limit)
 	if err != nil {
@@ -187,7 +187,7 @@ func TestScaleP21SW316ColdGenericCancellationReleasesOwnership(t *testing.T) {
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if read, err := repo.beginColdMetadataRead(cancelled); read != nil || !errors.Is(err, context.Canceled) ||
-		scaleP21SW316SourceRefs(source) != refs || len(repo.metadataResidency.coldSlot) != 0 {
+		sourceRefs(source) != refs || len(repo.metadataResidency.coldSlot) != 0 {
 		if read != nil {
 			read.Close()
 		}
@@ -198,7 +198,7 @@ func TestScaleP21SW316ColdGenericCancellationReleasesOwnership(t *testing.T) {
 		t.Fatal("cold generic owner could not enter with HOT quota held", err)
 	}
 	defer read.Close()
-	scaleP21SW316AssertColdGeneric(t, read, want)
+	assertColdGeneric(t, read, want)
 	waiting, stop := context.WithCancel(t.Context())
 	defer stop()
 	started, result := make(chan struct{}), make(chan error, 1)
@@ -227,13 +227,13 @@ func TestScaleP21SW316ColdGenericCancellationReleasesOwnership(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("queued cold generic cancellation did not return")
 	}
-	if len(repo.metadataResidency.coldSlot) != 1 || scaleP21SW316SourceRefs(source) != refs+1 ||
+	if len(repo.metadataResidency.coldSlot) != 1 || sourceRefs(source) != refs+1 ||
 		repo.MetadataWorkUsedForTesting() != limit {
 		t.Fatal("queued cancellation released another cold/HOT owner's resources")
 	}
 	read.Close()
 	read.Close()
-	if len(repo.metadataResidency.coldSlot) != 0 || scaleP21SW316SourceRefs(source) != refs ||
+	if len(repo.metadataResidency.coldSlot) != 0 || sourceRefs(source) != refs ||
 		repo.MetadataWorkUsedForTesting() != limit {
 		t.Fatal("cancelled waiter or double close leaked cold ownership")
 	}
@@ -242,9 +242,9 @@ func TestScaleP21SW316ColdGenericCancellationReleasesOwnership(t *testing.T) {
 		t.Fatal("generic cold read did not recover after queued cancellation", err)
 	}
 	defer next.Close()
-	scaleP21SW316AssertColdGeneric(t, next, want)
+	assertColdGeneric(t, next, want)
 	next.Close()
-	if len(repo.metadataResidency.coldSlot) != 0 || scaleP21SW316SourceRefs(source) != refs ||
+	if len(repo.metadataResidency.coldSlot) != 0 || sourceRefs(source) != refs ||
 		repo.MetadataWorkUsedForTesting() != limit {
 		t.Fatal("recovered generic cold read leaked ownership or released unrelated HOT work")
 	}

@@ -105,7 +105,7 @@ func (s *SQLiteStore) MutateNotificationDelivery(ctx context.Context, workspace,
 	}
 	if owner != nil {
 		var size int64
-		if err := tx.QueryRowContext(ctx, `SELECT `+s.scaleP21SW22VisibilityLength("data")+` FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`+lock, workspace, id).Scan(&size); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT `+s.visibilityLength("data")+` FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND resource_id='' AND id=?`+lock, workspace, id).Scan(&size); err != nil {
 			return err
 		}
 		if size < 0 || size > (int64(metadataWorkBytes())-4096)/32 {

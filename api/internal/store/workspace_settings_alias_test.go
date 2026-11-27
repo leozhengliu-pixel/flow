@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW23SettingsAliasKey(value string, bits int) string {
+func settingsAliasKey(value string, bits int) string {
 	var result strings.Builder
 	for index, character := range value {
 		if bits&(1<<index) != 0 && character >= 'a' && character <= 'z' {
@@ -23,8 +23,8 @@ func scaleP21SW23SettingsAliasKey(value string, bits int) string {
 	return result.String()
 }
 
-func TestScaleP21SW23WorkspaceSettingsAliasOrder(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentScannerFixture(t)
+func TestWorkspaceSettingsAliasOrder(t *testing.T) {
+	f, view, tx := residentScannerFixture(t)
 	workspace := f.data.Workspace.URLKey
 	if _, err := tx.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='workspaceSettings'`, workspace); err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestScaleP21SW23WorkspaceSettingsAliasOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := range 80 {
-		key := scaleP21SW23SettingsAliasKey("welcomeMessage", index)
+		key := settingsAliasKey("welcomeMessage", index)
 		body := []byte(fmt.Sprintf(`"value-%03d"`, index))
 		if index%11 == 0 {
 			body = []byte("null")
@@ -135,7 +135,7 @@ func TestScaleP21SW23WorkspaceSettingsAliasOrder(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23WorkspaceSettingsAliasTypedErrors(t *testing.T) {
+func TestWorkspaceSettingsAliasTypedErrors(t *testing.T) {
 	for _, row := range []metadataCacheRow{
 		{Field: "workspaceSettings", Key: "HIPAACOMPLIANCE", Data: []byte(`"bad bool"`)},
 		{Field: "workspaceSettings", Key: "AGENTWEBACCESS", Data: []byte(`[]`)},

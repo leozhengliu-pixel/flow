@@ -9,8 +9,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21M3AuditDifferential(t *testing.T) {
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+func TestScaleAuditDifferential(t *testing.T) {
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
 			name: "coding-mcp-audit", kind: "settings", id: "m3-audit-sentinel", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {

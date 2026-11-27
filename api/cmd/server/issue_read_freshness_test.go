@@ -22,7 +22,7 @@ func TestIssueReadFreshnessDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	open := func(t *testing.T) *store.SQLiteStore {
 		t.Helper()
 		repo, err := store.OpenDatabase(config)
@@ -33,7 +33,7 @@ func TestIssueReadFreshnessDifferential(t *testing.T) {
 		return repo
 	}
 	seed := open(t)
-	f := scaleP03Fixture(t, seed)
+	f := resourceAccessScaleFixture(t, seed)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	public, private := f.data.Teams[0].ID, idgen.New("freshness-team-")
 	ctx := store.ContextWithActor(t.Context(), f.data.Viewer)
@@ -47,8 +47,8 @@ func TestIssueReadFreshnessDifferential(t *testing.T) {
 	if err := seed.SetTeamMembership(ctx, workspaceID, private, f.data.Viewer.ID, "owner", true); err != nil {
 		t.Fatal(err)
 	}
-	member, user := scaleP03Join(t, f, "Freshness member", idgen.New("freshness-")+"@example.test", "member", public, private)
-	key := scaleP03Key(t, f, []string{"read"}, []string{public})
+	member, user := resourceAccessScaleJoin(t, f, "Freshness member", idgen.New("freshness-")+"@example.test", "member", public, private)
+	key := scaleKey(t, f, []string{"read"}, []string{public})
 	post := func(team string) domain.Issue {
 		return authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 			map[string]string{"title": "Freshness witness", "teamId": team}, workspace, http.StatusCreated)

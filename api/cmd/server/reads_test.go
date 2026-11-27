@@ -19,12 +19,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW23LoopRunReadsDifferential(t *testing.T) {
+func TestLoopRunReadsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, loopID := f.data.Workspace.URLKey, idgen.New("sw23-loop-")
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		loops := []domain.Loop{{ID: loopID, SlugID: "sw23-old-slug", Name: "Target", Description: strings.Repeat("legal large instructions ", 16000)}}
@@ -58,7 +58,7 @@ func TestScaleP21SW23LoopRunReadsDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before := pointRecordFingerprint(t, repo, workspace, "loops")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, test := range []struct {
 				name, loop, run string
@@ -90,10 +90,10 @@ func TestScaleP21SW23LoopRunReadsDifferential(t *testing.T) {
 						if w.Code != test.status {
 							t.Fatalf("loop read status=%d body=%s want=%d", w.Code, w.Body.String(), test.status)
 						}
-						outcomes = append(outcomes, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+						outcomes = append(outcomes, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("run read differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("run read differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -144,24 +144,24 @@ func TestScaleP21SW23LoopRunReadsDifferential(t *testing.T) {
 				r, w := f.request(member, nil, nil), httptest.NewRecorder()
 				r.SetPathValue("id", loopID)
 				r.SetPathValue("runId", run.ID)
-				scaleP21M3Call(&server{store: source}, w, r, (*server).getLoopRun)
+				callPointSettingsHandler(&server{store: source}, w, r, (*server).getLoopRun)
 				if w.Code != http.StatusForbidden {
 					t.Fatal("queued/replayed read bypassed live membership")
 				}
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("run reads changed canonical loops or decoded complete metadata")
 		}
 	}
 }
 
-func TestScaleP21SW23InternalConversationIdentityDifferential(t *testing.T) {
+func TestInternalConversationIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, sessionID := f.data.Workspace.URLKey, idgen.New("sw23-session-")
 		seed := func(owner string) {
 			t.Helper()
@@ -191,7 +191,7 @@ func TestScaleP21SW23InternalConversationIdentityDifferential(t *testing.T) {
 					outcomes = append(outcomes, []any{session, message})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("conversation differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("conversation differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})
@@ -234,7 +234,7 @@ func TestScaleP21SW23InternalConversationIdentityDifferential(t *testing.T) {
 		member := f.principals[2].user
 		seed(member.ID)
 		queued := []*http.Request{}
-		for _, credential := range scaleP21M3Credentials() {
+		for _, credential := range pointSettingsCredentialCases() {
 			queued = append(queued, f.request(member, credential.key, nil))
 		}
 		if err := repo.SuspendMember(t.Context(), f.data.Workspace.ID, member.ID); err != nil {
@@ -252,34 +252,34 @@ func TestScaleP21SW23InternalConversationIdentityDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21SW23CodingStore struct {
+type readsCodingStore struct {
 	*fakeCodingStore
 	keys  []string
 	calls int
 }
 
-func (f *scaleP21SW23CodingStore) WorkspacesForInstallation(context.Context, string, string, string) ([]string, error) {
+func (f *readsCodingStore) WorkspacesForInstallation(context.Context, string, string, string) ([]string, error) {
 	return append([]string(nil), f.keys...), nil
 }
 
-func (f *scaleP21SW23CodingStore) SessionsForChangeRequest(context.Context, string, string, string, int) ([]domain.CodingSession, error) {
+func (f *readsCodingStore) SessionsForChangeRequest(context.Context, string, string, string, int) ([]domain.CodingSession, error) {
 	f.calls++
 	return nil, nil
 }
 
-func TestScaleP21SW23CodingSettingsDifferential(t *testing.T) {
+func TestCodingSettingsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fake := &scaleP21SW23CodingStore{fakeCodingStore: newFakeCodingStore()}
+	fake := &readsCodingStore{fakeCodingStore: newFakeCodingStore()}
 	previous := codingTriggerStore
 	codingTriggerStore = func(*server) any { return fake }
 	t.Cleanup(func() { codingTriggerStore = previous })
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		fake.keys = []string{workspace}
-		settings := scaleP21SW3PopulatedSettings(t, f.data.WorkspaceSettings)
+		settings := populatedSettings(t, f.data.WorkspaceSettings)
 		settings.CodingAgentSettings = domain.CodingAgentSettings{Harness: "claude", Model: "retained-model"}
 		reset := func(enabled bool) {
 			t.Helper()
@@ -302,7 +302,7 @@ func TestScaleP21SW23CodingSettingsDifferential(t *testing.T) {
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, enabled := range []bool{false, true} {
 				reset(enabled)
-				unchanged := scaleP21M3Fingerprint(t, repo, workspace, "workspaceSettings")
+				unchanged := pointRecordFingerprint(t, repo, workspace, "workspaceSettings")
 				var outcomes []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					service := &server{store: source, coding: &codingServices{config: appconfig.CodingConfig{Enabled: true}}}
@@ -330,9 +330,9 @@ func TestScaleP21SW23CodingSettingsDifferential(t *testing.T) {
 					outcomes = append(outcomes, []any{starter.DefaultHarness, starter.DefaultModel, config, fake.calls - before})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("coding settings differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("coding settings differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
-				if scaleP21M3Fingerprint(t, repo, workspace, "workspaceSettings") != unchanged {
+				if pointRecordFingerprint(t, repo, workspace, "workspaceSettings") != unchanged {
 					t.Fatal("coding settings read changed canonical properties")
 				}
 			}

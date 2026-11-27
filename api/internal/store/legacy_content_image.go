@@ -217,7 +217,7 @@ func (n legacyContentImageNode) withCursor(ctx context.Context, visit func(*lega
 	if err := wire.reserve(ctx, cost); err != nil {
 		return err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return err
 	}
@@ -261,7 +261,7 @@ func (n legacyContentImageNode) withCursor(ctx context.Context, visit func(*lega
 	return ctx.Err()
 }
 
-func (n legacyContentImageNode) stageRows(ctx context.Context, stage *sw26MigrationStage, frames *metadataLogicalBuilder, typ reflect.Type, keyLength, bodyLength string, maxKey, maxBody int64) (err error) {
+func (n legacyContentImageNode) stageRows(ctx context.Context, stage *migrationStage, frames *metadataLogicalBuilder, typ reflect.Type, keyLength, bodyLength string, maxKey, maxBody int64) (err error) {
 	columns := keyLength + "," + bodyLength + ",CASE WHEN " + keyLength + "<=? THEN resource_id ELSE NULL END,CASE WHEN " + bodyLength + "<=? THEN data ELSE NULL END"
 	args := []any{maxKey, maxBody, n.workspace, n.kind}
 	base := legacyRecordBaseCapture(ctx)

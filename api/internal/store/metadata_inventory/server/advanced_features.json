@@ -57,7 +57,7 @@
     "completeExport": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleP21M3AdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleAdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -98,7 +98,7 @@
     "createCustomerRequestAttachment": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestScaleP21SW4AttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestAttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -138,7 +138,7 @@
     "createDraft": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback then owns the literal query, constructor-time metadata capture, draft.created writer/publication and response until encoding completes, using the legacy cold facade under one cancellable replica slot. createDraftWithStore preserves the remaining body literally. SW191 covers exact legacy/cold validation across the M matrix, warm/reloaded route responses and persisted draft rows, and a body-reader mutation proving capture stays after decoding.",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback then owns the literal query, constructor-time metadata capture, draft.created writer/publication and response until encoding completes, using the legacy cold facade under one cancellable replica slot. createDraftWithStore preserves the remaining body literally. draft and settings reads covers exact legacy/cold validation across the M matrix, warm/reloaded route responses and persisted draft rows, and a body-reader mutation proving capture stays after decoding.",
       "coldDispatch": "server/advanced_features.go:createDraft",
       "accessors": [
         "withColdMetadataRequest"
@@ -272,7 +272,7 @@
     "deleteCustomerRequestAttachment": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestScaleP21SW4PointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestScaleP21SW4ForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestPointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -312,7 +312,7 @@
     "deleteDraft": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestScaleP21SW4PointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestScaleP21SW4ForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestPointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -339,7 +339,7 @@
     "deleteProjectTemplate": {
       "owner": "P16",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes both actual delete branches: both remove the canonical target, but legacy falls through to a matching Document.ContentData marker/count after deletion while the scoped branch omits it. The template list migration does not certify this writer. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. TestProjectTemplateWriteAggregateHold executes both actual delete branches: both remove the canonical target, but legacy falls through to a matching Document.ContentData marker/count after deletion while the scoped branch omits it. The template list migration does not certify this writer. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestPointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -405,7 +405,7 @@
     "listProjectTemplates": {
       "owner": "P16",
       "status": "reviewed",
-      "reason": "Bounded dispatch uses BeginProjectTemplatesRead at the same actual installed-store boundary as BootstrapFor, preserving exact/default lookup, native warm NUL/invalid UTF-8, nil/empty, creator/nested fields and time JSON/error behavior. It owns only admitted detached templates and logical workspace identity, retains the handle through signed/ordinary response encoding, and validates the same conditional issue plus always-import/conditional four-content typed sources in bounded keyset snapshots so unrelated hydration failures still return the legacy missing-workspace response. Off branch is unchanged. Store/server TestScaleP21SW16ProjectTemplate tests pass twice on persistent SQLite across large admitted values, source/reload shape witness, malformed later-page content, logical empty/default identities, admission and original cancellation, and direct principal/key matrix. This is direct accessor decomposition only: the bounded source loader still independently omits templates and remains pending; no populated test-view injection or source-loader parity claim is made. Existing route authorization remains independently registered. Exact failure compatibility adds per-row SQL; no latency/capacity gain is claimed.",
+      "reason": "Bounded dispatch uses BeginProjectTemplatesRead at the same actual installed-store boundary as BootstrapFor, preserving exact/default lookup, native warm NUL/invalid UTF-8, nil/empty, creator/nested fields and time JSON/error behavior. It owns only admitted detached templates and logical workspace identity, retains the handle through signed/ordinary response encoding, and validates the same conditional issue plus always-import/conditional four-content typed sources in bounded keyset snapshots so unrelated hydration failures still return the legacy missing-workspace response. Off branch is unchanged. Store/server Project Template tests tests pass twice on persistent SQLite across large admitted values, source/reload shape witness, malformed later-page content, logical empty/default identities, admission and original cancellation, and direct principal/key matrix. This is direct accessor decomposition only: the bounded source loader still independently omits templates and remains pending; no populated test-view injection or source-loader parity claim is made. Existing route authorization remains independently registered. Exact failure compatibility adds per-row SQL; no latency/capacity gain is claimed.",
       "accessors": [
         "BootstrapFor"
       ]
@@ -413,7 +413,7 @@
     "maintainAdvancedSchedules": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Every ordinary bootstrap delegates to maintainAdvancedSchedulesAt with time.Now. The clock is invoked only after preflight loading, preserving the original production capture point. The reviewed helper owns the complete bounded scheduler path and the literal flag-off behavior; SW209 covers exact warm/reloaded scheduler effects, no-op, admission, cancellation and release.",
+      "reason": "Every ordinary bootstrap delegates to maintainAdvancedSchedulesAt with time.Now. The clock is invoked only after preflight loading, preserving the original production capture point. The reviewed helper owns the complete bounded scheduler path and the literal flag-off behavior; advanced schedule covers exact warm/reloaded scheduler effects, no-op, admission, cancellation and release.",
       "accessors": [
         "maintainAdvancedSchedulesAt",
         "BeginAdvancedScheduleRead",
@@ -430,7 +430,7 @@
     "maintainAdvancedSchedulesAt": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded dispatch reads admitted installed scheduler headers through BeginAdvancedScheduleRead and releases preflight ownership before the closed mutation. Only captured cadence/reminder decisions and one UTC clock survive into the callback; the independent output scope spans mutation and post-write cleanup. Literal flag-off loading and callback behavior remain. SW209 compares exact SLA/reminder/trash, canonical/native state, events and publication across principal/key fixtures, warm and actual reload, including duplicate-large map/inline shapes; normal, persistent SQLite count2 and complete race evidence preserve exact RemainingMinutes and the strict due-soon boundary without normalization.",
+      "reason": "Bounded dispatch reads admitted installed scheduler headers through BeginAdvancedScheduleRead and releases preflight ownership before the closed mutation. Only captured cadence/reminder decisions and one UTC clock survive into the callback; the independent output scope spans mutation and post-write cleanup. Literal flag-off loading and callback behavior remain. advanced schedule compares exact SLA/reminder/trash, canonical/native state, events and publication across principal/key fixtures, warm and actual reload, including duplicate-large map/inline shapes; normal, persistent SQLite count2 and complete race evidence preserve exact RemainingMinutes and the strict due-soon boundary without normalization.",
       "accessors": [
         "BeginAdvancedScheduleRead",
         "Bootstrap",
@@ -550,7 +550,7 @@
     "updateAsk": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Point ask/team/template inputs do not preserve legacy aggregate lookup: TestScaleP21SW16AskAggregateCollisionDifferential reproduced an earlier Document.ContentData object with id equal to the ask ID winning realtime enrichment, while a point scope emitted the Ask. The attempted point migration was reverted; retain the original writer until a bounded aggregate compatibility resolver covers that closure.",
+      "reason": "Point ask/team/template inputs do not preserve legacy aggregate lookup: Ask Aggregate Collision Differential tests reproduced an earlier Document.ContentData object with id equal to the ask ID winning realtime enrichment, while a point scope emitted the Ask. The attempted point migration was reverted; retain the original writer until a bounded aggregate compatibility resolver covers that closure.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -577,7 +577,7 @@
     "updateDocument": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded mode installs the closed DocumentUpdateWriteRequest marker (ref, normalized new project IDs, linked-issue read) and a request output owner, then calls MutateWorkspace with the unchanged callback, scope, postcommit compaction, generation conflict, access invalidation, mail and P20 response; the off branch is untouched. store/sqlite.go dispatches only document.updated and favorite.added/removed with that marker to mutateBoundedDocumentUpdate, so the workspace is never hydrated. SW480 runs the real route against legacy and bounded warm and SQL-reloaded sources and compares responses, canonical and installed documents/projects/favorites, collaboration logs, offloaded history, audits, events, webhooks and realtime: title/Markdown/rich/state edits, compaction (accepted, stale, replay), former-member retained/queued/rejected mentions with rollback, favorites, no-op, version conflict and match, links (project, issue, existing issue, unlink, invalid), reciprocal and large linked projects, team move, subscribers, archive/unarchive, trashed, missing, slug over earlier old slug, ID over old slug, duplicate IDs, 4 MiB current body title and content edits with offloaded history, a peer write to the same rows retried to the literal order, and the principal x key matrix on shared, private-team and outsider documents. The large stale document fixture also compares the successful merge at a 768 MiB work budget. At 64 MiB it checks atomic refusal of the bounded write.",
+      "reason": "Bounded mode installs the closed DocumentUpdateWriteRequest marker (ref, normalized new project IDs, linked-issue read) and a request output owner, then calls MutateWorkspace with the unchanged callback, scope, postcommit compaction, generation conflict, access invalidation, mail and resource windows response; the off branch is untouched. store/sqlite.go dispatches only document.updated and favorite.added/removed with that marker to mutateBoundedDocumentUpdate, so the workspace is never hydrated. document update parity runs the real route against legacy and bounded warm and SQL-reloaded sources and compares responses, canonical and installed documents/projects/favorites, collaboration logs, offloaded history, audits, events, webhooks and realtime: title/Markdown/rich/state edits, compaction (accepted, stale, replay), former-member retained/queued/rejected mentions with rollback, favorites, no-op, version conflict and match, links (project, issue, existing issue, unlink, invalid), reciprocal and large linked projects, team move, subscribers, archive/unarchive, trashed, missing, slug over earlier old slug, ID over old slug, duplicate IDs, 4 MiB current body title and content edits with offloaded history, a peer write to the same rows retried to the literal order, and the principal x key matrix on shared, private-team and outsider documents. The large stale document fixture also compares the successful merge at a 768 MiB work budget. At 64 MiB it checks atomic refusal of the bounded write.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -604,7 +604,7 @@
     "updateDraft": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback owns the literal query, constructor-time metadata capture, draft.updated writer/publication and response through encoding, using the legacy cold facade under the replica slot. updateDraftWithStore preserves the remaining body literally. SW191 compares warm/reloaded legacy/cold route responses and persisted drafts, with constructor-time capture and the M validator matrix; the original all-pending activation gate remains.",
+      "reason": "COLD production root. The original 2 MiB decoder remains before validator construction. The explicit repository callback owns the literal query, constructor-time metadata capture, draft.updated writer/publication and response through encoding, using the legacy cold facade under the replica slot. updateDraftWithStore preserves the remaining body literally. draft and settings reads compares warm/reloaded legacy/cold route responses and persisted drafts, with constructor-time capture and the M validator matrix; the original all-pending activation gate remains.",
       "coldDispatch": "server/advanced_features.go:updateDraft",
       "accessors": [
         "withColdMetadataRequest"
@@ -631,7 +631,7 @@
     "updateFavoriteFolder": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleP21M3AdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleAdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -645,7 +645,7 @@
     "updateProjectTemplate": {
       "owner": "P16",
       "status": "unmigrated",
-      "reason": "The callback still requires complete native template/validation inputs, existing issue MutationScope semantics and exact legacy aggregate closure. TestScaleP21SW16ProjectTemplateWriteAggregateHold executes the real update with an accepted earlier IssueTemplate.FormField whose ID equals the target template and proves that nested form field wins realtime entity lookup. A target-only scoped image would emit the template instead. Keep pending until a bounded writer preserves complete callback inputs, no-op, audit/webhook previous values/realtime and large legal body behavior; the list adapter does not certify this writer.",
+      "reason": "The callback still requires complete native template/validation inputs, existing issue MutationScope semantics and exact legacy aggregate closure. TestProjectTemplateWriteAggregateHold executes the real update with an accepted earlier IssueTemplate.FormField whose ID equals the target template and proves that nested form field wins realtime entity lookup. A target-only scoped image would emit the template instead. Keep pending until a bounded writer preserves complete callback inputs, no-op, audit/webhook previous values/realtime and large legal body behavior; the list adapter does not certify this writer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -660,7 +660,7 @@
     "updateProjectUpdateSettings": {
       "owner": "P16",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleP21M3AdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleAdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -700,7 +700,7 @@
     "updateSLASettings": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleP21M3AdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleAdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -33,11 +33,11 @@ import { avatarColor } from '@/lib/avatar-color'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
-import { useScaleP19FilterCounts, useScaleP19ProjectWindow } from './scale-p19-project-window'
-import { ScaleP19ProjectPager } from './scale-p19-project-pager'
-import { clearScaleP19ProjectHandoff, readScaleP19ProjectHandoff, writeScaleP19ProjectHandoff } from '@/lib/scale-p19-project-handoff'
-import type { ScaleP19ServerQuery } from '@/lib/scale-p19-window-api'
-import { ScaleP19TimelineContext, scaleP19Groups } from './scale-p19-view'
+import { useProjectWindowFilterCounts, useProjectQueryWindow } from './project-query-window'
+import { ProjectWindowPager } from './project-window-pager'
+import { clearProjectWindowHandoff, readProjectWindowHandoff, writeProjectWindowHandoff } from '@/lib/project-window-handoff'
+import type { ServerWindowQuery } from '@/lib/query-window-api'
+import { ProjectWindowTimelineContext, projectWindowGroups } from './project-window-view'
 
 const EMPTY_PROJECTS: Project[] = []
 
@@ -224,7 +224,7 @@ export function ProjectsPage({
 }: ProjectsPageProps) {
   const sourceView = savedView ?? duplicateFrom
   const handoffScope = `${workspaceKey}:${viewerId ?? viewer?.id ?? ''}:${scopeTeamId ?? 'workspace'}:${sourceView?.id ?? 'all'}`
-  const handoff = useMemo(() => import.meta.env.VITE_SYNC_V2 === 'true' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS === 'true' ? readScaleP19ProjectHandoff(handoffScope) : undefined, [handoffScope])
+  const handoff = useMemo(() => import.meta.env.VITE_SYNC_V2 === 'true' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS === 'true' ? readProjectWindowHandoff(handoffScope) : undefined, [handoffScope])
   const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
   const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return handoff?.filters ?? projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
   // The reference app: filters added on a saved view (outside edit mode) are temporary — the band with Clear / Save ⌄.
@@ -233,8 +233,8 @@ export function ProjectsPage({
   const activeFilters = useMemo(() => bandActive && extraFilters.length ? [...projectFilters, ...extraFilters] : projectFilters, [bandActive, extraFilters, projectFilters])
   const projectFilterQuery = useMemo(() => activeFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [activeFilters])
   const windowTeamIds = useMemo(() => scopeTeamId ? [...teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)] : undefined, [scopeTeamId, teamParents, teamSettings, teams])
-  const [windowQuery, setWindowQuery] = useState<ScaleP19ServerQuery>({ schema: 1, display: DEFAULT_PROJECTS_DISPLAY, locale: navigator.language })
-  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
+  const [windowQuery, setWindowQuery] = useState<ServerWindowQuery>({ schema: 1, display: DEFAULT_PROJECTS_DISPLAY, locale: navigator.language })
+  const projectWindow = useProjectQueryWindow(workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
   const [pagedProjects, setPagedProjects] = useState<Project[]>(projectWindow.enabled ? [] : projects)
   const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
@@ -398,15 +398,15 @@ export function ProjectsPage({
   const view = useProjectsViewState(visibleItems, { initial: savedDisplay || handoff ? { ...(savedDisplay ? { display: savedDisplay } : {}), ...(handoff ? { selectedIds: handoff.selectedIds } : {}) } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, groupingContext: itemIndexes, leadTeamId: scopeTeamId })
   useEffect(() => {
     const client = projectWindow.client
-    if (!projectWindow.enabled || !client) { clearScaleP19ProjectHandoff(handoffScope); return }
+    if (!projectWindow.enabled || !client) { clearProjectWindowHandoff(handoffScope); return }
     return client.subscribe(() => {
-      if (client.disposed && client.legacyRequired) writeScaleP19ProjectHandoff(handoffScope, { filters: projectFilters, extraFilters, selectedIds: view.state.selectedIds, sidebarOpen, insightMode, insightFilter })
-      else if (client.disposed) clearScaleP19ProjectHandoff(handoffScope)
+      if (client.disposed && client.legacyRequired) writeProjectWindowHandoff(handoffScope, { filters: projectFilters, extraFilters, selectedIds: view.state.selectedIds, sidebarOpen, insightMode, insightFilter })
+      else if (client.disposed) clearProjectWindowHandoff(handoffScope)
     })
   }, [extraFilters, handoffScope, insightFilter, insightMode, projectFilters, projectWindow.client, projectWindow.enabled, sidebarOpen, view.state.selectedIds])
   const { properties: _properties, timelineZoom: _timelineZoom, ...queryDisplay } = view.state.display
   const localizedDates = [queryDisplay.ordering, queryDisplay.grouping, queryDisplay.subGrouping].some(value => value === 'Start date' || value === 'Target date')
-  const nextWindowQuery: ScaleP19ServerQuery = { schema: 1, display: queryDisplay, leadTeamId: scopeTeamId, insight: insightFilter, locale: navigator.language, ...(localizedDates ? { dateLocale: document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en' } : {}) }
+  const nextWindowQuery: ServerWindowQuery = { schema: 1, display: queryDisplay, leadTeamId: scopeTeamId, insight: insightFilter, locale: navigator.language, ...(localizedDates ? { dateLocale: document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en' } : {}) }
   if (projectWindow.enabled && JSON.stringify(windowQuery) !== JSON.stringify(nextWindowQuery)) setWindowQuery(nextWindowQuery)
   useEffect(() => {
     if (projectWindow.enabled) {
@@ -437,7 +437,7 @@ export function ProjectsPage({
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
   const localFilterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
-  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
+  const filterOptions = useProjectWindowFilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'false', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
   // The reference app's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
   const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
@@ -731,9 +731,9 @@ export function ProjectsPage({
     views={projectViews}
   >
     <div className={`lp-projects__workspace ${sidebarOpen ? 'has-insights' : ''}`}>
-      <div className="lp-projects__data"><ScaleP19TimelineContext.Provider value={projectWindow.enabled ? projectWindow.metadata?.timeline : undefined}><ProjectsDataView
+      <div className="lp-projects__data"><ProjectWindowTimelineContext.Provider value={projectWindow.enabled ? projectWindow.metadata?.timeline : undefined}><ProjectsDataView
         {...view.dataViewProps}
-        groups={projectWindow.enabled ? scaleP19Groups(view.groups, leadScopedVisibleItems, projectWindow.metadata) : view.dataViewProps.groups}
+        groups={projectWindow.enabled ? projectWindowGroups(view.groups, leadScopedVisibleItems, projectWindow.metadata) : view.dataViewProps.groups}
         loading={loading || (projectWindow.enabled ? projectWindow.loading : directoryLoading) && !items.length}
         error={error ?? (projectWindow.enabled ? projectWindow.error : directoryError)}
         hasMore={!projectWindow.enabled && directoryHasMore}
@@ -768,10 +768,10 @@ export function ProjectsPage({
           onSubscriptionEventsChange: onSetProjectSubscriptionEvents,
           onCreateReminder: onCreateProjectReminder,
         } : undefined}
-      /></ScaleP19TimelineContext.Provider></div>
+      /></ProjectWindowTimelineContext.Provider></div>
       {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} rows={projectWindow.enabled ? projectWindow.metadata?.insights : undefined} />}
     </div>
-    {projectWindow.enabled && <ScaleP19ProjectPager page={projectWindow.page} loading={projectWindow.loading} onPage={index => { void projectWindow.load(index) }}/ >}
+    {projectWindow.enabled && <ProjectWindowPager page={projectWindow.page} loading={projectWindow.loading} onPage={index => { void projectWindow.load(index) }}/ >}
     {scheduleProjectId && projectById.get(scheduleProjectId) && onUpdateProject && <ProjectUpdateScheduleDialog
       open
       onOpenChange={open => { if (!open) setScheduleProjectId(undefined) }}

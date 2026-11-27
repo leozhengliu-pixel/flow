@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-// TestScaleP21SW279BoundedSeedScale seeds the P01 metadata fixture (count
+// TestBoundedSeedScale seeds the permission and load baseline metadata fixture (count
 // scale FLOW_P21_SEED_SCALE, default 2) through a bounded store and measures
 // it: the heap stays bounded by a batch, not by the seeded workspace, no
 // workspace is decoded and every record is reported.
-func TestScaleP21SW279BoundedSeedScale(t *testing.T) {
+func TestBoundedSeedScale(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")

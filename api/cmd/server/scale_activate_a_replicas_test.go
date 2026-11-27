@@ -28,7 +28,7 @@ func TestScaleActivateAOldAndNewBinariesShareCanonicalRecords(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "on")
 	t.Setenv("FLOW_SYNC_V2", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	if config.Driver != "sqlite" {
 		t.Skip("the local binary compatibility fixture uses a shared SQLite database")
 	}
@@ -116,8 +116,8 @@ func TestScaleActivateAOldAndNewBinariesShareCanonicalRecords(t *testing.T) {
 	}
 	for _, base := range []string{oldURL, f.host.URL} {
 		for _, token := range credentials {
-			viewer := scaleP01PermissionViewer{client: f.admin, secret: token}
-			status, body := scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects/scope-hidden-project")
+			viewer := scalePermissionViewer{client: f.admin, secret: token}
+			status, body := scalePermissionRead(t, viewer, base, workspace, "/api/projects/scope-hidden-project")
 			if status != http.StatusForbidden || bytes.Contains(body, []byte("Hidden project")) {
 				t.Fatal("mixed binary credential scope changed")
 			}

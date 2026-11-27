@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW228RawMessageNativeOwnership(t *testing.T) {
+func TestRawMessageNativeOwnership(t *testing.T) {
 	rawCapacity := make(json.RawMessage, 2, 4<<20)
 	copy(rawCapacity, "{}")
 	for _, input := range []json.RawMessage{
@@ -83,7 +83,7 @@ func TestScaleP21SW228RawMessageNativeOwnership(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW228OwnershipCancellationAndBudgetRecovery(t *testing.T) {
+func TestOwnershipCancellationAndBudgetRecovery(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
@@ -113,7 +113,7 @@ func TestScaleP21SW228OwnershipCancellationAndBudgetRecovery(t *testing.T) {
 			if target == "before" {
 				cancel()
 			} else {
-				ctx = &scaleP21SW228CancelContext{Context: cancelled, cancel: cancel, target: target}
+				ctx = &genericOwnedCancelContext{Context: cancelled, cancel: cancel, target: target}
 			}
 			owner := &ResourceRead{store: repo}
 			value, err := owner.integrationDeliveryRawMessage(ctx, node)
@@ -138,7 +138,7 @@ func TestScaleP21SW228OwnershipCancellationAndBudgetRecovery(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW228TypedResultExactEncodingPreflight(t *testing.T) {
+func TestTypedResultExactEncodingPreflight(t *testing.T) {
 	payload, err := json.Marshal(map[string]string{
 		"body": strings.Repeat("<>&", ((16<<20)-(64<<10))/18),
 	})
@@ -193,7 +193,7 @@ func TestScaleP21SW228TypedResultExactEncodingPreflight(t *testing.T) {
 	repo.metadataResidency.work.limit = metadataWorkBytes()
 }
 
-func TestScaleP21SW228ComparisonCloneReleasedAfterMerge(t *testing.T) {
+func TestComparisonCloneReleasedAfterMerge(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(fmt.Sprintf("unsupported-edit-%t", fail), func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
@@ -282,10 +282,10 @@ func TestScaleP21SW228ComparisonCloneReleasedAfterMerge(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW228IntegrationProfileNearLimitSourceModes(t *testing.T) {
+func TestIntegrationProfileNearLimitSourceModes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	plain := strings.Repeat("<>&", ((16<<20)-(64<<10))/18)
 	payload, err := json.Marshal(map[string]string{"body": plain})

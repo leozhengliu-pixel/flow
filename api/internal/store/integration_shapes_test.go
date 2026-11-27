@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW226IntegrationPeerShapeTransitions(t *testing.T) {
+func TestIntegrationPeerShapeTransitions(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	view := &SQLiteStore{db: fixture.db, dialect: fixture.dialect, maxStateBytes: fixture.maxStateBytes, metadataResidency: newMetadataResidency()}
 	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	for _, fields := range []string{"delivery", "connection", "both"} {
@@ -49,7 +49,7 @@ func TestScaleP21SW226IntegrationPeerShapeTransitions(t *testing.T) {
 							before.IntegrationConnections = append(before.IntegrationConnections, later)
 						}
 					}
-					requested := scaleP21SW226Clone(before)
+					requested := integrationStreamClone(before)
 					delivery, connection := &requested.IntegrationDeliveries[0], &requested.IntegrationConnections[0]
 					delivery.Attempts++
 					delivery.Status, delivery.LastError, delivery.UpdatedAt = "failed", "HTTP 502", at.Add(time.Hour)
@@ -67,7 +67,7 @@ func TestScaleP21SW226IntegrationPeerShapeTransitions(t *testing.T) {
 					if changeConnection {
 						shapes["integrationConnections"] = wantShape
 					}
-					peer := scaleP21SW226PeerMutation{
+					peer := peerMutation{
 						shapes: shapes,
 						mutate: func(data *domain.Bootstrap) error {
 							if direction == "inline-to-split" {
@@ -92,8 +92,8 @@ func TestScaleP21SW226IntegrationPeerShapeTransitions(t *testing.T) {
 							return nil
 						},
 					}
-					literal := scaleP21SW226Execute(t, fixture, view, before, requested, nil, "", false, "", peer)
-					bounded := scaleP21SW226Execute(t, fixture, view, before, requested, nil, "", true, "", peer)
+					literal := integrationStreamExecute(t, fixture, view, before, requested, nil, "", false, "", peer)
+					bounded := integrationStreamExecute(t, fixture, view, before, requested, nil, "", true, "", peer)
 					// These are legal native scalar edits over a separately
 					// committed collection-shape change. Success is required;
 					// matching budget refusals would not prove compatibility.
@@ -116,8 +116,8 @@ func TestScaleP21SW226IntegrationPeerShapeTransitions(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW226IntegrationCanonicalIORelease(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationCanonicalIORelease(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	sentinel := errors.New("sw226 canonical input failed")
 	for _, kind := range []reflect.Type{reflect.TypeFor[domain.IntegrationDelivery](), reflect.TypeFor[domain.IntegrationConnection]()} {
 		t.Run(kind.Name(), func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestScaleP21SW226IntegrationCanonicalIORelease(t *testing.T) {
 				raw = `{"id":"connection","config":{"body":"` + strings.Repeat("large config ", 100000) + `"},"scopes":["retained"]}`
 			}
 			input, readBytes := strings.NewReader(raw), 0
-			reader := scaleP21SW226ReadAt(func(dst []byte, offset int64) (int, error) {
+			reader := integrationStreamReadAt(func(dst []byte, offset int64) (int, error) {
 				if readBytes >= 64<<10 {
 					return 0, sentinel
 				}

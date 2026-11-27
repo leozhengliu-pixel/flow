@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW205AggregatePublicationDifferential(t *testing.T) {
+func TestAggregatePublicationDifferential(t *testing.T) {
 	for _, shape := range []string{
 		"document-4MiB-body-and-history", "document-HTML", "document-invalid-UTF8",
 		"delivery-4.3MiB", "delivery-HTML", "raw-number-unicode-duplicates",
@@ -25,11 +25,11 @@ func TestScaleP21SW205AggregatePublicationDifferential(t *testing.T) {
 		"dense", "deep-raw", "invalid-raw", "invalid-number", "invalid-float", "invalid-time",
 	} {
 		t.Run(shape, func(t *testing.T) {
-			before, after, id := scaleP21SW205AggregateFixture(shape)
+			before, after, id := aggregateFixture(shape)
 			for _, mode := range []string{"native-overlay", "stored-frame"} {
 				t.Run(mode, func(t *testing.T) {
 					probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
-					left, right, release := scaleP21SW205AggregateImages(t, before, after, mode)
+					left, right, release := aggregateImages(t, before, after, mode)
 					defer release()
 					for _, event := range []string{"resource.updated", "resource.deleted"} {
 						payload := json.RawMessage(`{"count":9007199254740993,"input":"<>&","duplicate":0,"duplicate":1}`)
@@ -41,11 +41,11 @@ func TestScaleP21SW205AggregatePublicationDifferential(t *testing.T) {
 						}
 						if !bytes.Equal(publication.PreviousValues, wantPrevious) {
 							publication.Close()
-							t.Fatalf("previous differs: got=%s want=%s", scaleP21SW205Preview(publication.PreviousValues), scaleP21SW205Preview(wantPrevious))
+							t.Fatalf("previous differs: got=%s want=%s", aggregatePublicationPreview(publication.PreviousValues), aggregatePublicationPreview(wantPrevious))
 						}
 						if !bytes.Equal(publication.RealtimePayload, wantSnapshot) {
 							publication.Close()
-							t.Fatalf("snapshot differs: got=%s want=%s", scaleP21SW205Preview(publication.RealtimePayload), scaleP21SW205Preview(wantSnapshot))
+							t.Fatalf("snapshot differs: got=%s want=%s", aggregatePublicationPreview(publication.RealtimePayload), aggregatePublicationPreview(wantSnapshot))
 						}
 						actor := domain.User{ID: "usr_sw205_actor", Name: "Snapshot actor"}
 						ctx := ContextWithActor(t.Context(), actor)
@@ -55,7 +55,7 @@ func TestScaleP21SW205AggregatePublicationDifferential(t *testing.T) {
 						if !reflect.DeepEqual(gotHook, wantHook) {
 							t.Fatal("webhook snapshot/entity/input/previous/actor differs")
 						}
-						wantHeld := scaleP21SW205ByteCharge(len(publication.PreviousValues)) + scaleP21SW205ByteCharge(len(publication.RealtimePayload))
+						wantHeld := byteCharge(len(publication.PreviousValues)) + byteCharge(len(publication.RealtimePayload))
 						if got := probe.metadataResidency.work.used; got != wantHeld {
 							t.Fatalf("temporary graphs survived construction: held=%d final bytes=%d", got, wantHeld)
 						}
@@ -71,7 +71,7 @@ func TestScaleP21SW205AggregatePublicationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW205AggregatePublicationPayloadShapesAndWinnerPrecedence(t *testing.T) {
+func TestAggregatePublicationPayloadShapesAndWinnerPrecedence(t *testing.T) {
 	const id = "issue_sw205_winner"
 	before := domain.Bootstrap{
 		Issues:   []domain.Issue{{ID: id, Title: "first typed"}, {ID: id, Title: "last typed"}},
@@ -80,7 +80,7 @@ func TestScaleP21SW205AggregatePublicationPayloadShapesAndWinnerPrecedence(t *te
 	after := before
 	after.Issues = append([]domain.Issue(nil), before.Issues...)
 	after.Issues[0].Title = "changed first typed"
-	left, right, release := scaleP21SW205AggregateImages(t, before, after, "stored-frame")
+	left, right, release := aggregateImages(t, before, after, "stored-frame")
 	defer release()
 	probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	for _, payload := range []string{
@@ -122,9 +122,9 @@ func TestScaleP21SW205AggregatePublicationPayloadShapesAndWinnerPrecedence(t *te
 	}
 }
 
-func TestScaleP21SW205AggregatePublicationQuotaCancellationAndIO(t *testing.T) {
-	before, after, id := scaleP21SW205AggregateFixture("document-HTML")
-	left, right, release := scaleP21SW205AggregateImages(t, before, after, "stored-frame")
+func TestAggregatePublicationQuotaCancellationAndIO(t *testing.T) {
+	before, after, id := aggregateFixture("document-HTML")
+	left, right, release := aggregateImages(t, before, after, "stored-frame")
 	defer release()
 	for _, scenario := range []string{"small-quota", "decode-quota", "cancel-before", "cancel-during"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestScaleP21SW205AggregatePublicationQuotaCancellationAndIO(t *testing.T) {
 				cancel()
 				want = context.Canceled
 			case "cancel-during":
-				work = &scaleP21SW205CancelContext{Context: ctx, cancel: cancel, at: 2000}
+				work = &aggregatePublicationCancelContext{Context: ctx, cancel: cancel, at: 2000}
 				want = context.Canceled
 			}
 			disk := metadataLogicalDiskUsed.Load()
@@ -181,9 +181,9 @@ func TestScaleP21SW205AggregatePublicationQuotaCancellationAndIO(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW205AggregatePublicationConcurrentOwnership(t *testing.T) {
-	before, after, id := scaleP21SW205AggregateFixture("raw-number-unicode-duplicates")
-	left, right, release := scaleP21SW205AggregateImages(t, before, after, "stored-frame")
+func TestAggregatePublicationConcurrentOwnership(t *testing.T) {
+	before, after, id := aggregateFixture("raw-number-unicode-duplicates")
+	left, right, release := aggregateImages(t, before, after, "stored-frame")
 	defer release()
 	probe := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	var group sync.WaitGroup
@@ -214,7 +214,7 @@ func TestScaleP21SW205AggregatePublicationConcurrentOwnership(t *testing.T) {
 	}
 }
 
-func scaleP21SW205AggregateImages(t *testing.T, before, after domain.Bootstrap, mode string) (metadataAggregateImage, metadataAggregateImage, func()) {
+func aggregateImages(t *testing.T, before, after domain.Bootstrap, mode string) (metadataAggregateImage, metadataAggregateImage, func()) {
 	t.Helper()
 	left, err := captureMetadataLogicalSource(t.Context(), before, copyStamp{})
 	if err != nil {
@@ -234,7 +234,7 @@ func scaleP21SW205AggregateImages(t *testing.T, before, after domain.Bootstrap, 
 	return a, b, func() { left.Release(); right.Release() }
 }
 
-func scaleP21SW205AggregateFixture(shape string) (before, after domain.Bootstrap, id string) {
+func aggregateFixture(shape string) (before, after domain.Bootstrap, id string) {
 	id = "document_sw205"
 	content := "before"
 	switch shape {
@@ -307,28 +307,28 @@ func scaleP21SW205AggregateFixture(shape string) (before, after domain.Bootstrap
 	return before, after, id
 }
 
-func scaleP21SW205ByteCharge(size int) int {
+func byteCharge(size int) int {
 	if size == 0 {
 		return 0
 	}
 	return ((size + 8191) &^ 8191) + 64
 }
 
-func scaleP21SW205Preview(raw []byte) string {
+func aggregatePublicationPreview(raw []byte) string {
 	if len(raw) > 256 {
 		return string(raw[:256]) + fmt.Sprintf("... (%d bytes)", len(raw))
 	}
 	return string(raw)
 }
 
-type scaleP21SW205CancelContext struct {
+type aggregatePublicationCancelContext struct {
 	context.Context
 	cancel context.CancelFunc
 	at     int64
 	calls  atomic.Int64
 }
 
-func (c *scaleP21SW205CancelContext) Err() error {
+func (c *aggregatePublicationCancelContext) Err() error {
 	if c.calls.Add(1) == c.at {
 		c.cancel()
 	}

@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW291: a loop's uploads follow the loop's read rule. Workspace loops are
+// A loop's uploads follow the loop's read rule. Workspace loops are
 // read by every active member through GET /api/loops, and a private team's
 // loop only by people who can see that team (admins, its members), so a file
 // on an existing loop is served to exactly the principals whose loop list
@@ -26,12 +26,12 @@ import (
 // on the loop nor the claimed upload record serves its file, not even to the
 // uploader. A pending upload stays its uploader's. Legacy and bounded checks
 // answer identically, warm and SQL-reloaded.
-func TestScaleP21SW291LoopAttachmentVisibility(t *testing.T) {
+func TestLoopAttachmentVisibility(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW268Seed(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := attachmentVisibilitySeed(t, repo)
 		workspace := f.data.Workspace.URLKey
 		prefix := idgen.New("sw291-")
 		stamp := time.Date(2026, time.November, 17, 10, 0, 0, 0, time.UTC)
@@ -146,8 +146,8 @@ func TestScaleP21SW291LoopAttachmentVisibility(t *testing.T) {
 			for _, principal := range f.principals {
 				for _, name := range names {
 					t.Run(fmt.Sprintf("reload=%t/%s/%s", reload, principal.name, name), func(t *testing.T) {
-						legacy := scaleP21SW268Serve(t, f, repo, principal.user, url(name))
-						bounded := scaleP21SW268Serve(t, f, view, principal.user, url(name))
+						legacy := attachmentVisibilityServe(t, f, repo, principal.user, url(name))
+						bounded := attachmentVisibilityServe(t, f, view, principal.user, url(name))
 						if !reflect.DeepEqual(legacy, bounded) {
 							t.Fatalf("upload visibility differs:\nlegacy=%+v\nbounded=%+v", legacy, bounded)
 						}

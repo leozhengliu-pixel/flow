@@ -16,12 +16,12 @@ import (
 
 // This preserves evidence for an activation blocker, not migration approval:
 // the accepted trusted writer retains NUL in warm state but strips it in SQL.
-func TestScaleP21SW25ReleaseKeySourceCompatibilityHold(t *testing.T) {
+func TestReleaseKeySourceCompatibilityHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		secret := "flow_release_" + idgen.New("sw25-source-")
 		hash := secretHash(secret)

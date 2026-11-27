@@ -9,11 +9,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW18StoredWorkspaceResidentBoundary(t *testing.T) {
+func TestStoredWorkspaceResidentBoundary(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "project.updated", "", nil, func(data *domain.Bootstrap) error {
 		for range 75 {

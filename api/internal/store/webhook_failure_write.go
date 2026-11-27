@@ -438,7 +438,7 @@ func (s *SQLiteStore) RecordWebhookDeliveryFailure(ctx context.Context, workspac
 				return err
 			}
 			writeCtx := context.WithValue(ctx, metadataAppendOrdersKey{}, retention.orders)
-			if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(domain.Bootstrap{}), retention.changes); err != nil {
+			if err := scaleWriteChanges(writeCtx, tx, workspace, newIssueReferences(domain.Bootstrap{}), retention.changes); err != nil {
 				return err
 			}
 			for key, order := range retention.orders {

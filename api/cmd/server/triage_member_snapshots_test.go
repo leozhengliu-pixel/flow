@@ -25,7 +25,7 @@ import (
 // Legacy, warm and SQL-reloaded runs agree byte for byte, and no run writes
 // live membership into the stored members/teamMembers image.
 
-func (f scaleP21IssueUpdateFixture) sw401TeamMember(t *testing.T, team, user string, present bool) {
+func (f scaleIssueUpdateFixture) triageMemberSnapshotsTeamMember(t *testing.T, team, user string, present bool) {
 	t.Helper()
 	f.exec(t, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, f.data.Workspace.ID, team, user)
 	if present {
@@ -34,10 +34,10 @@ func (f scaleP21IssueUpdateFixture) sw401TeamMember(t *testing.T, team, user str
 	}
 }
 
-// sw401LeaveConcurrently removes user's team membership row from another
+// leaveConcurrently removes user's team membership row from another
 // connection while a writer may hold the database: SQLite busy errors are
 // retried, so the removal lands before, during or after the write.
-func (f scaleP21IssueUpdateFixture) sw401LeaveConcurrently(team, user string) error {
+func (f scaleIssueUpdateFixture) leaveConcurrently(team, user string) error {
 	query := `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`
 	if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
 		query = `DELETE FROM team_memberships WHERE workspace_id=$1 AND team_id=$2 AND user_id=$3`
@@ -52,13 +52,13 @@ func (f scaleP21IssueUpdateFixture) sw401LeaveConcurrently(team, user string) er
 	return err
 }
 
-func (f scaleP21IssueUpdateFixture) sw401Status(t *testing.T, user, status string) {
+func (f scaleIssueUpdateFixture) triageMemberSnapshotsStatus(t *testing.T, user, status string) {
 	t.Helper()
 	f.exec(t, `UPDATE workspace_memberships SET status=? WHERE workspace_id=? AND user_id=?`, status, f.data.Workspace.ID, user)
 }
 
-// sw401Image edits the stored image only (no membership rows change).
-func (f scaleP21IssueUpdateFixture) sw401Image(t *testing.T, edit func(*domain.Bootstrap)) {
+// triageMemberSnapshotsImage edits the stored image only (no membership rows change).
+func (f scaleIssueUpdateFixture) triageMemberSnapshotsImage(t *testing.T, edit func(*domain.Bootstrap)) {
 	t.Helper()
 	restore := store.ForceFullMutationsForTesting(true)
 	defer restore()
@@ -70,24 +70,24 @@ func (f scaleP21IssueUpdateFixture) sw401Image(t *testing.T, edit func(*domain.B
 	}
 }
 
-func scaleP21SW401Private(data *domain.Bootstrap) {
+func triageMemberSnapshotsPrivate(data *domain.Bootstrap) {
 	settings := data.TeamSettings["tm-parent"]
 	settings.Access = "private"
 	data.TeamSettings["tm-parent"] = settings
 }
 
-func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
+func TestTriageTeamMoveMemberSnapshots(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	workspace := f.data.Workspace.URLKey
 	owner, member := f.data.Viewer, f.principals[2].user
 	former := f.former
 	reset := func(t *testing.T) {
 		for _, user := range []string{owner.ID, member.ID} {
-			f.sw401TeamMember(t, "tm-parent", user, false)
-			f.sw401Status(t, user, "active")
+			f.triageMemberSnapshotsTeamMember(t, "tm-parent", user, false)
+			f.triageMemberSnapshotsStatus(t, user, "active")
 		}
 	}
 	t.Cleanup(func() { reset(t) })
@@ -101,14 +101,14 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 	private := func(image, live []string) func(*testing.T) {
 		return func(t *testing.T) {
 			reset(t)
-			f.sw401Image(t, func(data *domain.Bootstrap) {
-				scaleP21SW401Private(data)
+			f.triageMemberSnapshotsImage(t, func(data *domain.Bootstrap) {
+				triageMemberSnapshotsPrivate(data)
 				for _, user := range image {
 					data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: "tm-parent", UserID: user, Role: "member"})
 				}
 			})
 			for _, user := range live {
-				f.sw401TeamMember(t, "tm-parent", user, true)
+				f.triageMemberSnapshotsTeamMember(t, "tm-parent", user, true)
 			}
 		}
 	}
@@ -135,7 +135,7 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 	duplicates := func(t *testing.T) {
 		reset(t)
 		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-		f.sw401Image(t, func(data *domain.Bootstrap) {
+		f.triageMemberSnapshotsImage(t, func(data *domain.Bootstrap) {
 			for _, item := range []domain.IssueSuggestion{
 				{ID: "tm-s-parent", IssueID: f.triage.ID, Type: "team", State: "active", SuggestedTeamID: "tm-other"},
 				{ID: "tm-s-parent", IssueID: f.triage.ID, Type: "team", State: "dismissed", SuggestedTeamID: "tm-parent"},
@@ -150,7 +150,7 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name  string
-		opts  scaleP21TeamMoveOptions
+		opts  scaleTeamMoveOptions
 		edit  func(*domain.Issue)
 		setup func(*testing.T)
 		call  func(*server) *httptest.ResponseRecorder
@@ -178,24 +178,24 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 			call: accept(member, "tm-s-parent")},
 		{name: "actor-suspended-after-snapshot", edit: assignee(former), setup: func(t *testing.T) {
 			reset(t)
-			f.sw401Status(t, member.ID, "suspended")
+			f.triageMemberSnapshotsStatus(t, member.ID, "suspended")
 		}, call: accept(member, "tm-s-parent")},
 		{name: "duplicate-suggestions-and-team-members", edit: assignee(member, member.ID, member.ID), setup: duplicates,
 			call: accept(member, "tm-s-parent"), code: http.StatusOK, team: "tm-parent"},
-		{name: "generate-auto-move-former-assignee", opts: scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"},
+		{name: "generate-auto-move-former-assignee", opts: scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"},
 			edit: assignee(former, former.ID, member.ID, former.ID), setup: reset, call: generate, code: http.StatusOK, team: "tm-parent"},
-		{name: "generate-auto-move-private-destination", opts: scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"},
+		{name: "generate-auto-move-private-destination", opts: scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"},
 			edit: assignee(member, former.ID), setup: private([]string{member.ID}, nil), call: generate, code: http.StatusOK},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID})
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{opts: test.opts, edit: test.edit, setup: test.setup, issue: f.triage.ID})
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			defer reset(t)
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
-				before := scaleP21SW185MemberImage(t, service.store, workspace)
+				before := memberImage(t, service.store, workspace)
 				w := test.call(service)
-				if after := scaleP21SW185MemberImage(t, service.store, workspace); after != before {
-					t.Fatalf("bounded=%t replaced the stored member snapshots: %s", service.store.BoundedMetadataEnabled(), scaleP21M2Diff(before, after))
+				if after := memberImage(t, service.store, workspace); after != before {
+					t.Fatalf("bounded=%t replaced the stored member snapshots: %s", service.store.BoundedMetadataEnabled(), policyFirstDifference(before, after))
 				}
 				return w
 			})
@@ -205,7 +205,7 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 				t.Fatalf("legacy status %d, want %d: %s", legacy.Code, test.code, legacy.Body)
 			}
 			if test.team != "" {
-				issue := scaleP21TeamMoveIssue(t, scaleP21TeamMoveOutcome{State: legacy.State.scaleP21TeamMoveState}, f.triage.ID)
+				issue := scaleTeamMoveIssue(t, scaleTeamMoveOutcome{State: legacy.State.scaleTeamMoveState}, f.triage.ID)
 				if issue.Team.ID != test.team || issue.Assignee == nil {
 					t.Fatalf("legacy issue team %s assignee %v", issue.Team.ID, issue.Assignee)
 				}
@@ -218,22 +218,22 @@ func TestScaleP21SW401TriageTeamMoveMemberSnapshots(t *testing.T) {
 // the accepted move runs. Every bounded outcome equals the legacy outcome
 // of the removal landing before the move (refused) or after it (moved): the
 // writer itself never consults destination membership.
-func TestScaleP21SW401TriageTeamMoveMembershipRemovedConcurrently(t *testing.T) {
+func TestTriageTeamMoveMembershipRemovedConcurrently(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner := f.data.Viewer
-	t.Cleanup(func() { f.sw401TeamMember(t, "tm-parent", owner.ID, false) })
+	t.Cleanup(func() { f.triageMemberSnapshotsTeamMember(t, "tm-parent", owner.ID, false) })
 	seed := func(t *testing.T) {
-		f.sw401Image(t, func(data *domain.Bootstrap) {
-			scaleP21SW401Private(data)
+		f.triageMemberSnapshotsImage(t, func(data *domain.Bootstrap) {
+			triageMemberSnapshotsPrivate(data)
 			data.TeamMembers = append(data.TeamMembers, domain.TeamMember{TeamID: "tm-parent", UserID: owner.ID, Role: "member"})
 		})
-		f.sw401TeamMember(t, "tm-parent", owner.ID, true)
+		f.triageMemberSnapshotsTeamMember(t, "tm-parent", owner.ID, true)
 	}
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{setup: seed, issue: f.triage.ID})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{setup: seed, issue: f.triage.ID})
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	accept := func(service *server) *httptest.ResponseRecorder {
 		return f.stateRequest(service, owner, nil, f.triage.ID, "tm-s-parent", true, false)
 	}
@@ -241,14 +241,14 @@ func TestScaleP21SW401TriageTeamMoveMembershipRemovedConcurrently(t *testing.T) 
 	for _, removedFirst := range []bool{true, false} {
 		got, started := f.run(t, "legacy", func(service *server) *httptest.ResponseRecorder {
 			if removedFirst {
-				f.sw401TeamMember(t, "tm-parent", owner.ID, false)
+				f.triageMemberSnapshotsTeamMember(t, "tm-parent", owner.ID, false)
 				return accept(service)
 			}
 			w := accept(service)
-			f.sw401TeamMember(t, "tm-parent", owner.ID, false)
+			f.triageMemberSnapshotsTeamMember(t, "tm-parent", owner.ID, false)
 			return w
 		})
-		expected[scaleP21IssueUpdateNormalize(t, got, started)] = got.Code
+		expected[scaleIssueUpdateNormalize(t, got, started)] = got.Code
 	}
 	if len(expected) != 2 {
 		t.Fatal("legacy removal orders produced one outcome")
@@ -270,7 +270,7 @@ func TestScaleP21SW401TriageTeamMoveMembershipRemovedConcurrently(t *testing.T) 
 					if attempt%2 == 1 {
 						time.Sleep(time.Duration(attempt) * time.Millisecond)
 					}
-					if err := f.sw401LeaveConcurrently("tm-parent", owner.ID); err != nil {
+					if err := f.leaveConcurrently("tm-parent", owner.ID); err != nil {
 						t.Error(err)
 					}
 				}()
@@ -278,7 +278,7 @@ func TestScaleP21SW401TriageTeamMoveMembershipRemovedConcurrently(t *testing.T) 
 				wait.Wait()
 				return w
 			})
-			if _, ok := expected[scaleP21IssueUpdateNormalize(t, got, started)]; !ok {
+			if _, ok := expected[scaleIssueUpdateNormalize(t, got, started)]; !ok {
 				t.Fatalf("%s attempt %d: concurrent removal matches no sequential legacy order (status %d): %s", source, attempt, got.Code, got.Body)
 			}
 		}

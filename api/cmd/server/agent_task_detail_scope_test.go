@@ -65,7 +65,7 @@ type agentTaskDetailPrincipal struct {
 }
 
 type agentTaskDetailFixture struct {
-	scaleP03PlatformFixture
+	scalePlatformFixture
 	principals []agentTaskDetailPrincipal
 	tasks      map[string]string // name -> task id
 	issueID    string
@@ -74,7 +74,7 @@ type agentTaskDetailFixture struct {
 
 func agentTaskDetailSetup(t *testing.T, repo *store.SQLiteStore) agentTaskDetailFixture {
 	t.Helper()
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	ctx := t.Context()
 	workspace, owner, public := f.data.Workspace.URLKey, f.data.Viewer, f.data.Teams[0].ID
 	prefix := idgen.New("atd-")
@@ -92,10 +92,10 @@ func agentTaskDetailSetup(t *testing.T, repo *store.SQLiteStore) agentTaskDetail
 		t.Fatal(err)
 	}
 	origin, _ := url.Parse(f.host.URL)
-	admin, adminUser := scaleP03Join(t, f, "Detail admin", prefix+"-admin@example.test", "admin", public)
-	member, memberUser := scaleP03Join(t, f, "Detail member", prefix+"-member@example.test", "member", public)
-	guest, guestUser := scaleP03Join(t, f, "Detail guest", prefix+"-guest@example.test", "guest", public)
-	insider, insiderUser := scaleP03Join(t, f, "Detail private member", prefix+"-insider@example.test", "member", public)
+	admin, adminUser := resourceAccessScaleJoin(t, f, "Detail admin", prefix+"-admin@example.test", "admin", public)
+	member, memberUser := resourceAccessScaleJoin(t, f, "Detail member", prefix+"-member@example.test", "member", public)
+	guest, guestUser := resourceAccessScaleJoin(t, f, "Detail guest", prefix+"-guest@example.test", "guest", public)
+	insider, insiderUser := resourceAccessScaleJoin(t, f, "Detail private member", prefix+"-insider@example.test", "member", public)
 	if err := repo.SetTeamMembership(ctx, f.data.Workspace.ID, private, insiderUser.ID, "member", true); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func agentTaskDetailSetup(t *testing.T, repo *store.SQLiteStore) agentTaskDetail
 		{name: "revoked-key", bearer: prefix + "-secret-revoked-key"},
 		{name: "app", bearer: appSecret},
 	}
-	return agentTaskDetailFixture{scaleP03PlatformFixture: f, principals: principals, tasks: tasks, issueID: publicIssue.ID, reply: reply}
+	return agentTaskDetailFixture{scalePlatformFixture: f, principals: principals, tasks: tasks, issueID: publicIssue.ID, reply: reply}
 }
 
 func agentTaskDetailRequest(f agentTaskDetailFixture, principal agentTaskDetailPrincipal, path string) *http.Request {
@@ -214,7 +214,7 @@ func agentTaskDetailLegacyEnv(t *testing.T) {
 // pre-fix authorization waited for a slot and answered 503 after the wait.
 func TestAgentTaskDetailReadsWithoutWorkspaceProjection(t *testing.T) {
 	agentTaskDetailLegacyEnv(t)
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
 			f := agentTaskDetailSetup(t, repo)
 			const wait = time.Second
@@ -340,7 +340,7 @@ func agentTaskDetailOriginalMCP(ctx context.Context, s *server, actor mcpActor, 
 // over HTTP and through the MCP session reader.
 func TestAgentTaskDetailScopedAuthorizationDifferential(t *testing.T) {
 	agentTaskDetailLegacyEnv(t)
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
 			f := agentTaskDetailSetup(t, repo)
 			bounded, err := repo.BoundedMetadataViewForTesting(t.Context())

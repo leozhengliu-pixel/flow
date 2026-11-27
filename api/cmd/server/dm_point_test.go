@@ -18,13 +18,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
+func TestDMPointOutputDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw40-dm-point-")
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{
 			"title": "DM exact point title", "description": "Complete point description", "teamId": f.public,
@@ -140,7 +140,7 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 				}
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("DM operation=%s changed:\n%s", fixture.name, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("DM operation=%s changed:\n%s", fixture.name, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		}
 		identity := domain.ChatIdentity{UserID: f.data.Viewer.ID, OpenID: "sw40-open-id", TenantKey: record.TenantKey, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
@@ -207,7 +207,7 @@ func TestScaleP21SW40DMPointOutputDifferential(t *testing.T) {
 		for _, output := range postOutputs {
 			if !bytes.Contains(firstPost, []byte("Comment added")) || output.Error != "" ||
 				!reflect.DeepEqual(postOutputs[0], output) {
-				t.Fatalf("successful POST card/retry changed:\n%s", scaleP21M2Diff(postOutputs[0], output))
+				t.Fatalf("successful POST card/retry changed:\n%s", policyFirstDifference(postOutputs[0], output))
 			}
 		}
 		comments, _, err := repo.ResourceCommentsPage(t.Context(), workspace, issue.ID, "", 100)

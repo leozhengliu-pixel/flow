@@ -17,14 +17,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW165Fixture(t *testing.T) (scaleP09Fixture, string) {
+func generalBootstrapReadFixture(t *testing.T) (scaleFixture, string) {
 	t.Helper()
-	scaleP21SW143Setup(t)
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+	bootstrapProjectionReadSetup(t)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 	prefix := idgen.New("sw165-")
 	at := time.Date(2026, 11, 15, 4, 5, 6, 789, time.UTC)
-	scaleP21SW63Seed(t, f, issue, at)
-	scaleP21SW143Seed(t, f, prefix, "Small bootstrap body <>&")
+	discussionWriterSeed(t, f, issue, at)
+	bootstrapProjectionReadSeed(t, f, prefix, "Small bootstrap body <>&")
 	if err := f.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw165_activity", "", nil, func(data *domain.Bootstrap) error {
 		data.Activities[issue.ID] = []domain.ActivityEvent{{
 			ID: prefix + "activity", Type: "comment.created", Actor: data.Viewer,
@@ -37,7 +37,7 @@ func scaleP21SW165Fixture(t *testing.T) (scaleP09Fixture, string) {
 	return f, prefix
 }
 
-func scaleP21SW165Compare(t *testing.T, ctx context.Context, want domain.Bootstrap, read *GeneralBootstrapRead) {
+func generalBootstrapReadCompare(t *testing.T, ctx context.Context, want domain.Bootstrap, read *GeneralBootstrapRead) {
 	t.Helper()
 	// The general outline retains update maps, unlike the paged issue
 	// projection. Only these five dead HTTP fields are omitted early.
@@ -51,7 +51,7 @@ func scaleP21SW165Compare(t *testing.T, ctx context.Context, want domain.Bootstr
 	if err := read.WriteJSON(ctx, &actual); err != nil {
 		t.Fatal("encode general bootstrap", err)
 	}
-	expected := scaleP21SW143Encode(t, want)
+	expected := bootstrapProjectionReadEncode(t, want)
 	if !bytes.Equal(expected, actual.Bytes()) {
 		position := 0
 		for position < min(len(expected), actual.Len()) && expected[position] == actual.Bytes()[position] {
@@ -64,8 +64,8 @@ func scaleP21SW165Compare(t *testing.T, ctx context.Context, want domain.Bootstr
 	}
 }
 
-func TestScaleP21SW165GeneralBootstrapSnapshotChoice(t *testing.T) {
-	f, prefix := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapSnapshotChoice(t *testing.T) {
+	f, prefix := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestScaleP21SW165GeneralBootstrapSnapshotChoice(t *testing.T) {
 							err, beforeWork, peakWork, view.MetadataWorkUsedForTesting(), view.metadataResidency.work.limit, view.maxStateBytes)
 					}
 					defer read.Close()
-					scaleP21SW165Compare(t, t.Context(), want, read)
+					generalBootstrapReadCompare(t, t.Context(), want, read)
 					read.Close()
 					read.Close()
 					if !reflect.DeepEqual(read.Data, domain.Bootstrap{}) || view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
@@ -143,13 +143,13 @@ func TestScaleP21SW165GeneralBootstrapSnapshotChoice(t *testing.T) {
 	}
 }
 
-type scaleP21SW165ContentRow struct {
+type contentRow struct {
 	Resource string
 	Raw      json.RawMessage
 }
 
-func TestScaleP21SW165GeneralBootstrapWalkersRetainSnapshot(t *testing.T) {
-	f, _ := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapWalkersRetainSnapshot(t *testing.T) {
+	f, _ := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -169,10 +169,10 @@ func TestScaleP21SW165GeneralBootstrapWalkersRetainSnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	wantContent := map[string][]scaleP21SW165ContentRow{}
+	wantContent := map[string][]contentRow{}
 	for _, kind := range []string{"comment", "activity", "notification", "delivery"} {
 		if err := f.WalkContentRecords(literal, workspace, kind, func(resource string, raw json.RawMessage) error {
-			wantContent[kind] = append(wantContent[kind], scaleP21SW165ContentRow{resource, slices.Clone(raw)})
+			wantContent[kind] = append(wantContent[kind], contentRow{resource, slices.Clone(raw)})
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -212,9 +212,9 @@ func TestScaleP21SW165GeneralBootstrapWalkersRetainSnapshot(t *testing.T) {
 	}
 	checkOpen()
 	for _, kind := range []string{"comment", "activity", "notification", "delivery"} {
-		var got []scaleP21SW165ContentRow
+		var got []contentRow
 		if err := read.WalkContentRecords(t.Context(), workspace, kind, func(resource string, raw json.RawMessage) error {
-			got = append(got, scaleP21SW165ContentRow{resource, slices.Clone(raw)})
+			got = append(got, contentRow{resource, slices.Clone(raw)})
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -244,8 +244,8 @@ func TestScaleP21SW165GeneralBootstrapWalkersRetainSnapshot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW165GeneralBootstrapRejectsNestedCallerSnapshot(t *testing.T) {
-	f, prefix := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapRejectsNestedCallerSnapshot(t *testing.T) {
+	f, prefix := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -289,8 +289,8 @@ func TestScaleP21SW165GeneralBootstrapRejectsNestedCallerSnapshot(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW165GeneralBootstrapCancellationQuotaRelease(t *testing.T) {
-	f, _ := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapCancellationQuotaRelease(t *testing.T) {
+	f, _ := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -355,8 +355,8 @@ func TestScaleP21SW165GeneralBootstrapCancellationQuotaRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW165GeneralBootstrapRetainedNativeMaps(t *testing.T) {
-	f, prefix := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapRetainedNativeMaps(t *testing.T) {
+	f, prefix := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -404,8 +404,8 @@ func TestScaleP21SW165GeneralBootstrapRetainedNativeMaps(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW165GeneralBootstrapOutputTransfer(t *testing.T) {
-	f, _ := scaleP21SW165Fixture(t)
+func TestGeneralBootstrapOutputTransfer(t *testing.T) {
+	f, _ := generalBootstrapReadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

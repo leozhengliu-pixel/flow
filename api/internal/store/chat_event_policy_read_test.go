@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21ChatEventPolicyProjection(data domain.Bootstrap, request ChatEventPolicyRequest) (bool, string, []ChatEventTemplateHeader) {
+func scaleChatEventPolicyProjection(data domain.Bootstrap, request ChatEventPolicyRequest) (bool, string, []ChatEventTemplateHeader) {
 	found, issueID := false, ""
 	if request.AskID != nil {
 		for _, ask := range data.Asks {
@@ -31,15 +31,15 @@ func scaleP21ChatEventPolicyProjection(data domain.Bootstrap, request ChatEventP
 	return found, issueID, templates
 }
 
-func scaleP21ChatEventPolicyEqual(t *testing.T, read *ChatEventPolicyRead, data domain.Bootstrap, request ChatEventPolicyRequest) {
+func scaleChatEventPolicyEqual(t *testing.T, read *ChatEventPolicyRead, data domain.Bootstrap, request ChatEventPolicyRequest) {
 	t.Helper()
-	found, issueID, templates := scaleP21ChatEventPolicyProjection(data, request)
+	found, issueID, templates := scaleChatEventPolicyProjection(data, request)
 	if read.AskFound != found || read.AskIssueID != issueID || !reflect.DeepEqual(read.Templates, templates) {
 		t.Fatal("installed event policy projection changed", read.AskFound, read.AskIssueID, read.Templates)
 	}
 }
 
-func TestScaleP21ChatEventPolicyNativeOwnership(t *testing.T) {
+func TestScaleChatEventPolicyNativeOwnership(t *testing.T) {
 	data := domain.Bootstrap{
 		Asks: []domain.Ask{
 			{ID: "duplicate", IssueID: ""}, {ID: "duplicate", IssueID: "wrong-later"},
@@ -54,7 +54,7 @@ func TestScaleP21ChatEventPolicyNativeOwnership(t *testing.T) {
 			{ID: "template\x00id", TemplateType: "form"},
 		},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, id := range []string{"duplicate", "", "ask\x00id", "missing"} {
 		request := ChatEventPolicyRequest{AskID: &id, TemplateIDs: []string{"duplicate", "", "template\x00id", "duplicate"}}
@@ -64,7 +64,7 @@ func TestScaleP21ChatEventPolicyNativeOwnership(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			scaleP21ChatEventPolicyEqual(t, read, data, request)
+			scaleChatEventPolicyEqual(t, read, data, request)
 			if statements != 0 || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used == 0 {
 				t.Fatal("event headers hydrated metadata or lost ownership", statements)
 			}
@@ -107,7 +107,7 @@ func TestScaleP21ChatEventPolicyNativeOwnership(t *testing.T) {
 					t.Error(found, err)
 					return
 				}
-				foundAsk, issueID, templates := scaleP21ChatEventPolicyProjection(data, request)
+				foundAsk, issueID, templates := scaleChatEventPolicyProjection(data, request)
 				if read.AskFound != foundAsk || read.AskIssueID != issueID || !reflect.DeepEqual(read.Templates, templates) {
 					t.Error("concurrent event policy projection changed")
 				}
@@ -121,10 +121,10 @@ func TestScaleP21ChatEventPolicyNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatEventPolicyWarmReloadAndPin(t *testing.T) {
+func TestScaleChatEventPolicyWarmReloadAndPin(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, askID := f.data.Workspace.URLKey, "event-policy-ask"
 	request := ChatEventPolicyRequest{AskID: &askID, TemplateIDs: []string{"event-policy-template"}}
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -163,7 +163,7 @@ func TestScaleP21ChatEventPolicyWarmReloadAndPin(t *testing.T) {
 			if err != nil || !found {
 				t.Fatal(found, err)
 			}
-			scaleP21ChatEventPolicyEqual(t, read, data, request)
+			scaleChatEventPolicyEqual(t, read, data, request)
 			held := view.metadataResidency.work.used
 			if expectedWork[reload] == 0 {
 				expectedWork[reload] = held
@@ -196,7 +196,7 @@ func TestScaleP21ChatEventPolicyWarmReloadAndPin(t *testing.T) {
 		t.Fatal(found, err)
 	}
 	parent.Close()
-	scaleP21ChatEventPolicyEqual(t, read, old, request)
+	scaleChatEventPolicyEqual(t, read, old, request)
 	read.Close()
 	if view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("pinned child leaked event policy work")

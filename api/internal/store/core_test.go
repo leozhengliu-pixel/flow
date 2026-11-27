@@ -12,10 +12,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21M1CoreMetadataDifferential(t *testing.T) {
+func TestScaleCoreMetadataDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: "m1-unrelated", Description: strings.Repeat("unrelated ", 40000)})
@@ -111,9 +111,9 @@ func TestScaleP21M1CoreMetadataDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21M1CoreSeedOwnerDifferential(t *testing.T) {
+func TestScaleCoreSeedOwnerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

@@ -413,7 +413,7 @@ type realtimePayloadEntry struct {
 
 const (
 	realtimePayloadCacheEntries = 256
-	// The remaining 8 MiB of P06's payload envelope holds event sources.
+	// The remaining 8 MiB of presence and realtime's payload envelope holds event sources.
 	realtimePayloadCacheBytes = 24 << 20
 )
 

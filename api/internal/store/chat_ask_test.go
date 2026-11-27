@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW197AskCallback(input ChatRequestAskInput, fallback domain.User, clock time.Time) func(*domain.Bootstrap) (string, error) {
+func askCallback(input ChatRequestAskInput, fallback domain.User, clock time.Time) func(*domain.Bootstrap) (string, error) {
 	return func(data *domain.Bootstrap) (string, error) {
 		if slices.ContainsFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == input.ID || ask.IssueID == input.IssueID }) {
 			return input.ID, ErrNoMutation
@@ -44,7 +44,7 @@ func scaleP21SW197AskCallback(input ChatRequestAskInput, fallback domain.User, c
 	}
 }
 
-func scaleP21SW197StoredMetadata(t *testing.T, repo *SQLiteStore, workspace string) any {
+func chatAskStoredMetadata(t *testing.T, repo *SQLiteStore, workspace string) any {
 	t.Helper()
 	var root json.RawMessage
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&root); err != nil {
@@ -79,11 +79,11 @@ func scaleP21SW197StoredMetadata(t *testing.T, repo *SQLiteStore, workspace stri
 	return result
 }
 
-func TestScaleP21SW197ChatAskDifferential(t *testing.T) {
+func TestChatAskDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw197-")
 	clock := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	input := ChatRequestAskInput{
@@ -186,7 +186,7 @@ func TestScaleP21SW197ChatAskDifferential(t *testing.T) {
 					ctx := ContextWithActor(t.Context(), actor)
 					var statements int
 					ctx = WithSQLStatementObserver(ctx, func(string) { statements++ })
-					callback := scaleP21SW197AskCallback(input, actor, clock)
+					callback := askCallback(input, actor, clock)
 					if mode == "legacy" {
 						err = source.MutateWorkspaceWithAggregate(ctx, workspace, "ask.created", payload, callback)
 					} else {
@@ -244,7 +244,7 @@ func TestScaleP21SW197ChatAskDifferential(t *testing.T) {
 					} else if len(createdAudits) != 1 || len(webhooks) != 1 || len(realtime) != 1 {
 						t.Fatal("Ask lost audit/event publication", len(createdAudits), len(webhooks), len(realtime))
 					}
-					outcome := []any{scaleP21SW197StoredMetadata(t, f.SQLiteStore, workspace), createdAudits, webhooks, realtime}
+					outcome := []any{chatAskStoredMetadata(t, f.SQLiteStore, workspace), createdAudits, webhooks, realtime}
 					raw, err := json.Marshal(outcome)
 					if err != nil {
 						t.Fatal(err)
@@ -265,19 +265,19 @@ func TestScaleP21SW197ChatAskDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ChatAskCancellationAndBudget(t *testing.T) {
+func TestChatAskCancellationAndBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
 	input := ChatRequestAskInput{ID: idgen.New("sw197-ask-"), IssueID: idgen.New("sw197-issue-"), Source: "lark"}
-	before := scaleP21SW197StoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)
-	callback := scaleP21SW197AskCallback(input, f.data.Viewer, time.Now().UTC())
+	before := chatAskStoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)
+	callback := askCallback(input, f.data.Viewer, time.Now().UTC())
 	cancelled, cancel := context.WithCancel(ContextWithActor(t.Context(), f.data.Viewer))
 	cancel()
 	if err := view.CreateChatRequestAsk(cancelled, f.data.Workspace.URLKey, input, callback); !errors.Is(err, context.Canceled) {
@@ -292,7 +292,7 @@ func TestScaleP21SW197ChatAskCancellationAndBudget(t *testing.T) {
 	if !errors.Is(err, ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("Ask budget refusal leaked work", err, view.MetadataWorkUsedForTesting())
 	}
-	if !reflect.DeepEqual(before, scaleP21SW197StoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
+	if !reflect.DeepEqual(before, chatAskStoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
 		t.Fatal("refused Ask changed persistent metadata")
 	}
 	sentinel := errors.New("rolled back Ask callback")
@@ -301,7 +301,7 @@ func TestScaleP21SW197ChatAskCancellationAndBudget(t *testing.T) {
 		return "", sentinel
 	})
 	if !errors.Is(err, sentinel) || view.MetadataWorkUsedForTesting() != 0 ||
-		!reflect.DeepEqual(before, scaleP21SW197StoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
+		!reflect.DeepEqual(before, chatAskStoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
 		t.Fatal("failed callback escaped rollback or leaked", err, view.MetadataWorkUsedForTesting())
 	}
 	t.Run("cancel-during-persistence", func(t *testing.T) {
@@ -316,7 +316,7 @@ func TestScaleP21SW197ChatAskCancellationAndBudget(t *testing.T) {
 		})
 		err := view.CreateChatRequestAsk(ctx, f.data.Workspace.URLKey, input, callback)
 		if !errors.Is(err, context.Canceled) || writes == 0 || view.MetadataWorkUsedForTesting() != 0 ||
-			!reflect.DeepEqual(before, scaleP21SW197StoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
+			!reflect.DeepEqual(before, chatAskStoredMetadata(t, f.SQLiteStore, f.data.Workspace.URLKey)) {
 			t.Fatal("cancellation during metadata persistence escaped rollback", err, writes, view.MetadataWorkUsedForTesting())
 		}
 	})

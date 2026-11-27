@@ -14,7 +14,7 @@ import (
 // The bounded workflow writer owns its full-record attempt and never reaches
 // the shared scoped kernel. Its only ordinal profile is integration delivery.
 // The workflow differentials do not certify any of the kernel's profiles.
-func TestScaleP21SW504WorkflowWriterKernelBoundary(t *testing.T) {
+func TestWorkflowWriterKernelBoundary(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

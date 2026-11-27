@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func scaleP21SW253CollectionAuthorizationRequest(r *http.Request) bool {
+func collectionAuthorizationRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
@@ -22,7 +22,7 @@ func scaleP21SW253CollectionAuthorizationRequest(r *http.Request) bool {
 // These exact collection roots have no per-resource authorization predicate.
 // Initiatives retain the literal root's independent guest refusal.
 func (s *server) boundedHotCollectionAuthorization(r *http.Request, workspace, userID string) (allowed, handled bool) {
-	if !s.store.BoundedMetadataEnabled() || !scaleP21SW253CollectionAuthorizationRequest(r) {
+	if !s.store.BoundedMetadataEnabled() || !collectionAuthorizationRequest(r) {
 		return false, false
 	}
 	request := r

@@ -56,7 +56,7 @@ function upsertById<T extends { id: string }>(items: T[], next: T): T[] {
 /**
  * Apply an SSE / realtime event as an entity-level patch when the payload is
  * self-contained. Returns `{ handled: false }` so callers can fall back to a
- * full REST bootstrap refresh (Wave 2 progressive store — LS-0718).
+ * full REST bootstrap refresh.
  */
 export function applyRealtimePatch(
   current: BootstrapData,

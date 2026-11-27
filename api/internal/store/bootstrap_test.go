@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW88JSONOracle(t *testing.T, view *SQLiteStore, data domain.Bootstrap, field string, workspaces ...string) int {
+func jsonOracle(t *testing.T, view *SQLiteStore, data domain.Bootstrap, field string, workspaces ...string) int {
 	t.Helper()
 	workspace := "physical"
 	if len(workspaces) > 0 {
@@ -36,7 +36,7 @@ func scaleP21SW88JSONOracle(t *testing.T, view *SQLiteStore, data domain.Bootstr
 	disk := metadataLogicalDiskUsed.Load()
 	var output bytes.Buffer
 	peak := 0
-	writer := &scaleP21SW88Writer{write: func(raw []byte) (int, error) {
+	writer := &bootstrapWriter{write: func(raw []byte) (int, error) {
 		held := view.MetadataWorkUsedForTesting()
 		if held <= base {
 			t.Error("field output lost independent scratch ownership")
@@ -65,15 +65,15 @@ func scaleP21SW88JSONOracle(t *testing.T, view *SQLiteStore, data domain.Bootstr
 	return peak
 }
 
-type scaleP21SW88Writer struct {
+type bootstrapWriter struct {
 	write func([]byte) (int, error)
 }
 
-func (w *scaleP21SW88Writer) Write(raw []byte) (int, error) {
+func (w *bootstrapWriter) Write(raw []byte) (int, error) {
 	return w.write(raw)
 }
 
-func TestScaleP21SW88LogicalJSONLiteral(t *testing.T) {
+func TestLogicalJSONLiteral(t *testing.T) {
 	type quoted struct {
 		Text string  `json:"text,string"`
 		Num  int64   `json:"num,string"`
@@ -153,13 +153,13 @@ func TestScaleP21SW88LogicalJSONLiteral(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			data := domain.Bootstrap{Settings: map[string]any{"value": test.value}}
-			view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
-			scaleP21SW88JSONOracle(t, view, data, "settings")
+			view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+			jsonOracle(t, view, data, "settings")
 		})
 	}
 }
 
-func TestScaleP21SW88LogicalJSONEveryField(t *testing.T) {
+func TestLogicalJSONEveryField(t *testing.T) {
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "native\x00workspace", URLKey: "physical"},
 		SavedViews: []domain.SavedView{
@@ -170,19 +170,19 @@ func TestScaleP21SW88LogicalJSONEveryField(t *testing.T) {
 		Documents: []domain.Document{{ID: "document", TeamIDs: []string{}, ContentData: map[string]any{"native": int64(9007199254740993)}}},
 		Settings:  map[string]any{"native": int64(9007199254740993)},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	typ := reflect.TypeFor[domain.Bootstrap]()
 	for index := range typ.NumField() {
 		field, _, _ := strings.Cut(typ.Field(index).Tag.Get("json"), ",")
 		if field != "" && field != "-" {
 			t.Run(field, func(t *testing.T) {
-				scaleP21SW88JSONOracle(t, view, data, field)
+				jsonOracle(t, view, data, field)
 			})
 		}
 	}
 }
 
-func TestScaleP21SW88LogicalJSONDuplicateTextKeyRefusal(t *testing.T) {
+func TestLogicalJSONDuplicateTextKeyRefusal(t *testing.T) {
 	first := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("first", 7*3600+1))
 	second := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("second", 7*3600+2))
 	left, leftErr := first.MarshalText()
@@ -191,7 +191,7 @@ func TestScaleP21SW88LogicalJSONDuplicateTextKeyRefusal(t *testing.T) {
 		t.Fatal("fixture needs distinct keys with identical text encoding")
 	}
 	data := domain.Bootstrap{Settings: map[string]any{"value": map[time.Time]string{first: "first", second: "second"}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -204,9 +204,9 @@ func TestScaleP21SW88LogicalJSONDuplicateTextKeyRefusal(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW88LogicalJSONLifetimeAndFailure(t *testing.T) {
+func TestLogicalJSONLifetimeAndFailure(t *testing.T) {
 	data := domain.Bootstrap{Settings: map[string]any{"body": strings.Repeat("body <>& ", 100000)}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	for _, outcome := range []string{"owner-close", "cancel", "writer-error", "short-write", "quota"} {
 		t.Run(outcome, func(t *testing.T) {
 			read, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
@@ -220,7 +220,7 @@ func TestScaleP21SW88LogicalJSONLifetimeAndFailure(t *testing.T) {
 			defer cancel()
 			sentinel := errors.New("destination refused")
 			calls := 0
-			writer := &scaleP21SW88Writer{write: func(raw []byte) (int, error) {
+			writer := &bootstrapWriter{write: func(raw []byte) (int, error) {
 				calls++
 				if view.MetadataWorkUsedForTesting() <= base {
 					t.Error("stream scratch was released before publication")
@@ -299,7 +299,7 @@ func TestScaleP21SW88LogicalJSONLifetimeAndFailure(t *testing.T) {
 	}
 	// Exercise actual admission rather than the removed fixed per-key limit.
 	largeKey := domain.Bootstrap{Settings: map[string]any{strings.Repeat("key", (2<<20)/3+1): "body"}}
-	keyView := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": largeKey})
+	keyView := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": largeKey})
 	keyRead, _, err := keyView.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -313,10 +313,10 @@ func TestScaleP21SW88LogicalJSONLifetimeAndFailure(t *testing.T) {
 	keyRead.Close()
 }
 
-func TestScaleP21SW88LogicalJSONWarmReloadAndLargeBodies(t *testing.T) {
+func TestLogicalJSONWarmReloadAndLargeBodies(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -343,7 +343,7 @@ func TestScaleP21SW88LogicalJSONWarmReloadAndLargeBodies(t *testing.T) {
 			f.mu.RLock()
 			literal := f.workspaces[workspace]
 			f.mu.RUnlock()
-			gotPeak := scaleP21SW88JSONOracle(t, view, literal, "savedViews", workspace)
+			gotPeak := jsonOracle(t, view, literal, "savedViews", workspace)
 			if peak == 0 {
 				peak = gotPeak
 			}
@@ -367,8 +367,8 @@ func TestScaleP21SW88LogicalJSONWarmReloadAndLargeBodies(t *testing.T) {
 			values[fmt.Sprintf("map-%03d", index)] = map[string]any{"nested": fmt.Sprintf("small-%03d", index)}
 		}
 		data := domain.Bootstrap{Settings: values}
-		native := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
-		gotPeak := scaleP21SW88JSONOracle(t, native, data, "settings")
+		native := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		gotPeak := jsonOracle(t, native, data, "settings")
 		if bodyPeak == 0 {
 			bodyPeak = gotPeak
 		}

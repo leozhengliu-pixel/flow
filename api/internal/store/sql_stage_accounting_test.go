@@ -13,13 +13,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW200Result struct {
+type sqlStageAccountingResult struct {
 	row, search []byte
 	budget      bool
 	billed      int
 }
 
-func scaleP21SW200Write(t *testing.T, fixture scaleP09Fixture, raw []byte, limit int, staged bool) scaleP21SW200Result {
+func sqlStageAccountingWrite(t *testing.T, fixture scaleFixture, raw []byte, limit int, staged bool) sqlStageAccountingResult {
 	t.Helper()
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -84,7 +84,7 @@ func scaleP21SW200Write(t *testing.T, fixture scaleP09Fixture, raw []byte, limit
 			}
 		}
 	}
-	result := scaleP21SW200Result{budget: errors.Is(err, ErrTransactionWriteBudget), billed: tx.writtenBytes}
+	result := sqlStageAccountingResult{budget: errors.Is(err, ErrTransactionWriteBudget), billed: tx.writtenBytes}
 	if err != nil {
 		if !result.budget {
 			t.Fatal(err)
@@ -111,10 +111,10 @@ func scaleP21SW200Write(t *testing.T, fixture scaleP09Fixture, raw []byte, limit
 	return result
 }
 
-func TestScaleP21SW200SQLStageLegacyBudgetBoundaries(t *testing.T) {
+func TestSQLStageLegacyBudgetBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	for _, size := range []int{32, 3*metadataRecordChunkBytes + 11} {
 		project := domain.Project{
 			ID: "sw200-" + fixture.data.Workspace.ID, Name: "Budget <project>",
@@ -133,8 +133,8 @@ func TestScaleP21SW200SQLStageLegacyBudgetBoundaries(t *testing.T) {
 			for _, delta := range []int{-1, 0, 1} {
 				t.Run(fmt.Sprintf("bytes=%d/boundary=%d/delta=%d", size, boundary, delta), func(t *testing.T) {
 					limit := boundary + delta
-					want := scaleP21SW200Write(t, fixture, raw, limit, false)
-					got := scaleP21SW200Write(t, fixture, raw, limit, true)
+					want := sqlStageAccountingWrite(t, fixture, raw, limit, false)
+					got := sqlStageAccountingWrite(t, fixture, raw, limit, true)
 					if !reflect.DeepEqual(got, want) {
 						t.Fatal("internal chunk controls changed literal transaction budget boundary", limit, got.billed, want.billed, got.budget, want.budget)
 					}
@@ -147,10 +147,10 @@ func TestScaleP21SW200SQLStageLegacyBudgetBoundaries(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW200SQLStageRejectsAccountingForgery(t *testing.T) {
+func TestSQLStageRejectsAccountingForgery(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -230,10 +230,10 @@ func TestScaleP21SW200SQLStageRejectsAccountingForgery(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW200SQLStageLargeDeclaredBytesUseTransactionBudget(t *testing.T) {
+func TestSQLStageLargeDeclaredBytesUseTransactionBudget(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -253,20 +253,20 @@ func TestScaleP21SW200SQLStageLargeDeclaredBytesUseTransactionBudget(t *testing.
 	}
 }
 
-func TestScaleP21SW200SQLStageCanonicalChargeMatchesLiteral(t *testing.T) {
+func TestSQLStageCanonicalChargeMatchesLiteral(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	project := domain.Project{ID: "sw200-" + fixture.data.Workspace.ID, Name: "SQL charge"}
 	raw, _ := json.Marshal(project)
-	want := scaleP21SW200Write(t, fixture, raw, 0, false)
-	got := scaleP21SW200Write(t, fixture, raw, 0, true)
+	want := sqlStageAccountingWrite(t, fixture, raw, 0, false)
+	got := sqlStageAccountingWrite(t, fixture, raw, 0, true)
 	if want.billed != got.billed || !bytes.Equal(want.row, got.row) || !bytes.Equal(want.search, got.search) {
 		t.Fatal("staged logical charges drifted from original canonical statements", got.billed, want.billed)
 	}
 }
 
-func scaleP21SW200RootWrite(t *testing.T, fixture scaleP09Fixture, raw []byte, updated string, limit int, staged bool) scaleP21SW200Result {
+func rootWrite(t *testing.T, fixture scaleFixture, raw []byte, updated string, limit int, staged bool) sqlStageAccountingResult {
 	t.Helper()
 	tx, err := fixture.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -310,7 +310,7 @@ func scaleP21SW200RootWrite(t *testing.T, fixture scaleP09Fixture, raw []byte, u
 			}
 		}
 	}
-	result := scaleP21SW200Result{budget: errors.Is(err, ErrTransactionWriteBudget), billed: tx.writtenBytes}
+	result := sqlStageAccountingResult{budget: errors.Is(err, ErrTransactionWriteBudget), billed: tx.writtenBytes}
 	if err != nil {
 		if !result.budget {
 			t.Fatal(err)
@@ -334,10 +334,10 @@ func scaleP21SW200RootWrite(t *testing.T, fixture scaleP09Fixture, raw []byte, u
 	return result
 }
 
-func TestScaleP21SW200SQLStageRootBudgetBoundaries(t *testing.T) {
+func TestSQLStageRootBudgetBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	for _, size := range []int{32, 3*metadataRecordChunkBytes + 11} {
 		raw, err := json.Marshal(map[string]any{
 			"workspace": map[string]any{"id": fixture.data.Workspace.ID},
@@ -350,8 +350,8 @@ func TestScaleP21SW200SQLStageRootBudgetBoundaries(t *testing.T) {
 		bill := len(metadataSQLStageLegacyRootSQL) + len(fixture.data.Workspace.ID) + len(raw) + len(updated) + len(fixture.data.Workspace.URLKey)
 		for _, delta := range []int{-1, 0, 1} {
 			t.Run(fmt.Sprintf("bytes=%d/delta=%d", size, delta), func(t *testing.T) {
-				want := scaleP21SW200RootWrite(t, fixture, raw, updated, bill+delta, false)
-				got := scaleP21SW200RootWrite(t, fixture, raw, updated, bill+delta, true)
+				want := rootWrite(t, fixture, raw, updated, bill+delta, false)
+				got := rootWrite(t, fixture, raw, updated, bill+delta, true)
 				if !reflect.DeepEqual(got, want) || (delta < 0) != got.budget {
 					t.Fatal("staged root changed literal budget or exact postimage", delta, got.billed, want.billed, got.budget, want.budget)
 				}

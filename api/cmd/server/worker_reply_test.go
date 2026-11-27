@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW159Message(id string, at time.Time) domain.AgentMessage {
+func workerReplyMessage(id string, at time.Time) domain.AgentMessage {
 	return domain.AgentMessage{
 		ID: id, Role: "assistant", Content: "native saved reply\x00", DurationMS: 9007199254740993, AnswerTo: "question",
 		Parts: []domain.AgentMessagePart{
@@ -45,7 +45,7 @@ func scaleP21SW159Message(id string, at time.Time) domain.AgentMessage {
 	}
 }
 
-func scaleP21SW159MessageFields(before, after domain.AgentMessage) []string {
+func messageFields(before, after domain.AgentMessage) []string {
 	var fields []string
 	left, right := reflect.ValueOf(before), reflect.ValueOf(after)
 	for index := 0; index < left.NumField(); index++ {
@@ -56,13 +56,13 @@ func scaleP21SW159MessageFields(before, after domain.AgentMessage) []string {
 	return fields
 }
 
-func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
+func TestWorkerReplyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_INTERNAL_CONVERSATION_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -120,7 +120,7 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 					case "nul-message":
 						mid += "\x00"
 					}
-					message := scaleP21SW159Message(mid, at)
+					message := workerReplyMessage(mid, at)
 					if strings.Contains(spec.name, "finished") || spec.name == "update-skip" {
 						message.Status = ""
 					}
@@ -312,7 +312,7 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 									t.Fatal("snapshot legacy draft", snapshotErr)
 								}
 							} else if !reflect.DeepEqual(draft.message, legacyDraft) {
-								t.Error("complete draft fields differ while stored reply is owned", scaleP21SW159MessageFields(legacyDraft, draft.message))
+								t.Error("complete draft fields differ while stored reply is owned", messageFields(legacyDraft, draft.message))
 							}
 							result.DraftChecked = true
 							if spec.name == "update-draft" {
@@ -436,7 +436,7 @@ func TestScaleP21SW159WorkerReplyDifferential(t *testing.T) {
 					}
 					if source == probe {
 						if !refusal && (!reflect.DeepEqual(result.Message, outputs[0].Message) || result.Streaming != outputs[0].Streaming) {
-							t.Fatal("complete native reply/status differ before output close", spec.name, scaleP21SW159MessageFields(outputs[0].Message, result.Message), outputs[0].Streaming, result.Streaming)
+							t.Fatal("complete native reply/status differ before output close", spec.name, messageFields(outputs[0].Message, result.Message), outputs[0].Streaming, result.Streaming)
 						}
 						// Compare native values while owned; the remaining effect
 						// comparison retains the independent legacy oracle value.

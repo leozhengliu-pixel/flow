@@ -17,13 +17,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21PulseHistoryDifferential(t *testing.T) {
+func TestScalePulseHistoryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{37}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestScaleP21PulseHistoryDifferential(t *testing.T) {
 			}
 			r.SetPathValue("id", target.id)
 			w := httptest.NewRecorder()
-			scaleP21CallWithOutputOwner(&server{store: source, authDisabled: development}, w, r, target.handler)
+			scaleCallWithOutputOwner(&server{store: source, authDisabled: development}, w, r, target.handler)
 			var value any
 			if err := json.Unmarshal(w.Body.Bytes(), &value); err != nil {
 				t.Fatal("history response is not JSON", w.Code, err)
@@ -154,7 +154,7 @@ func TestScaleP21PulseHistoryDifferential(t *testing.T) {
 			legacy, next := call(t, repo, user, key, target, query, development)
 			bounded, _ := call(t, f.probe, user, key, target, query, development)
 			if !reflect.DeepEqual(legacy, bounded) {
-				t.Fatalf("%s query=%s differential: %s", target.name, query.Encode(), scaleP21M2Diff(legacy, bounded))
+				t.Fatalf("%s query=%s differential: %s", target.name, query.Encode(), policyFirstDifference(legacy, bounded))
 			}
 			return legacy, next
 		}

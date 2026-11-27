@@ -5,7 +5,7 @@
     "readMetadataLogicalWorkspaceAdmitted": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "The existing validated logical loader accepts an optional actual-policy admission callback before native allocation; the normalizer independently admits its retained base only for that callback path. Nil-callback behavior remains unchanged. SW216 proves warm/stale reload, a normalization base larger than the parser lease, cancellation/release and policy denial before decode; SW21/SW27/SW30/SW33 regressions pass. Final normal, persistent SQLite twice and race checks cover the public and private reload paths.",
+      "reason": "The existing validated logical loader accepts an optional actual-policy admission callback before native allocation; the normalizer independently admits its retained base only for that callback path. Nil-callback behavior remains unchanged. reload admission proves warm/stale reload, a normalization base larger than the parser lease, cancellation/release and policy denial before decode; personal scrub/logical source/coverage normalize/large root regressions pass. Final normal, persistent SQLite twice and race checks cover the public and private reload paths.",
       "accessors": ["readRawMetadataLogicalSourceValidated"],
       "temperature": "hot",
       "temperatureReason": "Shared installed source reload supports HOT request and ticker freshness.",
@@ -14,7 +14,7 @@
     "readMetadataLogicalWorkspace": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Cold lifecycle constructs a fully validated typed disk source, compares its raw workspace identity before normalization, and derives only admitted resident core/policy. The source owns no SQL snapshot after return. SW27/SW30 cold and warm normalization differentials plus SW33 complete large-Members, real peer reload and cancellation controls cover publication and cleanup. Production catalog/journal readiness remains mandatory.",
+      "reason": "Cold lifecycle constructs a fully validated typed disk source, compares its raw workspace identity before normalization, and derives only admitted resident core/policy. The source owns no SQL snapshot after return. logical source/coverage normalize cold and warm normalization differentials plus large root complete large-Members, real peer reload and cancellation controls cover publication and cleanup. Production catalog/journal readiness remains mandatory.",
       "accessors": ["readRawMetadataLogicalSourceValidated"]
     }
   }

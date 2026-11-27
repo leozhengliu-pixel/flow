@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW166Fixture() domain.Bootstrap {
+func bootstrapSessionBodiesFixture() domain.Bootstrap {
 	at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
 	return domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "sw166-workspace", URLKey: "sw166-workspace"},
@@ -36,7 +36,7 @@ func scaleP21SW166Fixture() domain.Bootstrap {
 	}
 }
 
-func scaleP21SW166Begin(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, options bootstrapBodyProjectionOptions) *IssueBootstrapRead {
+func bootstrapSessionBodiesBegin(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, options bootstrapBodyProjectionOptions) *IssueBootstrapRead {
 	t.Helper()
 	body, err := view.beginBootstrapBodyProjectionWithOptions(t.Context(), source, options)
 	if err != nil {
@@ -47,7 +47,7 @@ func scaleP21SW166Begin(t *testing.T, view *SQLiteStore, source *metadataLogical
 	return read
 }
 
-func scaleP21SW166Exact(t *testing.T, data domain.Bootstrap, read *IssueBootstrapRead, rewrite ...MetadataJSONRewriter) {
+func bootstrapSessionBodiesExact(t *testing.T, data domain.Bootstrap, read *IssueBootstrapRead, rewrite ...MetadataJSONRewriter) {
 	t.Helper()
 	want, err := json.Marshal(data)
 	if err != nil {
@@ -69,14 +69,14 @@ func scaleP21SW166Exact(t *testing.T, data domain.Bootstrap, read *IssueBootstra
 	}
 }
 
-func TestScaleP21SW166BootstrapSessionBodyCodecs(t *testing.T) {
+func TestBootstrapSessionBodyCodecs(t *testing.T) {
 	for _, reloaded := range []bool{false, true} {
 		for _, mode := range []string{
 			"valid-raw", "nil-raw", "empty-raw", "null-raw", "partial-arguments", "partial-result",
 			"utf8-escapes", "native-markers-duplicates", "large-content", "large-part-text", "large-raw",
 		} {
 			t.Run(fmt.Sprint("reloaded=", reloaded, "/", mode), func(t *testing.T) {
-				data := scaleP21SW166Fixture()
+				data := bootstrapSessionBodiesFixture()
 				message := &data.AgentSessions[0].Messages[0]
 				call := message.Parts[0].ToolCall
 				switch mode {
@@ -121,9 +121,9 @@ func TestScaleP21SW166BootstrapSessionBodyCodecs(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				view, source := scaleP21SW138Source(t, data)
-				read := scaleP21SW166Begin(t, view, source, bootstrapBodyProjectionOptions{})
-				scaleP21SW166Exact(t, data, read)
+				view, source := bootstrapBodyProjectionSource(t, data)
+				read := bootstrapSessionBodiesBegin(t, view, source, bootstrapBodyProjectionOptions{})
+				bootstrapSessionBodiesExact(t, data, read)
 				read.Close()
 				read.Close()
 				if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
@@ -134,17 +134,17 @@ func TestScaleP21SW166BootstrapSessionBodyCodecs(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW166BootstrapSessionDatabaseBodies(t *testing.T) {
-	scaleP21SW143Setup(t)
+func TestBootstrapSessionDatabaseBodies(t *testing.T) {
+	bootstrapProjectionReadSetup(t)
 	for _, reloaded := range []bool{false, true} {
 		t.Run(fmt.Sprint("reloaded=", reloaded), func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			var held int
 			for _, scale := range []int{1, 10} {
 				body := strings.Repeat("Opaque session body <>&\u2028. ", scale*10000)
 				if err := f.MutateWorkspace(t.Context(), workspace, "agent.session_updated", "sw166-session", nil, func(data *domain.Bootstrap) error {
-					session := scaleP21SW166Fixture().AgentSessions[0]
+					session := bootstrapSessionBodiesFixture().AgentSessions[0]
 					session.ID, session.UserID = "sw166-session", f.data.Viewer.ID
 					message := &session.Messages[0]
 					message.Content, message.Parts[0].Text, message.Parts[0].ToolCall.Error = body, body, body
@@ -199,7 +199,7 @@ func TestScaleP21SW166BootstrapSessionDatabaseBodies(t *testing.T) {
 					t.Fatal("10x session bodies changed admitted headers", held, work)
 				}
 				held = work
-				scaleP21SW143Compare(t, t.Context(), want, read)
+				bootstrapProjectionReadCompare(t, t.Context(), want, read)
 				read.Close()
 				if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 					t.Fatal("database session body read retained work or decoded metadata")
@@ -210,16 +210,16 @@ func TestScaleP21SW166BootstrapSessionDatabaseBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW166BootstrapSessionLifetime(t *testing.T) {
-	data := scaleP21SW166Fixture()
+func TestBootstrapSessionLifetime(t *testing.T) {
+	data := bootstrapSessionBodiesFixture()
 	data.AgentSessions[0].Messages[0].Content = strings.Repeat("Streamed session content ", 100000)
-	view, source := scaleP21SW138Source(t, data)
+	view, source := bootstrapBodyProjectionSource(t, data)
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if body, err := view.beginBootstrapBodyProjection(canceled, source); body != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("canceled session body projection escaped", err)
 	}
-	probe := scaleP21SW166Begin(t, view, source, bootstrapBodyProjectionOptions{})
+	probe := bootstrapSessionBodiesBegin(t, view, source, bootstrapBodyProjectionOptions{})
 	required := view.MetadataWorkUsedForTesting()
 	probe.Close()
 	limit := view.metadataResidency.work.limit
@@ -231,12 +231,12 @@ func TestScaleP21SW166BootstrapSessionLifetime(t *testing.T) {
 	}
 	for _, mode := range []string{"cancel", "writer-error", "quota", "close"} {
 		t.Run(mode, func(t *testing.T) {
-			read := scaleP21SW166Begin(t, view, source, bootstrapBodyProjectionOptions{})
+			read := bootstrapSessionBodiesBegin(t, view, source, bootstrapBodyProjectionOptions{})
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			refused := errors.New("session body destination refused")
 			calls := 0
-			writer := &scaleP21SW88Writer{write: func(raw []byte) (int, error) {
+			writer := &bootstrapWriter{write: func(raw []byte) (int, error) {
 				calls++
 				if mode == "cancel" {
 					cancel()
@@ -272,13 +272,13 @@ func TestScaleP21SW166BootstrapSessionLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW166BootstrapSessionUploadRewrite(t *testing.T) {
-	data := scaleP21SW166Fixture()
+func TestBootstrapSessionUploadRewrite(t *testing.T) {
+	data := bootstrapSessionBodiesFixture()
 	data.AgentSessions[0].Messages[0].Content = "/uploads/content.txt"
 	data.AgentSessions[0].Messages[0].Parts[0].Text = "/uploads/part.txt"
 	data.AgentSessions[0].Messages[0].Parts[0].ToolCall.Error = "/uploads/error.txt"
-	view, source := scaleP21SW138Source(t, data)
-	read := scaleP21SW166Begin(t, view, source, bootstrapBodyProjectionOptions{})
+	view, source := bootstrapBodyProjectionSource(t, data)
+	read := bootstrapSessionBodiesBegin(t, view, source, bootstrapBodyProjectionOptions{})
 	calls := 0
 	rewrite := func(ctx context.Context, source MetadataJSONSource, dst io.Writer) error {
 		if !source.ContainsUploads() {
@@ -307,8 +307,8 @@ func TestScaleP21SW166BootstrapSessionUploadRewrite(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW166BootstrapStripUpdateSnapshots(t *testing.T) {
-	data := scaleP21SW166Fixture()
+func TestBootstrapStripUpdateSnapshots(t *testing.T) {
+	data := bootstrapSessionBodiesFixture()
 	snapshot := &domain.PulseSnapshot{CapturedAt: time.Date(2026, 11, 15, 2, 3, 4, 0, time.UTC), Status: "Snapshot only"}
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{
 		"duplicate": {{ID: "duplicate", Body: "Project update body", Snapshot: snapshot}, {ID: "", Snapshot: nil}},
@@ -318,8 +318,8 @@ func TestScaleP21SW166BootstrapStripUpdateSnapshots(t *testing.T) {
 	}
 	for _, strip := range []bool{false, true} {
 		t.Run(fmt.Sprint("strip=", strip), func(t *testing.T) {
-			view, source := scaleP21SW138Source(t, data)
-			read := scaleP21SW166Begin(t, view, source, bootstrapBodyProjectionOptions{StripUpdateSnapshots: strip})
+			view, source := bootstrapBodyProjectionSource(t, data)
+			read := bootstrapSessionBodiesBegin(t, view, source, bootstrapBodyProjectionOptions{StripUpdateSnapshots: strip})
 			want := data
 			if strip {
 				want.ProjectUpdates = map[string][]domain.ProjectUpdate{}
@@ -340,7 +340,7 @@ func TestScaleP21SW166BootstrapStripUpdateSnapshots(t *testing.T) {
 					t.Fatal("general bootstrap snapshot was materialized")
 				}
 			}
-			scaleP21SW166Exact(t, want, read)
+			bootstrapSessionBodiesExact(t, want, read)
 			read.Close()
 			if view.MetadataWorkUsedForTesting() != 0 || !reflect.DeepEqual(read.Data, domain.Bootstrap{}) {
 				t.Fatal("snapshot-stripped body projection retained output")

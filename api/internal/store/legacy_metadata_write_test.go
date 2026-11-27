@@ -15,10 +15,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW83Data(f scaleP09Fixture, repetitions int) domain.Bootstrap {
-	data := scaleP21SW78Data(f, repetitions)
+func legacyMetadataWriteData(f scaleFixture, repetitions int) domain.Bootstrap {
+	data := legacyCountWriteData(f, repetitions)
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
-	stale := scaleP21SW69OwnedActor(data.Users[0])
+	stale := ownedActor(data.Users[0])
 	stale.Name, stale.JobTitle = "Stale embedded name", "Stale embedded body"
 	data.Members = []domain.WorkspaceMember{{User: stale, Role: "member", Status: "active", JoinedAt: at}}
 	data.Initiatives = []domain.Initiative{
@@ -40,11 +40,11 @@ func scaleP21SW83Data(f scaleP09Fixture, repetitions int) domain.Bootstrap {
 	return data
 }
 
-func scaleP21SW83Target(before domain.Bootstrap) domain.Bootstrap {
+func legacyMetadataWriteTarget(before domain.Bootstrap) domain.Bootstrap {
 	next := cloneBootstrap(before)
 	refreshDisplayReferences(&next)
 	refreshIssueReferences(&next)
-	actor := scaleP21SW69OwnedActor(before.Users[0])
+	actor := ownedActor(before.Users[0])
 	actor.Name, actor.DisplayName = "Requested actor name", "Requested actor display"
 	next.Viewer, next.Users[0] = actor, actor
 	next.Labels[1].IssueCount++
@@ -53,7 +53,7 @@ func scaleP21SW83Target(before domain.Bootstrap) domain.Bootstrap {
 	return next
 }
 
-func scaleP21SW83Peer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap) {
+func legacyMetadataWritePeer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap) {
 	t.Helper()
 	put := func(field, id string, value any, order int) {
 		raw, err := json.Marshal(value)
@@ -71,7 +71,7 @@ func scaleP21SW83Peer(t *testing.T, tx *sqlTx, workspace, mode string, before do
 			t.Fatal(err)
 		}
 	case "actor-merged", "actor-conflict":
-		user := scaleP21SW69OwnedActor(before.Users[0])
+		user := ownedActor(before.Users[0])
 		user.JobTitle = "Canonical actor job title"
 		if mode == "actor-conflict" {
 			user.Name = "Conflicting canonical actor name"
@@ -93,19 +93,19 @@ func scaleP21SW83Peer(t *testing.T, tx *sqlTx, workspace, mode string, before do
 	case "update-merged", "update-conflict":
 		update := cloneSnapshotValue(reflect.ValueOf(before.ProjectUpdates["sw78-a-project"][0])).Interface().(domain.ProjectUpdate)
 		update.Body = "Canonical project update body"
-		put("projectUpdates", updateRecordKey("sw78-a-project", update.ID), metadataUpdate{Parent: "sw78-a-project", Item: mustMarshalSW83(t, update)}, 83)
+		put("projectUpdates", updateRecordKey("sw78-a-project", update.ID), metadataUpdate{Parent: "sw78-a-project", Item: mustMarshal(t, update)}, 83)
 	case "update-deleted":
 		if err := deleteMetadataRecordRow(t.Context(), tx, workspace, metadataRecordKey{"projectUpdates", updateRecordKey("sw78-a-project", before.ProjectUpdates["sw78-a-project"][0].ID)}); err != nil {
 			t.Fatal(err)
 		}
 	case "unknown-canonical", "gapped-order", "malformed-unchanged-rows":
-		scaleP21SW78Peer(t, tx, workspace, mode, before)
+		legacyCountWritePeer(t, tx, workspace, mode, before)
 	default:
 		t.Fatal("unknown union peer fixture", mode)
 	}
 }
 
-func mustMarshalSW83(t *testing.T, value any) json.RawMessage {
+func mustMarshal(t *testing.T, value any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -114,13 +114,13 @@ func mustMarshalSW83(t *testing.T, value any) json.RawMessage {
 	return raw
 }
 
-func scaleP21SW83MetadataWrite(query string) (bool, bool) {
+func isLegacyMetadataWriteStatement(query string) (bool, bool) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	write := strings.HasPrefix(query, "insert ") || strings.HasPrefix(query, "update ") || strings.HasPrefix(query, "delete ")
 	return write && (strings.Contains(query, "workspace_metadata_records") || strings.Contains(query, "workspace_states")), write && strings.HasPrefix(query, "update workspace_states ")
 }
 
-func scaleP21SW83Begin(t *testing.T, f scaleP09Fixture, before domain.Bootstrap) (*sqlTx, context.Context) {
+func legacyMetadataWriteBegin(t *testing.T, f scaleFixture, before domain.Bootstrap) (*sqlTx, context.Context) {
 	t.Helper()
 	raw, err := f.encodeWorkspaceMetadata(before)
 	if err != nil {
@@ -147,7 +147,7 @@ func scaleP21SW83Begin(t *testing.T, f scaleP09Fixture, before domain.Bootstrap)
 			seed.InitiativeUpdates = nil
 		}
 	}
-	tx, ctx := scaleP21SW77Begin(t, f, seed)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, seed)
 	if len(inline) == 0 {
 		return tx, ctx
 	}
@@ -173,15 +173,15 @@ func scaleP21SW83Begin(t *testing.T, f scaleP09Fixture, before domain.Bootstrap)
 		delete(manifest, field)
 		root[field] = value
 	}
-	root[metadataCollectionsKey] = mustMarshalSW83(t, manifest)
-	raw = mustMarshalSW83(t, root)
+	root[metadataCollectionsKey] = mustMarshal(t, manifest)
+	raw = mustMarshal(t, root)
 	if _, err := tx.ExecContext(ctx, `UPDATE workspace_states SET data=? WHERE workspace_key=?`, StripJSONNUL(raw), before.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
 	return tx, ctx
 }
 
-func scaleP21SW83SQLDiff(t *testing.T, got, want scaleP21SW76Metadata) {
+func sqlDiff(t *testing.T, got, want legacyActorWriteMetadata) {
 	t.Helper()
 	var changed func(string, json.RawMessage, json.RawMessage)
 	changed = func(path string, a, b json.RawMessage) {
@@ -229,7 +229,7 @@ func scaleP21SW83SQLDiff(t *testing.T, got, want scaleP21SW76Metadata) {
 		t.Logf("workspace identity: got=%q want=%q", got.WorkspaceID, want.WorkspaceID)
 	}
 	changed("root", json.RawMessage(got.Root), json.RawMessage(want.Root))
-	left, right := map[metadataRecordKey]scaleP21SW23MetadataRow{}, map[metadataRecordKey]scaleP21SW23MetadataRow{}
+	left, right := map[metadataRecordKey]metadataRow{}, map[metadataRecordKey]metadataRow{}
 	for _, row := range got.Rows {
 		left[metadataRecordKey{row.Field, row.Key}] = row
 	}
@@ -261,10 +261,10 @@ func scaleP21SW83SQLDiff(t *testing.T, got, want scaleP21SW76Metadata) {
 	}
 }
 
-func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, before, after *metadataLogicalSource, peer string, releaseInput func()) int {
+func legacyMetadataWriteCompare(t *testing.T, f scaleFixture, view *SQLiteStore, before, after *metadataLogicalSource, peer string, releaseInput func()) int {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	scope := scaleP21SW72FullScope(t, after)
+	scope := fullScope(t, after)
 	base, err := before.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -277,11 +277,11 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx, ctx := scaleP21SW83Begin(t, f, base)
-	scaleP21SW83Peer(t, tx, workspace, peer, base)
-	preimage := scaleP21SW76MetadataImage(t, tx, workspace)
+	tx, ctx := legacyMetadataWriteBegin(t, f, base)
+	legacyMetadataWritePeer(t, tx, workspace, peer, base)
+	preimage := metadataImage(t, tx, workspace)
 	_, wantErr := f.writeWorkspaceMetadataDelta(ctx, tx, workspace, base, &want)
-	wantSQL := scaleP21SW76MetadataImage(t, tx, workspace)
+	wantSQL := metadataImage(t, tx, workspace)
 	wantRebased := maps.Clone(tx.rebasedMetadata)
 	wantKeys, conflict := conflictedMetadataKeys(wantErr)
 	if conflict && !reflect.DeepEqual(preimage, wantSQL) {
@@ -292,7 +292,7 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 			t.Fatal("directory witness did not drop the canonical actor", wantErr)
 		}
 		key := metadataRecordKey{"projects", base.Projects[1].ID}
-		find := func(image scaleP21SW76Metadata) []byte {
+		find := func(image legacyActorWriteMetadata) []byte {
 			for _, row := range image.Rows {
 				if (metadataRecordKey{row.Field, row.Key}) == key {
 					return row.Data
@@ -304,19 +304,19 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 			t.Fatal("directory witness did not require display write after Users rebasing")
 		}
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	tx, ctx = scaleP21SW83Begin(t, f, base)
-	scaleP21SW83Peer(t, tx, workspace, peer, base)
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
+	tx, ctx = legacyMetadataWriteBegin(t, f, base)
+	legacyMetadataWritePeer(t, tx, workspace, peer, base)
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
 		t.Fatal("union oracle and bounded writer started from different SQL preimages")
 	}
 	peak, writes, rootWrites := 0, 0, 0
 	ctx, cancel := context.WithCancel(WithSQLStatementObserver(ctx, func(query string) {
 		peak = max(peak, view.MetadataWorkUsedForTesting())
-		write, root := scaleP21SW83MetadataWrite(query)
+		write, root := isLegacyMetadataWriteStatement(query)
 		if write {
 			writes++
 		}
@@ -339,8 +339,8 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 		}
 		t.Fatal("global field/key conflict order differs", gotKeys, wantKeys)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
-		scaleP21SW83SQLDiff(t, got, wantSQL)
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
+		sqlDiff(t, got, wantSQL)
 		if result != nil {
 			result.Release()
 		}
@@ -349,9 +349,9 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	if !reflect.DeepEqual(tx.rebasedMetadata, wantRebased) {
 		t.Fatal("union rebase markers differ or temporary ID aliases leaked", tx.rebasedMetadata, wantRebased)
 	}
-	scaleP21SW72Compare(t, before, scope, base)
-	scaleP21SW72Compare(t, after, scope, originalTarget)
-	scaleP21SW70Usable(t, tx)
+	legacyIssueImageCompare(t, before, scope, base)
+	legacyIssueImageCompare(t, after, scope, originalTarget)
+	legacyIssueScanUsable(t, tx)
 	if wantErr != nil {
 		if result != nil {
 			result.Release()
@@ -369,7 +369,7 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 		t.Fatal("successful union omitted its native postimage")
 	}
 	t.Cleanup(result.Release)
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	if result.Stamp() != after.Stamp() || view.WorkspaceMetadataDecodes() != 0 || rootWrites > 1 {
 		t.Fatal("union generation, full decoding or single-root-patch contract changed", rootWrites)
 	}
@@ -388,7 +388,7 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 		t.Fatal(err)
 	}
 	cancel()
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	result.Release()
 	result.Release()
 	if _, err := result.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) || view.MetadataWorkUsedForTesting() != 0 {
@@ -397,8 +397,8 @@ func scaleP21SW83Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	return peak
 }
 
-func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyMetadataUnionLiteral(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for _, test := range []struct{ name, shape, peer string }{
 		{name: "whole-union"},
 		{name: "unchanged", shape: "unchanged"},
@@ -428,7 +428,7 @@ func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
 		{name: "native-actor-via", shape: "native-actor-via"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			data := scaleP21SW83Data(f, 1000)
+			data := legacyMetadataWriteData(f, 1000)
 			switch test.shape {
 			case "duplicate-users":
 				data.Users = append(data.Users, domain.User{ID: data.Users[0].ID, Name: "Last duplicate directory user", JobTitle: "Last duplicate body"})
@@ -448,7 +448,7 @@ func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
 			case "nil-to-empty-members":
 				data.Members = nil
 			}
-			next := scaleP21SW83Target(data)
+			next := legacyMetadataWriteTarget(data)
 			if test.peer == "actor-deleted-write-directory" || test.peer == "display-project-deleted" {
 				next.Projects[1].IssueCount = data.Projects[1].IssueCount
 			}
@@ -475,9 +475,9 @@ func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
 				next.Members = []domain.WorkspaceMember{}
 			}
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			before, after := scaleP21SW78Capture(t, data), scaleP21SW78Capture(t, next)
+			before, after := legacyCountWriteCapture(t, data), legacyCountWriteCapture(t, next)
 			if test.shape == "native-actor-via" {
-				actor := scaleP21SW69OwnedActor(next.Viewer)
+				actor := ownedActor(next.Viewer)
 				actor.Via = &domain.ActorBot{ID: "sw83-application", Type: domain.ActorBotTypeOAuthApplication, Name: "Native actor provenance", OnBehalfOfID: "person"}
 				image, err := view.prepareLegacyActorImage(t.Context(), after, &actor)
 				if err != nil {
@@ -493,7 +493,7 @@ func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
 				t.Cleanup(after.Release)
 				image.Close()
 			}
-			scaleP21SW83Compare(t, f, view, before, after, test.peer, func() { before.Release(); after.Release() })
+			legacyMetadataWriteCompare(t, f, view, before, after, test.peer, func() { before.Release(); after.Release() })
 			before.Release()
 			after.Release()
 			if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
@@ -503,16 +503,16 @@ func TestScaleP21SW83LegacyMetadataUnionLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW83LegacyMetadataUnionFailureRelease(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW83Data(f, 1000)
-	next := scaleP21SW83Target(data)
-	before, after := scaleP21SW78Capture(t, data), scaleP21SW78Capture(t, next)
-	scope := scaleP21SW72FullScope(t, after)
+func TestLegacyMetadataUnionFailureRelease(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyMetadataWriteData(f, 1000)
+	next := legacyMetadataWriteTarget(data)
+	before, after := legacyCountWriteCapture(t, data), legacyCountWriteCapture(t, next)
+	scope := fullScope(t, after)
 	for _, failure := range []string{"cancel-before", "cancel-after-start", "quota"} {
 		t.Run(failure, func(t *testing.T) {
-			tx, ctx := scaleP21SW83Begin(t, f, data)
-			preimage := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey)
+			tx, ctx := legacyMetadataWriteBegin(t, f, data)
+			preimage := metadataImage(t, tx, data.Workspace.URLKey)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			want := error(context.Canceled)
@@ -542,18 +542,18 @@ func TestScaleP21SW83LegacyMetadataUnionFailureRelease(t *testing.T) {
 			if !errors.Is(err, want) || view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 				t.Fatal("failed union changed its error or leaked ownership", err)
 			}
-			if got := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
+			if got := metadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
 				t.Fatal("union preflight failure wrote metadata")
 			}
-			scaleP21SW72Compare(t, before, scope, data)
-			scaleP21SW72Compare(t, after, scope, next)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueImageCompare(t, before, scope, data)
+			legacyIssueImageCompare(t, after, scope, next)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 }
 
-func TestScaleP21SW83LegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	workspace := f.data.Workspace.URLKey
 	f.db.SetMaxOpenConns(4)
 	baseline := cloneBootstrap(collectionMetadata(f.data))
@@ -566,7 +566,7 @@ func TestScaleP21SW83LegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
 	peaks := map[bool]int{}
 	nonbody := map[bool]domain.Bootstrap{}
 	for _, size := range []int{2000, 20000} {
-		seed := scaleP21SW83Data(f, size)
+		seed := legacyMetadataWriteData(f, size)
 		f.db.SetMaxOpenConns(4)
 		err := func() error {
 			restore := ForceFullMutationsForTesting(true)
@@ -606,7 +606,7 @@ func TestScaleP21SW83LegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
 						before.Release()
 					}
 				})
-				data, err := before.Select(t.Context(), scaleP21SW72FullScope(t, before), 64<<20)
+				data, err := before.Select(t.Context(), fullScope(t, before), 64<<20)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -627,9 +627,9 @@ func TestScaleP21SW83LegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
 				} else if !found {
 					nonbody[reload] = small
 				}
-				after := scaleP21SW78Capture(t, scaleP21SW83Target(data))
+				after := legacyCountWriteCapture(t, legacyMetadataWriteTarget(data))
 				f.db.SetMaxOpenConns(1)
-				peak := scaleP21SW83Compare(t, f, view, before, after, "", func() {
+				peak := legacyMetadataWriteCompare(t, f, view, before, after, "", func() {
 					before.Release()
 					beforeOwned = false
 					after.Release()
@@ -648,21 +648,21 @@ func TestScaleP21SW83LegacyMetadataUnionWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW83LegacyMetadataUnionRejectsOtherEdits(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW83Data(f, 1000)
-	before := scaleP21SW78Capture(t, data)
+func TestLegacyMetadataUnionRejectsOtherEdits(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyMetadataWriteData(f, 1000)
+	before := legacyCountWriteCapture(t, data)
 	for _, field := range []string{"documents", "settings"} {
 		t.Run(field, func(t *testing.T) {
-			next := scaleP21SW83Target(data)
+			next := legacyMetadataWriteTarget(data)
 			if field == "documents" {
 				next.Documents[0].Title = "Outside the legacy discussion contract"
 			} else {
 				next.Settings["outside"] = "Unsupported metadata edit"
 			}
-			after := scaleP21SW78Capture(t, next)
-			tx, ctx := scaleP21SW83Begin(t, f, data)
-			preimage := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey)
+			after := legacyCountWriteCapture(t, next)
+			tx, ctx := legacyMetadataWriteBegin(t, f, data)
+			preimage := metadataImage(t, tx, data.Workspace.URLKey)
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 			result, err := view.persistLegacyMetadataImage(ctx, tx, data.Workspace.URLKey, before, after)
 			if result != nil {
@@ -672,7 +672,7 @@ func TestScaleP21SW83LegacyMetadataUnionRejectsOtherEdits(t *testing.T) {
 			if !errors.Is(err, ErrBoundedMetadataCoverage) {
 				t.Fatal("unsupported metadata edit was not rejected", err)
 			}
-			if got := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
+			if got := metadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
 				t.Fatal("unsupported union edit wrote canonical metadata")
 			}
 			if view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
@@ -682,18 +682,18 @@ func TestScaleP21SW83LegacyMetadataUnionRejectsOtherEdits(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW83LegacyMetadataUnionSelectedGrowth(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW83Data(f, 1000)
+func TestLegacyMetadataUnionSelectedGrowth(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyMetadataWriteData(f, 1000)
 	next := cloneBootstrap(data)
 	next.Users[0].Name = "Changed requested actor"
 	next.Viewer = next.Users[0]
-	before, after := scaleP21SW78Capture(t, data), scaleP21SW78Capture(t, next)
-	tx, ctx := scaleP21SW83Begin(t, f, data)
+	before, after := legacyCountWriteCapture(t, data), legacyCountWriteCapture(t, next)
+	tx, ctx := legacyMetadataWriteBegin(t, f, data)
 	fired, writes := false, 0
-	var peerImage scaleP21SW76Metadata
+	var peerImage legacyActorWriteMetadata
 	observed := WithSQLStatementObserver(ctx, func(query string) {
-		write, _ := scaleP21SW83MetadataWrite(query)
+		write, _ := isLegacyMetadataWriteStatement(query)
 		if write {
 			writes++
 		}
@@ -704,8 +704,8 @@ func TestScaleP21SW83LegacyMetadataUnionSelectedGrowth(t *testing.T) {
 		fired = true
 		grown := data.Users[0]
 		grown.JobTitle = strings.Repeat("Canonical actor grew after size admission. ", 2000)
-		scaleP21SW77Put(t, tx, data.Workspace.URLKey, grown.ID, grown, 0)
-		peerImage = scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey)
+		legacyDeltaBudgetPut(t, tx, data.Workspace.URLKey, grown.ID, grown, 0)
+		peerImage = metadataImage(t, tx, data.Workspace.URLKey)
 	})
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	result, err := view.persistLegacyMetadataImage(observed, tx, data.Workspace.URLKey, before, after)
@@ -719,39 +719,39 @@ func TestScaleP21SW83LegacyMetadataUnionSelectedGrowth(t *testing.T) {
 	if writes != 0 {
 		t.Fatal("selected growth failed after a union metadata write", writes)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, peerImage) {
+	if got := metadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, peerImage) {
 		t.Fatal("selected growth changed metadata beyond the injected peer row")
 	}
 	if view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("selected growth leaked union ownership")
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 }
 
-type scaleP21SW83MapOrderNode struct {
+type mapOrderNode struct {
 	base    metadataLogicalNode
 	reverse bool
 }
 
-func (n scaleP21SW83MapOrderNode) nodeType() reflect.Type           { return n.base.typ }
-func (n scaleP21SW83MapOrderNode) logicalBase() metadataLogicalNode { return n.base }
-func (n scaleP21SW83MapOrderNode) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
+func (n mapOrderNode) nodeType() reflect.Type           { return n.base.typ }
+func (n mapOrderNode) logicalBase() metadataLogicalNode { return n.base }
+func (n mapOrderNode) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {
 	return n.base.Value(ctx, limit)
 }
-func (n scaleP21SW83MapOrderNode) child(node metadataLogicalNode) metadataAggregateNode {
+func (n mapOrderNode) child(node metadataLogicalNode) metadataAggregateNode {
 	if node.typ == reflect.TypeFor[time.Time]() || node.typ.Kind() == reflect.Slice && node.typ.Elem().Kind() == reflect.Uint8 {
 		return metadataAggregateStoredNode{value: node}
 	}
 	switch node.typ.Kind() {
 	case reflect.Struct, reflect.Slice, reflect.Map:
-		return scaleP21SW83MapOrderNode{base: node, reverse: n.reverse}
+		return mapOrderNode{base: node, reverse: n.reverse}
 	}
 	return metadataAggregateStoredNode{value: node}
 }
-func (n scaleP21SW83MapOrderNode) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
+func (n mapOrderNode) nodeChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode) error) error {
 	return n.base.Children(ctx, func(key reflect.Value, value metadataLogicalNode) error { return visit(key, n.child(value)) })
 }
-func (n scaleP21SW83MapOrderNode) logicalMapEntries(ctx context.Context, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
+func (n mapOrderNode) logicalMapEntries(ctx context.Context, visit func(metadataAggregateNode, metadataAggregateNode) error) error {
 	type entry struct {
 		id         string
 		key, value metadataLogicalNode
@@ -778,11 +778,11 @@ func (n scaleP21SW83MapOrderNode) logicalMapEntries(ctx context.Context, visit f
 	return nil
 }
 
-func scaleP21SW83OrderMaps(t *testing.T, source *metadataLogicalSource, reverse bool) *metadataLogicalSource {
+func orderMaps(t *testing.T, source *metadataLogicalSource, reverse bool) *metadataLogicalSource {
 	t.Helper()
 	result, err := source.Transform(t.Context(), func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
 		if name == "settings" || name == "projects" {
-			return scaleP21SW83MapOrderNode{base: node, reverse: reverse}, true, nil
+			return mapOrderNode{base: node, reverse: reverse}, true, nil
 		}
 		return metadataAggregateStoredNode{value: node}, false, nil
 	})
@@ -794,11 +794,11 @@ func scaleP21SW83OrderMaps(t *testing.T, source *metadataLogicalSource, reverse 
 	return result
 }
 
-func TestScaleP21SW83LegacyMetadataUnionMapOrderEquality(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyMetadataUnionMapOrderEquality(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for index := range 8 {
 		t.Run(fmt.Sprintf("independent-capture-%d", index), func(t *testing.T) {
-			data := scaleP21SW83Data(f, 2)
+			data := legacyMetadataWriteData(f, 2)
 			mixed := map[string]any{
 				"nested": map[string]any{"z-last": int64(9007199254740993), "a-first": []any{true, nil, "literal", map[string]any{"right": float64(7), "left": []string{}}}},
 				"bytes":  []byte{0, 255}, "nil-slice": []string(nil), "empty-slice": []string{}, "boolean": false,
@@ -810,8 +810,8 @@ func TestScaleP21SW83LegacyMetadataUnionMapOrderEquality(t *testing.T) {
 				next.Projects[1].IssueCount++
 			}
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			before := scaleP21SW83OrderMaps(t, scaleP21SW78Capture(t, data), false)
-			after := scaleP21SW83OrderMaps(t, scaleP21SW78Capture(t, next), true)
+			before := orderMaps(t, legacyCountWriteCapture(t, data), false)
+			after := orderMaps(t, legacyCountWriteCapture(t, next), true)
 			keys := func(source *metadataLogicalSource) []string {
 				field, _, _ := metadataLogicalField("settings")
 				result := []string{}
@@ -868,7 +868,7 @@ func TestScaleP21SW83LegacyMetadataUnionMapOrderEquality(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(first.Interface(), second.Interface()) {
 				t.Fatal("map-order fixture changed semantic Settings values", err)
 			}
-			scaleP21SW83Compare(t, f, view, before, after, "", func() { before.Release(); after.Release() })
+			legacyMetadataWriteCompare(t, f, view, before, after, "", func() { before.Release(); after.Release() })
 			before.Release()
 			after.Release()
 			if metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {

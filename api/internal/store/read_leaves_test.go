@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW240SharedProjection(data domain.Bootstrap, token string) any {
+func sharedProjection(data domain.Bootstrap, token string) any {
 	for _, item := range data.Issues {
 		if item.ShareToken != token {
 			continue
@@ -33,27 +33,27 @@ func scaleP21SW240SharedProjection(data domain.Bootstrap, token string) any {
 	return nil
 }
 
-func scaleP21SW240ReadProjection(read *SharedIssueRead) any {
+func readProjection(read *SharedIssueRead) any {
 	if !read.Found {
 		return nil
 	}
-	return scaleP21SW240SharedProjection(domain.Bootstrap{
+	return sharedProjection(domain.Bootstrap{
 		Workspace: read.Workspace, Issues: []domain.Issue{read.Issue},
 		Comments: map[string][]domain.Comment{read.Issue.ID: read.Comments},
 	}, read.Issue.ShareToken)
 }
 
-func TestScaleP21SW240SharedIssueSourcesAndLargeOwnership(t *testing.T) {
+func TestSharedIssueSourcesAndLargeOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, native := range []bool{false, true} {
 		for _, reload := range []bool{false, true} {
 			t.Run(fmt.Sprintf("native=%t/reload=%t", native, reload), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+				f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 16, 8, 9, 10, 11, time.UTC)
-				scaleP21SW63Seed(t, f, issue, at)
+				discussionWriterSeed(t, f, issue, at)
 				token := "sw240-public-token"
 				if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw240_seed", "", nil, func(data *domain.Bootstrap) error {
 					label := domain.IssueLabel{ID: "sw240-label", Name: "First label"}
@@ -104,7 +104,7 @@ func TestScaleP21SW240SharedIssueSourcesAndLargeOwnership(t *testing.T) {
 					f.setWorkspaceLocked(workspace, data)
 					f.mu.Unlock()
 				}
-				view := scaleP21IssuePersistenceView(t, f, true, false)
+				view := scaleIssuePersistenceView(t, f, true, false)
 				literal, found := f.BootstrapFor(workspace)
 				if !found {
 					t.Fatal("literal shared source")
@@ -113,11 +113,11 @@ func TestScaleP21SW240SharedIssueSourcesAndLargeOwnership(t *testing.T) {
 				if err != nil || read == nil || !read.Found {
 					t.Fatal("bounded shared detail", err)
 				}
-				expected, err := json.Marshal(scaleP21SW240SharedProjection(literal, token))
+				expected, err := json.Marshal(sharedProjection(literal, token))
 				if err != nil {
 					t.Fatal(err)
 				}
-				got, err := json.Marshal(scaleP21SW240ReadProjection(read))
+				got, err := json.Marshal(readProjection(read))
 				if err != nil || string(expected) != string(got) {
 					t.Fatal("complete shared detail differs", err)
 				}
@@ -160,12 +160,12 @@ func TestScaleP21SW240SharedIssueSourcesAndLargeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW240FacetVisitorCancellationAndRelease(t *testing.T) {
+func TestFacetVisitorCancellationAndRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, _ := scaleP21IssuePersistenceFixture(t, nil, nil)
+	f, _ := scaleIssuePersistenceFixture(t, nil, nil)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	for _, cancelDuring := range []bool{false, true} {
 		read, err := view.BeginIssueFacetRead(t.Context(), workspace, "", nil)
 		if err != nil {
@@ -196,12 +196,12 @@ func TestScaleP21SW240FacetVisitorCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW240SharedIssueCancellationStages(t *testing.T) {
+func TestSharedIssueCancellationStages(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 	workspace := f.data.Workspace.URLKey
-	scaleP21SW63Seed(t, f, issue, time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
+	discussionWriterSeed(t, f, issue, time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC))
 	token := "sw240-cancel-token"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw240_cancel", "", nil, func(data *domain.Bootstrap) error {
 		for index := range data.Issues {
@@ -215,7 +215,7 @@ func TestScaleP21SW240SharedIssueCancellationStages(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	for _, stage := range []string{"issue", "comment"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -237,7 +237,7 @@ func TestScaleP21SW240SharedIssueCancellationStages(t *testing.T) {
 	}
 }
 
-func scaleP21SW240FacetOccurrences(data domain.Bootstrap) [][3]string {
+func facetOccurrences(data domain.Bootstrap) [][3]string {
 	result := [][3]string{}
 	add := func(field, id, label string) { result = append(result, [3]string{field, id, label}) }
 	for _, issue := range data.Issues {
@@ -264,10 +264,10 @@ func scaleP21SW240FacetOccurrences(data domain.Bootstrap) [][3]string {
 	return result
 }
 
-func TestScaleP21SW240FacetNativeFirstParentPermissions(t *testing.T) {
+func TestFacetNativeFirstParentPermissions(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP21IssueAuthorizationSeed(t)
+	f := scaleIssueAuthorizationSeed(t)
 	workspace := f.data.Workspace.URLKey
 	data, found := f.BootstrapFor(workspace)
 	if !found {
@@ -284,7 +284,7 @@ func TestScaleP21SW240FacetNativeFirstParentPermissions(t *testing.T) {
 	f.mu.Lock()
 	f.setWorkspaceLocked(workspace, data)
 	f.mu.Unlock()
-	view := scaleP21IssuePersistenceView(t, f.scaleP09Fixture, true, false)
+	view := scaleIssuePersistenceView(t, f.scaleFixture, true, false)
 	for _, user := range []domain.User{f.data.Viewer, f.guest} {
 		literal, found, err := f.BootstrapForUser(t.Context(), workspace, user.ID)
 		if err != nil || !found {
@@ -299,7 +299,7 @@ func TestScaleP21SW240FacetNativeFirstParentPermissions(t *testing.T) {
 			got = append(got, [3]string{field, value, label})
 			return nil
 		})
-		if err != nil || !reflect.DeepEqual(scaleP21SW240FacetOccurrences(literal), got) {
+		if err != nil || !reflect.DeepEqual(facetOccurrences(literal), got) {
 			t.Fatal("native first-parent authority or facet order differs", user.ID, err)
 		}
 		read.Close()
@@ -309,10 +309,10 @@ func TestScaleP21SW240FacetNativeFirstParentPermissions(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW240FacetNativeAuthorityLargePopulation(t *testing.T) {
+func TestFacetNativeAuthorityLargePopulation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	data, found := f.BootstrapFor(workspace)
 	if !found {
@@ -335,7 +335,7 @@ func TestScaleP21SW240FacetNativeAuthorityLargePopulation(t *testing.T) {
 	f.mu.Lock()
 	f.setWorkspaceLocked(workspace, data)
 	f.mu.Unlock()
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	// Fixed 128 KiB retained for every row would exceed this after 128 rows.
 	// Compact authority must admit the whole population under this limit.
 	view.metadataResidency.work.limit = 16 << 20
@@ -354,7 +354,7 @@ func TestScaleP21SW240FacetNativeAuthorityLargePopulation(t *testing.T) {
 		got = append(got, [3]string{field, id, label})
 		return nil
 	})
-	if err != nil || !reflect.DeepEqual(got, scaleP21SW240FacetOccurrences(literal)) {
+	if err != nil || !reflect.DeepEqual(got, facetOccurrences(literal)) {
 		t.Fatal("large native facet output/order differs", err, len(got))
 	}
 	if len(read.visible) != population || read.sqlIssues || peak >= 16<<20 {
@@ -367,7 +367,7 @@ func TestScaleP21SW240FacetNativeAuthorityLargePopulation(t *testing.T) {
 	}
 }
 
-func scaleP21SW240FacetVisit(t *testing.T, view *SQLiteStore, workspace, userID string, native bool) [][3]string {
+func facetVisit(t *testing.T, view *SQLiteStore, workspace, userID string, native bool) [][3]string {
 	t.Helper()
 	read, err := view.BeginIssueFacetRead(t.Context(), workspace, userID, nil)
 	if err != nil {
@@ -394,12 +394,12 @@ func scaleP21SW240FacetVisit(t *testing.T, view *SQLiteStore, workspace, userID 
 // that was already removed and overwritten is no longer found by a later
 // child. Both layouts below must match the literal oracle, including the one
 // where an archived-team parent's grant is lost.
-func TestScaleP21SW240FacetDeleteFuncOrderOrphansAndLabelNames(t *testing.T) {
+func TestFacetDeleteFuncOrderOrphansAndLabelNames(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, native := range []bool{false, true} {
 		t.Run(fmt.Sprintf("native=%t", native), func(t *testing.T) {
-			f := scaleP21IssueAuthorizationSeed(t)
+			f := scaleIssueAuthorizationSeed(t)
 			workspace := f.data.Workspace.URLKey
 			archived := ""
 			data, found := f.BootstrapFor(workspace)
@@ -500,7 +500,7 @@ func TestScaleP21SW240FacetDeleteFuncOrderOrphansAndLabelNames(t *testing.T) {
 						f.setWorkspaceLocked(workspace, data)
 						f.mu.Unlock()
 					}
-					view := scaleP21IssuePersistenceView(t, f.scaleP09Fixture, true, !native)
+					view := scaleIssuePersistenceView(t, f.scaleFixture, true, !native)
 					visible := map[string]bool{}
 					for _, user := range []string{"", f.data.Viewer.ID, f.guest.ID} {
 						var literal domain.Bootstrap
@@ -521,8 +521,8 @@ func TestScaleP21SW240FacetDeleteFuncOrderOrphansAndLabelNames(t *testing.T) {
 								visible[item.ID] = true
 							}
 						}
-						expected := scaleP21SW240FacetOccurrences(literal)
-						if got := scaleP21SW240FacetVisit(t, view, workspace, user, native); !reflect.DeepEqual(expected, got) {
+						expected := facetOccurrences(literal)
+						if got := facetVisit(t, view, workspace, user, native); !reflect.DeepEqual(expected, got) {
 							t.Fatalf("facet occurrences differ for %q:\nliteral=%v\nbounded=%v", user, expected, got)
 						}
 						if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {

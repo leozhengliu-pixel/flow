@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW24ImportMultipartSourceHold(t *testing.T) {
+func TestImportMultipartSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		var upload bytes.Buffer
 		form := multipart.NewWriter(&upload)
 		file, err := form.CreateFormFile("file", "accepted.csv")
@@ -95,11 +95,11 @@ func TestScaleP21SW24ImportMultipartSourceHold(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ImportHandoffSource(t *testing.T) {
+func TestImportHandoffSource(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		service := &server{store: repo}
 		for _, list := range []bool{false, true} {
 			r := httptest.NewRequest(http.MethodGet, "/api/imports", nil)

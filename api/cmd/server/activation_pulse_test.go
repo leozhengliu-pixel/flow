@@ -10,10 +10,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21ActivationPulseDifferential(t *testing.T) {
+func TestScaleActivationPulseDifferential(t *testing.T) {
 	for _, mode := range []string{"off", "current", "full"} {
 		t.Run(mode, func(t *testing.T) {
-			peers, fixture, _, project := scaleP21ActivationHTTPPeers(t, mode)
+			peers, fixture, _, project := scaleActivationHTTPPeers(t, mode)
 			workspace := fixture.data.Workspace
 			for writer := range peers {
 				var cursor string

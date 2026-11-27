@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW241Issue() domain.Issue {
+func issueFrameCompareIssue() domain.Issue {
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	return domain.Issue{
 		ID: "sw241-issue", Version: 1, Identifier: "SW241-1", Number: 1,
@@ -30,7 +30,7 @@ func scaleP21SW241Issue() domain.Issue {
 	}
 }
 
-func scaleP21SW241JSON(t *testing.T, issue domain.Issue) []byte {
+func issueFrameCompareJSON(t *testing.T, issue domain.Issue) []byte {
 	t.Helper()
 	raw, err := json.Marshal(issue)
 	if err != nil {
@@ -39,7 +39,7 @@ func scaleP21SW241JSON(t *testing.T, issue domain.Issue) []byte {
 	return raw
 }
 
-func scaleP21SW241Oracle(t *testing.T, previous []byte, next domain.Issue, data domain.Bootstrap) bool {
+func issueFrameCompareOracle(t *testing.T, previous []byte, next domain.Issue, data domain.Bootstrap) bool {
 	t.Helper()
 	values, err := issueRecordValues("", next)
 	if err != nil {
@@ -49,7 +49,7 @@ func scaleP21SW241Oracle(t *testing.T, previous []byte, next domain.Issue, data 
 		newIssueReferences(data).equalOwned(previous, next)
 }
 
-func scaleP21SW241Frames(t *testing.T, repo *SQLiteStore, next domain.Issue, data domain.Bootstrap) (*metadataLogicalBuilder, metadataLogicalNode, *metadataLogicalBuilder, *metadataLogicalSource) {
+func issueFrameCompareFrames(t *testing.T, repo *SQLiteStore, next domain.Issue, data domain.Bootstrap) (*metadataLogicalBuilder, metadataLogicalNode, *metadataLogicalBuilder, *metadataLogicalSource) {
 	t.Helper()
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	input, err := newMetadataLogicalBuilder(t.Context())
@@ -88,7 +88,7 @@ func scaleP21SW241Frames(t *testing.T, repo *SQLiteStore, next domain.Issue, dat
 	return input, node, output, source
 }
 
-func TestScaleP21SW241IssueFrameCompareDifferential(t *testing.T) {
+func TestIssueFrameCompareDifferential(t *testing.T) {
 	type cell struct {
 		name     string
 		previous []byte
@@ -96,12 +96,12 @@ func TestScaleP21SW241IssueFrameCompareDifferential(t *testing.T) {
 		data     domain.Bootstrap
 		want     bool
 	}
-	base := scaleP21SW241Issue()
+	base := issueFrameCompareIssue()
 	cells := []cell{
 		{name: "absent-preimage", next: base},
 		{name: "missing-defaults", previous: []byte(`{}`), want: true},
 		{name: "null-preimage-defaults", previous: []byte(`null`), want: true},
-		{name: "valid-native-row", previous: scaleP21SW241JSON(t, base), next: base, want: true},
+		{name: "valid-native-row", previous: issueFrameCompareJSON(t, base), next: base, want: true},
 	}
 	values, err := issueRecordValues("", base)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestScaleP21SW241IssueFrameCompareDifferential(t *testing.T) {
 	}
 	cells = append(cells, cell{name: "literal-raw-equal", previous: bytes.Clone(values[len(values)-1].([]byte)), next: base, want: true})
 	add := func(name string, old, next domain.Issue, data domain.Bootstrap, want bool) {
-		cells = append(cells, cell{name, scaleP21SW241JSON(t, old), next, cloneBootstrap(data), want})
+		cells = append(cells, cell{name, issueFrameCompareJSON(t, old), next, cloneBootstrap(data), want})
 	}
 	normalized := base
 	normalized.AgentSessionState = "active"
@@ -205,11 +205,11 @@ func TestScaleP21SW241IssueFrameCompareDifferential(t *testing.T) {
 		previous: bytes.Clone(values[len(values)-1].([]byte)), next: rawProducer, want: true})
 	for _, test := range cells {
 		t.Run(test.name, func(t *testing.T) {
-			if oracle := scaleP21SW241Oracle(t, test.previous, test.next, test.data); oracle != test.want {
+			if oracle := issueFrameCompareOracle(t, test.previous, test.next, test.data); oracle != test.want {
 				t.Fatal("fixture did not establish its literal equality branch", oracle, test.want)
 			}
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency(), maxStateBytes: 1 << 20}
-			_, node, frames, source := scaleP21SW241Frames(t, repo, test.next, test.data)
+			_, node, frames, source := issueFrameCompareFrames(t, repo, test.next, test.data)
 			got, err := legacyIssueRecordFrameEqual(t.Context(), repo, frames,
 				legacySessionJSONPart{bytes.NewReader(test.previous), 0, int64(len(test.previous))}, node, source)
 			if err != nil || got != test.want {
@@ -222,10 +222,10 @@ func TestScaleP21SW241IssueFrameCompareDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW241IssueFrameCompareAboveWorkspaceRootCap(t *testing.T) {
-	before := scaleP21SW241Issue()
+func TestIssueFrameCompareAboveWorkspaceRootCap(t *testing.T) {
+	before := issueFrameCompareIssue()
 	before.Description = strings.Repeat("x", 2<<20)
-	previous := scaleP21SW241JSON(t, before)
+	previous := issueFrameCompareJSON(t, before)
 	for _, changed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unchanged", true: "changed"}[changed], func(t *testing.T) {
 			next := before
@@ -233,10 +233,10 @@ func TestScaleP21SW241IssueFrameCompareAboveWorkspaceRootCap(t *testing.T) {
 				next.Description = "y" + next.Description[1:]
 			}
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency(), maxStateBytes: 1 << 20}
-			_, node, frames, source := scaleP21SW241Frames(t, repo, next, domain.Bootstrap{})
+			_, node, frames, source := issueFrameCompareFrames(t, repo, next, domain.Bootstrap{})
 			got, err := legacyIssueRecordFrameEqual(t.Context(), repo, frames,
 				legacySessionJSONPart{bytes.NewReader(previous), 0, int64(len(previous))}, node, source)
-			want := scaleP21SW241Oracle(t, previous, next, domain.Bootstrap{})
+			want := issueFrameCompareOracle(t, previous, next, domain.Bootstrap{})
 			if len(previous) <= repo.maxStateBytes || want == changed || err != nil || got != want {
 				t.Fatal("valid Issue row was capped by workspace-root bytes or changed equality", len(previous), got, want, err)
 			}
@@ -244,8 +244,8 @@ func TestScaleP21SW241IssueFrameCompareAboveWorkspaceRootCap(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
-	raw, requestBytes, stateBytes := scaleP21SW234EditorProducerRow(t)
+func TestIssueFrameCompareLargeEditor(t *testing.T) {
+	raw, requestBytes, stateBytes := editorProducerRow(t)
 	var before domain.Issue
 	if err := json.Unmarshal(raw, &before); err != nil {
 		t.Fatal(err)
@@ -263,7 +263,7 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 			}
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency(), maxStateBytes: 1 << 20}
 			repo.metadataResidency.work.limit = 16 << 20
-			input, node, frames, source := scaleP21SW241Frames(t, repo, next, domain.Bootstrap{})
+			input, node, frames, source := issueFrameCompareFrames(t, repo, next, domain.Bootstrap{})
 			node.cost = uint64(metadataWorkBytes()) + 1
 			if _, err := node.Value(t.Context(), metadataWorkBytes()); !errors.Is(err, ErrMetadataWorkBudget) {
 				t.Fatal("whole native Issue decode witness did not refuse", err)
@@ -287,7 +287,7 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 			}); err != nil || poisoned != 3 {
 				t.Fatal("large editor did not retain three framed-body witnesses", poisoned, err)
 			}
-			want := scaleP21SW241Oracle(t, previous, next, domain.Bootstrap{})
+			want := issueFrameCompareOracle(t, previous, next, domain.Bootstrap{})
 			got, err := legacyIssueRecordFrameEqual(t.Context(), repo, frames,
 				legacySessionJSONPart{bytes.NewReader(previous), 0, int64(len(previous))}, node, source)
 			if len(previous) <= 17<<20 || requestBytes >= 16<<20 || want == changed || err != nil || got != want {
@@ -300,19 +300,19 @@ func TestScaleP21SW241IssueFrameCompareLargeEditor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW241IssueFrameCompareFailureAndRelease(t *testing.T) {
+func TestIssueFrameCompareFailureAndRelease(t *testing.T) {
 	for _, mode := range []string{"cancel-before", "cancel-during-preimage", "denial-and-recovery", "closed-input", "closed-output", "closed-directory-source"} {
 		t.Run(mode, func(t *testing.T) {
-			before, next := scaleP21SW241Issue(), scaleP21SW241Issue()
+			before, next := issueFrameCompareIssue(), issueFrameCompareIssue()
 			before.Description, next.Description = strings.Repeat("x", 128<<10), strings.Repeat("x", 128<<10)
 			next.Creator.Name = "New display"
 			data := domain.Bootstrap{Users: []domain.User{{ID: "person", Name: "Current display"}}}
-			previous := scaleP21SW241JSON(t, before)
-			if !scaleP21SW241Oracle(t, previous, next, data) {
+			previous := issueFrameCompareJSON(t, before)
+			if !issueFrameCompareOracle(t, previous, next, data) {
 				t.Fatal("failure fixture must require directory equality")
 			}
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency(), maxStateBytes: 1 << 20}
-			input, node, output, source := scaleP21SW241Frames(t, repo, next, data)
+			input, node, output, source := issueFrameCompareFrames(t, repo, next, data)
 			_, releaseParent, err := repo.tryAdmitAdditionalMetadataWork(t.Context(), 4096)
 			if err != nil {
 				t.Fatal(err)
@@ -328,7 +328,7 @@ func TestScaleP21SW241IssueFrameCompareFailureAndRelease(t *testing.T) {
 				cancel()
 			case "cancel-during-preimage":
 				backing := bytes.NewReader(previous)
-				part.input = scaleP21SW234ReaderAt(func(dst []byte, offset int64) (int, error) {
+				part.input = issueCanonicalReaderAt(func(dst []byte, offset int64) (int, error) {
 					count, err := backing.ReadAt(dst, offset)
 					reads++
 					cancel()

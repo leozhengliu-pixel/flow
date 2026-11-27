@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP16ReadDocumentScope(ctx context.Context, reader metadataRowReader, workspace, id, lock string) (domain.Document, int, []byte, error) {
+func scaleReadDocumentScope(ctx context.Context, reader metadataRowReader, workspace, id, lock string) (domain.Document, int, []byte, error) {
 	var raw []byte
 	var order int
 	err := reader.QueryRowContext(ctx, `SELECT collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key=?`+lock, workspace, id).Scan(&order, &raw)
@@ -33,18 +33,18 @@ func scaleP16ReadDocumentScope(ctx context.Context, reader metadataRowReader, wo
 // Scope changes preserve current bodies and version markers byte for byte.
 // Only one canonical document body is resident at a time, including when a
 // current revision refers back to the document's body.
-func (s *SQLiteStore) scaleP16CascadeDocumentScopes(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
+func (s *SQLiteStore) scaleCascadeDocumentScopes(ctx context.Context, tx *sqlTx, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
 	lock := ""
 	if s.dialect != "sqlite" {
 		lock = " FOR UPDATE"
 	}
 	for cursor, pageNumber := 0, 1; ; pageNumber++ {
-		keys, next, err := scaleP16CascadeKeys(source, plan, cursor)
+		keys, next, err := scaleCascadeKeys(source, plan, cursor)
 		if err != nil || len(keys) == 0 {
 			return err
 		}
 		for _, id := range keys {
-			document, order, raw, err := scaleP16ReadDocumentScope(ctx, tx, workspace, id, lock)
+			document, order, raw, err := scaleReadDocumentScope(ctx, tx, workspace, id, lock)
 			if errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
@@ -95,9 +95,9 @@ func (s *SQLiteStore) scaleP16CascadeDocumentScopes(ctx context.Context, tx *sql
 	}
 }
 
-func (s *SQLiteStore) scaleP16InstallDocumentScopes(ctx context.Context, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
+func (s *SQLiteStore) scaleInstallDocumentScopes(ctx context.Context, workspace string, source *domain.Bootstrap, plan ProjectRecordCascade) error {
 	for cursor := 0; ; {
-		keys, next, err := scaleP16CascadeKeys(source, plan, cursor)
+		keys, next, err := scaleCascadeKeys(source, plan, cursor)
 		if err != nil || len(keys) == 0 {
 			return err
 		}
@@ -106,7 +106,7 @@ func (s *SQLiteStore) scaleP16InstallDocumentScopes(ctx context.Context, workspa
 				continue
 			}
 			document := &source.Documents[index]
-			header, _, _, err := scaleP16ReadDocumentScope(ctx, s.db, workspace, document.ID, "")
+			header, _, _, err := scaleReadDocumentScope(ctx, s.db, workspace, document.ID, "")
 			if err != nil {
 				return err
 			}

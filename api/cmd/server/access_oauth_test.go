@@ -21,7 +21,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW12Applications(t *testing.T, repo *store.SQLiteStore, workspace string, actor domain.User, logo string) domain.OAuthApplication {
+func accessOAuthApplications(t *testing.T, repo *store.SQLiteStore, workspace string, actor domain.User, logo string) domain.OAuthApplication {
 	t.Helper()
 	target := domain.OAuthApplication{
 		ID: idgen.New("oauth_app_sw12_"), ClientID: idgen.New("flow_client_sw12_"),
@@ -45,7 +45,7 @@ func scaleP21SW12Applications(t *testing.T, repo *store.SQLiteStore, workspace s
 	return target
 }
 
-func scaleP21SW12Reset(t *testing.T, repo *store.SQLiteStore, workspace string, target domain.OAuthApplication) {
+func accessOauthReset(t *testing.T, repo *store.SQLiteStore, workspace string, target domain.OAuthApplication) {
 	t.Helper()
 	repo.SetWebhookSink(nil)
 	repo.SetRealtimeSink(nil)
@@ -66,7 +66,7 @@ func scaleP21SW12Reset(t *testing.T, repo *store.SQLiteStore, workspace string, 
 	}
 }
 
-func scaleP21SW12OtherApplications(t *testing.T, repo *store.SQLiteStore, workspace, exclude string) [32]byte {
+func otherApplications(t *testing.T, repo *store.SQLiteStore, workspace, exclude string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	if err := repo.StreamMetadataRecords(t.Context(), workspace, "oauthApplications", func(key store.RecordKey, reader io.Reader) error {
@@ -86,9 +86,9 @@ func scaleP21SW12OtherApplications(t *testing.T, repo *store.SQLiteStore, worksp
 
 // Only the operation's random credential is replaced; old credentials, actor
 // fields and permissions remain part of the comparison.
-func scaleP21SW12JSON(t *testing.T, value any, secret string) any {
+func accessOauthJSON(t *testing.T, value any, secret string) any {
 	t.Helper()
-	result := scaleP21M2JSON(t, value, false)
+	result := normalizePolicyJSON(t, value, false)
 	var normalize func(any) any
 	normalize = func(value any) any {
 		switch item := value.(type) {
@@ -110,20 +110,20 @@ func scaleP21SW12JSON(t *testing.T, value any, secret string) any {
 	return normalize(result)
 }
 
-func TestScaleP21SW12SecretRotationDifferential(t *testing.T) {
+func TestSecretRotationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		target := scaleP21SW12Applications(t, repo, workspace, f.data.Viewer, "")
-		unrelated := scaleP21SW12OtherApplications(t, repo, workspace, target.ID)
+		target := accessOAuthApplications(t, repo, workspace, f.data.Viewer, "")
+		unrelated := otherApplications(t, repo, workspace, target.ID)
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, missing := range []bool{false, true} {
 				var results []any
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
-					scaleP21SW12Reset(t, repo, workspace, target)
+					accessOauthReset(t, repo, workspace, target)
 					var webhooks, realtime []any
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 						webhooks = append(webhooks, []any{event.Type, event.AggregateID, event.Payload, event.PreviousValues})
@@ -138,7 +138,7 @@ func TestScaleP21SW12SecretRotationDifferential(t *testing.T) {
 					}
 					r.SetPathValue("id", id)
 					before := time.Now().UTC()
-					scaleP21M3Call(&server{store: source}, w, r, (*server).rotateOAuthApplicationSecret)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).rotateOAuthApplicationSecret)
 					var response struct {
 						Secret string `json:"clientSecret"`
 					}
@@ -169,54 +169,54 @@ func TestScaleP21SW12SecretRotationDifferential(t *testing.T) {
 					for i := range entries {
 						entries[i].ID, entries[i].Hash, entries[i].Seq, entries[i].CreatedAt = "", "", 0, time.Time{}
 					}
-					results = append(results, scaleP21SW12JSON(t, []any{
-						w.Code, scaleP21M2Response(t, w, false), current.OAuthApplications,
-						scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "users", ID: user.ID}),
+					results = append(results, accessOauthJSON(t, []any{
+						w.Code, policyDifferentialResponse(t, w, false), current.OAuthApplications,
+						policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "users", ID: user.ID}),
 						webhooks, realtime, entries,
 					}, response.Secret))
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("rotation differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("rotation differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
-		scaleP21SW12Reset(t, repo, workspace, target)
-		original := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+		accessOauthReset(t, repo, workspace, target)
+		original := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 		r.SetPathValue("id", target.ID)
 		(&server{store: f.probe}).rotateOAuthApplicationSecret(w, r.WithContext(ctx))
-		if w.Code < 400 || scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") != original {
+		if w.Code < 400 || pointRecordFingerprint(t, repo, workspace, "oauthApplications") != original {
 			t.Fatal("cancelled rotation changed canonical metadata")
 		}
 		large := target
 		large.Description = strings.Repeat("selected application ", 20000)
-		scaleP21SW12Reset(t, repo, workspace, large)
-		original = scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+		accessOauthReset(t, repo, workspace, large)
+		original = pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 		for range 2 {
 			r, w = f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", target.ID)
 			(&server{store: f.probe}).rotateOAuthApplicationSecret(w, r)
 			if w.Code < 400 || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) ||
-				scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") != original {
+				pointRecordFingerprint(t, repo, workspace, "oauthApplications") != original {
 				t.Fatal("selected budget rejection changed canonical metadata or leaked admission")
 			}
 		}
-		if f.probe.WorkspaceMetadataDecodes() != 0 || scaleP21SW12OtherApplications(t, repo, workspace, target.ID) != unrelated {
+		if f.probe.WorkspaceMetadataDecodes() != 0 || otherApplications(t, repo, workspace, target.ID) != unrelated {
 			t.Fatal("rotation decoded full workspace metadata or changed unrelated application bytes/order")
 		}
 	}
 }
 
-func TestScaleP21SW12LogoInputDifferential(t *testing.T) {
+func TestLogoInputDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		logo := "/uploads/" + idgen.New("oauth_app_icon_sw12_current_") + ".png"
-		target := scaleP21SW12Applications(t, repo, workspace, f.data.Viewer, logo)
+		target := accessOAuthApplications(t, repo, workspace, f.data.Viewer, logo)
 		owned := idgen.New("oauth_app_icon_sw12_owned_") + ".png"
 		foreign := idgen.New("oauth_app_icon_sw12_foreign_") + ".png"
 		otherPurpose := idgen.New("oauth_app_icon_sw12_other_") + ".png"
@@ -235,7 +235,7 @@ func TestScaleP21SW12LogoInputDifferential(t *testing.T) {
 				}
 			})
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+		before := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, logo string
@@ -270,27 +270,27 @@ func TestScaleP21SW12LogoInputDifferential(t *testing.T) {
 		})
 		large := target
 		large.Description = strings.Repeat("selected application ", 20000)
-		scaleP21SW12Reset(t, repo, workspace, large)
+		accessOauthReset(t, repo, workspace, large)
 		for range 2 {
 			if err := (&server{store: f.probe}).checkOAuthAppLogoInput(f.request(f.data.Viewer, nil, nil), &logo, target.ID); !errors.Is(err, store.ErrMetadataPageBudget) {
 				t.Fatalf("selected large application error=%v", err)
 			}
 		}
-		scaleP21SW12Reset(t, repo, workspace, target)
-		if scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
+		accessOauthReset(t, repo, workspace, target)
+		if pointRecordFingerprint(t, repo, workspace, "oauthApplications") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("logo validation changed or decoded unrelated metadata")
 		}
 	}
 }
 
-func TestScaleP21SW12IconUploadDifferential(t *testing.T) {
+func TestIconUploadDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
-		scaleP21SW12Applications(t, repo, workspace, f.data.Viewer, "")
-		before := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+		accessOAuthApplications(t, repo, workspace, f.data.Viewer, "")
+		before := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, filename string
@@ -318,11 +318,11 @@ func TestScaleP21SW12IconUploadDifferential(t *testing.T) {
 					r, w := f.request(user, key, nil), httptest.NewRecorder()
 					r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())
 					r.Header.Set("Content-Type", form.FormDataContentType())
-					scaleP21M3Call(s, w, r, (*server).uploadOAuthApplicationIcon)
+					callPointSettingsHandler(s, w, r, (*server).uploadOAuthApplicationIcon)
 					if w.Code != spec.status {
 						t.Fatalf("%s status=%d body=%s", spec.name, w.Code, w.Body.String())
 					}
-					var result any = scaleP21M2Response(t, w, false)
+					var result any = policyDifferentialResponse(t, w, false)
 					if spec.status == http.StatusCreated {
 						var output map[string]string
 						if err := json.Unmarshal(w.Body.Bytes(), &output); err != nil {
@@ -366,24 +366,24 @@ func TestScaleP21SW12IconUploadDifferential(t *testing.T) {
 					results = append(results, []any{w.Code, result})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("icon upload differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("icon upload differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
-		if scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if pointRecordFingerprint(t, repo, workspace, "oauthApplications") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("icon upload changed or decoded application metadata")
 		}
 	}
 }
 
-func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
+func TestOAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		currentLogo := "/uploads/" + idgen.New("oauth_app_icon_sw12_held_") + ".png"
-		target := scaleP21SW12Applications(t, repo, workspace, f.data.Viewer, currentLogo)
+		target := accessOAuthApplications(t, repo, workspace, f.data.Viewer, currentLogo)
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW12 foreign", idgen.New("sw12-foreign-"), "us")
 		if err != nil {
 			t.Fatal(err)
@@ -395,8 +395,8 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
-		original := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
-		otherOriginal := scaleP21M3Fingerprint(t, repo, foreign.Workspace.URLKey, "oauthApplications")
+		original := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
+		otherOriginal := pointRecordFingerprint(t, repo, foreign.Workspace.URLKey, "oauthApplications")
 		member := f.principals[len(f.principals)-1].user
 		type heldRequest struct {
 			source  *store.SQLiteStore
@@ -424,17 +424,17 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 					r.SetPathValue("workspaceKey", spec.workspace)
 					r.SetPathValue("workspace", spec.workspace)
 					r.SetPathValue("id", target.ID)
-					scaleP21M3Call(&server{store: source}, w, r, (*server).rotateOAuthApplicationSecret)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).rotateOAuthApplicationSecret)
 					if w.Code != spec.want {
 						t.Fatalf("cross workspace rotation status=%d", w.Code)
 					}
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 					if err := (&server{store: source}).checkOAuthAppLogoInput(r, &currentLogo, target.ID); !errors.Is(err, errOAuthAppIconNotOwned) {
 						t.Fatalf("another workspace adopted current-logo exception: %v", err)
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("cross workspace rotation response differs: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("cross workspace rotation response differs: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			})
 		}
@@ -449,7 +449,7 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 					r.SetPathValue("id", target.ID)
 				}
 				w := httptest.NewRecorder()
-				scaleP21M3Call(&server{store: held.source}, w, r, (*server).rotateOAuthApplicationSecret)
+				callPointSettingsHandler(&server{store: held.source}, w, r, (*server).rotateOAuthApplicationSecret)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s rotation ignored live revocation: status=%d", phase, w.Code)
 				}
@@ -469,7 +469,7 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 				r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())
 				r.Header.Set("Content-Type", form.FormDataContentType())
 				s, w := &server{store: held.source, uploadPath: t.TempDir()}, httptest.NewRecorder()
-				scaleP21M3Call(s, w, r, (*server).uploadOAuthApplicationIcon)
+				callPointSettingsHandler(s, w, r, (*server).uploadOAuthApplicationIcon)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s upload ignored live revocation: status=%d", phase, w.Code)
 				}
@@ -482,8 +482,8 @@ func TestScaleP21SW12OAuthAuthorityAndWorkspaceIsolation(t *testing.T) {
 				}
 			}
 		}
-		if scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") != original ||
-			scaleP21M3Fingerprint(t, repo, foreign.Workspace.URLKey, "oauthApplications") != otherOriginal ||
+		if pointRecordFingerprint(t, repo, workspace, "oauthApplications") != original ||
+			pointRecordFingerprint(t, repo, foreign.Workspace.URLKey, "oauthApplications") != otherOriginal ||
 			f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("workspace isolation or authority checks changed application metadata or decoded full state")
 		}

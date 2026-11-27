@@ -309,10 +309,10 @@ func storeMaxInt64(target *atomic.Int64, value int64) {
 	}
 }
 
-// coldSlotHolders counts the COLD slots held process-wide (SW551).
+// coldSlotHolders counts the COLD slots held process-wide.
 var coldSlotHolders, coldSlotRefusals atomic.Int64
 
-// coldSlotAcquisitions counts COLD slot acquisitions process-wide (SW550).
+// coldSlotAcquisitions counts COLD slot acquisitions process-wide.
 var coldSlotAcquisitions atomic.Int64
 
 // ColdSlotAcquisitionsForTesting reports how many times a COLD slot was taken.
@@ -339,7 +339,7 @@ func envPositiveDuration(name string, fallback time.Duration) time.Duration {
 }
 
 // coldAccessorObservers report each legacy accessor a bounded store served
-// through its legacy view (SW530/SW550: a proven-bounded route makes none).
+// through its legacy view (flag-on route sweep/a proven-bounded route makes none).
 var coldAccessorLanes sync.Map // *metadataResidency -> chan struct{}
 
 // accessorLane is the replica's legacy-view lane: FLOW_COLD_VIEW_LANES
@@ -460,7 +460,7 @@ func (s *SQLiteStore) coldAccessorViewKept(ctx context.Context, accessor, worksp
 	return view, release, true
 }
 
-// coldAccessorReads counts the legacy views served (SW550).
+// coldAccessorReads counts the legacy views served.
 var coldAccessorReads atomic.Int64
 
 // ColdAccessorReadsForTesting reports how many legacy accessor reads bounded
@@ -496,7 +496,7 @@ func ColdWriteLockHoldForTesting() (holds int64, total, longest time.Duration) {
 }
 
 // coldAccessorFailures counts legacy views that could not be decoded (the
-// accessor then reports the workspace as missing, as SW531 did).
+// accessor then reports the workspace as missing, as skeletal workspace read refusal did).
 var coldAccessorFailures atomic.Int64
 
 // decodeColdWorkspace is decodeColdMetadataRead for one workspace, limited to
@@ -804,7 +804,7 @@ func (s *SQLiteStore) publishColdLegacyWriteLocked(ctx context.Context, workspac
 }
 
 // coldInstallHookForTesting runs inside a COLD write's install, while the
-// facade's lock is held (SW554).
+// facade's lock is held.
 var coldInstallHookForTesting atomic.Pointer[func()]
 
 // SetColdInstallHookForTesting sets (nil clears) the COLD install hook.

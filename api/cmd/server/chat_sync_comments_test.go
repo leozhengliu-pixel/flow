@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW65ChatSyncCommentsDifferential(t *testing.T) {
+func TestChatSyncCommentsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	f := newChatWorkflowFixture(t)
@@ -274,7 +274,7 @@ func TestScaleP21SW65ChatSyncCommentsDifferential(t *testing.T) {
 				outputs = append(outputs, got)
 			}
 			if !reflect.DeepEqual(outputs[0], outputs[1]) {
-				t.Fatal("actual comment sync legacy/bounded differential", scaleP21M2Diff(outputs[0], outputs[1]))
+				t.Fatal("actual comment sync legacy/bounded differential", policyFirstDifference(outputs[0], outputs[1]))
 			}
 		})
 	}

@@ -21,7 +21,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-type scaleP11Fixture struct {
+type peerScaleFixture struct {
 	writer, peer *store.SQLiteStore
 	service      *server
 	workspace    string
@@ -30,7 +30,7 @@ type scaleP11Fixture struct {
 	config       store.DatabaseConfig
 }
 
-func scaleP11NewFixture(t *testing.T, records int) scaleP11Fixture {
+func scaleNewFixture(t *testing.T, records int) peerScaleFixture {
 	t.Helper()
 	config := store.DatabaseConfig{Driver: os.Getenv("FLOW_TEST_DATABASE_DRIVER"), URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 4}
 	if (config.Driver == "") != (config.URL == "") {
@@ -97,19 +97,19 @@ func scaleP11NewFixture(t *testing.T, records int) scaleP11Fixture {
 			t.Fatalf("initial peer cursor=%d SQL head=%d error=%v", service.remoteEvents.consumer(workspace).cursor, state.Head, err)
 		}
 	}
-	return scaleP11Fixture{writer, peer, service, workspace, owner, redis, config}
+	return peerScaleFixture{writer, peer, service, workspace, owner, redis, config}
 }
 
 // Only the receiving replica's work is measured. Writer cost and fixture setup
 // are excluded; the canonical body bytes and measurement method stay fixed.
-func TestScaleP11PeerAllocation(t *testing.T) {
+func TestScalePeerAllocation(t *testing.T) {
 	// Measure the original in-memory peer projection's incremental application.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, mode := range []string{"off", "shadow", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_PEER_SYNC", mode)
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP11NewFixture(t, 256)
+			f := scaleNewFixture(t, 256)
 			var allocated uint64
 			var elapsed time.Duration
 			beforeDecodes := f.peer.WorkspaceMetadataDecodes()
@@ -143,10 +143,10 @@ func TestScaleP11PeerAllocation(t *testing.T) {
 	}
 }
 
-func TestScaleP11PeerSyncReusesCurrentInstalledGeneration(t *testing.T) {
+func TestScalePeerSyncReusesCurrentInstalledGeneration(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 256)
+	f := scaleNewFixture(t, 256)
 	service := &server{store: f.peer, coordinator: f.service.coordinator, realtime: newRealtimeHub()}
 	before := f.peer.WorkspaceMetadataDecodes()
 	state, err := f.peer.WorkspacePeerState(t.Context(), f.workspace)
@@ -165,7 +165,7 @@ func TestScaleP11PeerSyncReusesCurrentInstalledGeneration(t *testing.T) {
 	}
 }
 
-func scaleP11Rename(t *testing.T, f scaleP11Fixture, name string) domain.RealtimeEvent {
+func scaleRename(t *testing.T, f peerScaleFixture, name string) domain.RealtimeEvent {
 	t.Helper()
 	var event domain.RealtimeEvent
 	f.writer.SetRealtimeSink(func(_ string, e domain.RealtimeEvent) { event = e })
@@ -179,7 +179,7 @@ func scaleP11Rename(t *testing.T, f scaleP11Fixture, name string) domain.Realtim
 	return event
 }
 
-func scaleP11Name(t *testing.T, f scaleP11Fixture) string {
+func scaleName(t *testing.T, f peerScaleFixture) string {
 	t.Helper()
 	data, ok := f.peer.WorkspaceMetadata(f.workspace)
 	if !ok || len(data.Projects) == 0 {
@@ -188,7 +188,7 @@ func scaleP11Name(t *testing.T, f scaleP11Fixture) string {
 	return data.Projects[0].Name
 }
 
-func TestScaleP11QueueBoundsAndCoalescesHeads(t *testing.T) {
+func TestScaleQueueBoundsAndCoalescesHeads(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	var q remoteEventQueue
 	payload := []byte(strings.Repeat("p", 1<<20))
@@ -212,11 +212,11 @@ func TestScaleP11QueueBoundsAndCoalescesHeads(t *testing.T) {
 	}
 }
 
-func TestScaleP11RedisLossDuplicationAndReordering(t *testing.T) {
+func TestScaleRedisLossDuplicationAndReordering(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
-	events := []domain.RealtimeEvent{scaleP11Rename(t, f, "first"), scaleP11Rename(t, f, "second"), scaleP11Rename(t, f, "third")}
+	f := scaleNewFixture(t, 1)
+	events := []domain.RealtimeEvent{scaleRename(t, f, "first"), scaleRename(t, f, "second"), scaleRename(t, f, "third")}
 	for i := range events {
 		events[i].ClientID = fmt.Sprintf("p11-client-%d", i)
 	}
@@ -226,7 +226,7 @@ func TestScaleP11RedisLossDuplicationAndReordering(t *testing.T) {
 		f.service.remoteEvents.push(f.workspace, events[index], f.service.recordPeerSyncMode() != "off", func(string) {})
 	}
 	f.service.applyRemoteEvents(f.workspace)
-	if scaleP11Name(t, f) != "third" {
+	if scaleName(t, f) != "third" {
 		t.Fatal("peer did not converge to the latest committed record")
 	}
 	got := drainRealtime(channel)
@@ -239,7 +239,7 @@ func TestScaleP11RedisLossDuplicationAndReordering(t *testing.T) {
 		}
 	}
 	// No Redis notification at all; polling still installs and publishes.
-	lost := scaleP11Rename(t, f, "lost publish")
+	lost := scaleRename(t, f, "lost publish")
 	f.redis.Close()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
@@ -247,7 +247,7 @@ func TestScaleP11RedisLossDuplicationAndReordering(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	select {
 	case event := <-channel:
-		if event.ID != lost.ID && event.Type != "workspace.resync_required" || scaleP11Name(t, f) != "lost publish" {
+		if event.ID != lost.ID && event.Type != "workspace.resync_required" || scaleName(t, f) != "lost publish" {
 			t.Fatal("poll published before installing the complete transaction")
 		}
 	case <-time.After(2 * time.Second):
@@ -255,13 +255,13 @@ func TestScaleP11RedisLossDuplicationAndReordering(t *testing.T) {
 	}
 }
 
-func TestScaleP11FreshnessWithoutRedisAndFailureClosed(t *testing.T) {
+func TestScaleFreshnessWithoutRedisAndFailureClosed(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
-	scaleP11Rename(t, f, "commit without Redis")
+	f := scaleNewFixture(t, 1)
+	scaleRename(t, f, "commit without Redis")
 	f.redis.Close()
-	if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "commit without Redis" {
+	if err := f.service.ensureCurrentWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "commit without Redis" {
 		t.Fatalf("SQL freshness during Redis outage failed: %v", err)
 	}
 	if err := f.peer.Close(); err != nil {
@@ -272,7 +272,7 @@ func TestScaleP11FreshnessWithoutRedisAndFailureClosed(t *testing.T) {
 	}
 }
 
-func TestScaleP11ReloadWaitReturnsTimeoutAndSharedError(t *testing.T) {
+func TestScaleReloadWaitReturnsTimeoutAndSharedError(t *testing.T) {
 	for _, timeout := range []bool{false, true} {
 		t.Run(fmt.Sprint(timeout), func(t *testing.T) {
 			load := &workspaceReload{done: make(chan struct{}), err: errors.New("failed snapshot")}
@@ -290,15 +290,15 @@ func TestScaleP11ReloadWaitReturnsTimeoutAndSharedError(t *testing.T) {
 	}
 }
 
-func TestScaleP11OldWriterAndTombstoneFallback(t *testing.T) {
+func TestScaleOldWriterAndTombstoneFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
+	f := scaleNewFixture(t, 1)
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	scaleP11Rename(t, f, "old writer")
+	scaleRename(t, f, "old writer")
 	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "old writer" {
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "old writer" {
 		t.Fatalf("old writer was skipped: %v", err)
 	}
 	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "project.deleted", "p11-project-0", nil, func(data *domain.Bootstrap) error {
@@ -323,7 +323,7 @@ func TestScaleP11OldWriterAndTombstoneFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP11FlagDefaultsToOff(t *testing.T) {
+func TestScaleFlagDefaultsToOff(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "")
 	if err := os.Unsetenv("FLOW_RECORD_PEER_SYNC"); err != nil {
 		t.Fatal(err)
@@ -339,11 +339,11 @@ func TestScaleP11FlagDefaultsToOff(t *testing.T) {
 	}
 }
 
-func TestScaleP11LargeCollectionKeepsExactFallback(t *testing.T) {
+func TestScaleLargeCollectionKeepsExactFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 0)
+	f := scaleNewFixture(t, 0)
 	count := (1<<20)/int(reflect.TypeFor[domain.Project]().Size()) + 1
 	if err := f.writer.MutateWorkspace(workspaceFixtureContext(t.Context()), f.workspace, "test.p11_large", "", nil, func(data *domain.Bootstrap) error {
 		for i := range count {
@@ -357,8 +357,8 @@ func TestScaleP11LargeCollectionKeepsExactFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := f.peer.WorkspaceMetadataDecodes()
-	scaleP11Rename(t, f, "large collection fallback")
-	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleP11Name(t, f) != "large collection fallback" {
+	scaleRename(t, f, "large collection fallback")
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil || scaleName(t, f) != "large collection fallback" {
 		t.Fatalf("large collection lost the committed replacement: %v", err)
 	}
 	if f.peer.WorkspaceMetadataDecodes() <= before {
@@ -366,7 +366,7 @@ func TestScaleP11LargeCollectionKeepsExactFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP11ClientHintsAreBounded(t *testing.T) {
+func TestScaleClientHintsAreBounded(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	var queue remoteEventQueue
 	for i := range 10000 {
@@ -380,10 +380,10 @@ func TestScaleP11ClientHintsAreBounded(t *testing.T) {
 	}
 }
 
-func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
+func TestScaleRoutineCredentialEventsStaySilent(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP11NewFixture(t, 1)
+	f := scaleNewFixture(t, 1)
 	f.service.realtime.ordered = true
 	f.service.realtime.followPeerReplay(f.workspace, f.service.remoteEvents.consumer(f.workspace).eventCursor)
 	channel, stop := f.service.realtime.subscribe(f.workspace)
@@ -395,7 +395,7 @@ func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
 	if err != nil || head <= f.service.remoteEvents.consumer(f.workspace).eventCursor {
 		t.Fatalf("credential fixture did not append a legacy event: head=%d error=%v", head, err)
 	}
-	next := scaleP11Rename(t, f, "after silent event")
+	next := scaleRename(t, f, "after silent event")
 	f.service.publishPeerEvent(f.workspace, next)
 	if len(channel) != 0 {
 		t.Fatal("a later event bypassed an unclassified sequence")

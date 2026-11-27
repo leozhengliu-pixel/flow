@@ -19,9 +19,9 @@ import (
 func TestLocalStoreIssueReadSeparatesSourceRaceFromRevocation(t *testing.T) {
 	enableLocalStoreShadowTest(t)
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21M2Setup(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			member := f.principals[2].user
 			r := f.literalRequest(member, nil, nil)
@@ -38,7 +38,7 @@ func TestLocalStoreIssueReadSeparatesSourceRaceFromRevocation(t *testing.T) {
 				Transactions: []store.CommittedChange{{TxID: "projected", Seq: "1", Invalidations: []string{"issues"}}},
 			}
 			reads := 0
-			journal := scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+			journal := scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
 				reads++
 				if reads == 1 {
 					authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
@@ -57,7 +57,7 @@ func TestLocalStoreIssueReadSeparatesSourceRaceFromRevocation(t *testing.T) {
 				reads != 2 || delta.AuthzEpoch != access.AuthzEpoch || delta.ResyncRequired || delta.Next != page.Next || len(delta.Transactions) != 1 {
 				t.Fatalf("a concurrent issue write must retry with the same authority: %d (%d reads) %s", w.Code, reads, w.Body.String())
 			}
-			journal = scaleP12JournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+			journal = scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
 				if err := repo.SetTeamMembership(t.Context(), access.WorkspaceID, f.public, member.ID, "member", false); err != nil {
 					t.Fatal(err)
 				}
@@ -74,9 +74,9 @@ func TestLocalStoreIssueReadSeparatesSourceRaceFromRevocation(t *testing.T) {
 
 func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 	enableLocalStoreShadowTest(t)
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			fixture := newScaleP12Fixture(t, repo)
+			fixture := newScaleFixture(t, repo)
 			workspace, team := fixture.data.Workspace.URLKey, fixture.data.Teams[0].ID
 			label := authRequest[domain.IssueLabel](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/labels", map[string]string{"name": "Summary label", "color": "#676f88"}, workspace, http.StatusCreated)
 			created := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records", map[string]any{
@@ -91,7 +91,7 @@ func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 			if !ok {
 				t.Fatal("missing member authority")
 			}
-			request := func(principal scaleP12Principal, path string, args url.Values, body string) *http.Request {
+			request := func(principal scalePrincipal, path string, args url.Values, body string) *http.Request {
 				r := principal.request(workspace)
 				r.URL.Path = path
 				query := r.URL.Query()
@@ -162,7 +162,7 @@ func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 				if err := json.Unmarshal(item.Data, &summary); err != nil || !summary.IsSummary || summary.Description != "" || len(summary.Labels) != 1 || summary.Labels[0].ID != label.ID || item.Version == "0" || item.Version == "" {
 					t.Fatalf("issue summary lost its label or version: %+v", item)
 				}
-				for _, principal := range []scaleP12Principal{fixture.principals[len(fixture.principals)-1], {user: domain.User{ID: "no-member"}}} {
+				for _, principal := range []scalePrincipal{fixture.principals[len(fixture.principals)-1], {user: domain.User{ID: "no-member"}}} {
 					if w := read(service, request(principal, "/api/sync/records", pageArgs, "")); w.Code != http.StatusForbidden {
 						t.Fatalf("unentitled principal received %d", w.Code)
 					}
@@ -229,11 +229,11 @@ func TestLocalStoreIssueReadsDifferential(t *testing.T) {
 func TestLocalStoreIssueChangesIgnorePulseCursor(t *testing.T) {
 	enableLocalStoreShadowTest(t)
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			fixture := scaleP03Fixture(t, repo)
+			fixture := resourceAccessScaleFixture(t, repo)
 			workspace := fixture.data.Workspace.URLKey
-			principal := scaleP12Principal{user: fixture.data.Viewer}
+			principal := scalePrincipal{user: fixture.data.Viewer}
 			issue := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records", map[string]string{
 				"title": "Open issue", "teamId": fixture.data.Teams[0].ID,
 			}, workspace, http.StatusCreated)
@@ -257,9 +257,9 @@ func TestLocalStoreIssueChangesIgnorePulseCursor(t *testing.T) {
 				if service.store.BoundedMetadataEnabled() {
 					err = service.store.CommitPulseSummaries(t.Context(), workspace, []store.PulseSummaryCandidate{{
 						UserID: principal.user.ID, Schedule: "daily", End: end,
-					}}, scaleP21PulseDispatch)
+					}}, scalePulseDispatch)
 				} else {
-					err = scaleP21PulseLegacyWrite(t.Context(), repo, workspace, []pulseDue{{
+					err = scalePulseLegacyWrite(t.Context(), repo, workspace, []pulseDue{{
 						user: principal.user, schedule: "daily", end: end,
 					}}, end.Add(time.Hour))
 				}
@@ -299,14 +299,14 @@ func TestLocalStoreIssueChangesIgnorePulseCursor(t *testing.T) {
 func TestLocalStoreIssueChangesIgnoreNotificationSideEffects(t *testing.T) {
 	enableLocalStoreShadowTest(t)
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			fixture := scaleP03Fixture(t, repo)
+			fixture := resourceAccessScaleFixture(t, repo)
 			workspace, team := fixture.data.Workspace.URLKey, fixture.data.Teams[0].ID
-			editor, user := scaleP03Join(t, fixture, "Editor", "local-store-editor@example.test", "member", team)
+			editor, user := resourceAccessScaleJoin(t, fixture, "Editor", "local-store-editor@example.test", "member", team)
 			issue := authRequest[domain.Issue](t, fixture.admin, http.MethodPost, fixture.host.URL+"/api/issue-records",
 				map[string]string{"title": "Owner's issue", "teamId": team}, workspace, http.StatusCreated)
-			principal := scaleP12Principal{user: user}
+			principal := scalePrincipal{user: user}
 			r := principal.request(workspace)
 			access, err := fixture.service.resolveSyncAccess(r)
 			if err != nil {

@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW123Script struct {
+type accountReadScript struct {
 	rows       [][2]driver.Value
 	queryError error
 	endError   error
@@ -29,29 +29,29 @@ type scaleP21SW123Script struct {
 	blocked    atomic.Int64
 }
 
-type scaleP21SW123Connector struct{ script *scaleP21SW123Script }
+type accountReadConnector struct{ script *accountReadScript }
 
-func (c scaleP21SW123Connector) Driver() driver.Driver { return c }
-func (c scaleP21SW123Connector) Open(string) (driver.Conn, error) {
+func (c accountReadConnector) Driver() driver.Driver { return c }
+func (c accountReadConnector) Open(string) (driver.Conn, error) {
 	return c.Connect(context.Background())
 }
-func (c scaleP21SW123Connector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c accountReadConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &scaleP21SW123Connection{script: c.script}, nil
+	return &accountReadConnection{script: c.script}, nil
 }
 
-type scaleP21SW123Connection struct{ script *scaleP21SW123Script }
+type accountReadConnection struct{ script *accountReadScript }
 
-func (*scaleP21SW123Connection) Close() error { return nil }
-func (*scaleP21SW123Connection) Prepare(string) (driver.Stmt, error) {
+func (*accountReadConnection) Close() error { return nil }
+func (*accountReadConnection) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected account prepare")
 }
-func (*scaleP21SW123Connection) Begin() (driver.Tx, error) {
+func (*accountReadConnection) Begin() (driver.Tx, error) {
 	return nil, errors.New("unexpected account transaction")
 }
-func (c *scaleP21SW123Connection) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c *accountReadConnection) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	if !strings.Contains(query, "FROM issue_collection_counts") {
 		return nil, errors.New("unexpected account query")
 	}
@@ -64,24 +64,24 @@ func (c *scaleP21SW123Connection) QueryContext(ctx context.Context, query string
 	if c.script.queryError != nil {
 		return nil, c.script.queryError
 	}
-	return &scaleP21SW123Rows{script: c.script, guarded: strings.Contains(query, "CASE WHEN")}, nil
+	return &accountReadRows{script: c.script, guarded: strings.Contains(query, "CASE WHEN")}, nil
 }
 
-type scaleP21SW123Rows struct {
-	script   *scaleP21SW123Script
+type accountReadRows struct {
+	script   *accountReadScript
 	at       int
 	guarded  bool
 	finished bool
 }
 
-func (r *scaleP21SW123Rows) Columns() []string {
+func (r *accountReadRows) Columns() []string {
 	if r.guarded {
 		return []string{"bytes", "workspace_key", "total"}
 	}
 	return []string{"workspace_key", "total"}
 }
-func (r *scaleP21SW123Rows) Close() error { return r.script.closeError }
-func scaleP21SW123Bytes(value driver.Value) int64 {
+func (r *accountReadRows) Close() error { return r.script.closeError }
+func accountReadBytes(value driver.Value) int64 {
 	switch value := value.(type) {
 	case nil:
 		return 0
@@ -91,7 +91,7 @@ func scaleP21SW123Bytes(value driver.Value) int64 {
 		return int64(len(fmt.Sprint(value)))
 	}
 }
-func (r *scaleP21SW123Rows) Next(target []driver.Value) error {
+func (r *accountReadRows) Next(target []driver.Value) error {
 	if r.script.next != nil {
 		r.script.next()
 	}
@@ -112,7 +112,7 @@ func (r *scaleP21SW123Rows) Next(target []driver.Value) error {
 	}
 	r.at++
 	if r.guarded {
-		size := scaleP21SW123Bytes(row[0]) + scaleP21SW123Bytes(row[1])
+		size := accountReadBytes(row[0]) + accountReadBytes(row[1])
 		target[0] = size
 		if size > MetadataRecordPageMaxBytes {
 			r.script.blocked.Add(1)
@@ -125,14 +125,14 @@ func (r *scaleP21SW123Rows) Next(target []driver.Value) error {
 	return nil
 }
 
-func scaleP21SW123Store(t *testing.T, script *scaleP21SW123Script, bounded bool) *SQLiteStore {
+func accountReadStore(t *testing.T, script *accountReadScript, bounded bool) *SQLiteStore {
 	t.Helper()
-	database := sql.OpenDB(scaleP21SW123Connector{script: script})
+	database := sql.OpenDB(accountReadConnector{script: script})
 	t.Cleanup(func() { _ = database.Close() })
 	requested := time.Date(2026, 11, 15, 1, 2, 3, 4, time.FixedZone("sw123", 3600))
 	repo := &SQLiteStore{
 		db: &sqlDatabase{DB: database, dialect: "sqlite"}, dialect: "sqlite",
-		viewer: scaleP21SW118NativeViewer("sw123"), lastWorkspaceKey: "absent-default",
+		viewer: defaultViewerNativeViewer("sw123"), lastWorkspaceKey: "absent-default",
 		workspaces: map[string]domain.Bootstrap{
 			"physical-other": {Workspace: domain.Workspace{ID: "first", URLKey: "logical", Name: "zETA", Icon: "\x00icon", LogoURL: "logo", Color: "green", Region: "eu", CreatedAt: requested, DeletionRequestedAt: &requested}},
 			"":               {Workspace: domain.Workspace{ID: "second", URLKey: "", Name: "Alpha", CreatedAt: requested}},
@@ -145,12 +145,12 @@ func scaleP21SW123Store(t *testing.T, script *scaleP21SW123Script, bounded bool)
 	return repo
 }
 
-func scaleP21SW123Equal(t *testing.T, got, want domain.AccountBootstrap) {
+func accountReadEqual(t *testing.T, got, want domain.AccountBootstrap) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("account differs from literal: got=%#v want=%#v", got, want)
 	}
-	scaleP21SW118AssertViewer(t, got.Viewer, want.Viewer)
+	assertViewer(t, got.Viewer, want.Viewer)
 	for at := range got.Workspaces {
 		if got.Workspaces[at].Workspace.DeletionRequestedAt != want.Workspaces[at].Workspace.DeletionRequestedAt {
 			t.Fatal("account changed native workspace pointer ownership")
@@ -158,32 +158,32 @@ func scaleP21SW123Equal(t *testing.T, got, want domain.AccountBootstrap) {
 	}
 }
 
-func TestScaleP21SW123AccountLiteralCountErrorsAndNativeValues(t *testing.T) {
+func TestAccountLiteralCountErrorsAndNativeValues(t *testing.T) {
 	failure := errors.New("ordinary account SQL failure")
 	for _, fixture := range []struct {
 		name   string
-		script *scaleP21SW123Script
+		script *accountReadScript
 	}{
-		{"empty", &scaleP21SW123Script{}},
-		{"native-duplicates", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}, {"", int64(-2)}, {[]byte("logical"), []byte("13")}, {"logical\x00", int64(99)}, {"Logical", int64(66)}, {"uninstalled", int64(999)}}}},
-		{"query-error", &scaleP21SW123Script{queryError: failure}},
-		{"key-scan-error-clears-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}, {nil, int64(4)}}}},
-		{"count-scan-error-clears-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", "invalid-count"}}}},
-		{"count-null-clears-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", nil}}}},
-		{"count-overflow-clears-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", "18446744073709551616"}}}},
-		{"terminal-error-keeps-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(17)}}, endError: failure}},
-		{"close-error-keeps-prefix", &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(19)}}, closeError: failure}},
+		{"empty", &accountReadScript{}},
+		{"native-duplicates", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}, {"", int64(-2)}, {[]byte("logical"), []byte("13")}, {"logical\x00", int64(99)}, {"Logical", int64(66)}, {"uninstalled", int64(999)}}}},
+		{"query-error", &accountReadScript{queryError: failure}},
+		{"key-scan-error-clears-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}, {nil, int64(4)}}}},
+		{"count-scan-error-clears-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", "invalid-count"}}}},
+		{"count-null-clears-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", nil}}}},
+		{"count-overflow-clears-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}, {"unused", "18446744073709551616"}}}},
+		{"terminal-error-keeps-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(17)}}, endError: failure}},
+		{"close-error-keeps-prefix", &accountReadScript{rows: [][2]driver.Value{{"logical", int64(19)}}, closeError: failure}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			for _, bounded := range []bool{false, true} {
-				repo := scaleP21SW123Store(t, fixture.script, bounded)
+				repo := accountReadStore(t, fixture.script, bounded)
 				want := repo.Account()
 				disk := recordSpoolBytes.Load()
 				read, err := repo.BeginAccountRead(t.Context())
 				if err != nil {
 					t.Fatal(err)
 				}
-				scaleP21SW123Equal(t, read.Account, want)
+				accountReadEqual(t, read.Account, want)
 				if bounded && repo.MetadataWorkUsedForTesting() == 0 {
 					t.Fatal("account has no output owner")
 				}
@@ -198,10 +198,10 @@ func TestScaleP21SW123AccountLiteralCountErrorsAndNativeValues(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW123AccountInstalledReloadAndEmptyCatalog(t *testing.T) {
+func TestAccountInstalledReloadAndEmptyCatalog(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -217,7 +217,7 @@ func TestScaleP21SW123AccountInstalledReloadAndEmptyCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW123Equal(t, read.Account, view.Account())
+		accountReadEqual(t, read.Account, view.Account())
 		read.Close()
 	}
 	view.mu.Lock()
@@ -229,15 +229,15 @@ func TestScaleP21SW123AccountInstalledReloadAndEmptyCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	scaleP21SW123Equal(t, read.Account, view.Account())
+	accountReadEqual(t, read.Account, view.Account())
 	if read.Account.Workspaces == nil {
 		t.Fatal("empty account changed its nonnil workspace slice")
 	}
 }
 
-func TestScaleP21SW123AccountOrphanAndBodyGrowth(t *testing.T) {
-	script := &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(27)}}}
-	repo := scaleP21SW123Store(t, script, true)
+func TestAccountOrphanAndBodyGrowth(t *testing.T) {
+	script := &accountReadScript{rows: [][2]driver.Value{{"logical", int64(27)}}}
+	repo := accountReadStore(t, script, true)
 	disk := recordSpoolBytes.Load()
 	owned := 0
 	for _, count := range []int{0, 64, 4096} {
@@ -255,7 +255,7 @@ func TestScaleP21SW123AccountOrphanAndBodyGrowth(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW123Equal(t, read.Account, want)
+		accountReadEqual(t, read.Account, want)
 		used := repo.MetadataWorkUsedForTesting()
 		if owned == 0 {
 			owned = used
@@ -271,11 +271,11 @@ func TestScaleP21SW123AccountOrphanAndBodyGrowth(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW123AccountGuardedLargeKeysAndRows(t *testing.T) {
+func TestAccountGuardedLargeKeysAndRows(t *testing.T) {
 	key := strings.Repeat("native\x00", 16000)
 	for _, total := range []driver.Value{int64(31), "oversized"} {
-		script := &scaleP21SW123Script{rows: [][2]driver.Value{{key, total}}}
-		repo := scaleP21SW123Store(t, script, true)
+		script := &accountReadScript{rows: [][2]driver.Value{{key, total}}}
+		repo := accountReadStore(t, script, true)
 		repo.workspaces = map[string]domain.Bootstrap{"physical": {Workspace: domain.Workspace{URLKey: key, Name: "Large key", CreatedAt: time.Now()}}}
 		if total == "oversized" {
 			script.rows[0][1] = strings.Repeat("9", MetadataRecordPageMaxBytes+1)
@@ -290,7 +290,7 @@ func TestScaleP21SW123AccountGuardedLargeKeysAndRows(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW123Equal(t, read.Account, want)
+		accountReadEqual(t, read.Account, want)
 		read.Close()
 		script.rows[0][0] = strings.Repeat("x", MetadataRecordPageMaxBytes+1)
 		read, err = repo.BeginAccountRead(t.Context())
@@ -302,7 +302,7 @@ func TestScaleP21SW123AccountGuardedLargeKeysAndRows(t *testing.T) {
 		}
 	}
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect == "sqlite" {
 		key := "sw123-oversized-" + f.data.Workspace.URLKey
 		if _, err := f.db.ExecContext(t.Context(), `INSERT INTO issue_collection_counts(workspace_key,total) VALUES(CAST(? || zeroblob(?) AS BLOB),7)`, key, MetadataRecordPageMaxBytes+1); err != nil {
@@ -322,8 +322,8 @@ func TestScaleP21SW123AccountGuardedLargeKeysAndRows(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW123AccountJoinedDefaultsAndSort(t *testing.T) {
-	repo := scaleP21SW123Store(t, &scaleP21SW123Script{}, true)
+func TestAccountJoinedDefaultsAndSort(t *testing.T) {
+	repo := accountReadStore(t, &accountReadScript{}, true)
 	repo.workspaces = map[string]domain.Bootstrap{
 		"first":  {Workspace: domain.Workspace{Name: "Zulu"}},
 		"second": {Workspace: domain.Workspace{Name: "alpha"}},
@@ -346,9 +346,9 @@ func TestScaleP21SW123AccountJoinedDefaultsAndSort(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW123AccountCancellationAdmissionAndStageFailure(t *testing.T) {
-	script := &scaleP21SW123Script{rows: [][2]driver.Value{{"logical", int64(7)}}}
-	repo := scaleP21SW123Store(t, script, true)
+func TestAccountCancellationAdmissionAndStageFailure(t *testing.T) {
+	script := &accountReadScript{rows: [][2]driver.Value{{"logical", int64(7)}}}
+	repo := accountReadStore(t, script, true)
 	disk := recordSpoolBytes.Load()
 	for _, point := range []string{"before", "query", "rows"} {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -396,8 +396,8 @@ func TestScaleP21SW123AccountCancellationAdmissionAndStageFailure(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW123AccountOutputTransferAndBorrowedValues(t *testing.T) {
-	repo := scaleP21SW123Store(t, &scaleP21SW123Script{}, true)
+func TestAccountOutputTransferAndBorrowedValues(t *testing.T) {
+	repo := accountReadStore(t, &accountReadScript{}, true)
 	read, err := repo.BeginAccountRead(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -432,13 +432,13 @@ func TestScaleP21SW123AccountOutputTransferAndBorrowedValues(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW123AccountCountsPrecedeInstalledLock(t *testing.T) {
-	script := &scaleP21SW123Script{rows: [][2]driver.Value{{"replacement", int64(41)}}}
-	repo := scaleP21SW123Store(t, script, true)
+func TestAccountCountsPrecedeInstalledLock(t *testing.T) {
+	script := &accountReadScript{rows: [][2]driver.Value{{"replacement", int64(41)}}}
+	repo := accountReadStore(t, script, true)
 	next := domain.Bootstrap{Workspace: domain.Workspace{Name: "Replacement", URLKey: "replacement", CreatedAt: time.Now()}}
 	script.query = func() {
 		repo.mu.Lock()
-		repo.viewer = scaleP21SW118NativeViewer("replacement")
+		repo.viewer = defaultViewerNativeViewer("replacement")
 		repo.workspaces = map[string]domain.Bootstrap{"physical": next}
 		repo.lastWorkspaceKey = "replacement"
 		repo.mu.Unlock()
@@ -449,13 +449,13 @@ func TestScaleP21SW123AccountCountsPrecedeInstalledLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	scaleP21SW123Equal(t, read.Account, repo.Account())
+	accountReadEqual(t, read.Account, repo.Account())
 	if read.Account.Workspaces[0].IssueCount != 41 {
 		t.Fatal("account did not join staged counts to the later installed catalog")
 	}
 	// A closed caller snapshot cannot replace Account's independent SQL read.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -467,13 +467,13 @@ func TestScaleP21SW123AccountCountsPrecedeInstalledLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer again.Close()
-	scaleP21SW123Equal(t, again.Account, repo.Account())
+	accountReadEqual(t, again.Account, repo.Account())
 }
 
-func TestScaleP21SW123AccountConcurrentInstalledReplacement(t *testing.T) {
-	repo := scaleP21SW123Store(t, &scaleP21SW123Script{}, true)
+func TestAccountConcurrentInstalledReplacement(t *testing.T) {
+	repo := accountReadStore(t, &accountReadScript{}, true)
 	first := repo.Account()
-	repo.viewer = scaleP21SW118NativeViewer("second")
+	repo.viewer = defaultViewerNativeViewer("second")
 	repo.lastWorkspaceKey = "second"
 	repo.workspaces = map[string]domain.Bootstrap{"second": {Workspace: domain.Workspace{Name: "Second", CreatedAt: time.Now()}}}
 	second := repo.Account()

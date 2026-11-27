@@ -18,7 +18,7 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
 	t.Cleanup(func() { webhookDeliverySlots = oldSlots })
-	x := sw530Setup(t)
+	x := routeSweepSetup(t)
 	owner, admin, member, guest, inherited, former := x.principals[0], x.principals[1], x.principals[2], x.principals[3], x.principals[4], x.principals[5]
 	public, private, child := x.ids["teams"], x.ids["private-team"], x.ids["child-team"]
 	project, secondProject := x.fx.ids["child-project"], "portfolio-second-project"
@@ -26,13 +26,13 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 	privateDoc, childDoc := "portfolio-private-document", "portfolio-child-document"
 	type credential struct {
 		name      string
-		principal *sw530Principal
+		principal *routeSweepPrincipal
 		bearer    bool
 		teams     []string
 		status    int
 	}
 	var privateDeletes []credential
-	for _, principal := range []*sw530Principal{owner, admin} {
+	for _, principal := range []*routeSweepPrincipal{owner, admin} {
 		privateDeletes = append(privateDeletes,
 			credential{principal.name + "-session", principal, false, nil, 204},
 			credential{principal.name + "-unrestricted", principal, true, nil, 204},
@@ -116,7 +116,7 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		if data.NotificationPreferences == nil {
 			data.NotificationPreferences = map[string]domain.NotificationPreferences{}
 		}
-		for _, principal := range []*sw530Principal{member, inherited} {
+		for _, principal := range []*routeSweepPrincipal{member, inherited} {
 			prefs := defaultPreferences(principal.user.ID)
 			prefs.EmailFormat, prefs.UpdatedAt = "immediate", at
 			data.NotificationPreferences[principal.user.ID] = prefs
@@ -156,28 +156,28 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	create := func(principal *sw530Principal, bearer bool, body string) sw530Request {
-		return sw530Request{pattern: "POST /api/documents", method: http.MethodPost, path: "/api/documents", body: body, principal: principal, bearer: bearer}
+	create := func(principal *routeSweepPrincipal, bearer bool, body string) routeSweepRequest {
+		return routeSweepRequest{pattern: "POST /api/documents", method: http.MethodPost, path: "/api/documents", body: body, principal: principal, bearer: bearer}
 	}
-	remove := func(principal *sw530Principal, bearer bool, ref string) sw530Request {
-		return sw530Request{pattern: "DELETE /api/documents/{id}", method: http.MethodDelete, path: "/api/documents/" + ref, principal: principal, bearer: bearer}
+	remove := func(principal *routeSweepPrincipal, bearer bool, ref string) routeSweepRequest {
+		return routeSweepRequest{pattern: "DELETE /api/documents/{id}", method: http.MethodDelete, path: "/api/documents/" + ref, principal: principal, bearer: bearer}
 	}
 	type testCase struct {
 		name    string
-		request sw530Request
+		request routeSweepRequest
 		status  int
-		check   func(*testing.T, sw530Outcome)
+		check   func(*testing.T, routeSweepOutcome)
 	}
 	cases := []testCase{
 		{"linked-template", create(inherited, false, body(map[string]any{
 			"templateId": templateID, "issueId": " " + childIssue.ID + " ",
 			"projectIds": []string{project, " " + secondProject + " ", project}, "subscriberIds": []string{admin.user.ID, admin.user.ID},
-		})), 201, func(t *testing.T, got sw530Outcome) {
+		})), 201, func(t *testing.T, got routeSweepOutcome) {
 			var document struct {
 				Title, Content, IssueID                              string
 				TeamIDs, InheritedTeamIDs, ProjectIDs, SubscriberIDs []string
 			}
-			stamp := func(id string) string { return scaleP21TriageStamp.ReplaceAllString(id, "<stamp>") }
+			stamp := func(id string) string { return scaleTriageStamp.ReplaceAllString(id, "<stamp>") }
 			if err := json.Unmarshal([]byte(got.Body), &document); err != nil ||
 				document.Title != "Team notes" || document.Content != "Template content" || document.IssueID != childIssue.ID ||
 				!slices.Equal(document.TeamIDs, []string{stamp(child)}) || !slices.Equal(document.InheritedTeamIDs, []string{stamp(child), stamp(public)}) ||
@@ -197,7 +197,7 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		{"bad-json", create(owner, false, `{"title":`), 400, nil},
 		{"owner-id", remove(owner, false, docID), 204, nil},
 		{"owner-current-slug", remove(owner, false, alias), 204, nil},
-		{"explicit-owner", remove(member, false, docID), 204, func(t *testing.T, got sw530Outcome) {
+		{"explicit-owner", remove(member, false, docID), 204, func(t *testing.T, got routeSweepOutcome) {
 			if !slices.ContainsFunc(got.Rows, func(row string) bool {
 				return strings.Contains(row, "portfolio-subscription") && strings.HasSuffix(row, " removed")
 			}) {
@@ -218,12 +218,12 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		cases = append(cases, testCase{"private-" + c.name, remove(c.principal, c.bearer, privateDoc), c.status, nil})
 	}
 	cases = append(cases, testCase{
-		"mcp-delete-private", sw530Request{
+		"mcp-delete-private", routeSweepRequest{
 			pattern: "POST /mcp", method: http.MethodPost, path: "/mcp", principal: owner, bearer: true,
 			body: body(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{
 				"name": "delete_document", "arguments": map[string]any{"id": privateDoc},
 			}}),
-		}, http.StatusOK, func(t *testing.T, got sw530Outcome) {
+		}, http.StatusOK, func(t *testing.T, got routeSweepOutcome) {
 			var result struct {
 				Result struct {
 					StructuredContent struct {
@@ -253,7 +253,7 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 				if outcome.TimedOut || outcome.Status != tc.status {
 					t.Errorf("%s status=%d timeout=%t want %d", source, outcome.Status, outcome.TimedOut, tc.status)
 				}
-				if kind, _, _ := sw530Differences(got["legacy"], outcome); kind != "" {
+				if kind, _, _ := routeSweepDifferences(got["legacy"], outcome); kind != "" {
 					t.Errorf("%s differs from legacy in %s", source, kind)
 				}
 				if tc.status < 300 {
@@ -313,8 +313,8 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 
 var portfolioDocumentURLSuffix = regexp.MustCompile(`(/document/[^"\\]+-)[0-9a-f]{12}(\\?")`)
 
-func normalizePortfolioDocumentURLs(outcome *sw530Outcome) {
-	// SW530 normalizes the generated slug field, while project-resource rows
+func normalizePortfolioDocumentURLs(outcome *routeSweepOutcome) {
+	// flag-on route sweep normalizes the generated slug field, while project-resource rows
 	// and event snapshots can also embed that slug in a URL.
 	for _, entries := range [][]string{outcome.Rows, outcome.Events, outcome.Webhooks, outcome.Realtime} {
 		for i, entry := range entries {

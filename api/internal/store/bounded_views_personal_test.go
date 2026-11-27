@@ -14,7 +14,7 @@ func TestBoundedSavedViewScopedCascade(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	const target, keep = "p3-cascade", "p3-keep"
 	const cascades = MetadataRecordBatchMaxKeys + 10
@@ -48,7 +48,7 @@ func TestBoundedSavedViewScopedCascade(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer peer.releaseMetadataLogicalSources()
-	baseline := scaleP09Head(t, f)
+	baseline := scaleHead(t, f)
 	checkLookup := func(s *SQLiteStore, token string, found bool) {
 		t.Helper()
 		data, closeRead, err := s.BeginSharedSavedViewRead(t.Context(), workspace, token)
@@ -102,7 +102,7 @@ func TestBoundedSavedViewScopedCascade(t *testing.T) {
 	checkRows(2*cascades + 1)
 	checkLookup(view, "p3-cascade-token", true)
 	checkLookup(peer, "p3-cascade-token", true)
-	if published != 0 || scaleP09Head(t, f) != baseline {
+	if published != 0 || scaleHead(t, f) != baseline {
 		t.Fatal("rolled-back cascade reached realtime or the journal")
 	}
 	attempts := 0
@@ -162,7 +162,7 @@ func TestBoundedSavedViewRejectsStaleAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	actor := f.data.Viewer
 	ctx := ContextWithActor(t.Context(), actor)
@@ -220,7 +220,7 @@ func TestBoundedSavedViewSQLiteCredentialChurn(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite policy epoch")
 	}
@@ -281,7 +281,7 @@ func TestBoundedSavedViewTypedShareHeaders(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "view.created", "p3-typed-view", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "p3-typed-team", Key: "P3SHARE"})

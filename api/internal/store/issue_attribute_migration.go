@@ -11,26 +11,26 @@ import (
 	"flow/api/internal/domain"
 )
 
-type sw17AttributeHeader struct {
+type attributeHeader struct {
 	id   string
 	size int64
 }
 
-type sw17AttributeBatch struct {
+type attributeBatch struct {
 	store    *SQLiteStore
 	ids      []string
 	desired  [][]string
 	releases []func()
 }
 
-func (b *sw17AttributeBatch) close() {
+func (b *attributeBatch) close() {
 	for _, release := range b.releases {
 		release()
 	}
 	b.releases = nil
 }
 
-func (b *sw17AttributeBatch) add(ctx context.Context, issue domain.Issue) error {
+func (b *attributeBatch) add(ctx context.Context, issue domain.Issue) error {
 	attributes := issueAttributes(issue)
 	rows := make([][]string, 0, len(attributes))
 	for field, value := range attributes {
@@ -39,7 +39,7 @@ func (b *sw17AttributeBatch) add(ctx context.Context, issue domain.Issue) error 
 	return b.retain(ctx, issue.ID, rows)
 }
 
-func (b *sw17AttributeBatch) retain(ctx context.Context, id string, rows [][]string) error {
+func (b *attributeBatch) retain(ctx context.Context, id string, rows [][]string) error {
 	// syncIssueIndexRows JSON-encodes composite keys. Its strings can expand
 	// sixfold, with encoder growth and a returned copy: 4+3*6 bytes per byte.
 	bytes := int64(len(id))*22 + int64(len(rows)+1)*1024
@@ -61,18 +61,18 @@ func (b *sw17AttributeBatch) retain(ctx context.Context, id string, rows [][]str
 	return nil
 }
 
-func (s *SQLiteStore) sw17AttributeLength(column string) string {
+func (s *SQLiteStore) attributeColumnLength(column string) string {
 	if s.dialect == "sqlite" {
 		return "LENGTH(CAST(" + column + " AS BLOB))"
 	}
 	return "OCTET_LENGTH(" + column + ")"
 }
 
-func (s *SQLiteStore) sw17AttributeHeaders(ctx context.Context, tx *sqlTx, workspace, last string) ([]sw17AttributeHeader, func(), error) {
+func (s *SQLiteStore) attributeHeaders(ctx context.Context, tx *sqlTx, workspace, last string) ([]attributeHeader, func(), error) {
 	where, args := "workspace_key=? AND id>?", []any{workspace, last}
 	page := " FROM issue_records WHERE " + where + " ORDER BY id LIMIT 250"
 	var count, keyBytes int64
-	query := "SELECT COUNT(*),COALESCE(SUM(key_bytes),0) FROM (SELECT " + s.sw17AttributeLength("id") + " key_bytes" + page + ") sw17_headers"
+	query := "SELECT COUNT(*),COALESCE(SUM(key_bytes),0) FROM (SELECT " + s.attributeColumnLength("id") + " key_bytes" + page + ") sw17_headers"
 	if err := tx.QueryRowContext(ctx, query, args...).Scan(&count, &keyBytes); err != nil {
 		return nil, nil, err
 	}
@@ -87,14 +87,14 @@ func (s *SQLiteStore) sw17AttributeHeaders(ctx context.Context, tx *sqlTx, works
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := tx.QueryContext(headerCtx, "SELECT id,"+s.sw17AttributeLength("data")+page, args...)
+	rows, err := tx.QueryContext(headerCtx, "SELECT id,"+s.attributeColumnLength("data")+page, args...)
 	if err != nil {
 		release()
 		return nil, nil, err
 	}
-	headers := make([]sw17AttributeHeader, 0, int(count))
+	headers := make([]attributeHeader, 0, int(count))
 	for rows.Next() {
-		var header sw17AttributeHeader
+		var header attributeHeader
 		if err := rows.Scan(&header.id, &header.size); err != nil {
 			rows.Close()
 			release()
@@ -119,7 +119,7 @@ func (s *SQLiteStore) sw17AttributeHeaders(ctx context.Context, tx *sqlTx, works
 	return headers, release, nil
 }
 
-func (s *SQLiteStore) sw17ReadAttributeIssue(ctx context.Context, tx *sqlTx, workspace string, header sw17AttributeHeader, visit func(context.Context, domain.Issue) error) error {
+func (s *SQLiteStore) readAttributeIssue(ctx context.Context, tx *sqlTx, workspace string, header attributeHeader, visit func(context.Context, domain.Issue) error) error {
 	if header.size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
@@ -130,18 +130,18 @@ func (s *SQLiteStore) sw17ReadAttributeIssue(ctx context.Context, tx *sqlTx, wor
 	}
 	defer releaseRaw()
 	var raw []byte
-	query := "SELECT CASE WHEN " + s.sw17AttributeLength("data") + "<=? THEN data ELSE NULL END FROM issue_records WHERE workspace_key=? AND " + s.metadataRecordKeyEquals("id", "?")
+	query := "SELECT CASE WHEN " + s.attributeColumnLength("data") + "<=? THEN data ELSE NULL END FROM issue_records WHERE workspace_key=? AND " + s.metadataRecordKeyEquals("id", "?")
 	if err := tx.QueryRowContext(rawCtx, query, header.size, workspace, header.id).Scan(&raw); err != nil {
 		return err
 	}
 	if int64(len(raw)) != header.size {
 		return ErrMetadataWorkBudget
 	}
-	return s.sw17DecodeAttributeIssue(rawCtx, raw, rawCost, visit)
+	return s.decodeAttributeIssue(rawCtx, raw, rawCost, visit)
 }
 
-func (s *SQLiteStore) sw17DecodeAttributeIssue(ctx context.Context, raw []byte, rawCost int, visit func(context.Context, domain.Issue) error) error {
-	// The existing P15 token model accounts for typed maps/slices as well
+func (s *SQLiteStore) decodeAttributeIssue(ctx context.Context, raw []byte, rawCost int, visit func(context.Context, domain.Issue) error) error {
+	// The existing record hydration token model accounts for typed maps/slices as well
 	// as strings. Only one full Issue is decoded, never a 250-body slice.
 	budget := metadataHydrationBudget{bytes: len(raw), work: metadataWorkBytes()}
 	if err := budget.consume(raw); err != nil {
@@ -165,12 +165,12 @@ func (s *SQLiteStore) sw17DecodeAttributeIssue(ctx context.Context, raw []byte, 
 	return visit(typedCtx, issue)
 }
 
-func (b *sw17AttributeBatch) write(ctx context.Context, tx *sqlTx, workspace string) error {
+func (b *attributeBatch) write(ctx context.Context, tx *sqlTx, workspace string) error {
 	if len(b.ids) == 0 {
 		return nil
 	}
 	where, ids := bindList("issue_id", b.ids)
-	length := b.store.sw17AttributeLength("issue_id") + "+" + b.store.sw17AttributeLength("field") + "+" + b.store.sw17AttributeLength("value")
+	length := b.store.attributeColumnLength("issue_id") + "+" + b.store.attributeColumnLength("field") + "+" + b.store.attributeColumnLength("value")
 	var count, bytes int64
 	query := "SELECT COUNT(*),COALESCE(SUM(" + length + "),0) FROM issue_attribute_records WHERE workspace_key=? AND " + where
 	if err := tx.QueryRowContext(ctx, query, append([]any{workspace}, ids...)...).Scan(&count, &bytes); err != nil {
@@ -191,7 +191,7 @@ func (b *sw17AttributeBatch) write(ctx context.Context, tx *sqlTx, workspace str
 	return syncIssueIndexRows(writeCtx, tx, workspace, "issue_attribute_records", []string{"issue_id", "field", "value"}, 2, b.ids, b.desired)
 }
 
-func (s *SQLiteStore) sw17AttributeCheckpoint(ctx context.Context, workspace string) (string, int, func(), error) {
+func (s *SQLiteStore) attributeCheckpoint(ctx context.Context, workspace string) (string, int, func(), error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return "", 0, nil, err
@@ -199,7 +199,7 @@ func (s *SQLiteStore) sw17AttributeCheckpoint(ctx context.Context, workspace str
 	defer tx.Rollback()
 	var size int64
 	var complete int
-	query := "SELECT " + s.sw17AttributeLength("last_id") + ",complete FROM issue_attribute_migrations WHERE workspace_key=?"
+	query := "SELECT " + s.attributeColumnLength("last_id") + ",complete FROM issue_attribute_migrations WHERE workspace_key=?"
 	if err := tx.QueryRowContext(ctx, query, workspace).Scan(&size, &complete); err != nil {
 		return "", 0, nil, err
 	}
@@ -214,7 +214,7 @@ func (s *SQLiteStore) sw17AttributeCheckpoint(ctx context.Context, workspace str
 		return "", 0, nil, err
 	}
 	var last sql.NullString
-	query = "SELECT CASE WHEN " + s.sw17AttributeLength("last_id") + "<=? THEN last_id ELSE NULL END FROM issue_attribute_migrations WHERE workspace_key=?"
+	query = "SELECT CASE WHEN " + s.attributeColumnLength("last_id") + "<=? THEN last_id ELSE NULL END FROM issue_attribute_migrations WHERE workspace_key=?"
 	if err := tx.QueryRowContext(readCtx, query, size, workspace).Scan(&last); err != nil || !last.Valid {
 		release()
 		if err == nil {
@@ -225,7 +225,7 @@ func (s *SQLiteStore) sw17AttributeCheckpoint(ctx context.Context, workspace str
 	return last.String, complete, release, nil
 }
 
-func (s *SQLiteStore) sw17MigrateIssueAttributesBounded(ctx context.Context) error {
+func (s *SQLiteStore) migrateIssueAttributesBounded(ctx context.Context) error {
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return err
@@ -236,7 +236,7 @@ func (s *SQLiteStore) sw17MigrateIssueAttributesBounded(ctx context.Context) err
 			return err
 		}
 		for {
-			done, err := s.sw17AttributeStep(ctx, workspace)
+			done, err := s.attributeStep(ctx, workspace)
 			if err != nil {
 				return err
 			}
@@ -248,8 +248,8 @@ func (s *SQLiteStore) sw17MigrateIssueAttributesBounded(ctx context.Context) err
 	return nil
 }
 
-func (s *SQLiteStore) sw17AttributeStep(ctx context.Context, workspace string) (bool, error) {
-	last, complete, releaseCheckpoint, err := s.sw17AttributeCheckpoint(ctx, workspace)
+func (s *SQLiteStore) attributeStep(ctx context.Context, workspace string) (bool, error) {
+	last, complete, releaseCheckpoint, err := s.attributeCheckpoint(ctx, workspace)
 	if err != nil {
 		return false, err
 	}
@@ -270,15 +270,15 @@ func (s *SQLiteStore) sw17AttributeStep(ctx context.Context, workspace string) (
 		return false, err
 	}
 	defer tx.Rollback()
-	headers, releaseHeaders, err := s.sw17AttributeHeaders(ctx, tx, workspace, last)
+	headers, releaseHeaders, err := s.attributeHeaders(ctx, tx, workspace, last)
 	if err != nil {
 		return false, err
 	}
 	defer releaseHeaders()
-	batch := sw17AttributeBatch{store: s}
+	batch := attributeBatch{store: s}
 	defer batch.close()
 	for _, header := range headers {
-		if err := s.sw17ReadAttributeIssue(ctx, tx, workspace, header, batch.add); err != nil {
+		if err := s.readAttributeIssue(ctx, tx, workspace, header, batch.add); err != nil {
 			return false, err
 		}
 	}
@@ -299,7 +299,7 @@ func (s *SQLiteStore) sw17AttributeStep(ctx context.Context, workspace string) (
 	return complete >= issueAttributeVersion, tx.Commit()
 }
 
-func (s *SQLiteStore) sw17MigrateRecurrenceInstancesBounded(ctx context.Context) error {
+func (s *SQLiteStore) migrateRecurrenceInstancesBounded(ctx context.Context) error {
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return err
@@ -309,14 +309,14 @@ func (s *SQLiteStore) sw17MigrateRecurrenceInstancesBounded(ctx context.Context)
 		return err
 	}
 	for workspace := range s.workspaces {
-		if err := s.sw17RecurrenceWorkspace(ctx, workspace); err != nil {
+		if err := s.migrateRecurrenceWorkspace(ctx, workspace); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace string) error {
+func (s *SQLiteStore) migrateRecurrenceWorkspace(ctx context.Context, workspace string) error {
 	var exists int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM recurrence_instance_migrations WHERE workspace_key=?`, workspace).Scan(&exists); err != nil || exists > 0 {
 		return err
@@ -333,13 +333,13 @@ func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace str
 		return err
 	}
 	defer spool.Close()
-	if err := s.sw17StageRecurrenceAttributes(ctx, tx, workspace, spool); err != nil {
+	if err := s.stageRecurrenceAttributes(ctx, tx, workspace, spool); err != nil {
 		return err
 	}
 	if _, err := spool.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	batch := sw17AttributeBatch{store: s}
+	batch := attributeBatch{store: s}
 	defer func() { batch.close() }()
 	for {
 		var header [16]byte
@@ -363,7 +363,7 @@ func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace str
 			}
 			defer release()
 			limited := &io.LimitedReader{R: spool, N: int64(size)}
-			var record sw17AttributeProjection
+			var record attributeProjection
 			if err := json.NewDecoder(limited).Decode(&record); err != nil {
 				return err
 			}
@@ -379,7 +379,7 @@ func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace str
 				return err
 			}
 			batch.close()
-			batch = sw17AttributeBatch{store: s}
+			batch = attributeBatch{store: s}
 		}
 	}
 	if err := batch.write(ctx, tx, workspace); err != nil {
@@ -391,12 +391,12 @@ func (s *SQLiteStore) sw17RecurrenceWorkspace(ctx context.Context, workspace str
 	return tx.Commit()
 }
 
-type sw17AttributeProjection struct {
+type attributeProjection struct {
 	ID   string
 	Rows [][]string
 }
 
-func (s *SQLiteStore) sw17StageRecurrenceAttributes(ctx context.Context, tx *sqlTx, workspace string, spool *RecordSpool) error {
+func (s *SQLiteStore) stageRecurrenceAttributes(ctx context.Context, tx *sqlTx, workspace string, spool *RecordSpool) error {
 	column, pattern := "data", any(`%"recurrenceSeriesId":%`)
 	switch s.dialect {
 	case "sqlite":
@@ -406,7 +406,7 @@ func (s *SQLiteStore) sw17StageRecurrenceAttributes(ctx context.Context, tx *sql
 	}
 	where := " FROM issue_records WHERE workspace_key=? AND " + column + " LIKE ?"
 	var maximum int64
-	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+s.sw17AttributeLength("data")+"),0)"+where, workspace, pattern).Scan(&maximum); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX("+s.attributeColumnLength("data")+"),0)"+where, workspace, pattern).Scan(&maximum); err != nil {
 		return err
 	}
 	if maximum < 0 || maximum > (int64(metadataWorkBytes())-(64<<10))/3 {
@@ -434,16 +434,16 @@ func (s *SQLiteStore) sw17StageRecurrenceAttributes(ctx context.Context, tx *sql
 		if int64(len(raw)) > maximum {
 			return ErrMetadataWorkBudget
 		}
-		if err := s.sw17DecodeAttributeIssue(rawCtx, raw, rawCost, func(recordCtx context.Context, issue domain.Issue) error {
+		if err := s.decodeAttributeIssue(rawCtx, raw, rawCost, func(recordCtx context.Context, issue domain.Issue) error {
 			if issue.RecurrenceSeriesID == "" {
 				return nil
 			}
-			projection := sw17AttributeBatch{store: s}
+			projection := attributeBatch{store: s}
 			defer projection.close()
 			if err := projection.add(recordCtx, issue); err != nil {
 				return err
 			}
-			data, err := json.Marshal(sw17AttributeProjection{ID: issue.ID, Rows: projection.desired})
+			data, err := json.Marshal(attributeProjection{ID: issue.ID, Rows: projection.desired})
 			if err != nil {
 				return err
 			}

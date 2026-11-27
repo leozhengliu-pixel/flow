@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW29LogicalOrphanRetainsDiskAdmission(t *testing.T) {
+func TestLogicalOrphanRetainsDiskAdmission(t *testing.T) {
 	beforeDisk, beforeDescriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {

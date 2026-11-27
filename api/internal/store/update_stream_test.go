@@ -11,14 +11,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW209UpdateResult struct {
+type updateResult struct {
 	before, next map[string][]domain.ProjectUpdate
 	row          json.RawMessage
 }
 
-func scaleP21SW209UpdateRun(t *testing.T, fixture scaleP09Fixture, bounded *SQLiteStore, before, requested domain.Bootstrap, canonicalBody string, useBounded bool) (scaleP21SW209UpdateResult, int) {
+func updateRun(t *testing.T, fixture scaleFixture, bounded *SQLiteStore, before, requested domain.Bootstrap, canonicalBody string, useBounded bool) (updateResult, int) {
 	t.Helper()
-	tx, ctx := scaleP21SW77Begin(t, fixture, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, fixture, before)
 	defer tx.Rollback()
 	ctx = context.WithValue(ctx, advancedScheduleStreamKey{}, true)
 	parent := before.Projects[0].ID
@@ -40,7 +40,7 @@ func scaleP21SW209UpdateRun(t *testing.T, fixture scaleP09Fixture, bounded *SQLi
 		t.Fatal(err)
 	}
 	field, _ := metadataFieldByName("projectUpdates")
-	result := scaleP21SW209UpdateResult{}
+	result := updateResult{}
 	peak := bounded.MetadataWorkUsedForTesting()
 	if !useBounded {
 		previous, next := cloneBootstrap(before), cloneBootstrap(requested)
@@ -132,11 +132,11 @@ func scaleP21SW209UpdateRun(t *testing.T, fixture scaleP09Fixture, bounded *SQLi
 	return result, peak
 }
 
-func TestScaleP21SW209ProjectUpdateStreamDifferential(t *testing.T) {
+func TestProjectUpdateStreamDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -175,8 +175,8 @@ func TestScaleP21SW209ProjectUpdateStreamDifferential(t *testing.T) {
 					if concurrent {
 						canonical = "Concurrent canonical body <changed>&\u2028"
 					}
-					want, _ := scaleP21SW209UpdateRun(t, fixture, bounded, before, requested, canonical, false)
-					got, peak := scaleP21SW209UpdateRun(t, fixture, bounded, before, requested, canonical, true)
+					want, _ := updateRun(t, fixture, bounded, before, requested, canonical, false)
+					got, peak := updateRun(t, fixture, bounded, before, requested, canonical, true)
 					if !reflect.DeepEqual(got, want) {
 						t.Fatal("schedule changed native/body source choice or SQL", reload, concurrent, nativeInvalid, size)
 					}
@@ -193,7 +193,7 @@ func TestScaleP21SW209ProjectUpdateStreamDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW209StreamCounterIsPayloadLength(t *testing.T) {
+func TestStreamCounterIsPayloadLength(t *testing.T) {
 	var counter legacyProjectByteCounter
 	var chunk [metadataRecordChunkBytes]byte
 	wanted := metadataWorkBytes() + len(chunk)

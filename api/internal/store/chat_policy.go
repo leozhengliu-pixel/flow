@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW19ChatPolicyMaxWork = 64 << 20
+const chatPolicyMaxWork = 64 << 20
 
 // ChatTeamPolicyRead owns the policy headers and their work allowance. The
 // trusted caller must retain it while constructing and encoding its result.
@@ -43,7 +43,7 @@ func (s *SQLiteStore) BeginChatTeamPolicyRead(ctx context.Context, workspace str
 			workspace = s.lastWorkspaceKey
 		}
 		source, found := s.workspaces[workspace]
-		cost, err := scaleP21SW19ChatPolicyCost(ctx, source)
+		cost, err := chatPolicyCost(ctx, source)
 		s.mu.RUnlock()
 		if !found {
 			return nil, false, nil
@@ -68,7 +68,7 @@ func (s *SQLiteStore) BeginChatTeamPolicyRead(ctx context.Context, workspace str
 		// the current source before allocating its caller-owned snapshot.
 		s.mu.RLock()
 		source, found = s.workspaces[workspace]
-		current, err := scaleP21SW19ChatPolicyCost(admitted, source)
+		current, err := chatPolicyCost(admitted, source)
 		if !found || err != nil || current > cost {
 			s.mu.RUnlock()
 			release()
@@ -85,8 +85,8 @@ func (s *SQLiteStore) BeginChatTeamPolicyRead(ctx context.Context, workspace str
 		for index, team := range source.Teams {
 			data.Teams[index] = domain.Team{
 				ID: strings.Clone(team.ID), Private: team.Private,
-				ArchivedAt: scaleP21SW19PresenceTime(team.ArchivedAt),
-				RetiredAt:  scaleP21SW19PresenceTime(team.RetiredAt),
+				ArchivedAt: presenceTime(team.ArchivedAt),
+				RetiredAt:  presenceTime(team.RetiredAt),
 			}
 		}
 		for id, settings := range source.TeamSettings {
@@ -105,14 +105,14 @@ func (s *SQLiteStore) BeginChatTeamPolicyRead(ctx context.Context, workspace str
 	}
 }
 
-func scaleP21SW19PresenceTime(value *time.Time) *time.Time {
+func presenceTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
 	return new(time.Time)
 }
 
-func scaleP21SW19ChatPolicyCost(ctx context.Context, data domain.Bootstrap) (int, error) {
+func chatPolicyCost(ctx context.Context, data domain.Bootstrap) (int, error) {
 	// Charge concrete typed storage, map slack/buckets, cloned strings and
 	// presence sentinels, output IDs and the helpers' longest ancestry set.
 	cost := int64(2<<20) + int64(unsafe.Sizeof(ChatTeamPolicyRead{}))
@@ -123,7 +123,7 @@ func scaleP21SW19ChatPolicyCost(ctx context.Context, data domain.Bootstrap) (int
 			return err
 		}
 		cost += size
-		if cost > scaleP21SW19ChatPolicyMaxWork {
+		if cost > chatPolicyMaxWork {
 			return ErrMetadataWorkBudget
 		}
 		return nil

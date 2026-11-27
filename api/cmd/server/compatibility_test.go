@@ -13,8 +13,8 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP18ToolFamilyCompatibility(t *testing.T) {
-	repo, actor, ctx := scaleP18Fixture(t)
+func TestScaleToolFamilyCompatibility(t *testing.T) {
+	repo, actor, ctx := costScaleFixture(t)
 	service := &server{store: repo}
 	var project domain.Project
 	if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), actor.WorkspaceKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -64,8 +64,8 @@ func TestScaleP18ToolFamilyCompatibility(t *testing.T) {
 	}
 }
 
-func TestScaleP18ChatAuthorizationOnlyPreservesPolicy(t *testing.T) {
-	repo, actor, ctx := scaleP18Fixture(t)
+func TestScaleChatAuthorizationOnlyPreservesPolicy(t *testing.T) {
+	repo, actor, ctx := costScaleFixture(t)
 	s := &server{store: repo}
 	identity := domain.ChatIdentity{UserID: actor.User.ID, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
 	for _, mode := range []string{"off", "on"} {
@@ -94,10 +94,10 @@ func TestScaleP18ChatAuthorizationOnlyPreservesPolicy(t *testing.T) {
 	}
 }
 
-func TestScaleP18DelegationAndCrossWorkspace(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		_, requester := scaleP03Join(t, f, "P18 requester", idgen.New("p18-requester-")+"@example.test", "member", f.data.Teams[0].ID)
+func TestScaleDelegationAndCrossWorkspace(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		_, requester := resourceAccessScaleJoin(t, f, "P18 requester", idgen.New("p18-requester-")+"@example.test", "member", f.data.Teams[0].ID)
 		private := "p18-private"
 		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), f.data.Workspace.URLKey, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
 			data.Teams = append(data.Teams, domain.Team{ID: private, Key: "P18P", Private: true})
@@ -117,7 +117,7 @@ func TestScaleP18DelegationAndCrossWorkspace(t *testing.T) {
 		if _, err := f.service.callFlowTool(ctx, actor, "get_project", map[string]any{"query": "p18-private-project"}); err == nil {
 			t.Fatal("delegation widened the acting principal's access")
 		}
-		_, guest := scaleP03Join(t, f, "P18 guest requester", idgen.New("p18-guest-")+"@example.test", "guest", f.data.Teams[0].ID)
+		_, guest := resourceAccessScaleJoin(t, f, "P18 guest requester", idgen.New("p18-guest-")+"@example.test", "guest", f.data.Teams[0].ID)
 		t.Setenv("FLOW_MCP_WRITE_RECORDS", "on")
 		actor.AuthorizationUserID = guest.ID
 		if _, err := f.service.callFlowTool(ctx, actor, "save_project", map[string]any{"id": "p18-public-project", "name": "Allowed guest edit"}); err != nil {

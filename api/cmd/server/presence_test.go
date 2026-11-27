@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP06PresenceRequest(t *testing.T, client *http.Client, base, workspace string, input map[string]any, minimal bool, secret string) (int, []byte) {
+func scalePresenceRequest(t *testing.T, client *http.Client, base, workspace string, input map[string]any, minimal bool, secret string) (int, []byte) {
 	t.Helper()
 	raw, _ := json.Marshal(input)
 	r, err := http.NewRequest(http.MethodPost, base+"/api/realtime/presence", bytes.NewReader(raw))
@@ -56,10 +56,10 @@ func equalSingleRealtimeFrame(left, right string) bool {
 	leftData, leftOK = strings.CutSuffix(leftData, "\n\n")
 	rightData, rightOK = strings.CutSuffix(rightData, "\n\n")
 	return leftOK && rightOK && json.Valid([]byte(leftData)) && json.Valid([]byte(rightData)) &&
-		sw530CanonicalJSON([]byte(leftData)) == sw530CanonicalJSON([]byte(rightData))
+		canonicalJSON([]byte(leftData)) == canonicalJSON([]byte(rightData))
 }
 
-func TestScaleP06QueuedAndReplayPermissionDifferential(t *testing.T) {
+func TestScaleQueuedAndReplayPermissionDifferential(t *testing.T) {
 	f := newRealtimePolicyFixture(t)
 	project := authRequest[domain.Project](t, f.admin, "POST", f.host.URL+"/api/projects", map[string]any{"name": "Queued private project", "teamIds": []string{f.private.ID}}, "test-workspace", 201)
 	viewer := authRequest[domain.Bootstrap](t, f.insider, "GET", f.host.URL+"/api/bootstrap", nil, "test-workspace", 200).Viewer
@@ -101,24 +101,24 @@ func TestScaleP06QueuedAndReplayPermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP06MinimalPresenceCompatibilityAndNoRosterScan(t *testing.T) {
+func TestScaleMinimalPresenceCompatibilityAndNoRosterScan(t *testing.T) {
 	s := &server{store: pulseTestRepo(t), uploadPath: t.TempDir(), authDisabled: true}
 	host := httptest.NewServer(newHandler(s))
 	defer host.Close()
 	input := map[string]any{"clientId": "minimal", "route": "/test-workspace/inbox"}
 	t.Setenv("FLOW_PRESENCE_MINIMAL", "off")
-	if status, body := scaleP06PresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 200 || len(body) == 0 {
+	if status, body := scalePresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 200 || len(body) == 0 {
 		t.Fatalf("flag-off response status=%d bytes=%d", status, len(body))
 	}
 	t.Setenv("FLOW_PRESENCE_MINIMAL", "on")
-	if status, body := scaleP06PresenceRequest(t, host.Client(), host.URL, "test-workspace", input, false, ""); status != 200 || len(body) == 0 {
+	if status, body := scalePresenceRequest(t, host.Client(), host.URL, "test-workspace", input, false, ""); status != 200 || len(body) == 0 {
 		t.Fatal("old client lost its roster")
 	}
 	s.realtime.mu.Lock()
 	s.realtime.presence["test-workspace"]["expired-sentinel"] = domain.Presence{ClientID: "expired-sentinel", LastSeenAt: time.Now().Add(-2 * presenceTTL)}
 	s.realtime.mu.Unlock()
 	for range 100 {
-		if status, body := scaleP06PresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 204 || len(body) != 0 {
+		if status, body := scalePresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 204 || len(body) != 0 {
 			t.Fatalf("minimal response status=%d bytes=%d", status, len(body))
 		}
 	}
@@ -129,12 +129,12 @@ func TestScaleP06MinimalPresenceCompatibilityAndNoRosterScan(t *testing.T) {
 		t.Fatal("stable minimal heartbeats scanned/cleaned the full roster")
 	}
 	input["active"] = false
-	if status, _ := scaleP06PresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 204 {
+	if status, _ := scalePresenceRequest(t, host.Client(), host.URL, "test-workspace", input, true, ""); status != 204 {
 		t.Fatal("minimal leave failed")
 	}
 }
 
-func TestScaleP06MinimalPresenceDefaultsOn(t *testing.T) {
+func TestScaleMinimalPresenceDefaultsOn(t *testing.T) {
 	t.Setenv("FLOW_PRESENCE_MINIMAL", "")
 	r := httptest.NewRequest("POST", "/api/realtime/presence", nil)
 	if minimalPresenceRequest(r) {
@@ -150,7 +150,7 @@ func TestScaleP06MinimalPresenceDefaultsOn(t *testing.T) {
 	}
 }
 
-func TestScaleP06PresencePermissionDifferential(t *testing.T) {
+func TestScalePresencePermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_PRESENCE_MINIMAL", "on")
 	f := newRealtimePolicyFixture(t)
 	base, workspace := f.host.URL, "test-workspace"
@@ -223,8 +223,8 @@ func TestScaleP06PresencePermissionDifferential(t *testing.T) {
 				key = workspace
 			}
 			input := map[string]any{"clientId": "p06-differential", "issueId": tc.issueID, "documentId": tc.documentID, "route": "/presence"}
-			legacy, legacyBody := scaleP06PresenceRequest(t, tc.client, base, key, input, false, tc.secret)
-			minimal, body := scaleP06PresenceRequest(t, tc.client, base, key, input, true, tc.secret)
+			legacy, legacyBody := scalePresenceRequest(t, tc.client, base, key, input, false, tc.secret)
+			minimal, body := scalePresenceRequest(t, tc.client, base, key, input, true, tc.secret)
 			if legacy != 200 {
 				if minimal != legacy {
 					t.Fatalf("authorization changed: old=%d minimal=%d", legacy, minimal)
@@ -236,7 +236,7 @@ func TestScaleP06PresencePermissionDifferential(t *testing.T) {
 			}
 			// The old adapter must still return exactly the same fields after
 			// a minimal touch. Only lastSeenAt is expected to advance.
-			_, updated := scaleP06PresenceRequest(t, tc.client, base, key, input, false, tc.secret)
+			_, updated := scalePresenceRequest(t, tc.client, base, key, input, false, tc.secret)
 			normalize := func(raw []byte) []byte {
 				var roster []domain.Presence
 				if json.Unmarshal(raw, &roster) != nil {

@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW55PersonalNotificationCardDifferential(t *testing.T) {
+func TestPersonalNotificationCardDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +148,7 @@ func TestScaleP21SW55PersonalNotificationCardDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(outputs[0], outputs[1]) {
-						t.Fatal("actual personal notification card differential", scaleP21M2Diff(outputs[0], outputs[1]))
+						t.Fatal("actual personal notification card differential", policyFirstDifference(outputs[0], outputs[1]))
 					}
 				})
 			}

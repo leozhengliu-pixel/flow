@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW197Exec(t *testing.T, database *scaleP04Database, query string, args ...any) {
+func chatMutationsExec(t *testing.T, database *scaleDatabase, query string, args ...any) {
 	t.Helper()
 	database.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, database.key).Close()
 	if database.config.Driver == "postgres" || database.config.Driver == "postgresql" {
@@ -28,7 +28,7 @@ func scaleP21SW197Exec(t *testing.T, database *scaleP04Database, query string, a
 	}
 }
 
-func scaleP21SW197Values(values map[string]string) map[string]json.RawMessage {
+func chatMutationsValues(values map[string]string) map[string]json.RawMessage {
 	result := map[string]json.RawMessage{}
 	for key, value := range values {
 		result[key], _ = json.Marshal(value)
@@ -36,7 +36,7 @@ func scaleP21SW197Values(values map[string]string) map[string]json.RawMessage {
 	return result
 }
 
-func scaleP21SW197StatusClock(value any, started, finished time.Time) {
+func statusClock(value any, started, finished time.Time) {
 	switch value := value.(type) {
 	case map[string]any:
 		for key, child := range value {
@@ -48,21 +48,21 @@ func scaleP21SW197StatusClock(value any, started, finished time.Time) {
 					}
 				}
 			}
-			scaleP21SW197StatusClock(child, started, finished)
+			statusClock(child, started, finished)
 		}
 	case []any:
 		for _, child := range value {
-			scaleP21SW197StatusClock(child, started, finished)
+			statusClock(child, started, finished)
 		}
 	}
 }
 
-func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
+func TestChatMutationAdaptersDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f, database, issue := scaleP21SW44ChatFixture(t)
+	f, database, issue := chatFixture(t)
 	repo, workspace := database.repo, database.key
 	prefix := idgen.New("sw197-")
 	baseline, found := repo.BootstrapFor(workspace)
@@ -81,7 +81,7 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlFixture := scaleP21SW10Fixture{reader: database}
+	sqlFixture := notificationsFixture{reader: database}
 	sqlFixture.data.Workspace.URLKey = workspace
 	platform := f.threadPlatform(t)
 	targetState := issue.State.ID
@@ -119,10 +119,10 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 					for _, table := range []string{"chat_actions", "chat_jobs", "chat_intake_requests", "chat_thread_items", "chat_threads"} {
-						scaleP21SW197Exec(t, database, "DELETE FROM "+table+" WHERE workspace_key=? AND connection_id=?", workspace, f.record.ConnectionID)
+						chatMutationsExec(t, database, "DELETE FROM "+table+" WHERE workspace_key=? AND connection_id=?", workspace, f.record.ConnectionID)
 					}
-					scaleP21SW197Exec(t, database, `DELETE FROM chat_mutation_receipts WHERE workspace_key=?`, workspace)
-					scaleP21SW197Exec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, nextNumber-1, workspace)
+					chatMutationsExec(t, database, `DELETE FROM chat_mutation_receipts WHERE workspace_key=?`, workspace)
+					chatMutationsExec(t, database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, nextNumber-1, workspace)
 					f.binding.Requests = &domain.ChatBindingRequests{Enabled: true, Emoji: "OK"}
 					if err := repo.PutChatBinding(t.Context(), workspace, f.binding); err != nil {
 						t.Fatal(err)
@@ -140,7 +140,7 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 					f.s.store = source
 					f.sent, f.patched, f.responseIDs = nil, nil, map[string]string{}
 					platform.calls = nil
-					before := scaleP21SW59SQL(t, sqlFixture)
+					before := discussionWriteSql(t, sqlFixture)
 					job := domain.ChatJob{ID: prefix + "job", DedupKey: prefix + operation, WorkspaceKey: workspace, ConnectionID: f.record.ConnectionID}
 					actionID := prefix + "action"
 					messageID := "om_" + prefix + operation
@@ -159,12 +159,12 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 							priorEvents[event.ID] = true
 						}
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-						got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+						got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 					})
 					captureRealtime := func(_ string, event domain.RealtimeEvent) {
-						got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+						got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 					}
 					source.SetRealtimeSink(captureRealtime)
 					if source != repo {
@@ -189,7 +189,7 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 						if refusal == "invalid-input" {
 							title = ""
 						}
-						values := scaleP21SW197Values(map[string]string{
+						values := chatMutationsValues(map[string]string{
 							"title": title, "description": "Exact chat body <>&", "teamId": f.binding.TeamID,
 							"priority": "2", "assigneeId": "__unassigned", "stateId": targetState, "comment": title,
 						})
@@ -236,7 +236,7 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 							}
 							got.Header = http.Header{"Request-Code": []string{outcome.Code}}
 						case "process-request":
-							command.Values = scaleP21SW197Values(map[string]string{"source": domain.ChatRequestSourceShortcut, "explicit": "true", "text": title})
+							command.Values = chatMutationsValues(map[string]string{"source": domain.ChatRequestSourceShortcut, "explicit": "true", "text": title})
 							if refusal == "invalid-input" {
 								command.MessageID = "invalid-platform-id"
 							}
@@ -250,7 +250,7 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("chat adapter leaked work or decoded the full workspace", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 					}
-					got.Rows = scaleP21SW59SQL(t, sqlFixture)
+					got.Rows = discussionWriteSql(t, sqlFixture)
 					for _, id := range aggregateIDs {
 						events, err := repo.Events(t.Context(), id)
 						if err != nil {
@@ -298,13 +298,13 @@ func TestScaleP21SW197ChatMutationAdaptersDifferential(t *testing.T) {
 						calls = append(calls, []any{call.method, call.path, body})
 					}
 					got.Response, err = json.Marshal(map[string]any{
-						"error": scaleP21ChatPointError(operationErr), "requests": requests, "jobs": jobs, "platform": calls,
+						"error": scaleChatPointError(operationErr), "requests": requests, "jobs": jobs, "platform": calls,
 					})
 					if err != nil {
 						t.Fatal(err)
 					}
-					normalized := scaleP21SW59Normalized(t, got, before, started, finished)
-					scaleP21SW197StatusClock(normalized, started, finished)
+					normalized := discussionWriteNormalized(t, got, before, started, finished)
+					statusClock(normalized, started, finished)
 					if source == repo {
 						expected = normalized
 					} else if !reflect.DeepEqual(expected, normalized) {

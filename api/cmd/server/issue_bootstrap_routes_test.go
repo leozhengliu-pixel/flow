@@ -19,16 +19,16 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW145Fixture struct {
-	scaleP21M2Fixture
+type issueBootstrapRoutesFixture struct {
+	policyDifferentialFixture
 	other, project, document, issue, loop string
 }
 
-func scaleP21SW145Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW145Fixture {
+func issueBootstrapRoutesSeed(t *testing.T, repo *store.SQLiteStore) issueBootstrapRoutesFixture {
 	t.Helper()
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw145-")
-	result := scaleP21SW145Fixture{scaleP21M2Fixture: f, project: prefix + "project", document: prefix + "document", issue: prefix + "issue", loop: prefix + "loop"}
+	result := issueBootstrapRoutesFixture{policyDifferentialFixture: f, project: prefix + "project", document: prefix + "document", issue: prefix + "issue", loop: prefix + "loop"}
 	stamp := time.Date(2026, time.November, 15, 12, 13, 14, 123456789, time.UTC)
 	restore := store.ForceFullMutationsForTesting(true)
 	err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw145_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -132,7 +132,7 @@ func scaleP21SW145Seed(t *testing.T, repo *store.SQLiteStore) scaleP21SW145Fixtu
 	return result
 }
 
-type scaleP21SW145Case struct {
+type issueBootstrapRoutesCase struct {
 	name, workspace, projection  string
 	user                         domain.User
 	key                          *domain.APIKey
@@ -141,23 +141,23 @@ type scaleP21SW145Case struct {
 	status                       int
 }
 
-type scaleP21SW145Trace struct {
+type issueBootstrapRoutesTrace struct {
 	producerDone                   bool
 	producerWrites, replay, direct int
 	held                           int
 	scope                          *requestResourceReads
 }
 
-type scaleP21SW145Producer struct {
+type issueBootstrapRoutesProducer struct {
 	http.ResponseWriter
 	t      *testing.T
 	source *store.SQLiteStore
-	trace  *scaleP21SW145Trace
+	trace  *issueBootstrapRoutesTrace
 	status int
 }
 
-func (w *scaleP21SW145Producer) Unwrap() http.ResponseWriter { return w.ResponseWriter }
-func (w *scaleP21SW145Producer) sample(code int) {
+func (w *issueBootstrapRoutesProducer) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *issueBootstrapRoutesProducer) sample(code int) {
 	work := w.source.MetadataWorkUsedForTesting()
 	w.trace.held = max(w.trace.held, work)
 	if w.source.BoundedMetadataEnabled() && code == http.StatusOK &&
@@ -165,12 +165,12 @@ func (w *scaleP21SW145Producer) sample(code int) {
 		w.t.Fatal("bootstrap producer lost its read or request scope during encoding")
 	}
 }
-func (w *scaleP21SW145Producer) WriteHeader(code int) {
+func (w *issueBootstrapRoutesProducer) WriteHeader(code int) {
 	w.status = code
 	w.sample(code)
 	w.ResponseWriter.WriteHeader(code)
 }
-func (w *scaleP21SW145Producer) Write(body []byte) (int, error) {
+func (w *issueBootstrapRoutesProducer) Write(body []byte) (int, error) {
 	code := w.status
 	if code == 0 {
 		code = http.StatusOK
@@ -180,12 +180,12 @@ func (w *scaleP21SW145Producer) Write(body []byte) (int, error) {
 	return w.ResponseWriter.Write(body)
 }
 
-type scaleP21SW145Network struct {
+type issueBootstrapRoutesNetwork struct {
 	*httptest.ResponseRecorder
-	trace *scaleP21SW145Trace
+	trace *issueBootstrapRoutesTrace
 }
 
-func (w *scaleP21SW145Network) Write(body []byte) (int, error) {
+func (w *issueBootstrapRoutesNetwork) Write(body []byte) (int, error) {
 	if w.trace.producerDone {
 		w.trace.replay++
 	} else {
@@ -194,15 +194,15 @@ func (w *scaleP21SW145Network) Write(body []byte) (int, error) {
 	return w.ResponseRecorder.Write(body)
 }
 
-type scaleP21SW145Response struct {
+type issueBootstrapRoutesResponse struct {
 	status int
 	header http.Header
 	body   []byte
 }
 
-var scaleP21SW145TimingDuration = regexp.MustCompile(`(;[ \t]*dur=)[0-9.]+`)
+var timingDuration = regexp.MustCompile(`(;[ \t]*dur=)[0-9.]+`)
 
-func scaleP21SW145Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLiteStore, test scaleP21SW145Case) (scaleP21SW145Response, scaleP21SW145Trace) {
+func issueBootstrapRoutesServe(t *testing.T, f issueBootstrapRoutesFixture, source *store.SQLiteStore, test issueBootstrapRoutesCase) (issueBootstrapRoutesResponse, issueBootstrapRoutesTrace) {
 	t.Helper()
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(test.spool))
 	directory := t.TempDir()
@@ -229,9 +229,9 @@ func scaleP21SW145Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	defer releaseSnapshot()
 	request, closeOutput := beginRequestResourceReads(request)
 	defer closeOutput()
-	trace := scaleP21SW145Trace{}
+	trace := issueBootstrapRoutesTrace{}
 	trace.scope, _ = request.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
-	writer := &scaleP21SW145Network{ResponseRecorder: httptest.NewRecorder(), trace: &trace}
+	writer := &issueBootstrapRoutesNetwork{ResponseRecorder: httptest.NewRecorder(), trace: &trace}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/issue-records/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 		// Exercise the actual signing wrapper and registered handler, fixing
@@ -239,7 +239,7 @@ func scaleP21SW145Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 		if signing, _ := r.Context().Value(hydratedURLSigningKey{}).(*hydratedURLSigning); signing != nil {
 			signing.expires = time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
 		}
-		producer := &scaleP21SW145Producer{ResponseWriter: w, t: t, source: source, trace: &trace}
+		producer := &issueBootstrapRoutesProducer{ResponseWriter: w, t: t, source: source, trace: &trace}
 		service.issueRecordsBootstrap(producer, r)
 		if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("bootstrap producer retained work after encoding and before transport replay")
@@ -272,23 +272,23 @@ func scaleP21SW145Serve(t *testing.T, f scaleP21SW145Fixture, source *store.SQLi
 	}
 	header := writer.Header().Clone()
 	for index, value := range header["Server-Timing"] {
-		header["Server-Timing"][index] = scaleP21SW145TimingDuration.ReplaceAllString(value, "${1}<duration>")
+		header["Server-Timing"][index] = timingDuration.ReplaceAllString(value, "${1}<duration>")
 	}
-	return scaleP21SW145Response{writer.Code, header, bytes.Clone(writer.Body.Bytes())}, trace
+	return issueBootstrapRoutesResponse{writer.Code, header, bytes.Clone(writer.Body.Bytes())}, trace
 }
 
-func TestScaleP21SW145IssueBootstrapRegisteredRoutes(t *testing.T) {
+func TestIssueBootstrapRegisteredRoutes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "sw145-fixed-signing-fixture")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW145Seed(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := issueBootstrapRoutesSeed(t, repo)
 		workspace, pairs := f.data.Workspace.URLKey, 0
-		compare := func(t *testing.T, view *store.SQLiteStore, test scaleP21SW145Case) {
+		compare := func(t *testing.T, view *store.SQLiteStore, test issueBootstrapRoutesCase) {
 			t.Helper()
-			old, oldTrace := scaleP21SW145Serve(t, f, repo, test)
-			bounded, boundedTrace := scaleP21SW145Serve(t, f, view, test)
+			old, oldTrace := issueBootstrapRoutesServe(t, f, repo, test)
+			bounded, boundedTrace := issueBootstrapRoutesServe(t, f, view, test)
 			if old.status != test.status || bounded.status != old.status || !reflect.DeepEqual(old.header, bounded.header) || !bytes.Equal(old.body, bounded.body) {
 				offset := 0
 				for offset < min(len(old.body), len(bounded.body)) && old.body[offset] == bounded.body[offset] {
@@ -352,17 +352,17 @@ func TestScaleP21SW145IssueBootstrapRegisteredRoutes(t *testing.T) {
 			}
 			for _, credential := range credentials {
 				for _, projection := range []string{"", "project-list", "issue-detail"} {
-					test := scaleP21SW145Case{name: credential.name, workspace: workspace, projection: projection, user: credential.user, key: credential.key, spool: 4 << 20, status: http.StatusOK}
+					test := issueBootstrapRoutesCase{name: credential.name, workspace: workspace, projection: projection, user: credential.user, key: credential.key, spool: 4 << 20, status: http.StatusOK}
 					t.Run(fmt.Sprintf("reload=%t/%s/projection=%s", reload, test.name, projection), func(t *testing.T) { compare(t, view, test) })
 				}
 			}
 			for _, projection := range []string{"", "project-list", "issue-detail"} {
 				for _, mode := range []string{"development", "public-sql-snapshot"} {
-					test := scaleP21SW145Case{name: mode, workspace: workspace, projection: projection, user: f.data.Viewer, development: mode == "development", handoff: mode == "public-sql-snapshot", spool: 4 << 20, status: http.StatusOK}
+					test := issueBootstrapRoutesCase{name: mode, workspace: workspace, projection: projection, user: f.data.Viewer, development: mode == "development", handoff: mode == "public-sql-snapshot", spool: 4 << 20, status: http.StatusOK}
 					t.Run(fmt.Sprintf("reload=%t/%s/projection=%s", reload, mode, projection), func(t *testing.T) { compare(t, view, test) })
 				}
 			}
-			for _, test := range []scaleP21SW145Case{
+			for _, test := range []issueBootstrapRoutesCase{
 				{name: "cross-workspace", workspace: f.other, user: f.data.Viewer, spool: 4 << 20, status: http.StatusForbidden},
 				{name: "development-missing", workspace: idgen.New("sw145-absent-"), user: f.data.Viewer, development: true, spool: 4 << 20, status: http.StatusNotFound},
 			} {
@@ -370,7 +370,7 @@ func TestScaleP21SW145IssueBootstrapRegisteredRoutes(t *testing.T) {
 			}
 			if !reload {
 				for _, budget := range []int{0, 1024, 4 << 20} {
-					test := scaleP21SW145Case{name: "signed", workspace: workspace, user: f.principals[1].user, signed: true, spool: budget, status: http.StatusOK}
+					test := issueBootstrapRoutesCase{name: "signed", workspace: workspace, user: f.principals[1].user, signed: true, spool: budget, status: http.StatusOK}
 					t.Run(fmt.Sprintf("signed/spool=%d", budget), func(t *testing.T) { compare(t, view, test) })
 				}
 			}

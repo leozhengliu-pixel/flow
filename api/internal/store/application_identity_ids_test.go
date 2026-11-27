@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW24LegacyIdentityIDs(s *SQLiteStore) []string {
+func legacyIdentityIDs(s *SQLiteStore) []string {
 	s.mu.RLock()
 	ids := []string{}
 	for _, data := range s.workspaces {
@@ -27,7 +27,7 @@ func scaleP21SW24LegacyIdentityIDs(s *SQLiteStore) []string {
 	return slices.Compact(ids)
 }
 
-func TestScaleP21SW24ApplicationIdentityIDsSource(t *testing.T) {
+func TestApplicationIdentityIDsSource(t *testing.T) {
 	large := strings.Repeat("ignored source ", 600000)
 	for _, apps := range [][]domain.OAuthApplication{nil, {}, {
 		{ClientID: "z"}, {ClientID: ""}, {ClientID: "duplicate"},
@@ -43,7 +43,7 @@ func TestScaleP21SW24ApplicationIdentityIDsSource(t *testing.T) {
 			metadataResidency: newMetadataResidency(),
 		}
 		source.metadataResidency.stamps["physical\x00key"] = copyStamp{workspaceID: "stale", revision: -1}
-		want := scaleP21SW24LegacyIdentityIDs(source)
+		want := legacyIdentityIDs(source)
 		read, err := source.beginApplicationIdentityIDsRead(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -91,7 +91,7 @@ func TestScaleP21SW24ApplicationIdentityIDsSource(t *testing.T) {
 			// so the stub shares a database holding the nameless application
 			// under the installed workspace.
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			if err := f.MutateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), workspace, "scale_p21_sw24.nameless", "", nil, func(data *domain.Bootstrap) error {
 				data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: "sw24-nameless", ClientID: "enumerated-after-cancel"})
@@ -112,7 +112,7 @@ func TestScaleP21SW24ApplicationIdentityIDsSource(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ApplicationIdentityIDsOwnership(t *testing.T) {
+func TestApplicationIdentityIDsOwnership(t *testing.T) {
 	large := strings.Repeat("x", 8<<20)
 	id := large[100:110]
 	source := &SQLiteStore{
@@ -154,9 +154,9 @@ func TestScaleP21SW24ApplicationIdentityIDsOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ApplicationIdentityIDsBounds(t *testing.T) {
+func TestApplicationIdentityIDsBounds(t *testing.T) {
 	source := &SQLiteStore{
-		workspaces:        map[string]domain.Bootstrap{"workspace": {OAuthApplications: []domain.OAuthApplication{{ClientID: strings.Repeat("x", scaleP21SW24IdentityIDsMaxWork/2)}}}},
+		workspaces:        map[string]domain.Bootstrap{"workspace": {OAuthApplications: []domain.OAuthApplication{{ClientID: strings.Repeat("x", identityIDsMaxWork/2)}}}},
 		metadataResidency: newMetadataResidency(),
 	}
 	if read, err := source.beginApplicationIdentityIDsRead(t.Context()); read != nil || !errors.Is(err, ErrMetadataWorkBudget) || source.metadataResidency.work.used != 0 {
@@ -178,7 +178,7 @@ func TestScaleP21SW24ApplicationIdentityIDsBounds(t *testing.T) {
 	recovered.close()
 }
 
-func TestScaleP21SW24ApplicationIdentityIDsAllocations(t *testing.T) {
+func TestApplicationIdentityIDsAllocations(t *testing.T) {
 	var previous float64
 	for _, size := range []int{64 << 10, 8 << 20} {
 		source := &SQLiteStore{
@@ -188,7 +188,7 @@ func TestScaleP21SW24ApplicationIdentityIDsAllocations(t *testing.T) {
 			metadataResidency: newMetadataResidency(),
 		}
 		before := testing.AllocsPerRun(10, func() {
-			if ids := scaleP21SW24LegacyIdentityIDs(source); !slices.Equal(ids, []string{"a", "b"}) {
+			if ids := legacyIdentityIDs(source); !slices.Equal(ids, []string{"a", "b"}) {
 				panic("legacy IDs")
 			}
 		})
@@ -210,11 +210,11 @@ func TestScaleP21SW24ApplicationIdentityIDsAllocations(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24ApplicationIdentityIDsProducer(t *testing.T) {
+func TestApplicationIdentityIDsProducer(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, client, appID := f.data.Workspace.URLKey, idgen.New("sw24-client-"), idgen.New("sw24-application-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "oauthApplications"), workspace, "scale_p21_sw24.identity_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{

@@ -9,9 +9,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21MigrateOAuthIdentityDifferential(t *testing.T) {
+func TestScaleMigrateOAuthIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	appID, clientID := idgen.New("p21-app-"), idgen.New("p21-client-")
 	publicID, publicClient := idgen.New("p21-app-"), idgen.New("p21-client-")
@@ -40,7 +40,7 @@ func TestScaleP21MigrateOAuthIdentityDifferential(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	if err := probe.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}

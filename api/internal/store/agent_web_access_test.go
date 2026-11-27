@@ -14,13 +14,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW23MetadataRow struct {
+type metadataRow struct {
 	Field, Key string
 	Order      int
 	Data       []byte
 }
 
-func scaleP21SW23MigrationRows(t *testing.T, repository *SQLiteStore, workspace string) ([]byte, []scaleP21SW23MetadataRow) {
+func migrationRows(t *testing.T, repository *SQLiteStore, workspace string) ([]byte, []metadataRow) {
 	t.Helper()
 	var root []byte
 	if err := repository.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&root); err != nil {
@@ -31,9 +31,9 @@ func scaleP21SW23MigrationRows(t *testing.T, repository *SQLiteStore, workspace 
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	result := []scaleP21SW23MetadataRow{}
+	result := []metadataRow{}
 	for rows.Next() {
-		var row scaleP21SW23MetadataRow
+		var row metadataRow
 		if err := rows.Scan(&row.Field, &row.Key, &row.Order, &row.Data); err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func scaleP21SW23MigrationRows(t *testing.T, repository *SQLiteStore, workspace 
 	return root, result
 }
 
-func scaleP21SW23MigrationSettings(settings domain.WorkspaceSettings) domain.WorkspaceSettings {
+func migrationSettings(settings domain.WorkspaceSettings) domain.WorkspaceSettings {
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	value := reflect.ValueOf(&settings).Elem()
 	for index := 0; index < value.NumField(); index++ {
@@ -82,11 +82,11 @@ func scaleP21SW23MigrationSettings(settings domain.WorkspaceSettings) domain.Wor
 	return settings
 }
 
-func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
+func TestAgentWebAccessMigrationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	enabledAt := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	off, on := false, true
@@ -110,7 +110,7 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 		{"zero-update", nil, false, false, time.Time{}, enabledAt, false, false},
 	} {
 		t.Run(spec.name, func(t *testing.T) {
-			settings := scaleP21SW23MigrationSettings(f.data.WorkspaceSettings)
+			settings := migrationSettings(f.data.WorkspaceSettings)
 			settings.AgentWebAccess, settings.AgentWebSearch, settings.AgentWebSearchDisabled = spec.explicit, spec.search, spec.disabled
 			settings.UpdatedAt = spec.updated
 			raw, _ := json.Marshal(settings)
@@ -155,7 +155,7 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 			type outcome struct {
 				Changed, Off bool
 				Root         []byte
-				Rows         []scaleP21SW23MetadataRow
+				Rows         []metadataRow
 				Settings     domain.WorkspaceSettings
 				Drops        int
 			}
@@ -170,7 +170,7 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				beforeRoot, _ := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+				beforeRoot, _ := migrationRows(t, f.SQLiteStore, workspace)
 				published := 0
 				source.SetWebhookSink(func(string, domain.DomainEvent) { published++ })
 				source.SetRealtimeSink(func(string, domain.RealtimeEvent) { published++ })
@@ -182,7 +182,7 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 				if err != nil || changed != spec.changed || isOff != spec.off {
 					t.Fatalf("bounded=%t changed/off=%v/%v err=%v want=%v/%v", bounded, changed, isOff, err, spec.changed, spec.off)
 				}
-				root, records := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+				root, records := migrationRows(t, f.SQLiteStore, workspace)
 				if !bytes.Equal(root, beforeRoot) {
 					t.Fatal("property migration rewrote the canonical root or shapes")
 				}
@@ -209,7 +209,7 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 				if changed, _, err := source.migrateWorkspaceAgentWebAccess(t.Context(), workspace, spec.history); err != nil || changed {
 					t.Fatalf("migration was not idempotent: changed=%v err=%v", changed, err)
 				}
-				if afterRoot, afterRows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, afterRoot) || !reflect.DeepEqual(records, afterRows) {
+				if afterRoot, afterRows := migrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, afterRoot) || !reflect.DeepEqual(records, afterRows) {
 					t.Fatal("repeated migration rewrote canonical state")
 				}
 				if bounded && (source.WorkspaceMetadataDecodes() != 0 || source.metadataResidency.work.used != 0 || source.metadataResidency.policyBytes > source.metadataResidency.policyLimit) {
@@ -223,11 +223,11 @@ func TestScaleP21SW23AgentWebAccessMigrationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23AgentWebAccessFreshPolicyAndCapacity(t *testing.T) {
+func TestAgentWebAccessFreshPolicyAndCapacity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	seed := func() {
 		t.Helper()
@@ -268,13 +268,13 @@ func TestScaleP21SW23AgentWebAccessFreshPolicyAndCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeRoot, beforeRows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	beforeRoot, beforeRows := migrationRows(t, f.SQLiteStore, workspace)
 	beforePolicy, _ := view.WorkspaceSettingsMetadata(workspace)
 	view.metadataResidency.policyLimit = view.metadataResidency.policyBytes
 	if changed, _, err := view.migrateWorkspaceAgentWebAccess(t.Context(), workspace, time.Time{}); changed || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("resident candidate capacity changed=%v err=%v", changed, err)
 	}
-	if root, rows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, beforeRoot) || !reflect.DeepEqual(rows, beforeRows) {
+	if root, rows := migrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, beforeRoot) || !reflect.DeepEqual(rows, beforeRows) {
 		t.Fatal("resident-capacity failure committed a property patch")
 	}
 	afterPolicy, _ := view.WorkspaceSettingsMetadata(workspace)
@@ -287,11 +287,11 @@ func TestScaleP21SW23AgentWebAccessFreshPolicyAndCapacity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23AgentWebAccessMigrationRollback(t *testing.T) {
+func TestAgentWebAccessMigrationRollback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "workspaceSettings"), workspace, "scale_p21_sw23.web_failure", "", nil, func(data *domain.Bootstrap) error {
 		data.WorkspaceSettings.AgentWebAccess = nil
@@ -304,7 +304,7 @@ func TestScaleP21SW23AgentWebAccessMigrationRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeRoot, beforeRows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	beforeRoot, beforeRows := migrationRows(t, f.SQLiteStore, workspace)
 	beforePolicy, _ := view.WorkspaceSettingsMetadata(workspace)
 	injected := errors.New("sw23 precommit failure")
 	f.db.commitHooks.Store(&commitHooks{beforeCommit: func(tx *sqlTx) { tx.writeErr = injected }})
@@ -313,7 +313,7 @@ func TestScaleP21SW23AgentWebAccessMigrationRollback(t *testing.T) {
 		t.Fatalf("failed commit changed=%v err=%v", changed, err)
 	}
 	f.db.commitHooks.Store(nil)
-	if root, rows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, beforeRoot) || !reflect.DeepEqual(rows, beforeRows) {
+	if root, rows := migrationRows(t, f.SQLiteStore, workspace); !bytes.Equal(root, beforeRoot) || !reflect.DeepEqual(rows, beforeRows) {
 		t.Fatal("failed commit exposed a partial property set")
 	}
 	afterPolicy, _ := view.WorkspaceSettingsMetadata(workspace)

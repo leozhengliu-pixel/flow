@@ -16,13 +16,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW43ChatUpdateFormPointDifferential(t *testing.T) {
+func TestChatUpdateFormPointDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{73}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw43-card-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "states", "teamSettings"), workspace, "scale_p21.sw43_card_workflow", "", nil, func(data *domain.Bootstrap) error {
 			data.States = []domain.WorkflowState{
@@ -143,7 +143,7 @@ func TestScaleP21SW43ChatUpdateFormPointDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("update-form output differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("update-form output differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

@@ -18,13 +18,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ChatRequestStatusDifferential(t *testing.T) {
+func TestScaleChatRequestStatusDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{47}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestScaleP21ChatRequestStatusDifferential(t *testing.T) {
 					if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 						t.Fatal(err)
 					}
-					before := scaleP21M3Fingerprint(t, repo, workspace, "asks")
+					before := pointRecordFingerprint(t, repo, workspace, "asks")
 					if err := repo.PutChatIntegration(t.Context(), record); err != nil {
 						t.Fatal(err)
 					}
@@ -187,7 +187,7 @@ func TestScaleP21ChatRequestStatusDifferential(t *testing.T) {
 					}
 					request, lookup := repo.ChatIntakeRequestForMessage(t.Context(), workspace, record.ConnectionID, "request-status-source-message")
 					if lookup == nil {
-						result.Request = scaleP21M2JSON(t, request, false)
+						result.Request = normalizePolicyJSON(t, request, false)
 						if request.Outcome != test.wantOutcome {
 							t.Fatal("stored request outcome changed", request.Outcome, test.wantOutcome)
 						}
@@ -197,11 +197,11 @@ func TestScaleP21ChatRequestStatusDifferential(t *testing.T) {
 					thread, lookup := repo.ChatThread(t.Context(), workspace, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID)
 					if lookup == nil {
 						thread.SyncFrom = time.Time{}
-						result.Thread = scaleP21M2JSON(t, thread, false)
+						result.Thread = normalizePolicyJSON(t, thread, false)
 					} else if !errors.Is(lookup, sql.ErrNoRows) {
 						t.Fatal(lookup)
 					}
-					if source.MetadataWorkUsedForTesting() != 0 || before != scaleP21M3Fingerprint(t, repo, workspace, "asks") {
+					if source.MetadataWorkUsedForTesting() != 0 || before != pointRecordFingerprint(t, repo, workspace, "asks") {
 						t.Fatal("status output leaked ownership or changed Ask records")
 					}
 					outputs = append(outputs, result)
@@ -210,7 +210,7 @@ func TestScaleP21ChatRequestStatusDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("request-status differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("request-status differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

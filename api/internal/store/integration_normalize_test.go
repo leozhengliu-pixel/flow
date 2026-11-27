@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW326IntegrationNormalization(t *testing.T) {
+func TestIntegrationNormalization(t *testing.T) {
 	for _, shape := range []string{"nil", "empty", "defaults", "large"} {
 		t.Run(shape, func(t *testing.T) {
 			repo := &SQLiteStore{metadataResidency: newMetadataResidency()}

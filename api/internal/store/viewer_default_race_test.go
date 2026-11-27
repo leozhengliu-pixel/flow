@@ -11,18 +11,18 @@ import (
 	"flow/api/internal/domain"
 )
 
-type sw17ViewerDefaultHookContext struct {
+type viewerDefaultHookContext struct {
 	context.Context
 	once sync.Once
 	hook func()
 }
 
-func (c *sw17ViewerDefaultHookContext) Err() error {
+func (c *viewerDefaultHookContext) Err() error {
 	c.once.Do(c.hook)
 	return c.Context.Err()
 }
 
-func sw17ViewerDefaultSwitchStore() *SQLiteStore {
+func viewerDefaultSwitchStore() *SQLiteStore {
 	return &SQLiteStore{
 		lastWorkspaceKey: "old\x00physical",
 		workspaces: map[string]domain.Bootstrap{
@@ -33,11 +33,11 @@ func sw17ViewerDefaultSwitchStore() *SQLiteStore {
 	}
 }
 
-func TestScaleP21SW17ViewerDefaultSwitchBetweenLocks(t *testing.T) {
+func TestViewerDefaultSwitchBetweenLocks(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "default", true: "explicit"}[explicit], func(t *testing.T) {
-			repo := sw17ViewerDefaultSwitchStore()
-			before, found := scaleP21ResidentOracle(repo, "")
+			repo := viewerDefaultSwitchStore()
+			before, found := scaleResidentOracle(repo, "")
 			if !found || before.Viewer.Name != "before" {
 				t.Fatal("old default oracle missing")
 			}
@@ -46,14 +46,14 @@ func TestScaleP21SW17ViewerDefaultSwitchBetweenLocks(t *testing.T) {
 				workspace = "old\x00physical"
 			}
 			var expected domain.User
-			hook := &sw17ViewerDefaultHookContext{Context: t.Context(), hook: func() {
+			hook := &viewerDefaultHookContext{Context: t.Context(), hook: func() {
 				repo.mu.Lock()
 				repo.lastWorkspaceKey = "new\x00physical"
 				old := repo.workspaces["old\x00physical"]
 				old.Viewer.Name = "changed-after-switch"
 				repo.workspaces["old\x00physical"] = old
 				repo.mu.Unlock()
-				legacy, found := scaleP21ResidentOracle(repo, workspace)
+				legacy, found := scaleResidentOracle(repo, workspace)
 				if !found {
 					t.Fatal("post-switch oracle missing")
 				}
@@ -84,10 +84,10 @@ func TestScaleP21SW17ViewerDefaultSwitchBetweenLocks(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17ViewerDefaultSwitchCostRetryAndLifetime(t *testing.T) {
-	repo := sw17ViewerDefaultSwitchStore()
+func TestViewerDefaultSwitchCostRetryAndLifetime(t *testing.T) {
+	repo := viewerDefaultSwitchStore()
 	larger := domain.User{ID: "new-viewer", Name: strings.Repeat("large new viewer ", 10000)}
-	expectedCost, err := scaleP21SW20ViewerCost(larger)
+	expectedCost, err := installedViewerViewerCost(larger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestScaleP21SW17ViewerDefaultSwitchCostRetryAndLifetime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hook := &sw17ViewerDefaultHookContext{Context: parent, hook: func() {
+	hook := &viewerDefaultHookContext{Context: parent, hook: func() {
 		repo.mu.Lock()
 		repo.lastWorkspaceKey = "new\x00physical"
 		next := repo.workspaces["new\x00physical"]
@@ -125,12 +125,12 @@ func TestScaleP21SW17ViewerDefaultSwitchCostRetryAndLifetime(t *testing.T) {
 		t.Fatal("retry handle close leaked admission")
 	}
 
-	repo = sw17ViewerDefaultSwitchStore()
-	hook = &sw17ViewerDefaultHookContext{Context: t.Context(), hook: func() {
+	repo = viewerDefaultSwitchStore()
+	hook = &viewerDefaultHookContext{Context: t.Context(), hook: func() {
 		repo.mu.Lock()
 		repo.lastWorkspaceKey = "new\x00physical"
 		next := repo.workspaces["new\x00physical"]
-		next.Viewer.Name = strings.Repeat("x", scaleP21SW20ViewerMaxWork/33+1)
+		next.Viewer.Name = strings.Repeat("x", viewerMaxWork/33+1)
 		repo.workspaces["new\x00physical"] = next
 		repo.mu.Unlock()
 	}}

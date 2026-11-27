@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW152Data(prefix, ignored string) domain.Bootstrap {
+func commentActionReadData(prefix, ignored string) domain.Bootstrap {
 	at := time.Date(2026, 11, 15, 7, 8, 9, 123, time.UTC)
 	state, assignee, priority := "state", "", 3
 	labels, empty := []string{"label", "label", ""}, []string{}
@@ -41,7 +41,7 @@ func scaleP21SW152Data(prefix, ignored string) domain.Bootstrap {
 	}
 }
 
-func scaleP21SW152Actions(data domain.Bootstrap, issue string) []domain.CommentAction {
+func commentActionReadActions(data domain.Bootstrap, issue string) []domain.CommentAction {
 	result := []domain.CommentAction{}
 	for _, action := range data.CommentActions {
 		if action.IssueID == issue {
@@ -51,7 +51,7 @@ func scaleP21SW152Actions(data domain.Bootstrap, issue string) []domain.CommentA
 	return result
 }
 
-func scaleP21SW152Validation(data domain.Bootstrap) domain.Bootstrap {
+func commentActionReadValidation(data domain.Bootstrap) domain.Bootstrap {
 	var result domain.Bootstrap
 	if data.States != nil {
 		result.States = []domain.WorkflowState{}
@@ -80,7 +80,7 @@ func scaleP21SW152Validation(data domain.Bootstrap) domain.Bootstrap {
 	return result
 }
 
-func scaleP21SW152Parent(t *testing.T, repo *SQLiteStore, workspace string) *InstalledMetadataRead {
+func commentActionReadParent(t *testing.T, repo *SQLiteStore, workspace string) *InstalledMetadataRead {
 	t.Helper()
 	parent, found, err := repo.BeginInstalledMetadataRead(t.Context(), workspace)
 	if err != nil || !found {
@@ -89,13 +89,13 @@ func scaleP21SW152Parent(t *testing.T, repo *SQLiteStore, workspace string) *Ins
 	return parent
 }
 
-func TestScaleP21SW152CommentActionsWarmReload(t *testing.T) {
+func TestCommentActionsWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw152-")
-	fixture := scaleP21SW152Data(prefix, strings.Repeat("excluded body ", 1000))
+	fixture := commentActionReadData(prefix, strings.Repeat("excluded body ", 1000))
 	restore := ForceFullMutationsForTesting(true)
 	err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw152_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.CommentActions = fixture.CommentActions
@@ -122,7 +122,7 @@ func TestScaleP21SW152CommentActionsWarmReload(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer view.releaseMetadataLogicalSources()
-			parent := scaleP21SW152Parent(t, view, workspace)
+			parent := commentActionReadParent(t, view, workspace)
 			defer parent.Close()
 			baseline := view.MetadataWorkUsedForTesting()
 			oracle, found := f.WorkspaceMetadata(workspace)
@@ -136,10 +136,10 @@ func TestScaleP21SW152CommentActionsWarmReload(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !reflect.DeepEqual(read.Actions, scaleP21SW152Actions(oracle, issue)) {
+				if !reflect.DeepEqual(read.Actions, commentActionReadActions(oracle, issue)) {
 					t.Fatal("raw action fields/order/status/target differ", issue, read.Actions)
 				}
-				if err := read.LoadValidationHeaders(ctx); err != nil || !reflect.DeepEqual(read.Validation, scaleP21SW152Validation(oracle)) {
+				if err := read.LoadValidationHeaders(ctx); err != nil || !reflect.DeepEqual(read.Validation, commentActionReadValidation(oracle)) {
 					t.Fatal("raw validation directory differs", issue, err)
 				}
 				used := view.MetadataWorkUsedForTesting()
@@ -176,9 +176,9 @@ func TestScaleP21SW152CommentActionsWarmReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW152CommentActionsShapesAndDuplicates(t *testing.T) {
+func TestCommentActionsShapesAndDuplicates(t *testing.T) {
 	for _, shape := range []string{"nil", "empty", "duplicates"} {
-		data := scaleP21SW152Data("", "excluded")
+		data := commentActionReadData("", "excluded")
 		switch shape {
 		case "nil":
 			data = domain.Bootstrap{}
@@ -189,13 +189,13 @@ func TestScaleP21SW152CommentActionsShapesAndDuplicates(t *testing.T) {
 			duplicate.Status, duplicate.TargetUserID = "dismissed", "another"
 			data.CommentActions = append(data.CommentActions, duplicate)
 		}
-		repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
-		parent := scaleP21SW152Parent(t, repo, "physical")
+		repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		parent := commentActionReadParent(t, repo, "physical")
 		read, err := parent.ReadCommentActions(t.Context(), "issue")
-		if err != nil || !reflect.DeepEqual(read.Actions, scaleP21SW152Actions(data, "issue")) {
+		if err != nil || !reflect.DeepEqual(read.Actions, commentActionReadActions(data, "issue")) {
 			t.Fatal(shape, read, err)
 		}
-		if err := read.LoadValidationHeaders(t.Context()); err != nil || !reflect.DeepEqual(read.Validation, scaleP21SW152Validation(data)) {
+		if err := read.LoadValidationHeaders(t.Context()); err != nil || !reflect.DeepEqual(read.Validation, commentActionReadValidation(data)) {
 			t.Fatal("nil/empty/duplicate validation shape differs", shape, err)
 		}
 		parent.Close()
@@ -209,10 +209,10 @@ func TestScaleP21SW152CommentActionsShapesAndDuplicates(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW152CommentActionsPinnedLifetimeAndConcurrent(t *testing.T) {
-	before := scaleP21SW152Data("", "before")
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
-	parent := scaleP21SW152Parent(t, repo, "physical")
+func TestCommentActionsPinnedLifetimeAndConcurrent(t *testing.T) {
+	before := commentActionReadData("", "before")
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
+	parent := commentActionReadParent(t, repo, "physical")
 	held, err := parent.ReadCommentActions(t.Context(), "issue")
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestScaleP21SW152CommentActionsPinnedLifetimeAndConcurrent(t *testing.T) {
 	}
 	old.Close()
 	parent.Close()
-	if err := held.LoadValidationHeaders(t.Context()); err != nil || !reflect.DeepEqual(held.Validation, scaleP21SW152Validation(before)) ||
+	if err := held.LoadValidationHeaders(t.Context()); err != nil || !reflect.DeepEqual(held.Validation, commentActionReadValidation(before)) ||
 		held.Actions[0].Arguments.Title != before.CommentActions[0].Arguments.Title {
 		t.Fatal("header loading escaped the selected generation or parent lifetime", err)
 	}
@@ -243,7 +243,7 @@ func TestScaleP21SW152CommentActionsPinnedLifetimeAndConcurrent(t *testing.T) {
 		t.Fatal("closed parent remained usable", err)
 	}
 	held.Close()
-	current := scaleP21SW152Parent(t, repo, "physical")
+	current := commentActionReadParent(t, repo, "physical")
 	var workers sync.WaitGroup
 	for range 4 {
 		workers.Go(func() {
@@ -273,13 +273,13 @@ func TestScaleP21SW152CommentActionsPinnedLifetimeAndConcurrent(t *testing.T) {
 	}
 }
 
-type scaleP21SW152Cancel struct {
+type commentActionReadCancel struct {
 	context.Context
 	cancel context.CancelFunc
 	checks int
 }
 
-func (c *scaleP21SW152Cancel) Err() error {
+func (c *commentActionReadCancel) Err() error {
 	c.checks++
 	if c.checks == 60 {
 		c.cancel()
@@ -287,9 +287,9 @@ func (c *scaleP21SW152Cancel) Err() error {
 	return c.Context.Err()
 }
 
-func TestScaleP21SW152CommentActionsCancellationAdmission(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": scaleP21SW152Data("", strings.Repeat("body", 10000))})
-	parent := scaleP21SW152Parent(t, repo, "physical")
+func TestCommentActionsCancellationAdmission(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": commentActionReadData("", strings.Repeat("body", 10000))})
+	parent := commentActionReadParent(t, repo, "physical")
 	defer parent.Close()
 	baseline := repo.MetadataWorkUsedForTesting()
 	canceled, cancel := context.WithCancel(t.Context())
@@ -302,7 +302,7 @@ func TestScaleP21SW152CommentActionsCancellationAdmission(t *testing.T) {
 	}
 	for _, existence := range []bool{false, true} {
 		base, cancel := context.WithCancel(t.Context())
-		ctx := &scaleP21SW152Cancel{Context: base, cancel: cancel}
+		ctx := &commentActionReadCancel{Context: base, cancel: cancel}
 		if existence {
 			if found, err := parent.CommentActionExists(ctx, "missing"); found || !errors.Is(err, context.Canceled) {
 				t.Fatal("mid-scan existence cancellation escaped", err)
@@ -333,7 +333,7 @@ func TestScaleP21SW152CommentActionsCancellationAdmission(t *testing.T) {
 		t.Fatal("initial header cancellation retained directories/work", err)
 	}
 	base, cancel := context.WithCancel(t.Context())
-	ctx := &scaleP21SW152Cancel{Context: base, cancel: cancel}
+	ctx := &commentActionReadCancel{Context: base, cancel: cancel}
 	err = read.LoadValidationHeaders(ctx)
 	cancel()
 	if !errors.Is(err, context.Canceled) || !reflect.DeepEqual(read.Validation, domain.Bootstrap{}) || repo.MetadataWorkUsedForTesting() != actionsWork {
@@ -354,15 +354,15 @@ func TestScaleP21SW152CommentActionsCancellationAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW152CommentActionsBodyIndependent(t *testing.T) {
+func TestCommentActionsBodyIndependent(t *testing.T) {
 	retained := 0
 	for _, count := range []int{100, 1000} {
-		data := scaleP21SW152Data("", strings.Repeat("ignored", 2000))
+		data := commentActionReadData("", strings.Repeat("ignored", 2000))
 		for range count {
 			data.CommentActions = append(data.CommentActions, domain.CommentAction{IssueID: "unrelated", CommentID: "unrelated", Arguments: domain.CommentActionArguments{Description: strings.Repeat("unselected ", 1000)}})
 		}
-		repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
-		parent := scaleP21SW152Parent(t, repo, "physical")
+		repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		parent := commentActionReadParent(t, repo, "physical")
 		baseline := repo.MetadataWorkUsedForTesting()
 		read, err := parent.ReadCommentActions(t.Context(), "issue")
 		if err != nil {
@@ -389,9 +389,9 @@ func TestScaleP21SW152CommentActionsBodyIndependent(t *testing.T) {
 	}
 	headerWork := 0
 	for _, bytes := range []int{1024, 16384} {
-		data := scaleP21SW152Data("", strings.Repeat("x", bytes))
-		repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
-		parent := scaleP21SW152Parent(t, repo, "physical")
+		data := commentActionReadData("", strings.Repeat("x", bytes))
+		repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		parent := commentActionReadParent(t, repo, "physical")
 		read, err := parent.ReadCommentActions(t.Context(), "missing")
 		if err != nil {
 			t.Fatal(err)
@@ -414,9 +414,9 @@ func TestScaleP21SW152CommentActionsBodyIndependent(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW152CommentActionsOutputOwner(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": scaleP21SW152Data("", "ignored")})
-	parent := scaleP21SW152Parent(t, repo, "physical")
+func TestCommentActionsOutputOwner(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": commentActionReadData("", "ignored")})
+	parent := commentActionReadParent(t, repo, "physical")
 	read, err := parent.ReadCommentActions(t.Context(), "issue")
 	if err != nil {
 		t.Fatal(err)
@@ -435,7 +435,7 @@ func TestScaleP21SW152CommentActionsOutputOwner(t *testing.T) {
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("output close retained actions/headers")
 	}
-	parent = scaleP21SW152Parent(t, repo, "physical")
+	parent = commentActionReadParent(t, repo, "physical")
 	read, err = parent.ReadCommentActions(t.Context(), "issue")
 	if err != nil {
 		t.Fatal(err)

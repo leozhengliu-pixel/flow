@@ -86,7 +86,7 @@
     "deleteAgentSkill": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "SW20 collision differential proves a target-only scope changes realtime entity and webhook PreviousValues when an earlier document ContentData object has the skill ID. Keep the original writer pending a bounded aggregate compatibility resolver; no collision fields are normalized away.",
+      "reason": "installed viewer and team lifecycle collision differential proves a target-only scope changes realtime entity and webhook PreviousValues when an earlier document ContentData object has the skill ID. Keep the original writer pending a bounded aggregate compatibility resolver; no collision fields are normalized away.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -216,7 +216,7 @@
     "updateAgentSkill": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "SW20 collision differential proves legacy aggregate lookup emits an earlier document ContentData object with the skill ID, while a target-only scope emits the skill itself. Keep the original writer pending a bounded aggregate compatibility resolver.",
+      "reason": "installed viewer and team lifecycle collision differential proves legacy aggregate lookup emits an earlier document ContentData object with the skill ID, while a target-only scope emits the skill itself. Keep the original writer pending a bounded aggregate compatibility resolver.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

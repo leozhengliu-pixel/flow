@@ -10,8 +10,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21OwnedChildReadGeneration(t *testing.T) {
-	f, warm, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestScaleOwnedChildReadGeneration(t *testing.T) {
+	f, warm, _ := warmLogicalFixture(t)
 	workspace := warm.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -69,8 +69,8 @@ func TestScaleP21OwnedChildReadGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21OwnedChildReadCloseAndBindings(t *testing.T) {
-	f, _, _ := scaleP21SW27WarmLogicalFixture(t)
+func TestScaleOwnedChildReadCloseAndBindings(t *testing.T) {
+	f, _, _ := warmLogicalFixture(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {

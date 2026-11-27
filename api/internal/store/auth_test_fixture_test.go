@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW275Rows(t *testing.T, repo *SQLiteStore) []string {
+func authTestFixtureRows(t *testing.T, repo *SQLiteStore) []string {
 	t.Helper()
 	var rows []string
 	for _, query := range []string{
@@ -56,7 +56,7 @@ func scaleP21SW275Rows(t *testing.T, repo *SQLiteStore) []string {
 	return rows
 }
 
-func scaleP21SW275Clear(t *testing.T, repo *SQLiteStore) {
+func authTestFixtureClear(t *testing.T, repo *SQLiteStore) {
 	t.Helper()
 	for _, statement := range []string{`DELETE FROM team_memberships`, `DELETE FROM workspace_memberships`, `DELETE FROM auth_users`} {
 		if _, err := repo.db.ExecContext(t.Context(), statement); err != nil {
@@ -65,13 +65,13 @@ func scaleP21SW275Clear(t *testing.T, repo *SQLiteStore) {
 	}
 }
 
-// TestScaleP21SW275AuthTestFixtureDifferential compares the test-profile
+// TestAuthTestFixtureDifferential compares the test-profile
 // account seed of a legacy store with a bounded store whose resident copy is
 // policy-only: the same auth users, workspace memberships and team roles,
 // including inline (duplicate-ID) user collections where the first entry
 // wins, inactive and mixed-case users, several teams, the populated no-op and
 // the missing-password refusal. The bounded seed decodes no workspace.
-func TestScaleP21SW275AuthTestFixtureDifferential(t *testing.T) {
+func TestAuthTestFixtureDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -108,7 +108,7 @@ func TestScaleP21SW275AuthTestFixtureDifferential(t *testing.T) {
 			}
 			var results [][]string
 			for _, bounded := range []bool{false, true} {
-				scaleP21SW275Clear(t, repo)
+				authTestFixtureClear(t, repo)
 				target := repo
 				if bounded {
 					view, err := repo.BoundedMetadataViewForTesting(t.Context())
@@ -129,7 +129,7 @@ func TestScaleP21SW275AuthTestFixtureDifferential(t *testing.T) {
 				if err := target.ensureAuthTestFixture(t.Context()); err != nil {
 					t.Fatalf("bounded=%t: %v", bounded, err)
 				}
-				rows := scaleP21SW275Rows(t, repo)
+				rows := authTestFixtureRows(t, repo)
 				// A populated table is left alone.
 				if _, err := repo.db.ExecContext(t.Context(), `DELETE FROM team_memberships`); err != nil {
 					t.Fatal(err)
@@ -137,7 +137,7 @@ func TestScaleP21SW275AuthTestFixtureDifferential(t *testing.T) {
 				if err := target.ensureAuthTestFixture(t.Context()); err != nil {
 					t.Fatal(err)
 				}
-				if after := scaleP21SW275Rows(t, repo); len(after) >= len(rows) {
+				if after := authTestFixtureRows(t, repo); len(after) >= len(rows) {
 					t.Fatalf("bounded=%t populated fixture was reseeded", bounded)
 				}
 				if bounded && (target.WorkspaceMetadataDecodes() != 0 || target.metadataResidency.work.used != 0) {
@@ -158,12 +158,12 @@ func TestScaleP21SW275AuthTestFixtureDifferential(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW275AuthTestFixtureCallset proves the fixture is a
+// TestAuthTestFixtureCallset proves the fixture is a
 // constructor-only seed: its single reference is OpenDatabase's
 // seedWorkspaceOwners stage under the "test" fixture profile, and OpenDatabase
 // is called by no request handler or ticker (only main and test helpers).
-func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
-	references := scaleP21SW275References(t, ".", "ensureAuthTestFixture")
+func TestAuthTestFixtureCallset(t *testing.T) {
+	references := authTestFixtureReferences(t, ".", "ensureAuthTestFixture")
 	if !reflect.DeepEqual(references, []string{"database.go:OpenDatabase"}) {
 		t.Fatalf("ensureAuthTestFixture references=%v", references)
 	}
@@ -174,7 +174,7 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 	guarded := 0
 	ast.Inspect(file, func(node ast.Node) bool {
 		branch, ok := node.(*ast.IfStmt)
-		if !ok || !scaleP21SW278CallNamed(branch.Cond, "EqualFold") {
+		if !ok || !callNamed(branch.Cond, "EqualFold") {
 			return true
 		}
 		ast.Inspect(branch.Body, func(node ast.Node) bool {
@@ -212,7 +212,7 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 		for name := range constructors {
 			names = append(names, name)
 		}
-		callers := append(scaleP21SW275References(t, ".", names...), scaleP21SW275References(t, "../../cmd/server", names...)...)
+		callers := append(authTestFixtureReferences(t, ".", names...), authTestFixtureReferences(t, "../../cmd/server", names...)...)
 		for _, caller := range callers {
 			switch caller {
 			// metadataPrepare is `server metadata-prepare`: its only caller
@@ -239,10 +239,10 @@ func TestScaleP21SW275AuthTestFixtureCallset(t *testing.T) {
 	}
 }
 
-// scaleP21SW275References lists file:function for every non-test selector or
+// authTestFixtureReferences lists file:function for every non-test selector or
 // identifier naming one of names (calls and function values alike), skipping
 // the declarations themselves.
-func scaleP21SW275References(t *testing.T, dir string, names ...string) []string {
+func authTestFixtureReferences(t *testing.T, dir string, names ...string) []string {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
@@ -284,10 +284,10 @@ func scaleP21SW275References(t *testing.T, dir string, names ...string) []string
 			})
 		}
 	}
-	return scaleP21SW275Unique(references)
+	return authTestFixtureUnique(references)
 }
 
-func scaleP21SW275Unique(values []string) []string {
+func authTestFixtureUnique(values []string) []string {
 	seen := map[string]bool{}
 	result := []string{}
 	for _, value := range values {

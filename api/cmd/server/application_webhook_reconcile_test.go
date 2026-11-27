@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW295: the application webhook reconcile (the delivery tick's
+// The application webhook reconcile (the delivery tick's
 // reconcileAllApplicationWebhooks and dispatchWebhookEvent's per-workspace
 // reconcile on application, OAuth and team lifecycle events) and its OAuth
 // application index on the legacy store, a warm bounded view and a bounded
@@ -23,9 +23,9 @@ import (
 // permission-change deliveries, domain events and publications must agree;
 // bounded, the installed image must equal a reload.
 
-// sw295Normalize orders what the original writes in map order: managed hooks
+// applicationWebhookReconcileNormalize orders what the original writes in map order: managed hooks
 // it creates in one reconcile take collection positions in map order.
-func sw295Normalize(outcome scaleP21SW294Outcome) scaleP21SW294Outcome {
+func applicationWebhookReconcileNormalize(outcome oauthMetadataOutcome) oauthMetadataOutcome {
 	var hooks [][]any
 	rows := outcome.State.Metadata[:0:0]
 	for _, row := range outcome.State.Metadata {
@@ -49,30 +49,30 @@ func sw295Normalize(outcome scaleP21SW294Outcome) scaleP21SW294Outcome {
 	return outcome
 }
 
-func (f scaleP21TeamCreateFixture) sw295Differential(t *testing.T, name string, setup func(*testing.T), call func(*server) string, interleaved bool) []scaleP21SW294Outcome {
+func (f scaleTeamCreateFixture) applicationWebhookReconcileDifferential(t *testing.T, name string, setup func(*testing.T), call func(*server) string, interleaved bool) []oauthMetadataOutcome {
 	t.Helper()
-	f.scaleP21TriageWriterFixture.prepare = f.sw294Prepare(setup)
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.oauthMetadataPrepare(setup)
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
-	var outcomes []scaleP21SW294Outcome
+	var outcomes []oauthMetadataOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started := f.sw294Run(t, source, call)
-		got = sw295Normalize(got)
+		got, started := f.oauthMetadataRun(t, source, call)
+		got = applicationWebhookReconcileNormalize(got)
 		if interleaved {
 			got.State.Events, got.Webhooks, got.Realtime = nil, nil, nil
 			delete(got.Extra, "deliveries")
 		}
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-// sw295Hooks lists the workspace's managed hook rows.
-func (f scaleP21TeamCreateFixture) sw295Hooks(t *testing.T) string {
+// hooks lists the workspace's managed hook rows.
+func (f scaleTeamCreateFixture) applicationWebhookReconcileHooks(t *testing.T) string {
 	t.Helper()
 	var hooks []string
 	for _, row := range f.rows(t, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field='webhooks' ORDER BY record_key`, f.data.Workspace.URLKey) {
@@ -81,13 +81,13 @@ func (f scaleP21TeamCreateFixture) sw295Hooks(t *testing.T) string {
 	return strings.Join(hooks, "\n")
 }
 
-// sw295Settle waits for dispatchWebhookEvent's background reconcile: the
+// settle waits for dispatchWebhookEvent's background reconcile: the
 // managed hooks changed and the reconcile finished its queued deliveries.
-func (f scaleP21TeamCreateFixture) sw295Settle(t *testing.T, before string) {
+func (f scaleTeamCreateFixture) settle(t *testing.T, before string) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		if f.sw295Hooks(t) != before && applicationWebhookReconcile.TryLock() {
+		if f.applicationWebhookReconcileHooks(t) != before && applicationWebhookReconcile.TryLock() {
 			applicationWebhookReconcile.Unlock()
 			return
 		}
@@ -96,11 +96,11 @@ func (f scaleP21TeamCreateFixture) sw295Settle(t *testing.T, before string) {
 	t.Fatal("background application webhook reconcile did not run")
 }
 
-func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
+func TestApplicationWebhookReconcileDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	// Queued deliveries stay queued: no background attempt races the state.
 	oldSlots := webhookDeliverySlots
 	webhookDeliverySlots = make(chan struct{})
@@ -197,8 +197,8 @@ func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
 		s.reconcileApplicationWebhooks(t.Context(), workspace)
 		return "done"
 	}
-	cases := []scaleP21SW294Case{
-		{name: "reconcile-workspace", setup: func(t *testing.T) { seed(t, 1) }, call: reconcile, check: func(t *testing.T, outcome scaleP21SW294Outcome) {
+	cases := []oauthMetadataCase{
+		{name: "reconcile-workspace", setup: func(t *testing.T) { seed(t, 1) }, call: reconcile, check: func(t *testing.T, outcome oauthMetadataOutcome) {
 			raw := string(outcome.Installed)
 			// sw295-shared takes the webhook URL of the last workspace in key order.
 			shared := "hooks.example.test/shared-here"
@@ -223,7 +223,7 @@ func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
 			seed(t, 4)
 			(&server{store: f.repository}).reconcileApplicationWebhooks(t.Context(), workspace)
 			f.exec(t, `DELETE FROM webhook_deliveries WHERE workspace_key=?`, workspace)
-		}, call: reconcile, check: func(t *testing.T, outcome scaleP21SW294Outcome) {
+		}, call: reconcile, check: func(t *testing.T, outcome oauthMetadataOutcome) {
 			if len(outcome.State.Events) != 0 || string(outcome.Installed) != "{}" {
 				t.Fatalf("an unchanged reconcile wrote: %v %s", outcome.State.Events, outcome.Installed)
 			}
@@ -231,14 +231,14 @@ func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
 		{name: "reconcile-nothing-installed", call: reconcile},
 	}
 	for _, eventType := range []string{"application.updated", "application.uninstalled", "oauth_authorization.created", "oauth_authorization.revoked", "team.created", "team.archived", "oauth_application.deleted"} {
-		cases = append(cases, scaleP21SW294Case{name: "dispatch-" + eventType, setup: func(t *testing.T) { seed(t, 3) }, call: func(s *server) string {
-			before := f.sw295Hooks(t)
+		cases = append(cases, oauthMetadataCase{name: "dispatch-" + eventType, setup: func(t *testing.T) { seed(t, 3) }, call: func(s *server) string {
+			before := f.applicationWebhookReconcileHooks(t)
 			s.dispatchWebhookEvent(workspace, domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: "sw295-aggregate", Payload: json.RawMessage(`{}`), CreatedAt: time.Now().UTC()})
-			f.sw295Settle(t, before)
+			f.settle(t, before)
 			return "settled"
 		}})
 	}
-	cases = append(cases, scaleP21SW294Case{name: "concurrent-reconciles-and-install", setup: func(t *testing.T) { seed(t, 6) }, call: func(s *server) string {
+	cases = append(cases, oauthMetadataCase{name: "concurrent-reconciles-and-install", setup: func(t *testing.T) { seed(t, 6) }, call: func(s *server) string {
 		var group sync.WaitGroup
 		for range 4 {
 			group.Add(1)
@@ -262,7 +262,7 @@ func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
 	}, interleaved: true})
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			outcomes := f.sw295Differential(t, test.name, test.setup, test.call, test.interleaved)
+			outcomes := f.applicationWebhookReconcileDifferential(t, test.name, test.setup, test.call, test.interleaved)
 			if test.check != nil {
 				test.check(t, outcomes[0])
 			}
@@ -280,11 +280,11 @@ func TestScaleP21SW295ApplicationWebhookReconcileDifferential(t *testing.T) {
 // The OAuth application index (oauthApplicationsByClient): every installed
 // workspace in key order, a client ID in several workspaces mapping to the
 // last, missing client IDs absent, with the fields the reconcile reads.
-func TestScaleP21SW295ApplicationWebhookClients(t *testing.T) {
+func TestApplicationWebhookClients(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	owner := f.data.Viewer
 	at := time.Date(2026, 4, 5, 6, 7, 8, 0, time.UTC)
 	keys := []string{"sw295-index-a-" + idgen.New(""), "sw295-index-b-" + idgen.New("")}
@@ -354,7 +354,7 @@ func TestScaleP21SW295ApplicationWebhookClients(t *testing.T) {
 			continue
 		}
 		if got != want {
-			t.Fatalf("%s index changed: %s", source, scaleP21M2Diff(want, got))
+			t.Fatalf("%s index changed: %s", source, policyFirstDifference(want, got))
 		}
 	}
 }

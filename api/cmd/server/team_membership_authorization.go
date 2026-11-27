@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW315TeamMembershipAuthorizationRequest(r *http.Request) (string, bool) {
+func teamMembershipAuthorizationRequest(r *http.Request) (string, bool) {
 	var pattern string
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
@@ -22,7 +22,7 @@ func scaleP21SW315TeamMembershipAuthorizationRequest(r *http.Request) (string, b
 	default:
 		return "", false
 	}
-	parts, selected := scaleP21EscapedRouteParts(r, pattern)
+	parts, selected := scaleEscapedRouteParts(r, pattern)
 	if !selected || len(parts) < 3 {
 		return "", false
 	}
@@ -33,7 +33,7 @@ func (s *server) boundedTeamMembershipAuthorization(r *http.Request, workspace, 
 	if !s.store.BoundedMetadataEnabled() {
 		return false, false
 	}
-	ref, selected := scaleP21SW315TeamMembershipAuthorizationRequest(r)
+	ref, selected := teamMembershipAuthorizationRequest(r)
 	if !selected {
 		return false, false
 	}

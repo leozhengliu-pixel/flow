@@ -16,8 +16,8 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW421Body is a legal multi-byte body with characters JSON escapes.
-func scaleP21SW421Body(seed string, size int) string {
+// body is a legal multi-byte body with characters JSON escapes.
+func loopNextRunBody(seed string, size int) string {
 	unit := seed + " <body>&é世\t ; "
 	text := strings.Repeat(unit, size/len(unit)+1)[:size]
 	for !utf8.ValidString(text) {
@@ -26,9 +26,9 @@ func scaleP21SW421Body(seed string, size int) string {
 	return text
 }
 
-// scaleP21SW421Peak samples a store's admitted metadata work until the
+// peak samples a store's admitted metadata work until the
 // returned stop, which reports the largest sample.
-func scaleP21SW421Peak(source *store.SQLiteStore) func() int {
+func loopNextRunPeak(source *store.SQLiteStore) func() int {
 	done, peak := make(chan struct{}), 0
 	var wait sync.WaitGroup
 	wait.Add(1)
@@ -52,32 +52,32 @@ func scaleP21SW421Peak(source *store.SQLiteStore) func() int {
 	}
 }
 
-// SW421: the schedule runner's loop.scheduled stamp (setLoopNextRun) with
+// The schedule runner's loop.scheduled stamp (setLoopNextRun) with
 // bounded metadata against the literal stamp, byte for byte (loop rows,
 // search documents, the root, events, webhooks and realtime), warm and
 // SQL-reloaded: small and large loops up to the literal writer's maximum,
 // rows the literal writer refuses, named time zones, duplicates, a missing
 // loop and peers that commit to the loop row before the stamp.
-func TestScaleP21SW421LoopNextRunDifferential(t *testing.T) {
-	scaleP21SW421LoopNextRun(t, false)
+func TestLoopNextRunDifferential(t *testing.T) {
+	loopNextRun(t, false)
 }
 
-func TestScaleP21SW421LoopNextRunReloadedDifferential(t *testing.T) {
-	scaleP21SW421LoopNextRun(t, true)
+func TestLoopNextRunReloadedDifferential(t *testing.T) {
+	loopNextRun(t, true)
 }
 
-func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
+func loopNextRun(t *testing.T, reload bool) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &scaleP04Database{config: config}
+	reader := &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
@@ -114,7 +114,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 	}
 	instructions := func(size int) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
-			data.Loops[1].Instructions = scaleP21SW421Body("legal large loop instructions", size)
+			data.Loops[1].Instructions = loopNextRunBody("legal large loop instructions", size)
 		}
 	}
 	earlier := next.Add(-24 * time.Hour)
@@ -138,9 +138,9 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 		{name: "large-time-zone-earlier", next: earlier.In(york), seed: instructions(4 << 20)},
 		{name: "duplicate-occurrences", next: next, seed: func(data *domain.Bootstrap) {
 			second := loop(target)
-			second.Name, second.Instructions = "Second occurrence", scaleP21SW421Body("second", 300<<10)
+			second.Name, second.Instructions = "Second occurrence", loopNextRunBody("second", 300<<10)
 			data.Loops = append(data.Loops, second)
-			data.Loops[1].Instructions = scaleP21SW421Body("first", 2<<20)
+			data.Loops[1].Instructions = loopNextRunBody("first", 2<<20)
 		}},
 		{name: "missing-loop", next: next, loopID: prefix + "missing", missing: true},
 		{name: "peer-renamed-large", next: next, seed: instructions(4 << 20), sqlite: true,
@@ -233,7 +233,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 					t.Fatal(err)
 				}
 				if spec.raw > 0 {
-					rewrite(t, func(item *domain.Loop) { item.Instructions = scaleP21SW421Body("over the literal maximum", spec.raw) })
+					rewrite(t, func(item *domain.Loop) { item.Instructions = loopNextRunBody("over the literal maximum", spec.raw) })
 				}
 				if reload || spec.raw > 0 {
 					if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -267,7 +267,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 					return nil
 				}
 				var stampErr error
-				stopPeak := scaleP21SW421Peak(source)
+				stopPeak := loopNextRunPeak(source)
 				switch {
 				case !spec.refused && !spec.missing && spec.peer == nil:
 					// The server entry point (it logs its error).
@@ -308,7 +308,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				got := scaleP21TriageClock.ReplaceAllStringFunc(string(encoded), func(clock string) string {
+				got := scaleTriageClock.ReplaceAllStringFunc(string(encoded), func(clock string) string {
 					if parsed, err := time.Parse(time.RFC3339Nano, clock); err == nil && parsed.After(at.Add(48*time.Hour)) && !parsed.Equal(next) && !parsed.Equal(spec.next) {
 						return "<clock>"
 					}
@@ -336,7 +336,7 @@ func scaleP21SW421LoopNextRun(t *testing.T, reload bool) {
 					t.Fatal("bounded stamp decoded complete workspace metadata")
 				}
 				if got != want {
-					t.Fatalf("bounded loop.scheduled stamp differs from the literal stamp\n%s", scaleP21SW260FirstDiff(want, got))
+					t.Fatalf("bounded loop.scheduled stamp differs from the literal stamp\n%s", firstDiff(want, got))
 				}
 			}
 		})

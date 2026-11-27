@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW78Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
+func legacyCountWriteFixture(t *testing.T) (scaleFixture, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func scaleP21SW78Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
 	return f, view
 }
 
-func scaleP21SW78Data(f scaleP09Fixture, repetitions int) domain.Bootstrap {
+func legacyCountWriteData(f scaleFixture, repetitions int) domain.Bootstrap {
 	at := time.Date(2026, 11, 14, 1, 2, 3, 456, time.UTC)
 	body := strings.Repeat("Known unchanged count-write body. ", repetitions)
 	user := f.data.Viewer
@@ -57,7 +57,7 @@ func scaleP21SW78Data(f scaleP09Fixture, repetitions int) domain.Bootstrap {
 	}
 }
 
-func scaleP21SW78Capture(t *testing.T, data domain.Bootstrap) *metadataLogicalSource {
+func legacyCountWriteCapture(t *testing.T, data domain.Bootstrap) *metadataLogicalSource {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{workspaceID: data.Workspace.ID, revision: -1})
 	if err != nil {
@@ -67,7 +67,7 @@ func scaleP21SW78Capture(t *testing.T, data domain.Bootstrap) *metadataLogicalSo
 	return source
 }
 
-func scaleP21SW78Peer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap) {
+func legacyCountWritePeer(t *testing.T, tx *sqlTx, workspace, mode string, before domain.Bootstrap) {
 	t.Helper()
 	put := func(field, id string, value any, order int, unknown bool) {
 		raw, err := json.Marshal(value)
@@ -168,10 +168,10 @@ func scaleP21SW78Peer(t *testing.T, tx *sqlTx, workspace, mode string, before do
 	}
 }
 
-func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, before, after, directory *metadataLogicalSource, peer string, releaseInput func()) int {
+func legacyCountWriteCompare(t *testing.T, f scaleFixture, view *SQLiteStore, before, after, directory *metadataLogicalSource, peer string, releaseInput func()) int {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	scope := scaleP21SW72FullScope(t, after)
+	scope := fullScope(t, after)
 	base, err := before.Select(t.Context(), scope, 64<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -186,18 +186,18 @@ func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	}
 	old, target := cloneBootstrap(base), cloneBootstrap(next)
 	old.Users, target.Users = users.Users, users.Users
-	tx, ctx := scaleP21SW77Begin(t, f, base)
-	scaleP21SW78Peer(t, tx, workspace, peer, base)
-	preimage := scaleP21SW76MetadataImage(t, tx, workspace)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, base)
+	legacyCountWritePeer(t, tx, workspace, peer, base)
+	preimage := metadataImage(t, tx, workspace)
 	_, wantErr := f.writeWorkspaceMetadataDelta(ctx, tx, workspace, old, &target)
-	wantSQL := scaleP21SW76MetadataImage(t, tx, workspace)
-	scaleP21SW70Usable(t, tx)
+	wantSQL := metadataImage(t, tx, workspace)
+	legacyIssueScanUsable(t, tx)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	tx, ctx = scaleP21SW77Begin(t, f, base)
-	scaleP21SW78Peer(t, tx, workspace, peer, base)
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
+	tx, ctx = legacyDeltaBudgetBegin(t, f, base)
+	legacyCountWritePeer(t, tx, workspace, peer, base)
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
 		t.Fatal("literal and count writes did not start from the same SQL preimage")
 	}
 	peak := 0
@@ -216,19 +216,19 @@ func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 			t.Fatal("count conflict keys differ", gotKeys, wantKeys)
 		}
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, wantSQL) {
 		if result != nil {
 			result.Release()
 		}
 		t.Fatal("full canonical root, metadata rows or collection orders differ")
 	}
-	scaleP21SW72Compare(t, before, scope, base)
-	scaleP21SW72Compare(t, after, scope, next)
+	legacyIssueImageCompare(t, before, scope, base)
+	legacyIssueImageCompare(t, after, scope, next)
 	stillUsers, err := directory.Select(t.Context(), MetadataRecordScope{Fields: []string{"users"}}, 64<<20)
 	if err != nil || !reflect.DeepEqual(stillUsers, users) {
 		t.Fatal("count persistence changed its reference directory", err)
 	}
-	scaleP21SW70Usable(t, tx)
+	legacyIssueScanUsable(t, tx)
 	if wantErr != nil {
 		if result != nil {
 			result.Release()
@@ -245,7 +245,7 @@ func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	t.Cleanup(result.Release)
 	want := next
 	want.Labels, want.Projects = target.Labels, target.Projects
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	for index, node := range after.fields {
 		name := reflect.TypeFor[domain.Bootstrap]().Field(index).Tag.Get("json")
 		if name != "-" && name != "labels" && name != "projects" && result.fields[index] != node {
@@ -260,7 +260,7 @@ func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 		t.Fatal(err)
 	}
 	cancel()
-	scaleP21SW72Compare(t, result, scope, want)
+	legacyIssueImageCompare(t, result, scope, want)
 	result.Release()
 	result.Release()
 	if _, err := result.Select(t.Context(), scope, 64<<20); !errors.Is(err, errMetadataLogicalClosed) || view.MetadataWorkUsedForTesting() != 0 {
@@ -269,8 +269,8 @@ func scaleP21SW78Compare(t *testing.T, f scaleP09Fixture, view *SQLiteStore, bef
 	return peak
 }
 
-func TestScaleP21SW78LegacyCountWriteLiteral(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyCountWriteLiteral(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	for _, test := range []struct{ name, shape, peer string }{
 		{name: "unchanged"}, {name: "unchanged-with-canonical-peer", peer: "canonical-merged"}, {name: "unchanged-with-canonical-deletion", peer: "deleted-both"},
 		{name: "labels-only"}, {name: "projects-only"}, {name: "both"},
@@ -287,7 +287,7 @@ func TestScaleP21SW78LegacyCountWriteLiteral(t *testing.T) {
 		{name: "nil-directories", shape: "nil"}, {name: "empty-directories", shape: "empty"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			data := scaleP21SW78Data(f, 1000)
+			data := legacyCountWriteData(f, 1000)
 			switch test.shape {
 			case "duplicate":
 				data.Labels[1].ID, data.Projects[1].ID = data.Labels[0].ID, data.Projects[0].ID
@@ -318,8 +318,8 @@ func TestScaleP21SW78LegacyCountWriteLiteral(t *testing.T) {
 				ref.Users = []domain.User{first, last}
 			}
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			before, after, directory := scaleP21SW78Capture(t, data), scaleP21SW78Capture(t, next), scaleP21SW78Capture(t, ref)
-			scaleP21SW78Compare(t, f, view, before, after, directory, test.peer, func() { before.Release(); after.Release(); directory.Release() })
+			before, after, directory := legacyCountWriteCapture(t, data), legacyCountWriteCapture(t, next), legacyCountWriteCapture(t, ref)
+			legacyCountWriteCompare(t, f, view, before, after, directory, test.peer, func() { before.Release(); after.Release(); directory.Release() })
 			before.Release()
 			after.Release()
 			directory.Release()
@@ -330,8 +330,8 @@ func TestScaleP21SW78LegacyCountWriteLiteral(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
+func TestLegacyCountWriteWarmReloadBodyBound(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
 	workspace := f.data.Workspace.URLKey
 	baseline, ok := f.storedWorkspace(workspace)
 	if !ok {
@@ -346,9 +346,9 @@ func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
 	baseline.NotificationPreferences[userSettings.UserID] = preferences
 	peaks := map[bool]int{}
 	nonbody := map[bool]domain.Bootstrap{}
-	canonical := map[bool]scaleP21SW76Metadata{}
+	canonical := map[bool]legacyActorWriteMetadata{}
 	for _, size := range []int{2000, 20000} {
-		seed := scaleP21SW78Data(f, size)
+		seed := legacyCountWriteData(f, size)
 		f.db.SetMaxOpenConns(4)
 		// A prior reload adds defaults and normalizes references. Reset every
 		// field and persist it in full so body sizes start from the same state.
@@ -389,7 +389,7 @@ func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
 						before.Release()
 					}
 				})
-				data, err := before.Select(t.Context(), scaleP21SW72FullScope(t, before), 64<<20)
+				data, err := before.Select(t.Context(), fullScope(t, before), 64<<20)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -421,8 +421,8 @@ func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
 				} else {
 					nonbody[reload] = small
 				}
-				tx, _ := scaleP21SW77Begin(t, f, small)
-				image := scaleP21SW76MetadataImage(t, tx, workspace)
+				tx, _ := legacyDeltaBudgetBegin(t, f, small)
+				image := metadataImage(t, tx, workspace)
 				if err := tx.Rollback(); err != nil {
 					t.Fatal(err)
 				}
@@ -435,9 +435,9 @@ func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
 				}
 				data.Labels[1].IssueCount++
 				data.Projects[1].IssueCount++
-				after := scaleP21SW78Capture(t, data)
+				after := legacyCountWriteCapture(t, data)
 				f.db.SetMaxOpenConns(1)
-				peak := scaleP21SW78Compare(t, f, view, before, after, before, "", func() { before.Release(); beforeOwned = false; after.Release() })
+				peak := legacyCountWriteCompare(t, f, view, before, after, before, "", func() { before.Release(); beforeOwned = false; after.Release() })
 				if peak == 0 {
 					t.Fatal("count write had no admitted work")
 				}
@@ -453,18 +453,18 @@ func TestScaleP21SW78LegacyCountWriteWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW78LegacyCountWriteFailureRelease(t *testing.T) {
-	f, view := scaleP21SW78Fixture(t)
-	data := scaleP21SW78Data(f, 1000)
+func TestLegacyCountWriteFailureRelease(t *testing.T) {
+	f, view := legacyCountWriteFixture(t)
+	data := legacyCountWriteData(f, 1000)
 	next := cloneBootstrap(data)
 	next.Labels[1].IssueCount++
 	next.Projects[1].IssueCount++
-	before, after := scaleP21SW78Capture(t, data), scaleP21SW78Capture(t, next)
-	scope := scaleP21SW72FullScope(t, after)
+	before, after := legacyCountWriteCapture(t, data), legacyCountWriteCapture(t, next)
+	scope := fullScope(t, after)
 	for _, failure := range []string{"cancel-before", "cancel-after-start", "quota"} {
 		t.Run(failure, func(t *testing.T) {
-			tx, ctx := scaleP21SW77Begin(t, f, data)
-			preimage := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, data)
+			preimage := metadataImage(t, tx, data.Workspace.URLKey)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			want := error(context.Canceled)
@@ -494,12 +494,12 @@ func TestScaleP21SW78LegacyCountWriteFailureRelease(t *testing.T) {
 			if !errors.Is(err, want) || view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 				t.Fatal("failed count write changed its error or leaked", err)
 			}
-			if got := scaleP21SW76MetadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
+			if got := metadataImage(t, tx, data.Workspace.URLKey); !reflect.DeepEqual(got, preimage) {
 				t.Fatal("preflight failure wrote canonical count metadata")
 			}
-			scaleP21SW72Compare(t, before, scope, data)
-			scaleP21SW72Compare(t, after, scope, next)
-			scaleP21SW70Usable(t, tx)
+			legacyIssueImageCompare(t, before, scope, data)
+			legacyIssueImageCompare(t, after, scope, next)
+			legacyIssueScanUsable(t, tx)
 		})
 	}
 }

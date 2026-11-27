@@ -12,10 +12,10 @@ import (
 
 // Deferred audits describe an already committed operation. Legacy callers
 // retain the original actor even if membership changes before the audit runs.
-func TestScaleP21M1DeferredAuditSharedPrerequisite(t *testing.T) {
+func TestScaleDeferredAuditSharedPrerequisite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -51,10 +51,10 @@ func TestScaleP21M1DeferredAuditSharedPrerequisite(t *testing.T) {
 	}
 }
 
-func TestScaleP21M1ActorDirectorySharedPrerequisite(t *testing.T) {
+func TestScaleActorDirectorySharedPrerequisite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	var original []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='users' AND record_key=?`, workspace, f.data.Viewer.ID).Scan(&original); err != nil {

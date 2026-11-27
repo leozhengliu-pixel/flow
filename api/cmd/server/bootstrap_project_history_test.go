@@ -12,19 +12,19 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21BootstrapHistoryProjects is enough project progress history that
+// scaleBootstrapHistoryProjects is enough project progress history that
 // charging every header frame's cost for the whole read (the bounded
 // bootstrap's former admission) exceeded the process work budget, which
 // refused every bootstrap of the workspace with 503 while the flag-off
 // bootstrap answered 200. The headers themselves take a few MiB.
 const (
-	scaleP21BootstrapHistoryProjects = 160
-	scaleP21BootstrapHistoryPoints   = 40
+	scaleBootstrapHistoryProjects = 160
+	scaleBootstrapHistoryPoints   = 40
 )
 
-func scaleP21BootstrapHistorySeed(t *testing.T, repo *store.SQLiteStore) scaleP21SW145Fixture {
+func scaleBootstrapHistorySeed(t *testing.T, repo *store.SQLiteStore) issueBootstrapRoutesFixture {
 	t.Helper()
-	f := scaleP21SW145Seed(t, repo)
+	f := issueBootstrapRoutesSeed(t, repo)
 	stamp := time.Date(2026, time.November, 19, 9, 10, 11, 0, time.UTC)
 	restore := store.ForceFullMutationsForTesting(true)
 	defer restore()
@@ -36,9 +36,9 @@ func scaleP21BootstrapHistorySeed(t *testing.T, repo *store.SQLiteStore) scaleP2
 			}
 		}
 		owner := data.Viewer
-		for index := range scaleP21BootstrapHistoryProjects {
+		for index := range scaleBootstrapHistoryProjects {
 			history := func(offset float64) []domain.ProjectProgressHistoryPoint {
-				points := make([]domain.ProjectProgressHistoryPoint, scaleP21BootstrapHistoryPoints)
+				points := make([]domain.ProjectProgressHistoryPoint, scaleBootstrapHistoryPoints)
 				for day := range points {
 					points[day] = domain.ProjectProgressHistoryPoint{
 						Date: stamp.AddDate(0, 0, -day), Value: offset + float64(day)/7, ScopeEstimate: float64(index + day),
@@ -72,17 +72,17 @@ func scaleP21BootstrapHistorySeed(t *testing.T, repo *store.SQLiteStore) scaleP2
 	return f
 }
 
-type scaleP21BootstrapHistoryResponse struct {
+type scaleBootstrapHistoryResponse struct {
 	Status                  int
 	RetryAfter, ContentType string
 	Body                    string
 }
 
-func scaleP21BootstrapHistoryServe(t *testing.T, f scaleP21SW145Fixture, source *store.SQLiteStore, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
-	return scaleP21BootstrapHistoryServeWith(t, f, &server{store: source, authDisabled: test.development}, test)
+func scaleBootstrapHistoryServe(t *testing.T, f issueBootstrapRoutesFixture, source *store.SQLiteStore, test issueBootstrapRoutesCase) scaleBootstrapHistoryResponse {
+	return scaleBootstrapHistoryServeWith(t, f, &server{store: source, authDisabled: test.development}, test)
 }
 
-func scaleP21BootstrapHistoryServeWith(t *testing.T, f scaleP21SW145Fixture, service *server, test scaleP21SW145Case) scaleP21BootstrapHistoryResponse {
+func scaleBootstrapHistoryServeWith(t *testing.T, f issueBootstrapRoutesFixture, service *server, test issueBootstrapRoutesCase) scaleBootstrapHistoryResponse {
 	t.Helper()
 	request := f.literalRequest(test.user, test.key, nil)
 	request.Method, request.URL.Path = http.MethodGet, "/api/issue-records/bootstrap"
@@ -91,26 +91,26 @@ func scaleP21BootstrapHistoryServeWith(t *testing.T, f scaleP21SW145Fixture, ser
 	defer closeOutput()
 	writer := httptest.NewRecorder()
 	service.signedFileURLs(http.HandlerFunc(service.issueRecordsBootstrap)).ServeHTTP(writer, request)
-	return scaleP21BootstrapHistoryResponse{writer.Code, writer.Header().Get("Retry-After"), writer.Header().Get("Content-Type"), writer.Body.String()}
+	return scaleBootstrapHistoryResponse{writer.Code, writer.Header().Get("Retry-After"), writer.Header().Get("Content-Type"), writer.Body.String()}
 }
 
-// TestScaleP21IssueBootstrapLargeProjectHistory compares the paged bootstrap
+// TestScaleIssueBootstrapLargeProjectHistory compares the paged bootstrap
 // flag off and on for a workspace whose project headers are large, for every
 // principal shape and projection: the bounded read answers the same bytes
 // instead of refusing, and releases all of its work.
-func TestScaleP21IssueBootstrapLargeProjectHistory(t *testing.T) {
+func TestScaleIssueBootstrapLargeProjectHistory(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21BootstrapHistorySeed(t, repo)
+			f := scaleBootstrapHistorySeed(t, repo)
 			workspace := f.data.Workspace.URLKey
 			view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace, f.other)
 			if err != nil {
 				t.Fatal(err)
 			}
-			cases := []scaleP21SW145Case{
+			cases := []issueBootstrapRoutesCase{
 				{name: "admin-private-outsider", user: f.principals[0].user},
 				{name: "private-admin", user: f.principals[1].user},
 				{name: "member", user: f.principals[2].user},
@@ -123,14 +123,14 @@ func TestScaleP21IssueBootstrapLargeProjectHistory(t *testing.T) {
 				for _, projection := range []string{"", "project-list", "issue-detail"} {
 					test.workspace, test.projection = workspace, projection
 					t.Run(fmt.Sprintf("%s/projection=%s", test.name, projection), func(t *testing.T) {
-						legacy := scaleP21BootstrapHistoryServe(t, f, repo, test)
+						legacy := scaleBootstrapHistoryServe(t, f, repo, test)
 						if legacy.Status != http.StatusOK {
 							t.Fatal("flag-off bootstrap failed", legacy.Status, legacy.Body)
 						}
 						histories = max(histories, strings.Count(legacy.Body, `"scopeCount"`))
 						decodes := view.WorkspaceMetadataDecodes()
 						view.MetadataWorkPeakForTesting()
-						bounded := scaleP21BootstrapHistoryServe(t, f, view, test)
+						bounded := scaleBootstrapHistoryServe(t, f, view, test)
 						peak := view.MetadataWorkPeakForTesting()
 						if bounded.Status != legacy.Status || bounded.RetryAfter != legacy.RetryAfter || bounded.ContentType != legacy.ContentType {
 							t.Fatalf("flag-on bootstrap answered %d (Retry-After %q) where flag-off answered %d: %.200s", bounded.Status, bounded.RetryAfter, legacy.Status, bounded.Body)
@@ -148,26 +148,26 @@ func TestScaleP21IssueBootstrapLargeProjectHistory(t *testing.T) {
 				}
 			}
 			// The admin projections carry every project's histories.
-			if want := scaleP21BootstrapHistoryProjects * 4 / 3 * scaleP21BootstrapHistoryPoints; histories < want {
+			if want := scaleBootstrapHistoryProjects * 4 / 3 * scaleBootstrapHistoryPoints; histories < want {
 				t.Fatal("the fixture's histories were not served", histories, want)
 			}
 		})
 	}
 }
 
-// TestScaleP21IssueBootstrapAccessChangedDuringRead moves the workspace's
+// TestScaleIssueBootstrapAccessChangedDuringRead moves the workspace's
 // authorization epoch while a bounded bootstrap holds its access (another
 // member made admin and member again). The flag-off
 // bootstrap reads one consistent workspace and answers 200; the bounded one
 // reads again and answers the same bytes. Authorization that keeps changing
 // under every read is a retryable 503, never a 403.
-func TestScaleP21IssueBootstrapAccessChangedDuringRead(t *testing.T) {
+func TestScaleIssueBootstrapAccessChangedDuringRead(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21SW145Seed(t, repo)
+			f := issueBootstrapRoutesSeed(t, repo)
 			workspace := f.data.Workspace.URLKey
 			view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace, f.other)
 			if err != nil {
@@ -188,7 +188,7 @@ func TestScaleP21IssueBootstrapAccessChangedDuringRead(t *testing.T) {
 					}
 				}
 			}
-			for _, test := range []scaleP21SW145Case{
+			for _, test := range []issueBootstrapRoutesCase{
 				{name: "member", user: f.principals[2].user},
 				{name: "admin", user: f.principals[1].user, projection: "project-list"},
 			} {
@@ -197,7 +197,7 @@ func TestScaleP21IssueBootstrapAccessChangedDuringRead(t *testing.T) {
 					edits = 0
 					// The first read's trailing check (its third epoch read) finds
 					// the epoch moved; the next read is undisturbed.
-					serve := func(source *store.SQLiteStore, observe func(string)) scaleP21BootstrapHistoryResponse {
+					serve := func(source *store.SQLiteStore, observe func(string)) scaleBootstrapHistoryResponse {
 						service := &server{store: source}
 						request := f.literalRequest(test.user, test.key, nil)
 						request.Method, request.URL.Path = http.MethodGet, "/api/issue-records/bootstrap"
@@ -209,7 +209,7 @@ func TestScaleP21IssueBootstrapAccessChangedDuringRead(t *testing.T) {
 						defer closeOutput()
 						writer := httptest.NewRecorder()
 						service.issueRecordsBootstrap(writer, request)
-						return scaleP21BootstrapHistoryResponse{writer.Code, writer.Header().Get("Retry-After"), writer.Header().Get("Content-Type"), writer.Body.String()}
+						return scaleBootstrapHistoryResponse{writer.Code, writer.Header().Get("Retry-After"), writer.Header().Get("Content-Type"), writer.Body.String()}
 					}
 					epochRead := func(query string) bool {
 						return strings.Contains(query, "workspace_authz_epochs") && strings.Contains(query, "record_journal_mode")

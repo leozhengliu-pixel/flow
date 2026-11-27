@@ -5,7 +5,7 @@
     "agentSessionTarget": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Genuine trusted configuration scan uses StreamMetadataRecords in canonical order, retaining one typed webhook and at most 256 KiB plus one encoded byte. First matching managed client/enabled/resource subscription wins; no network work occurs in the repeatable-read snapshot. Oversized rows fail explicitly. TestScaleP21M2AgentWebhookScanDifferential covers 122 rows, first/middle/last/missing, cancellation and oversized bodies; caller-owned app URL/secret shortcut is unchanged.",
+      "reason": "Genuine trusted configuration scan uses StreamMetadataRecords in canonical order, retaining one typed webhook and at most 256 KiB plus one encoded byte. First matching managed client/enabled/resource subscription wins; no network work occurs in the repeatable-read snapshot. Oversized rows fail explicitly. TestScaleAgentWebhookScanDifferential covers 122 rows, first/middle/last/missing, cancellation and oversized bodies; caller-owned app URL/secret shortcut is unchanged.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

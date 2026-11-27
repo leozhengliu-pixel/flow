@@ -19,13 +19,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW296: large metadata rows written by the bounded legacy metadata writer
+// Large metadata rows written by the bounded legacy metadata writer
 // (persistLegacyMetadataImage) against the literal delta writer, at the
 // sizes the literal writer accepts in one transaction and just above them.
 
-const scaleP21SW296Tx = 32 << 20
+const largeRowWriteTx = 32 << 20
 
-type scaleP21SW296Case struct {
+type largeRowWriteCase struct {
 	name   string
 	fields []string
 	seed   func(*domain.Bootstrap)
@@ -42,11 +42,11 @@ type scaleP21SW296Case struct {
 	heapRows int
 }
 
-var scaleP21SW296At = time.Date(2026, 11, 17, 3, 4, 5, 600, time.UTC)
+var largeRowWriteAt = time.Date(2026, 11, 17, 3, 4, 5, 600, time.UTC)
 
-// scaleP21SW296Body is a legal multi-byte body with HTML, control and
+// body is a legal multi-byte body with HTML, control and
 // separator characters that JSON escapes; size is its UTF-8 length.
-func scaleP21SW296Body(seed string, size int) string {
+func largeRowWriteBody(seed string, size int) string {
 	unit := seed + " <body>&\u00e9\u4e16\t\u2028; "
 	text := strings.Repeat(unit, size/len(unit)+1)[:size]
 	for !utf8.ValidString(text) {
@@ -55,7 +55,7 @@ func scaleP21SW296Body(seed string, size int) string {
 	return text
 }
 
-func scaleP21SW296IDs(prefix string, count int) []string {
+func largeRowWriteIDs(prefix string, count int) []string {
 	ids := make([]string, count)
 	for index := range ids {
 		ids[index] = fmt.Sprintf("%s-%07d", prefix, index)
@@ -63,7 +63,7 @@ func scaleP21SW296IDs(prefix string, count int) []string {
 	return ids
 }
 
-func scaleP21SW296Base(f scaleP09Fixture) domain.Bootstrap {
+func largeRowWriteBase(f scaleFixture) domain.Bootstrap {
 	user := f.data.Viewer
 	user.Name, user.DisplayName = "Directory current name", "Directory current display"
 	stale := user
@@ -72,33 +72,33 @@ func scaleP21SW296Base(f scaleP09Fixture) domain.Bootstrap {
 		Workspace: f.data.Workspace, Viewer: user, ViewerRole: "owner",
 		Users: []domain.User{user},
 		Loops: []domain.Loop{
-			{ID: "sw296-small-loop", Name: "Small loop", Status: "published", Instructions: "Reply.", Creator: user, CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At, ConnectorIDs: []string{}},
+			{ID: "sw296-small-loop", Name: "Small loop", Status: "published", Instructions: "Reply.", Creator: user, CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt, ConnectorIDs: []string{}},
 			{ID: "sw296-loop", Name: "Large loop", Status: "published", Level: "workspace", TriggerType: "schedule",
 				TriggerConfig: map[string]any{"unit": "day", "interval": float64(1)}, Instructions: "Small instructions.",
 				InstructionsData: map[string]any{"type": "doc"}, ConnectorIDs: []string{"connector"}, Creator: stale,
-				CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At, PublishedAt: &scaleP21SW296At},
+				CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt, PublishedAt: &largeRowWriteAt},
 		},
 		Releases: []domain.Release{
 			{ID: "sw296-release", SlugID: "large-release", Name: "Large release", Status: "planned", PipelineID: "pipeline", Stage: "Open",
 				ProjectIDs: []string{}, IssueIDs: []string{"issue-a"}, SubscriberIDs: []string{}, Resources: []domain.ReleaseResource{},
-				Creator: stale, CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At},
+				Creator: stale, CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt},
 			{ID: "sw296-other-release", SlugID: "other-release", Name: "Other release", ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{},
-				Resources: []domain.ReleaseResource{}, Creator: user, CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At},
+				Resources: []domain.ReleaseResource{}, Creator: user, CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt},
 		},
 		Documents: []domain.Document{
 			{ID: "sw296-document", SlugID: "large-document", Title: "Large document", Content: "Small content.", Creator: stale,
-				ProjectIDs: []string{}, TeamIDs: []string{}, SubscriberIDs: []string{}, CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At, Version: 3},
+				ProjectIDs: []string{}, TeamIDs: []string{}, SubscriberIDs: []string{}, CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt, Version: 3},
 		},
 		Projects: []domain.Project{
-			{ID: "sw296-project", Name: "Large project", Description: "Small description.", Lead: &stale, CreatedAt: scaleP21SW296At, UpdatedAt: scaleP21SW296At},
+			{ID: "sw296-project", Name: "Large project", Description: "Small description.", Lead: &stale, CreatedAt: largeRowWriteAt, UpdatedAt: largeRowWriteAt},
 		},
 	}
 }
 
-func scaleP21SW296Loop(data *domain.Bootstrap) *domain.Loop       { return &data.Loops[1] }
-func scaleP21SW296Release(data *domain.Bootstrap) *domain.Release { return &data.Releases[0] }
+func largeRowWriteLoop(data *domain.Bootstrap) *domain.Loop       { return &data.Loops[1] }
+func largeRowWriteRelease(data *domain.Bootstrap) *domain.Release { return &data.Releases[0] }
 
-func scaleP21SW296Put(t *testing.T, tx *sqlTx, workspace, field, key string, value any, order int) {
+func largeRowWritePut(t *testing.T, tx *sqlTx, workspace, field, key string, value any, order int) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -109,7 +109,7 @@ func scaleP21SW296Put(t *testing.T, tx *sqlTx, workspace, field, key string, val
 	}
 }
 
-func scaleP21SW296Order(t *testing.T, tx *sqlTx, workspace, field, key string) int {
+func largeRowWriteOrder(t *testing.T, tx *sqlTx, workspace, field, key string) int {
 	t.Helper()
 	var order int
 	if err := tx.QueryRowContext(t.Context(), `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, field, key).Scan(&order); err != nil {
@@ -118,9 +118,9 @@ func scaleP21SW296Order(t *testing.T, tx *sqlTx, workspace, field, key string) i
 	return order
 }
 
-// scaleP21SW296Seed commits base as the canonical metadata in its own
+// largeRowWriteSeed commits base as the canonical metadata in its own
 // transaction, as an earlier literal write left it.
-func scaleP21SW296Seed(t *testing.T, f scaleP09Fixture, base domain.Bootstrap) {
+func largeRowWriteSeed(t *testing.T, f scaleFixture, base domain.Bootstrap) {
 	t.Helper()
 	// The release issue index takes one row per linked issue: a release
 	// with very many issues grew over several transactions.
@@ -131,7 +131,7 @@ func scaleP21SW296Seed(t *testing.T, f scaleP09Fixture, base domain.Bootstrap) {
 		base.Releases = slices.Clone(base.Releases)
 		base.Releases[0].IssueIDs = grown[:step]
 	}
-	scaleP21SW296SeedOnce(t, f, base)
+	seedOnce(t, f, base)
 	for count := 2 * step; grown != nil; count += step {
 		release := base.Releases[0]
 		release.IssueIDs = grown[:min(count, len(grown))]
@@ -139,7 +139,7 @@ func scaleP21SW296Seed(t *testing.T, f scaleP09Fixture, base domain.Bootstrap) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW296Put(t, tx, base.Workspace.URLKey, "releases", release.ID, release, scaleP21SW296Order(t, tx, base.Workspace.URLKey, "releases", release.ID))
+		largeRowWritePut(t, tx, base.Workspace.URLKey, "releases", release.ID, release, largeRowWriteOrder(t, tx, base.Workspace.URLKey, "releases", release.ID))
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func scaleP21SW296Seed(t *testing.T, f scaleP09Fixture, base domain.Bootstrap) {
 	}
 }
 
-func scaleP21SW296SeedOnce(t *testing.T, f scaleP09Fixture, base domain.Bootstrap) {
+func seedOnce(t *testing.T, f scaleFixture, base domain.Bootstrap) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -172,17 +172,17 @@ func scaleP21SW296SeedOnce(t *testing.T, f scaleP09Fixture, base domain.Bootstra
 	}
 }
 
-type scaleP21SW296Result struct {
+type largeRowWriteResult struct {
 	err     error
 	keys    []metadataRecordKey
-	image   scaleP21SW76Metadata
+	image   legacyActorWriteMetadata
 	rebased map[metadataRecordKey]bool
 	want    domain.Bootstrap
 	work    int
 	heap    uint64
 }
 
-func scaleP21SW296Begin(t *testing.T, f scaleP09Fixture, workspace string) (*sqlTx, context.Context) {
+func largeRowWriteBegin(t *testing.T, f scaleFixture, workspace string) (*sqlTx, context.Context) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -192,19 +192,19 @@ func scaleP21SW296Begin(t *testing.T, f scaleP09Fixture, workspace string) (*sql
 	return tx, context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
 }
 
-// scaleP21SW296Run runs one case: the literal delta writer and then the
+// largeRowWriteRun runs one case: the literal delta writer and then the
 // bounded writer on the same committed preimage (warm captured or reloaded
 // from SQL), each in its own rolled-back transaction after the same peer.
-func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test scaleP21SW296Case, reload bool) {
+func largeRowWriteRun(t *testing.T, f scaleFixture, view *SQLiteStore, test largeRowWriteCase, reload bool) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	base := scaleP21SW296Base(f)
+	base := largeRowWriteBase(f)
 	if test.seed != nil {
 		test.seed(&base)
 	}
 	// Canonical rows were written from loaded (normalized) images.
 	normalize(&base)
-	scaleP21SW296Seed(t, f, base)
+	largeRowWriteSeed(t, f, base)
 	var before *metadataLogicalSource
 	if reload {
 		f.mu.Lock()
@@ -222,30 +222,30 @@ func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test s
 		}
 		t.Cleanup(before.Release)
 	} else {
-		before = scaleP21SW78Capture(t, base)
+		before = legacyCountWriteCapture(t, base)
 	}
-	scope := scaleP21SW72FullScope(t, before)
+	scope := fullScope(t, before)
 	data, err := before.Select(t.Context(), scope, 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
 	next := cloneBootstrap(data)
 	test.write(&next)
-	after := scaleP21SW78Capture(t, next)
+	after := legacyCountWriteCapture(t, next)
 
 	// Literal oracle.
-	oracle, ctx := scaleP21SW296Begin(t, f, workspace)
+	oracle, ctx := largeRowWriteBegin(t, f, workspace)
 	if test.peer != nil {
 		test.peer(t, oracle, workspace, data)
 	}
-	preimage := scaleP21SW76MetadataImage(t, oracle, workspace)
-	literal := scaleP21SW296Result{want: cloneBootstrap(next)}
+	preimage := metadataImage(t, oracle, workspace)
+	literal := largeRowWriteResult{want: cloneBootstrap(next)}
 	original := cloneBootstrap(data)
 	_, literal.err = f.writeWorkspaceMetadataDelta(ctx, oracle, workspace, original, &literal.want)
 	literal.keys, _ = conflictedMetadataKeys(literal.err)
-	literal.image = scaleP21SW76MetadataImage(t, oracle, workspace)
+	literal.image = metadataImage(t, oracle, workspace)
 	literal.rebased = maps.Clone(oracle.rebasedMetadata)
-	literalSide := scaleP21SW296SideImage(t, oracle, workspace)
+	literalSide := sideImage(t, oracle, workspace)
 	if err := oracle.Rollback(); err != nil {
 		t.Fatal(err)
 	}
@@ -267,11 +267,11 @@ func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test s
 	}
 
 	// Bounded writer.
-	tx, ctx := scaleP21SW296Begin(t, f, workspace)
+	tx, ctx := largeRowWriteBegin(t, f, workspace)
 	if test.peer != nil {
 		test.peer(t, tx, workspace, data)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
+	if got := metadataImage(t, tx, workspace); !reflect.DeepEqual(got, preimage) {
 		t.Fatal("literal and bounded writers started from different SQL preimages")
 	}
 	ctx = context.WithValue(ctx, legacyMetadataExtraFieldsKey{}, test.fields)
@@ -297,11 +297,11 @@ func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test s
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	result, gotErr := view.persistLegacyMetadataImage(ctx, tx, workspace, before, after)
 	sample()
-	bounded := scaleP21SW296Result{err: gotErr, work: peakWork, heap: peakHeap - baseline}
+	bounded := largeRowWriteResult{err: gotErr, work: peakWork, heap: peakHeap - baseline}
 	bounded.keys, _ = conflictedMetadataKeys(gotErr)
-	bounded.image = scaleP21SW76MetadataImage(t, tx, workspace)
+	bounded.image = metadataImage(t, tx, workspace)
 	bounded.rebased = maps.Clone(tx.rebasedMetadata)
-	boundedSide := scaleP21SW296SideImage(t, tx, workspace)
+	boundedSide := sideImage(t, tx, workspace)
 	if test.refused {
 		// Both refuse; the bounded writer may stop at its work budget
 		// before it reaches the transaction budget. Nothing is written.
@@ -330,7 +330,7 @@ func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test s
 		t.Fatal("conflict keys differ", literal.keys, bounded.keys)
 	}
 	if !reflect.DeepEqual(literal.image, bounded.image) {
-		scaleP21SW83SQLDiff(t, bounded.image, literal.image)
+		sqlDiff(t, bounded.image, literal.image)
 		if result != nil {
 			result.Release()
 		}
@@ -394,14 +394,14 @@ func scaleP21SW296Run(t *testing.T, f scaleP09Fixture, view *SQLiteStore, test s
 	t.Logf("%s reload=%t literal_err=%v row=%d work=%d heap=%d statements=%d", test.name, reload, literal.err, row, bounded.work, bounded.heap, statements)
 }
 
-// scaleP21SW296Side is every index, blob and journal row the metadata row
+// side is every index, blob and journal row the metadata row
 // writer maintains next to the rows, plus the transaction's write charge.
-type scaleP21SW296Side struct {
+type largeRowWriteSide struct {
 	Tables  map[string][][]string
 	Written int
 }
 
-func scaleP21SW296SideImage(t *testing.T, tx *sqlTx, workspace string) scaleP21SW296Side {
+func sideImage(t *testing.T, tx *sqlTx, workspace string) largeRowWriteSide {
 	t.Helper()
 	// The root statement's updated_at argument is RFC3339Nano text, whose
 	// length depends on the clock; each charge excludes its own stamp.
@@ -409,7 +409,7 @@ func scaleP21SW296SideImage(t *testing.T, tx *sqlTx, workspace string) scaleP21S
 	if err := tx.QueryRowContext(t.Context(), `SELECT updated_at FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&updatedAt); err != nil {
 		t.Fatal(err)
 	}
-	side := scaleP21SW296Side{Tables: map[string][][]string{}, Written: tx.writtenBytes - len(updatedAt)}
+	side := largeRowWriteSide{Tables: map[string][][]string{}, Written: tx.writtenBytes - len(updatedAt)}
 	for name, query := range map[string]string{
 		"search":    `SELECT field,record_key,content FROM metadata_search_documents WHERE workspace_key=? ORDER BY field,record_key`,
 		"releases":  `SELECT release_id,issue_id,pipeline_id,stage,status,released_at FROM release_issue_filter_records WHERE workspace_key=? ORDER BY release_id,issue_id`,
@@ -450,7 +450,7 @@ func scaleP21SW296SideImage(t *testing.T, tx *sqlTx, workspace string) scaleP21S
 	return side
 }
 
-func scaleP21SW296Cases() []scaleP21SW296Case {
+func largeRowWriteCases() []largeRowWriteCase {
 	// Legal maxima: an HTTP body holds at most 16 MiB, and the literal writer
 	// writes a row (plus its search document) within the 32 MiB transaction
 	// budget. A run start writes the loop and its v1 snapshot in one
@@ -462,10 +462,10 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 	loopMax, versionMax, searchableMax, stampMax := 15<<20, 7<<20, 7<<20, 11<<20
 	ids := 300_000
 	stamp := func(data *domain.Bootstrap) {
-		loop := scaleP21SW296Loop(data)
-		at := scaleP21SW296At.Add(time.Hour)
+		loop := largeRowWriteLoop(data)
+		at := largeRowWriteAt.Add(time.Hour)
 		loop.LastRunAt, loop.Version, loop.VersionID = &at, 1, loop.ID+"_v1"
-		data.LoopVersions = append(data.LoopVersions, domain.LoopVersion{ID: loop.ID + "_v1", LoopID: loop.ID, Version: 1, PublishedAt: scaleP21SW296At,
+		data.LoopVersions = append(data.LoopVersions, domain.LoopVersion{ID: loop.ID + "_v1", LoopID: loop.ID, Version: 1, PublishedAt: largeRowWriteAt,
 			PublishedBy: data.Users[0], ChangeSummary: []string{"published"}, Definition: domain.LoopDefinition{Name: loop.Name, Instructions: loop.Instructions,
 				InstructionsData: loop.InstructionsData, ConnectorIDs: slices.Clone(loop.ConnectorIDs)}})
 	}
@@ -473,45 +473,45 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 	withVersion := func(seed func(*domain.Bootstrap)) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
 			seed(data)
-			data.LoopVersions = []domain.LoopVersion{{ID: "sw296-small-loop_v1", LoopID: "sw296-small-loop", Version: 1, PublishedAt: scaleP21SW296At,
+			data.LoopVersions = []domain.LoopVersion{{ID: "sw296-small-loop_v1", LoopID: "sw296-small-loop", Version: 1, PublishedAt: largeRowWriteAt,
 				PublishedBy: data.Users[0], ChangeSummary: []string{"published"}, Definition: domain.LoopDefinition{Name: "Small loop", Instructions: "Reply."}}}
 		}
 	}
 	touch := func(data *domain.Bootstrap) {
-		loop := scaleP21SW296Loop(data)
-		at := scaleP21SW296At.Add(time.Hour)
+		loop := largeRowWriteLoop(data)
+		at := largeRowWriteAt.Add(time.Hour)
 		loop.LastRunAt = &at
 	}
 	instructions := func(size int) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
-			scaleP21SW296Loop(data).Instructions = scaleP21SW296Body("legal large instructions", size)
+			largeRowWriteLoop(data).Instructions = largeRowWriteBody("legal large instructions", size)
 		}
 	}
 	releaseSeed := func(count, description int) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
-			release := scaleP21SW296Release(data)
-			release.IssueIDs = scaleP21SW296IDs("issue", count)
-			release.Description = scaleP21SW296Body("release notes", description)
+			release := largeRowWriteRelease(data)
+			release.IssueIDs = largeRowWriteIDs("issue", count)
+			release.Description = largeRowWriteBody("release notes", description)
 		}
 	}
 	addIssue := func(data *domain.Bootstrap) {
-		release := scaleP21SW296Release(data)
+		release := largeRowWriteRelease(data)
 		release.IssueIDs = append(release.IssueIDs, "added-issue")
-		release.UpdatedAt = scaleP21SW296At.Add(time.Minute)
+		release.UpdatedAt = largeRowWriteAt.Add(time.Minute)
 	}
 	peerLoop := func(edit func(*domain.Loop)) func(*testing.T, *sqlTx, string, domain.Bootstrap) {
 		return func(t *testing.T, tx *sqlTx, workspace string, base domain.Bootstrap) {
-			loop := *scaleP21SW296Loop(&base)
+			loop := *largeRowWriteLoop(&base)
 			edit(&loop)
-			scaleP21SW296Put(t, tx, workspace, "loops", loop.ID, loop, scaleP21SW296Order(t, tx, workspace, "loops", loop.ID))
+			largeRowWritePut(t, tx, workspace, "loops", loop.ID, loop, largeRowWriteOrder(t, tx, workspace, "loops", loop.ID))
 		}
 	}
 	peerRelease := func(edit func(*domain.Release)) func(*testing.T, *sqlTx, string, domain.Bootstrap) {
 		return func(t *testing.T, tx *sqlTx, workspace string, base domain.Bootstrap) {
-			release := *scaleP21SW296Release(&base)
+			release := *largeRowWriteRelease(&base)
 			release.IssueIDs = slices.Clone(release.IssueIDs)
 			edit(&release)
-			scaleP21SW296Put(t, tx, workspace, "releases", release.ID, release, scaleP21SW296Order(t, tx, workspace, "releases", release.ID))
+			largeRowWritePut(t, tx, workspace, "releases", release.ID, release, largeRowWriteOrder(t, tx, workspace, "releases", release.ID))
 		}
 	}
 	deleted := func(field, key string) func(*testing.T, *sqlTx, string, domain.Bootstrap) {
@@ -524,14 +524,14 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 	documentSeed := func(size int) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
 			document := &data.Documents[0]
-			document.Content = scaleP21SW296Body("legal document body", size)
+			document.Content = largeRowWriteBody("legal document body", size)
 			document.Revisions = []domain.DocumentRevision{
-				{ID: "current", DocumentID: document.ID, Title: document.Title, Content: document.Content, Author: data.Users[0], CreatedAt: scaleP21SW296At},
-				{ID: "older", DocumentID: document.ID, Title: document.Title, Content: scaleP21SW296Body("older version", 4096), Author: data.Users[0], CreatedAt: scaleP21SW296At},
+				{ID: "current", DocumentID: document.ID, Title: document.Title, Content: document.Content, Author: data.Users[0], CreatedAt: largeRowWriteAt},
+				{ID: "older", DocumentID: document.ID, Title: document.Title, Content: largeRowWriteBody("older version", 4096), Author: data.Users[0], CreatedAt: largeRowWriteAt},
 			}
 		}
 	}
-	return []scaleP21SW296Case{
+	return []largeRowWriteCase{
 		// Loop run start: the loop's stamp plus its v1 snapshot (a second
 		// large row).
 		{name: "loop-stamp-v1-at-max", fields: []string{"loops", "loopVersions"}, seed: withVersion(instructions(stampMax)), write: stamp, bounded: true},
@@ -542,11 +542,11 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 			peer: peerLoop(func(loop *domain.Loop) { loop.Name = "Peer renamed loop" })},
 		{name: "loop-touch-peer-conflict", fields: []string{"loops"}, seed: instructions(4 << 20), write: touch, bounded: true,
 			peer: peerLoop(func(loop *domain.Loop) {
-				at := scaleP21SW296At.Add(2 * time.Hour)
+				at := largeRowWriteAt.Add(2 * time.Hour)
 				loop.LastRunAt = &at
 			})},
 		{name: "loop-touch-peer-instructions", fields: []string{"loops"}, seed: instructions(4 << 20), write: touch, bounded: true,
-			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = scaleP21SW296Body("peer instructions", 4<<20) })},
+			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = largeRowWriteBody("peer instructions", 4<<20) })},
 		{name: "loop-touch-peer-stale-display", fields: []string{"loops"}, seed: instructions(4 << 20), write: touch, bounded: true,
 			peer: peerLoop(func(loop *domain.Loop) { loop.Creator.Name = "Older stored creator name" })},
 		{name: "loop-touch-peer-deleted", fields: []string{"loops"}, seed: instructions(4 << 20), write: touch, bounded: true, peer: deleted("loops", "sw296-loop")},
@@ -554,12 +554,12 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 		{name: "loop-edit-instructions-peer-renamed", fields: []string{"loops"}, seed: instructions(4 << 20), write: instructions(4<<20 - 3), bounded: true,
 			peer: peerLoop(func(loop *domain.Loop) { loop.Name = "Peer renamed loop" })},
 		{name: "loop-edit-instructions-peer-instructions-conflict", fields: []string{"loops"}, seed: instructions(4 << 20), write: instructions(4<<20 - 3), bounded: true,
-			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = scaleP21SW296Body("peer instructions", 4<<20) })},
+			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = largeRowWriteBody("peer instructions", 4<<20) })},
 		{name: "loop-edit-instructions-peer-same-instructions", fields: []string{"loops"}, seed: instructions(4 << 20), write: instructions(4<<20 - 3), bounded: true,
-			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = scaleP21SW296Body("legal large instructions", 4<<20-3) })},
+			peer: peerLoop(func(loop *domain.Loop) { loop.Instructions = largeRowWriteBody("legal large instructions", 4<<20-3) })},
 		{name: "loop-added-at-max", fields: []string{"loops"}, write: func(data *domain.Bootstrap) {
-			loop := *scaleP21SW296Loop(data)
-			loop.ID, loop.Instructions = "sw296-added-loop", scaleP21SW296Body("added loop", loopMax)
+			loop := *largeRowWriteLoop(data)
+			loop.ID, loop.Instructions = "sw296-added-loop", largeRowWriteBody("added loop", loopMax)
 			data.Loops = append(data.Loops, loop)
 		}, bounded: true},
 		{name: "loop-removed-at-max", fields: []string{"loops"}, seed: instructions(loopMax), write: func(data *domain.Bootstrap) {
@@ -572,10 +572,10 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 		{name: "release-add-issue-peer-added", fields: []string{"releases"}, seed: releaseSeed(50_000, 4<<20), write: addIssue, bounded: true,
 			peer: peerRelease(func(release *domain.Release) { release.IssueIDs = append(release.IssueIDs, "peer-issue") })},
 		{name: "release-add-issue-peer-description", fields: []string{"releases"}, seed: releaseSeed(1000, 4<<20), write: addIssue, bounded: true,
-			peer: peerRelease(func(release *domain.Release) { release.Description = scaleP21SW296Body("peer notes", 4<<20) })},
+			peer: peerRelease(func(release *domain.Release) { release.Description = largeRowWriteBody("peer notes", 4<<20) })},
 		{name: "release-add-issue-peer-status-conflict", fields: []string{"releases"}, seed: releaseSeed(1000, 4<<20), write: func(data *domain.Bootstrap) {
 			addIssue(data)
-			scaleP21SW296Release(data).Status = "started"
+			largeRowWriteRelease(data).Status = "started"
 		}, bounded: true, peer: peerRelease(func(release *domain.Release) { release.Status = "completed" })},
 		{name: "release-add-issue-peer-deleted", fields: []string{"releases"}, seed: releaseSeed(50_000, 1<<20), write: addIssue, peer: deleted("releases", "sw296-release")},
 		{name: "release-removed", fields: []string{"releases"}, seed: releaseSeed(ids, 1<<20), write: func(data *domain.Bootstrap) {
@@ -590,9 +590,9 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 		{name: "document-content-edit-4mib", fields: []string{"documents"}, seed: documentSeed(4 << 20), write: func(data *domain.Bootstrap) {
 			document := &data.Documents[0]
 			previous := document.Revisions[0]
-			document.Content, document.Version = scaleP21SW296Body("edited document body", 4<<20), 4
+			document.Content, document.Version = largeRowWriteBody("edited document body", 4<<20), 4
 			document.Revisions = append([]domain.DocumentRevision{{ID: "edited", DocumentID: document.ID, Title: document.Title, Content: document.Content,
-				Author: data.Users[0], CreatedAt: scaleP21SW296At.Add(time.Hour)}, previous}, document.Revisions[1:]...)
+				Author: data.Users[0], CreatedAt: largeRowWriteAt.Add(time.Hour)}, previous}, document.Revisions[1:]...)
 		}, bounded: true},
 		{name: "document-title-peer-conflict", fields: []string{"documents"}, seed: documentSeed(2 << 20), write: func(data *domain.Bootstrap) {
 			data.Documents[0].Title = "Renamed large document"
@@ -603,69 +603,69 @@ func scaleP21SW296Cases() []scaleP21SW296Case {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := writeMetadataRecordRow(t.Context(), tx, workspace, metadataRecordKey{"documents", document.ID}, metadataRecord{data: raw, order: scaleP21SW296Order(t, tx, workspace, "documents", document.ID)}, nil); err != nil {
+			if err := writeMetadataRecordRow(t.Context(), tx, workspace, metadataRecordKey{"documents", document.ID}, metadataRecord{data: raw, order: largeRowWriteOrder(t, tx, workspace, "documents", document.ID)}, nil); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		// Projects outside the progress closure take the generic kernel.
 		{name: "project-renamed-large-description", seed: func(data *domain.Bootstrap) {
-			data.Projects[0].Description = scaleP21SW296Body("project description", searchableMax)
+			data.Projects[0].Description = largeRowWriteBody("project description", searchableMax)
 		}, write: func(data *domain.Bootstrap) { data.Projects[0].Name = "Renamed project" }, bounded: true},
 	}
 }
 
-func TestScaleP21SW296LargeRowWriteDifferential(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 0, false)
+func TestLargeRowWriteDifferential(t *testing.T) {
+	largeRowWrites(t, 0, false)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart1Reloaded(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 0, true)
+func TestLargeRowWriteDifferentialPart1Reloaded(t *testing.T) {
+	largeRowWrites(t, 0, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart2(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 1, false, true)
+func TestLargeRowWriteDifferentialPart2(t *testing.T) {
+	largeRowWrites(t, 1, false, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart3(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 2, false)
+func TestLargeRowWriteDifferentialPart3(t *testing.T) {
+	largeRowWrites(t, 2, false)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart3Reloaded(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 2, true)
+func TestLargeRowWriteDifferentialPart3Reloaded(t *testing.T) {
+	largeRowWrites(t, 2, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart4(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 3, false)
+func TestLargeRowWriteDifferentialPart4(t *testing.T) {
+	largeRowWrites(t, 3, false)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart4Reloaded(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 3, true)
+func TestLargeRowWriteDifferentialPart4Reloaded(t *testing.T) {
+	largeRowWrites(t, 3, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialPart5(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 4, false, true)
+func TestLargeRowWriteDifferentialPart5(t *testing.T) {
+	largeRowWrites(t, 4, false, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialReleaseAdd(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 5, false, true)
+func TestLargeRowWriteDifferentialReleaseAdd(t *testing.T) {
+	largeRowWrites(t, 5, false, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialReleaseRemove(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 6, false, true)
+func TestLargeRowWriteDifferentialReleaseRemove(t *testing.T) {
+	largeRowWrites(t, 6, false, true)
 }
 
-func TestScaleP21SW296LargeRowWriteDifferentialDocumentTitle(t *testing.T) {
-	scaleP21SW296LargeRowWrites(t, 7, false, true)
+func TestLargeRowWriteDifferentialDocumentTitle(t *testing.T) {
+	largeRowWrites(t, 7, false, true)
 }
 
-func scaleP21SW296LargeRowWrites(t *testing.T, part int, reloads ...bool) {
+func largeRowWrites(t *testing.T, part int, reloads ...bool) {
 	t.Helper()
-	f, view := scaleP21SW78Fixture(t)
+	f, view := legacyCountWriteFixture(t)
 	f.db.SetMaxOpenConns(4)
-	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
+	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != largeRowWriteTx {
 		t.Fatal("SW296 sizes assume the production work and transaction budgets", f.db.maxTransactionBytes)
 	}
-	for index, test := range scaleP21SW296Cases() {
+	for index, test := range largeRowWriteCases() {
 		shard := index % 5
 		// The 300,000-link fixtures each seed and write a large release
 		// twice. Keep them apart from the other large-row tests.
@@ -683,7 +683,7 @@ func scaleP21SW296LargeRowWrites(t *testing.T, part int, reloads ...bool) {
 		}
 		for _, reload := range reloads {
 			t.Run(fmt.Sprintf("%s/reload=%t", test.name, reload), func(t *testing.T) {
-				scaleP21SW296Run(t, f, view, test, reload)
+				largeRowWriteRun(t, f, view, test, reload)
 			})
 		}
 	}

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW19GitLabConfigProjection(data domain.Bootstrap) (string, []domain.IntegrationConnection) {
+func gitLabConfigProjection(data domain.Bootstrap) (string, []domain.IntegrationConnection) {
 	var connections []domain.IntegrationConnection
 	for _, item := range data.IntegrationConnections {
 		if item.Provider != "gitlab" {
@@ -25,11 +25,11 @@ func scaleP21SW19GitLabConfigProjection(data domain.Bootstrap) (string, []domain
 	return data.Workspace.URLKey, connections
 }
 
-func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
+func TestGitLabConfigsInstalledDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("sw19-installed-gitlab-")
 	zone := time.FixedZone(strings.Repeat("omitted-date-location", 50000), 3661)
 	when := time.Now().In(zone)
@@ -80,14 +80,14 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 		}
 		// The oracle is the legacy owner's image: the bounded view's image
 		// holds no connections, so its read decodes them from the installed
-		// logical source (SW559; it read the empty image before).
+		// logical source (resident image readers; it read the empty image before).
 		for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 			for _, key := range []string{workspace, "", workspace + "-missing", strings.ToUpper(workspace)} {
-				before, found := scaleP21ResidentOracle(f.SQLiteStore, key)
-				if _, resident := scaleP21ResidentOracle(source, key); resident != found {
+				before, found := scaleResidentOracle(f.SQLiteStore, key)
+				if _, resident := scaleResidentOracle(source, key); resident != found {
 					t.Fatal(stage, "bounded view and owner disagree on the workspace", key)
 				}
-				expectedWorkspace, expected := scaleP21SW19GitLabConfigProjection(before)
+				expectedWorkspace, expected := gitLabConfigProjection(before)
 				read, actualFound, err := source.BeginGitLabConnectionConfigsRead(t.Context(), key)
 				if err != nil || actualFound != found {
 					t.Fatal(stage, "installed selection", err, found, actualFound)
@@ -105,8 +105,8 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 				read.Close()
 			}
 		}
-		owner, _ := scaleP21ResidentOracle(f.SQLiteStore, workspace)
-		cold, held := scaleP21ResidentOracle(probe, workspace)
+		owner, _ := scaleResidentOracle(f.SQLiteStore, workspace)
+		cold, held := scaleResidentOracle(probe, workspace)
 		if len(owner.IntegrationConnections) == 0 || !held || len(cold.IntegrationConnections) != 0 {
 			t.Fatal("independent loader/source hold witness changed")
 		}
@@ -116,7 +116,7 @@ func TestScaleP21SW19GitLabConfigsInstalledDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW19GitLabConfigsOwnershipAdmission(t *testing.T) {
+func TestGitLabConfigsOwnershipAdmission(t *testing.T) {
 	id := "owned-gitlab-id"
 	body := strings.Repeat("owned<&>\x00", 2000)
 	config := map[string]string{"owned-key": body}
@@ -168,7 +168,7 @@ func TestScaleP21SW19GitLabConfigsOwnershipAdmission(t *testing.T) {
 		t.Fatal("saturated admission did not reject before cloning", err)
 	}
 	repo.metadataResidency.work.limit = metadataWorkBytes()
-	source.IntegrationConnections[0].Config = map[string]string{"over": strings.Repeat("x", scaleP21SW19GitLabConfigsMaxWork/33)}
+	source.IntegrationConnections[0].Config = map[string]string{"over": strings.Repeat("x", gitLabConfigsMaxWork/33)}
 	repo.workspaces["physical"] = source
 	if _, _, err := repo.BeginGitLabConnectionConfigsRead(t.Context(), ""); !errors.Is(err, ErrMetadataWorkBudget) || repo.metadataResidency.work.used != 0 {
 		t.Fatal("oversized config did not reject before allocation", err)

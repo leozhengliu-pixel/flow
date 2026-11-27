@@ -12,12 +12,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW0ResidentBoundsFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *sqlTx) {
+func residentBoundsFixture(t *testing.T) (scaleFixture, *SQLiteStore, *sqlTx) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off") // Raw SQLite BLOB identifiers predate journal capture.
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	f.db.SetMaxOpenConns(1)
 	options := *metadataReadOptions(f.dialect)
 	options.ReadOnly = false
@@ -34,8 +34,8 @@ func scaleP21SW0ResidentBoundsFixture(t *testing.T) (scaleP09Fixture, *SQLiteSto
 	return f, view, tx
 }
 
-func TestScaleP21SW0ResidentBoundsOversizedKeyNoTransfer(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentBoundsFixture(t)
+func TestResidentBoundsOversizedKeyNoTransfer(t *testing.T) {
+	f, view, tx := residentBoundsFixture(t)
 	if f.dialect == "mysql" {
 		t.Skip("VARBINARY(191) enforces the byte bound at insertion")
 	}
@@ -83,8 +83,8 @@ func TestScaleP21SW0ResidentBoundsOversizedKeyNoTransfer(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResidentBoundsAcceptedKeysAndPoolOne(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentBoundsFixture(t)
+func TestResidentBoundsAcceptedKeysAndPoolOne(t *testing.T) {
+	f, view, tx := residentBoundsFixture(t)
 	workspace := f.data.Workspace.URLKey
 	keys := []string{"", strings.Repeat("名", 63) + "ab", strings.Repeat("x", 191), "ordinary"}
 	for index, key := range keys {
@@ -131,8 +131,8 @@ func TestScaleP21SW0ResidentBoundsAcceptedKeysAndPoolOne(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResidentBoundsPhysicalKeyAliasesFailClosed(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentBoundsFixture(t)
+func TestResidentBoundsPhysicalKeyAliasesFailClosed(t *testing.T) {
+	f, view, tx := residentBoundsFixture(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite TEXT/BLOB storage classes permit distinct physical keys with equal decoded bytes")
 	}
@@ -164,8 +164,8 @@ func TestScaleP21SW0ResidentBoundsPhysicalKeyAliasesFailClosed(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResidentBoundsRootTextBytes(t *testing.T) {
-	f, view, tx := scaleP21SW0ResidentBoundsFixture(t)
+func TestResidentBoundsRootTextBytes(t *testing.T) {
+	f, view, tx := residentBoundsFixture(t)
 	workspace := f.data.Workspace.URLKey
 	var original []byte
 	if err := tx.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&original); err != nil {
@@ -224,7 +224,7 @@ func TestScaleP21SW0ResidentBoundsRootTextBytes(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0ResidentBoundsCancelledNoSQL(t *testing.T) {
+func TestResidentBoundsCancelledNoSQL(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	view := &SQLiteStore{dialect: "sqlite", metadataResidency: newMetadataResidency()}
 	cancelled, cancel := context.WithCancel(t.Context())

@@ -5,7 +5,7 @@
     "auditCodingEnvironment": {
       "owner": "P18",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope retains the original detached audit-only context, actor and credential attribution after native environment commit or membership revocation. Callback only stages the supplied audit metadata. TestScaleP21SW7DeferredAuditsDifferential compares audits, canonical root Viewer, webhook/realtime output, cancellation and missing paths across principal/key classes and repeated persistent SQLite runs; native operation authorization stays independent.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope retains the original detached audit-only context, actor and credential attribution after native environment commit or membership revocation. Callback only stages the supplied audit metadata. TestDeferredAuditsDifferential compares audits, canonical root Viewer, webhook/realtime output, cancellation and missing paths across principal/key classes and repeated persistent SQLite runs; native operation authorization stays independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -29,7 +29,7 @@
     "codingEnvironmentAccess": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Bounded input is resident workspace identity and workspaceSettings; feature and live WorkspaceRole checks and admin/guest semantics remain intact. The exact legacy accessor remains off mode. TestScaleP21M1CoreReadsDifferential compares responses across principal/credential classes, cross-workspace users, default/missing workspaces and oversized unrelated records.",
+      "reason": "Bounded input is resident workspace identity and workspaceSettings; feature and live WorkspaceRole checks and admin/guest semantics remain intact. The exact legacy accessor remains off mode. TestScaleCoreReadsDifferential compares responses across principal/credential classes, cross-workspace users, default/missing workspaces and oversized unrelated records.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -37,7 +37,7 @@
     "codingWorkspaceKey": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Only resident workspace IDs/URL keys are inspected in bounded mode; explicit request keys retain precedence and off mode keeps WorkspaceMetadata. The catalog is bounded by the resident policy process cap. TestScaleP21M1CoreReadsDifferential compares explicit, default, missing and alternate workspace identities. Authorization remains in the caller.",
+      "reason": "Only resident workspace IDs/URL keys are inspected in bounded mode; explicit request keys retain precedence and off mode keeps WorkspaceMetadata. The catalog is bounded by the resident policy process cap. TestScaleCoreReadsDifferential compares explicit, default, missing and alternate workspace identities. Authorization remains in the caller.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"

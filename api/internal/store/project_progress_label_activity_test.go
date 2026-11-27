@@ -13,7 +13,7 @@ import (
 func TestProjectProgressRebuildReadsLabelDeltaActivity(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
+	f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
 	workspace := f.data.Workspace.URLKey
 	labeled, err := f.UpdateIssueRecord(t.Context(), workspace, issue.ID, &issue.Version, IssueMutationScope{}, func(data *domain.Bootstrap, current *domain.Issue) error {
 		current.Labels = []domain.IssueLabel{{ID: "p21-label", Name: "Label"}}

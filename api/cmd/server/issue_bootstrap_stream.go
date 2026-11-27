@@ -142,7 +142,7 @@ func (s *server) openIssueRecordsBootstrapRead(w http.ResponseWriter, r *http.Re
 	if s.authDisabled && r.Header.Get(localStoreHeader) == localStoreShadowCapability {
 		materializeDevelopmentMembers(&data)
 	}
-	if err := scaleP21SanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
+	if err := scaleSanitizeBootstrap(r.Context(), &data, read.StreamString); err != nil {
 		return nil, err
 	}
 	s.applyCalendarAway(r.Context(), &data)

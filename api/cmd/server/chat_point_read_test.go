@@ -18,20 +18,20 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21ChatPointError(err error) string {
+func scaleChatPointError(err error) string {
 	if err == nil {
 		return ""
 	}
 	return fmt.Sprintf("%T: %v", err, err)
 }
 
-func scaleP21ChatPointIdentity(ctx context.Context, userID string) context.Context {
+func scaleChatPointIdentity(ctx context.Context, userID string) context.Context {
 	return withChatIdentityAuthentication(ctx, domain.ChatIdentity{
 		UserID: userID, AuthProvider: "password", AuthenticatedAt: time.Now().UTC(),
 	})
 }
 
-func scaleP21ChatPointCall(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID, path string, result any) (err error, held int, closeOutput func()) {
+func scaleChatPointCall(t *testing.T, source *store.SQLiteStore, ctx context.Context, workspace, userID, path string, result any) (err error, held int, closeOutput func()) {
 	t.Helper()
 	ctx, closeScope := beginMetadataOutputReads(ctx)
 	closeOutput = func() {
@@ -49,11 +49,11 @@ func scaleP21ChatPointCall(t *testing.T, source *store.SQLiteStore, ctx context.
 	return err, held, closeOutput
 }
 
-func TestScaleP21ChatPointReadPermissionDifferential(t *testing.T) {
+func TestScaleChatPointReadPermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		data, found := repo.WorkspaceMetadata(workspace)
 		if !found {
@@ -83,12 +83,12 @@ func TestScaleP21ChatPointReadPermissionDifferential(t *testing.T) {
 			t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
 				f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 					for _, ref := range []string{public.ID, public.Identifier, strings.ToLower(public.Identifier), private.ID, "missing-point-read"} {
-						ctx := scaleP21ChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
+						ctx := scaleChatPointIdentity(f.literalRequest(user, key, nil).Context(), user.ID)
 						var before, after domain.Issue
 						path := "/api/issue-records/" + url.PathEscape(ref)
-						oldErr, _, closeOld := scaleP21ChatPointCall(t, repo, ctx, workspace, user.ID, path, &before)
-						newErr, held, closeNew := scaleP21ChatPointCall(t, f.probe, ctx, workspace, user.ID, path, &after)
-						if scaleP21ChatPointError(oldErr) != scaleP21ChatPointError(newErr) || !reflect.DeepEqual(before, after) {
+						oldErr, _, closeOld := scaleChatPointCall(t, repo, ctx, workspace, user.ID, path, &before)
+						newErr, held, closeNew := scaleChatPointCall(t, f.probe, ctx, workspace, user.ID, path, &after)
+						if scaleChatPointError(oldErr) != scaleChatPointError(newErr) || !reflect.DeepEqual(before, after) {
 							t.Fatalf("ref=%q point permission/output changed: old=%v new=%v", ref, oldErr, newErr)
 						}
 						if held == 0 {
@@ -118,11 +118,11 @@ func TestScaleP21ChatPointReadPermissionDifferential(t *testing.T) {
 		// Revocation is checked again by the actual handler, even after a
 		// successful owned read of this issue by the same principal.
 		authRequest[[]domain.IssuePermission](t, privateAdmin, http.MethodPut, f.host.URL+"/api/issues/"+private.ID+"/permissions", map[string]any{"permissions": []map[string]string{}}, workspace, http.StatusOK)
-		ctx := scaleP21ChatPointIdentity(t.Context(), guest.ID)
+		ctx := scaleChatPointIdentity(t.Context(), guest.ID)
 		var old, current domain.Issue
-		oldErr, _, closeOld := scaleP21ChatPointCall(t, repo, ctx, workspace, guest.ID, "/api/issue-records/"+private.ID, &old)
-		newErr, _, closeNew := scaleP21ChatPointCall(t, f.probe, ctx, workspace, guest.ID, "/api/issue-records/"+private.ID, &current)
-		if oldErr == nil || scaleP21ChatPointError(oldErr) != scaleP21ChatPointError(newErr) || !reflect.DeepEqual(old, current) {
+		oldErr, _, closeOld := scaleChatPointCall(t, repo, ctx, workspace, guest.ID, "/api/issue-records/"+private.ID, &old)
+		newErr, _, closeNew := scaleChatPointCall(t, f.probe, ctx, workspace, guest.ID, "/api/issue-records/"+private.ID, &current)
+		if oldErr == nil || scaleChatPointError(oldErr) != scaleChatPointError(newErr) || !reflect.DeepEqual(old, current) {
 			t.Fatal("point read cached an earlier explicit grant", oldErr, newErr)
 		}
 		closeOld()
@@ -133,11 +133,11 @@ func TestScaleP21ChatPointReadPermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
+func TestScaleChatPointReadErrorsMergeAndCap(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Point merge target", "teamId": f.data.Teams[0].ID, "description": strings.Repeat("complete body ", 5000)}, workspace, http.StatusCreated)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -145,7 +145,7 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 			t.Fatal(err)
 		}
 		path := "/api/issue-records/" + issue.ID
-		ctx := scaleP21ChatPointIdentity(t.Context(), userID)
+		ctx := scaleChatPointIdentity(t.Context(), userID)
 		for _, name := range []string{"map-merge", "partial-type-error", "nil-target", "nil-result", "missing-issue", "missing-workspace", "empty-workspace", "empty-user", "missing-user", "unverified", "expired", "unsupported-path", "query", "fragment", "malformed-path", "scope-canceled"} {
 			t.Run(name, func(t *testing.T) {
 				var results []any
@@ -208,9 +208,9 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 						readCtx, cancel = context.WithCancel(readCtx)
 						cancel()
 					}
-					callErr, _, closeOutput := scaleP21ChatPointCall(t, source, readCtx, readWorkspace, readUser, readPath, target)
+					callErr, _, closeOutput := scaleChatPointCall(t, source, readCtx, readWorkspace, readUser, readPath, target)
 					closes = append(closes, closeOutput)
-					failures = append(failures, scaleP21ChatPointError(callErr))
+					failures = append(failures, scaleChatPointError(callErr))
 					results = append(results, target)
 				}
 				if failures[0] != failures[1] || !reflect.DeepEqual(results[0], results[1]) {
@@ -235,7 +235,7 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 			})
 		}
 		var response map[string]any
-		readErr, _, closeResponse := scaleP21ChatPointCall(t, repo, ctx, workspace, userID, path, &response)
+		readErr, _, closeResponse := scaleChatPointCall(t, repo, ctx, workspace, userID, path, &response)
 		if readErr != nil {
 			t.Fatal(readErr)
 		}
@@ -259,9 +259,9 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 				}()
 				for _, source := range []*store.SQLiteStore{repo, view} {
 					var got map[string]any
-					err, held, closeOutput := scaleP21ChatPointCall(t, source, ctx, workspace, userID, path, &got)
+					err, held, closeOutput := scaleChatPointCall(t, source, ctx, workspace, userID, path, &got)
 					closes = append(closes, closeOutput)
-					failures = append(failures, scaleP21ChatPointError(err))
+					failures = append(failures, scaleChatPointError(err))
 					if source == view && held == 0 {
 						t.Fatal("over-limit response released before caller handled its error")
 					}
@@ -345,11 +345,11 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 				}
 				var before, after domain.Issue
 				readCtx := withChatIdentityAuthentication(t.Context(), identity)
-				oldErr, _, closeOld := scaleP21ChatPointCall(t, repo, readCtx, workspace, acting, path, &before)
+				oldErr, _, closeOld := scaleChatPointCall(t, repo, readCtx, workspace, acting, path, &before)
 				defer closeOld()
-				newErr, _, closeNew := scaleP21ChatPointCall(t, view, readCtx, workspace, acting, path, &after)
+				newErr, _, closeNew := scaleChatPointCall(t, view, readCtx, workspace, acting, path, &after)
 				defer closeNew()
-				if scaleP21ChatPointError(oldErr) != scaleP21ChatPointError(newErr) || !reflect.DeepEqual(before, after) || (name == "mfa-valid") != (newErr == nil) {
+				if scaleChatPointError(oldErr) != scaleChatPointError(newErr) || !reflect.DeepEqual(before, after) || (name == "mfa-valid") != (newErr == nil) {
 					t.Fatal("current consent/account policy changed", oldErr, newErr)
 				}
 			})
@@ -384,18 +384,18 @@ func TestScaleP21ChatPointReadErrorsMergeAndCap(t *testing.T) {
 	}
 }
 
-func TestScaleP21ChatPointReadLifetimeAndRecorder(t *testing.T) {
+func TestScaleChatPointReadLifetimeAndRecorder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, userID := f.data.Workspace.URLKey, f.data.Viewer.ID
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Original point lifetime", "teamId": f.data.Teams[0].ID}, workspace, http.StatusCreated)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx := scaleP21ChatPointIdentity(t.Context(), userID)
+		ctx := scaleChatPointIdentity(t.Context(), userID)
 		ctx, cancel := context.WithCancel(ctx)
 		owned, closeScope := beginMetadataOutputReads(ctx)
 		var first domain.Issue
@@ -409,7 +409,7 @@ func TestScaleP21ChatPointReadLifetimeAndRecorder(t *testing.T) {
 		}
 		var counts [2]int
 		for index := range counts {
-			measureCtx := scaleP21ChatPointIdentity(t.Context(), userID)
+			measureCtx := scaleChatPointIdentity(t.Context(), userID)
 			measureCtx, closeMeasure := beginIndependentMetadataOutputReads(measureCtx)
 			measureCtx = store.WithSQLStatementObserver(measureCtx, func(string) { counts[index]++ })
 			var measured domain.Issue
@@ -527,7 +527,7 @@ func TestScaleP21ChatPointReadLifetimeAndRecorder(t *testing.T) {
 		var jobs sync.WaitGroup
 		for range 4 {
 			jobs.Go(func() {
-				local := scaleP21ChatPointIdentity(t.Context(), userID)
+				local := scaleChatPointIdentity(t.Context(), userID)
 				local, closeLocal := beginMetadataOutputReads(local)
 				defer closeLocal()
 				var read domain.Issue

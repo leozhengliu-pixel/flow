@@ -14,12 +14,12 @@ import (
 )
 
 // The events metadataTeamMutation routes to mutateTeamMetadata.
-var scaleP21TeamMetadataEvents = map[string]bool{
+var scaleTeamMetadataEvents = map[string]bool{
 	"team.created": true, "team.updated": true, "team.settings_updated": true, "team.deleted": true,
 	"alm.org_teams_imported": true, "alm.users_imported": true, "alm.projects_imported": true,
 }
 
-type scaleP21TeamMetadataUse struct {
+type scaleTeamMetadataUse struct {
 	function string
 	// call names the function or method the event literal is passed to; empty
 	// for any other use (comparison, table, list).
@@ -29,8 +29,8 @@ type scaleP21TeamMetadataUse struct {
 	bounded bool
 }
 
-func scaleP21TeamMetadataUses(file *ast.File) []scaleP21TeamMetadataUse {
-	var uses []scaleP21TeamMetadataUse
+func scaleTeamMetadataUses(file *ast.File) []scaleTeamMetadataUse {
+	var uses []scaleTeamMetadataUse
 	visit := func(function string, root ast.Node) {
 		var stack []ast.Node
 		ast.Inspect(root, func(node ast.Node) bool {
@@ -44,12 +44,12 @@ func scaleP21TeamMetadataUses(file *ast.File) []scaleP21TeamMetadataUse {
 				return true
 			}
 			value, err := strconv.Unquote(literal.Value)
-			if err != nil || !scaleP21TeamMetadataEvents[value] {
+			if err != nil || !scaleTeamMetadataEvents[value] {
 				return true
 			}
-			use := scaleP21TeamMetadataUse{function: function}
+			use := scaleTeamMetadataUse{function: function}
 			if len(stack) >= 2 {
-				if call, ok := stack[len(stack)-2].(*ast.CallExpr); ok && scaleP21TeamMetadataArgument(call.Args, literal) {
+				if call, ok := stack[len(stack)-2].(*ast.CallExpr); ok && scaleTeamMetadataArgument(call.Args, literal) {
 					switch callee := call.Fun.(type) {
 					case *ast.SelectorExpr:
 						use.call = callee.Sel.Name
@@ -96,7 +96,7 @@ func scaleP21TeamMetadataUses(file *ast.File) []scaleP21TeamMetadataUse {
 	return uses
 }
 
-func scaleP21TeamMetadataArgument(items []ast.Expr, target ast.Expr) bool {
+func scaleTeamMetadataArgument(items []ast.Expr, target ast.Expr) bool {
 	for _, item := range items {
 		if item == target {
 			return true
@@ -105,14 +105,14 @@ func scaleP21TeamMetadataArgument(items []ast.Expr, target ast.Expr) bool {
 	return false
 }
 
-// TestScaleP21TeamMetadataCallset proves mutateTeamMetadata (the original
+// TestScaleTeamMetadataCallset proves mutateTeamMetadata (the original
 // full-snapshot team writer) is unreachable from a bounded store except
 // through a cold facade: dispatchMutation's bounded branch returns before it,
 // and every production producer of the events it serves is either createTeam
 // on its flag-off branch (bounded createTeam uses CreateTeamRecords) or a
 // registered COLD consumer, which only a cold facade (with the bounded
 // representation disabled) runs.
-func TestScaleP21TeamMetadataCallset(t *testing.T) {
+func TestScaleTeamMetadataCallset(t *testing.T) {
 	// 1. The only reference is dispatchMutation's call, after the bounded
 	// dispatch block that always returns.
 	references := 0
@@ -227,7 +227,7 @@ func TestScaleP21TeamMetadataCallset(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, use := range scaleP21TeamMetadataUses(file) {
+		for _, use := range scaleTeamMetadataUses(file) {
 			key := relative + ":" + use.function
 			if use.call != "" && (strings.HasPrefix(use.call, "Mutate") || strings.Contains(use.call, "dispatch") || strings.Contains(strings.ToLower(use.call), "cold")) {
 				key += ":" + use.call
@@ -253,7 +253,7 @@ func TestScaleP21TeamMetadataCallset(t *testing.T) {
 	}
 }
 
-func TestScaleP21TeamMetadataCallsetRejectsFalseProofs(t *testing.T) {
+func TestScaleTeamMetadataCallsetRejectsFalseProofs(t *testing.T) {
 	for _, fixture := range []struct {
 		name, body string
 		bounded    bool
@@ -269,7 +269,7 @@ func TestScaleP21TeamMetadataCallsetRejectsFalseProofs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			uses := scaleP21TeamMetadataUses(file)
+			uses := scaleTeamMetadataUses(file)
 			if len(uses) != 1 || uses[0].call == "" || uses[0].bounded != fixture.bounded {
 				t.Fatalf("uses=%+v want bounded=%t", uses, fixture.bounded)
 			}

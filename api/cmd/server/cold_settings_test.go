@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW207Outcome struct {
+type coldSettingsOutcome struct {
 	Code                            int
 	Header                          http.Header
 	Response                        json.RawMessage
@@ -25,7 +25,7 @@ type scaleP21SW207Outcome struct {
 	Events, Webhooks, Realtime      []json.RawMessage
 }
 
-func scaleP21SW207Normalize(t *testing.T, value any, generated string, started, finished time.Time) any {
+func coldSettingsNormalize(t *testing.T, value any, generated string, started, finished time.Time) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -61,9 +61,9 @@ func scaleP21SW207Normalize(t *testing.T, value any, generated string, started, 
 	return walk(result)
 }
 
-func scaleP21SW207Rows(t *testing.T, f scaleP21SW10Fixture, query string, arg any, jsonColumns ...int) [][]any {
+func coldSettingsRows(t *testing.T, f notificationsFixture, query string, arg any, jsonColumns ...int) [][]any {
 	t.Helper()
-	rows := (&scaleP21TriageWriterFixture{reader: f.reader}).rows(t, query, arg)
+	rows := (&scaleTriageWriterFixture{reader: f.reader}).rows(t, query, arg)
 	for _, row := range rows {
 		for _, column := range jsonColumns {
 			switch raw := row[column].(type) {
@@ -78,18 +78,18 @@ func scaleP21SW207Rows(t *testing.T, f scaleP21SW10Fixture, query string, arg an
 	return rows
 }
 
-func scaleP21SW207State(t *testing.T, f scaleP21SW10Fixture) scaleP21SW207Outcome {
+func coldSettingsState(t *testing.T, f notificationsFixture) coldSettingsOutcome {
 	t.Helper()
 	key := f.data.Workspace.URLKey
-	return scaleP21SW207Outcome{
-		Root:     scaleP21SW207Rows(t, f, `SELECT data FROM workspace_states WHERE workspace_key=?`, key, 0),
-		Metadata: scaleP21SW207Rows(t, f, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, key, 3),
-		Issues:   scaleP21SW207Rows(t, f, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, key, 3),
-		Content:  scaleP21SW207Rows(t, f, `SELECT kind,resource_id,id,created_at,owner_id,parent_id,status,next_attempt_at,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id`, key, 8),
+	return coldSettingsOutcome{
+		Root:     coldSettingsRows(t, f, `SELECT data FROM workspace_states WHERE workspace_key=?`, key, 0),
+		Metadata: coldSettingsRows(t, f, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, key, 3),
+		Issues:   coldSettingsRows(t, f, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, key, 3),
+		Content:  coldSettingsRows(t, f, `SELECT kind,resource_id,id,created_at,owner_id,parent_id,status,next_attempt_at,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id`, key, 8),
 	}
 }
 
-func scaleP21SW207RestoreOrders(t *testing.T, f scaleP21SW10Fixture, orders [][]any) {
+func restoreOrders(t *testing.T, f notificationsFixture, orders [][]any) {
 	t.Helper()
 	query := `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`
 	if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
@@ -110,7 +110,7 @@ func scaleP21SW207RestoreOrders(t *testing.T, f scaleP21SW10Fixture, orders [][]
 	}
 }
 
-func scaleP21SW207Serve(t *testing.T, source *store.SQLiteStore, workspace, viewer, session, method, path, body string, modify func(context.Context) context.Context) *httptest.ResponseRecorder {
+func coldSettingsServe(t *testing.T, source *store.SQLiteStore, workspace, viewer, session, method, path, body string, modify func(context.Context) context.Context) *httptest.ResponseRecorder {
 	t.Helper()
 	service := &server{store: source}
 	mux := http.NewServeMux()
@@ -133,7 +133,7 @@ func scaleP21SW207Serve(t *testing.T, source *store.SQLiteStore, workspace, view
 			t.Fatal("real settings cookie authenticated the wrong viewer")
 		}
 		if source.BoundedMetadataEnabled() {
-			route, selected := scaleP21ColdAuthorizationRoute(r)
+			route, selected := scaleColdAuthorizationRoute(r)
 			if !selected || !strings.HasPrefix(route.consumer, "server/settings_features.go:") {
 				t.Fatal("settings authentication did not select its exact registered COLD route")
 			}
@@ -153,7 +153,7 @@ func scaleP21SW207Serve(t *testing.T, source *store.SQLiteStore, workspace, view
 		request = request.WithContext(modify(request.Context()))
 	}
 	response := httptest.NewRecorder()
-	writer := &scaleP21SW215ColdOutputWriter{ResponseRecorder: response, check: func() {
+	writer := &coldOutputWriter{ResponseRecorder: response, check: func() {
 		outputChecks++
 		if source.BoundedMetadataEnabled() && (held == nil || held.Store() == nil || scope == nil || scope.closed) {
 			t.Error("settings response encoded after its COLD lifetime ended")
@@ -169,13 +169,13 @@ func scaleP21SW207Serve(t *testing.T, source *store.SQLiteStore, workspace, view
 	return response
 }
 
-func TestScaleP21SW207ColdSettingsRoutesDifferential(t *testing.T) {
+func TestColdSettingsRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "on")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	_, session, err := repo.Login(t.Context(), f.data.Viewer.Email, "p03-fixture-password")
 	if err != nil {
@@ -251,49 +251,49 @@ func TestScaleP21SW207ColdSettingsRoutesDifferential(t *testing.T) {
 			var expectedOrders [][]any
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				reset()
-				orders := scaleP21SW207Rows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
+				orders := coldSettingsRows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 				if source == repo {
 					expectedOrders = orders
 				} else {
 					// Delta reset preserves holes and appends restored rows;
 					// restore only the fixture's exact pre-request ordinals.
-					scaleP21SW207RestoreOrders(t, f, expectedOrders)
+					restoreOrders(t, f, expectedOrders)
 					if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 						t.Fatal(err)
 					}
 					if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 						t.Fatal(err)
 					}
-					orders = scaleP21SW207Rows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
+					orders = coldSettingsRows(t, f, `SELECT field,record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 					if !reflect.DeepEqual(expectedOrders, orders) {
 						t.Fatal("literal and bounded settings legs began with different canonical collection orders")
 					}
 				}
 				prior := map[any]bool{}
-				for _, row := range scaleP21SW207Rows(t, f, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
+				for _, row := range coldSettingsRows(t, f, `SELECT id FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID) {
 					prior[row[0]] = true
 				}
-				got := scaleP21SW207Outcome{}
+				got := coldSettingsOutcome{}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot}))
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot}))
 				})
 				source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "clientId": event.ClientID, "payload": event.Payload}))
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "clientId": event.ClientID, "payload": event.Payload}))
 				})
 				started := time.Now().UTC()
-				response := scaleP21SW207Serve(t, source, workspace, f.data.Viewer.ID, session, test.method, test.path, test.body, nil)
+				response := coldSettingsServe(t, source, workspace, f.data.Viewer.ID, session, test.method, test.path, test.body, nil)
 				finished := time.Now().UTC()
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
-				state := scaleP21SW207State(t, f)
+				state := coldSettingsState(t, f)
 				state.Code, state.Header = response.Code, response.Header().Clone()
 				if response.Body.Len() != 0 {
 					state.Response = bytes.Clone(response.Body.Bytes())
 				}
 				state.Webhooks, state.Realtime = got.Webhooks, got.Realtime
-				for _, row := range scaleP21SW207Rows(t, f, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID, 3, 4) {
+				for _, row := range coldSettingsRows(t, f, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID, 3, 4) {
 					if !prior[row[0]] {
-						state.Events = append(state.Events, scaleP21SW106Envelope(t, row[1:]))
+						state.Events = append(state.Events, discussionRoutesEnvelope(t, row[1:]))
 					}
 				}
 				if state.Code != test.code || len(state.Events) != test.events || len(state.Webhooks) != test.events || len(state.Realtime) != test.events {
@@ -309,11 +309,11 @@ func TestScaleP21SW207ColdSettingsRoutesDifferential(t *testing.T) {
 					}
 					generated = item.ID
 				}
-				actual := scaleP21SW207Normalize(t, state, generated, started, finished)
+				actual := coldSettingsNormalize(t, state, generated, started, finished)
 				if source == repo {
 					expected = actual
 				} else if !reflect.DeepEqual(expected, actual) {
-					t.Fatalf("cold settings output/effects differ: %s", scaleP21M2Diff(expected, actual))
+					t.Fatalf("cold settings output/effects differ: %s", policyFirstDifference(expected, actual))
 				}
 				if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 					t.Fatal("cold settings route leaked output or entered HOT hydration")
@@ -339,9 +339,9 @@ func TestScaleP21SW207ColdSettingsRoutesDifferential(t *testing.T) {
 		{"verification", func(ctx context.Context) context.Context { return store.WithMetadataRecordVerification(ctx) }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			before := scaleP21SW207State(t, f)
-			response := scaleP21SW207Serve(t, f.probe, workspace, f.data.Viewer.ID, session, http.MethodPatch, "/api/project-statuses/"+a, `{"name":"must not write"}`, test.context)
-			if response.Code < 400 || !strings.Contains(response.Body.String(), store.ErrBoundedMetadataCoverage.Error()) || !reflect.DeepEqual(before, scaleP21SW207State(t, f)) {
+			before := coldSettingsState(t, f)
+			response := coldSettingsServe(t, f.probe, workspace, f.data.Viewer.ID, session, http.MethodPatch, "/api/project-statuses/"+a, `{"name":"must not write"}`, test.context)
+			if response.Code < 400 || !strings.Contains(response.Body.String(), store.ErrBoundedMetadataCoverage.Error()) || !reflect.DeepEqual(before, coldSettingsState(t, f)) {
 				t.Fatal("unsupported context lost its refusal or changed metadata", response.Code, response.Body.String())
 			}
 		})

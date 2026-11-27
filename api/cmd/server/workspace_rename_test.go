@@ -8,15 +8,15 @@ import (
 	"flow/api/internal/store"
 )
 
-// SW555: a workspace update with bounded metadata on, a rename included, runs
+// A workspace update with bounded metadata on, a rename included, runs
 // the literal legacy update on a COLD facade (PATCH /api/workspaces/{key} is a
 // COLD route). Renamed flag off and bounded from the same state, the answers
 // are identical, the complete metadata under the new key is identical (SQL
 // and the bounded image), and the bounded store no longer holds the old key.
 // Before, the bounded update wrote the resident skeleton as the workspace's
 // metadata (its non-resident records replaced by nothing).
-func TestScaleP21SW555WorkspaceRenameColdDifferential(t *testing.T) {
-	f, from := scaleP21SW550Fixture(t)
+func TestWorkspaceRenameColdDifferential(t *testing.T) {
+	f, from := routeTemperatureGuardFixture(t)
 	to := from + "-renamed"
 	ctx, scope := store.WithColdScope(t.Context(), "PATCH /api/workspaces/{workspaceKey}")
 	defer scope.Close()
@@ -78,7 +78,7 @@ func TestScaleP21SW555WorkspaceRenameColdDifferential(t *testing.T) {
 	}
 	boundedImage, ok := f.probe.WorkspaceMetadata(to)
 	if !ok || encode(boundedImage) != encode(legacyImage) {
-		t.Fatalf("SW555 the bounded image under the new key differs from flag off:\n legacy=%s\nbounded=%s", scaleP21SW555Clip(encode(legacyImage), encode(boundedImage)), scaleP21SW555Clip(encode(boundedImage), encode(legacyImage)))
+		t.Fatalf("SW555 the bounded image under the new key differs from flag off:\n legacy=%s\nbounded=%s", workspaceRenameClip(encode(legacyImage), encode(boundedImage)), workspaceRenameClip(encode(boundedImage), encode(legacyImage)))
 	}
 	if err := f.repository.ReloadWorkspace(t.Context(), to); err != nil {
 		t.Fatal(err)
@@ -92,8 +92,8 @@ func TestScaleP21SW555WorkspaceRenameColdDifferential(t *testing.T) {
 	}
 }
 
-// scaleP21SW555Clip shows text around its first difference from other.
-func scaleP21SW555Clip(text, other string) string {
+// clip shows text around its first difference from other.
+func workspaceRenameClip(text, other string) string {
 	index := 0
 	for index < len(text) && index < len(other) && text[index] == other[index] {
 		index++

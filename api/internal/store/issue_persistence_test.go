@@ -14,9 +14,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21IssuePersistenceFixture(t *testing.T, projects []domain.Project, documents []domain.Document) (scaleP09Fixture, domain.Issue) {
+func scaleIssuePersistenceFixture(t *testing.T, projects []domain.Project, documents []domain.Document) (scaleFixture, domain.Issue) {
 	t.Helper()
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	at := utcDay(time.Now().UTC()).AddDate(0, 0, -15)
 	person := domain.User{ID: "p21-person", Name: "Person", Active: true}
 	team := domain.Team{ID: "p21-team", Name: "Selected private team", Key: "P21", Private: true}
@@ -46,7 +46,7 @@ func scaleP21IssuePersistenceFixture(t *testing.T, projects []domain.Project, do
 	return f, issue
 }
 
-func scaleP21IssuePersistenceView(t *testing.T, f scaleP09Fixture, bounded, reload bool) *SQLiteStore {
+func scaleIssuePersistenceView(t *testing.T, f scaleFixture, bounded, reload bool) *SQLiteStore {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	if reload {
@@ -68,7 +68,7 @@ func scaleP21IssuePersistenceView(t *testing.T, f scaleP09Fixture, bounded, relo
 	return view
 }
 
-type scaleP21IssuePhysicalField struct {
+type scaleIssuePhysicalField struct {
 	Shape string
 	Root  json.RawMessage
 	Rows  []struct {
@@ -78,7 +78,7 @@ type scaleP21IssuePhysicalField struct {
 	}
 }
 
-func scaleP21IssuePhysical(t *testing.T, repo *SQLiteStore, workspace, name string) scaleP21IssuePhysicalField {
+func scaleIssuePhysical(t *testing.T, repo *SQLiteStore, workspace, name string) scaleIssuePhysicalField {
 	t.Helper()
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -92,7 +92,7 @@ func scaleP21IssuePhysical(t *testing.T, repo *SQLiteStore, workspace, name stri
 	if err := json.Unmarshal(root[metadataCollectionsKey], &shapes); err != nil {
 		t.Fatal(err)
 	}
-	result := scaleP21IssuePhysicalField{Shape: shapes[name], Root: root[name]}
+	result := scaleIssuePhysicalField{Shape: shapes[name], Root: root[name]}
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field=? ORDER BY collection_order,record_key`, workspace, name)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func scaleP21IssuePhysical(t *testing.T, repo *SQLiteStore, workspace, name stri
 	return result
 }
 
-func scaleP21IssueNative(t *testing.T, repo *SQLiteStore, workspace, name string) any {
+func scaleIssueNative(t *testing.T, repo *SQLiteStore, workspace, name string) any {
 	t.Helper()
 	if !repo.BoundedMetadataEnabled() {
 		data, _ := repo.storedWorkspace(workspace)
@@ -135,7 +135,7 @@ func scaleP21IssueNative(t *testing.T, repo *SQLiteStore, workspace, name string
 	return value.Interface()
 }
 
-func scaleP21IssuePersistenceUpdate(t *testing.T, repo *SQLiteStore, workspace string, issue domain.Issue, business bool, contexts ...context.Context) domain.Issue {
+func scaleIssuePersistenceUpdate(t *testing.T, repo *SQLiteStore, workspace string, issue domain.Issue, business bool, contexts ...context.Context) domain.Issue {
 	t.Helper()
 	ctx := t.Context()
 	if len(contexts) != 0 {
@@ -170,22 +170,22 @@ func scaleP21IssuePersistenceUpdate(t *testing.T, repo *SQLiteStore, workspace s
 	return updated
 }
 
-func TestScaleP21IssuePersistenceSplitBusiness(t *testing.T) {
+func TestScaleIssuePersistenceSplitBusiness(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprint("reload=", reload), func(t *testing.T) {
-			var physical []scaleP21IssuePhysicalField
+			var physical []scaleIssuePhysicalField
 			var native []any
 			var issues []domain.Issue
 			var effects []map[string][]json.RawMessage
 			for _, bounded := range []bool{false, true} {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{
 					{ID: "p21-project", Name: "Selected", TeamIDs: []string{"p21-team"}, Milestones: []domain.ProjectMilestone{{ID: "milestone"}}},
 					{ID: "unrelated-project", Description: strings.Repeat("unrelated body ", 20000)},
 				}, nil)
 				workspace := f.data.Workspace.URLKey
-				repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+				repo := scaleIssuePersistenceView(t, f, bounded, reload)
 				var webhook []domain.DomainEvent
 				var realtime []domain.RealtimeEvent
 				repo.SetWebhookSink(func(_ string, event domain.DomainEvent) { webhook = append(webhook, event) })
@@ -194,14 +194,14 @@ func TestScaleP21IssuePersistenceSplitBusiness(t *testing.T) {
 						realtime = append(realtime, event)
 					}
 				})
-				prior := scaleP21IssuePhysical(t, repo, workspace, "projects").Rows[1].Raw
-				issues = append(issues, scaleP21IssuePersistenceUpdate(t, repo, workspace, issue, true))
-				state := scaleP21IssuePhysical(t, repo, workspace, "projects")
+				prior := scaleIssuePhysical(t, repo, workspace, "projects").Rows[1].Raw
+				issues = append(issues, scaleIssuePersistenceUpdate(t, repo, workspace, issue, true))
+				state := scaleIssuePhysical(t, repo, workspace, "projects")
 				if string(prior) != string(state.Rows[1].Raw) {
 					t.Fatal("unrelated project row changed")
 				}
 				physical = append(physical, state)
-				native = append(native, scaleP21IssueNative(t, repo, workspace, "projects"))
+				native = append(native, scaleIssueNative(t, repo, workspace, "projects"))
 				outputs := map[string][]json.RawMessage{}
 				rows, err := f.db.QueryContext(t.Context(), `SELECT kind,data FROM workspace_content_records WHERE workspace_key=? AND kind IN ('activity','notification','delivery') ORDER BY kind,id`, workspace)
 				if err != nil {
@@ -261,28 +261,28 @@ func TestScaleP21IssuePersistenceSplitBusiness(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssuePersistenceInlineProjectShapes(t *testing.T) {
+func TestScaleIssuePersistenceInlineProjectShapes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, keepInline := range []bool{false, true} {
 		t.Run(fmt.Sprint("keepInline=", keepInline), func(t *testing.T) {
-			var physical []scaleP21IssuePhysicalField
+			var physical []scaleIssuePhysicalField
 			var native []any
 			for _, bounded := range []bool{false, true} {
 				projects := []domain.Project{{ID: "p21-project", Name: "First native"}, {ID: "p21-project", Name: "后置项目"}}
 				if keepInline {
 					projects = append(projects, domain.Project{ID: "sibling", Name: "Sibling one"}, domain.Project{ID: "sibling", Name: "Sibling two"})
 				}
-				f, issue := scaleP21IssuePersistenceFixture(t, projects, nil)
+				f, issue := scaleIssuePersistenceFixture(t, projects, nil)
 				workspace := f.data.Workspace.URLKey
-				repo := scaleP21IssuePersistenceView(t, f, bounded, false)
-				before := scaleP21IssuePhysical(t, repo, workspace, "projects")
+				repo := scaleIssuePersistenceView(t, f, bounded, false)
+				before := scaleIssuePhysical(t, repo, workspace, "projects")
 				if before.Shape != "" || len(before.Rows) != 0 {
 					t.Fatal("duplicate fixture did not start inline")
 				}
-				scaleP21IssuePersistenceUpdate(t, repo, workspace, issue, false)
-				physical = append(physical, scaleP21IssuePhysical(t, repo, workspace, "projects"))
-				native = append(native, scaleP21IssueNative(t, repo, workspace, "projects"))
+				scaleIssuePersistenceUpdate(t, repo, workspace, issue, false)
+				physical = append(physical, scaleIssuePhysical(t, repo, workspace, "projects"))
+				native = append(native, scaleIssueNative(t, repo, workspace, "projects"))
 				if bounded && (repo.WorkspaceMetadataDecodes() != 0 || repo.MetadataWorkUsedForTesting() != 0) {
 					t.Fatal("inline project writer decoded full metadata or leaked work")
 				}
@@ -303,13 +303,13 @@ func TestScaleP21IssuePersistenceInlineProjectShapes(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssuePersistenceDocumentChaining(t *testing.T) {
+func TestScaleIssuePersistenceDocumentChaining(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, inlineProjects := range []bool{false, true} {
 		for _, inlineDocuments := range []bool{false, true} {
 			t.Run(fmt.Sprintf("projectsInline=%t/documentsInline=%t", inlineProjects, inlineDocuments), func(t *testing.T) {
-				var physical [][]scaleP21IssuePhysicalField
+				var physical [][]scaleIssuePhysicalField
 				var native [][]any
 				for _, bounded := range []bool{false, true} {
 					projects := []domain.Project{{ID: "p21-project", Name: "Selected"}}
@@ -320,9 +320,9 @@ func TestScaleP21IssuePersistenceDocumentChaining(t *testing.T) {
 					if inlineDocuments {
 						documents = append(documents, documents[0], domain.Document{ID: "sibling", Title: "A"}, domain.Document{ID: "sibling", Title: "B"})
 					}
-					f, issue := scaleP21IssuePersistenceFixture(t, projects, documents)
+					f, issue := scaleIssuePersistenceFixture(t, projects, documents)
 					workspace := f.data.Workspace.URLKey
-					repo := scaleP21IssuePersistenceView(t, f, bounded, false)
+					repo := scaleIssuePersistenceView(t, f, bounded, false)
 					selected, _ := repo.storedWorkspace(workspace)
 					var inputs *issueHotInputs
 					if bounded {
@@ -381,8 +381,8 @@ func TestScaleP21IssuePersistenceDocumentChaining(t *testing.T) {
 					if err != nil {
 						t.Fatal("document/progress transaction failed", bounded, err)
 					}
-					physical = append(physical, []scaleP21IssuePhysicalField{scaleP21IssuePhysical(t, repo, workspace, "projects"), scaleP21IssuePhysical(t, repo, workspace, "documents")})
-					native = append(native, []any{scaleP21IssueNative(t, repo, workspace, "projects"), scaleP21IssueNative(t, repo, workspace, "documents")})
+					physical = append(physical, []scaleIssuePhysicalField{scaleIssuePhysical(t, repo, workspace, "projects"), scaleIssuePhysical(t, repo, workspace, "documents")})
+					native = append(native, []any{scaleIssueNative(t, repo, workspace, "projects"), scaleIssueNative(t, repo, workspace, "documents")})
 					if inputs != nil {
 						inputs.close()
 						if repo.MetadataWorkUsedForTesting() != 0 || repo.WorkspaceMetadataDecodes() != 0 {
@@ -399,7 +399,7 @@ func TestScaleP21IssuePersistenceDocumentChaining(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
+func TestScaleIssuePersistenceRollbackAndAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, mode := range []string{"callback", "cancel", "inline-cancel", "quota", "root"} {
@@ -408,9 +408,9 @@ func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
 			if mode == "root" || mode == "inline-cancel" {
 				projects = append(projects, projects[0])
 			}
-			f, issue := scaleP21IssuePersistenceFixture(t, projects, nil)
+			f, issue := scaleIssuePersistenceFixture(t, projects, nil)
 			workspace := f.data.Workspace.URLKey
-			view := scaleP21IssuePersistenceView(t, f, true, false)
+			view := scaleIssuePersistenceView(t, f, true, false)
 			if mode == "root" {
 				var raw []byte
 				if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -443,7 +443,7 @@ func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
 				}
 				t.Log("oversized inline root remains admitted until a writer-local quota failure")
 			}
-			prior := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
+			prior := scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if mode == "inline-cancel" {
@@ -484,17 +484,17 @@ func TestScaleP21IssuePersistenceRollbackAndAdmission(t *testing.T) {
 				}
 			}
 			stored, readErr := f.IssueRecord(t.Context(), workspace, issue.ID)
-			if readErr != nil || stored.Title != issue.Title || stored.Version != issue.Version || !reflect.DeepEqual(prior, scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
+			if readErr != nil || stored.Title != issue.Title || stored.Version != issue.Version || !reflect.DeepEqual(prior, scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("rollback/cancel/admission altered canonical state or leaked", err, readErr)
 			}
 		})
 	}
 }
 
-func TestScaleP21IssuePersistenceInlineDynamicWork(t *testing.T) {
+func TestScaleIssuePersistenceInlineDynamicWork(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	var physical []scaleP21IssuePhysicalField
+	var physical []scaleIssuePhysicalField
 	var native []any
 	var peak int
 	for _, bounded := range []bool{false, true} {
@@ -502,9 +502,9 @@ func TestScaleP21IssuePersistenceInlineDynamicWork(t *testing.T) {
 		for index := range 80 {
 			projects = append(projects, domain.Project{ID: fmt.Sprint("unrelated-", index), Name: "Native header"})
 		}
-		f, issue := scaleP21IssuePersistenceFixture(t, projects, nil)
+		f, issue := scaleIssuePersistenceFixture(t, projects, nil)
 		workspace := f.data.Workspace.URLKey
-		repo := scaleP21IssuePersistenceView(t, f, bounded, false)
+		repo := scaleIssuePersistenceView(t, f, bounded, false)
 		var raw []byte
 		if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
 			t.Fatal(err)
@@ -517,9 +517,9 @@ func TestScaleP21IssuePersistenceInlineDynamicWork(t *testing.T) {
 				peak = max(peak, repo.MetadataWorkUsedForTesting())
 			}
 		})
-		scaleP21IssuePersistenceUpdate(t, repo, workspace, issue, false, ctx)
-		physical = append(physical, scaleP21IssuePhysical(t, repo, workspace, "projects"))
-		native = append(native, scaleP21IssueNative(t, repo, workspace, "projects"))
+		scaleIssuePersistenceUpdate(t, repo, workspace, issue, false, ctx)
+		physical = append(physical, scaleIssuePhysical(t, repo, workspace, "projects"))
+		native = append(native, scaleIssueNative(t, repo, workspace, "projects"))
 		if bounded && repo.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("dynamic inline work leaked")
 		}
@@ -530,20 +530,20 @@ func TestScaleP21IssuePersistenceInlineDynamicWork(t *testing.T) {
 	t.Logf("inline_live_admission=%d", peak)
 }
 
-func TestScaleP21IssuePersistenceInlineNativeNoop(t *testing.T) {
+func TestScaleIssuePersistenceInlineNativeNoop(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	nativeAt := time.Now()
-	var physical []scaleP21IssuePhysicalField
+	var physical []scaleIssuePhysicalField
 	var native []any
 	for _, bounded := range []bool{false, true} {
-		f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{
+		f, issue := scaleIssuePersistenceFixture(t, []domain.Project{
 			{ID: "p21-project", Name: "First", CreatedAt: nativeAt},
 			{ID: "p21-project", Name: "Last", CreatedAt: nativeAt, ProgressHistory: []domain.ProjectProgressHistoryPoint{{Date: utcDay(nativeAt), Value: 7}}},
 		}, nil)
 		workspace := f.data.Workspace.URLKey
-		repo := scaleP21IssuePersistenceView(t, f, bounded, false)
-		prior := scaleP21IssuePhysical(t, repo, workspace, "projects")
+		repo := scaleIssuePersistenceView(t, f, bounded, false)
+		prior := scaleIssuePhysical(t, repo, workspace, "projects")
 		_, err := repo.UpdateIssueRecord(t.Context(), workspace, issue.ID, &issue.Version, IssueMutationScope{Payload: domain.IssueUpdateInput{Title: new("Title only")}}, func(_ *domain.Bootstrap, current *domain.Issue) error {
 			current.Title = "Title only"
 			return nil
@@ -551,8 +551,8 @@ func TestScaleP21IssuePersistenceInlineNativeNoop(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		state := scaleP21IssuePhysical(t, repo, workspace, "projects")
-		values := scaleP21IssueNative(t, repo, workspace, "projects").([]domain.Project)
+		state := scaleIssuePhysical(t, repo, workspace, "projects")
+		values := scaleIssueNative(t, repo, workspace, "projects").([]domain.Project)
 		// The inline duplicates have no rows to rebase onto, so neither copy
 		// is dropped: the first takes the progress refresh like any project
 		// and the second keeps its native values.
@@ -571,12 +571,12 @@ func TestScaleP21IssuePersistenceInlineNativeNoop(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssuePersistenceUnknownStamp(t *testing.T) {
+func TestScaleIssuePersistenceUnknownStamp(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "First"}, {ID: "p21-project", Name: "Last"}}, nil)
+	f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "First"}, {ID: "p21-project", Name: "Last"}}, nil)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	source, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -593,7 +593,7 @@ func TestScaleP21IssuePersistenceUnknownStamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	view.installMetadataLogicalSource(workspace, unknown)
-	scaleP21IssuePersistenceUpdate(t, view, workspace, issue, false)
+	scaleIssuePersistenceUpdate(t, view, workspace, issue, false)
 	source, err = view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -602,8 +602,8 @@ func TestScaleP21IssuePersistenceUnknownStamp(t *testing.T) {
 	if source.Stamp().revision != -1 || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("unknown source revision was promoted or owner leaked", source.Stamp())
 	}
-	physical := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
-	native := scaleP21IssueNative(t, view, workspace, "projects").([]domain.Project)
+	physical := scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")
+	native := scaleIssueNative(t, view, workspace, "projects").([]domain.Project)
 	// The inline duplicates have no rows to rebase onto: both stay, in SQL
 	// and in the warm native postimage, and the field stays inline.
 	var stored []domain.Project
@@ -616,10 +616,10 @@ func TestScaleP21IssuePersistenceUnknownStamp(t *testing.T) {
 	}
 }
 
-func TestScaleP21IssuePersistenceCanonicalPeerRebase(t *testing.T) {
+func TestScaleIssuePersistenceCanonicalPeerRebase(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	var physical []scaleP21IssuePhysicalField
+	var physical []scaleIssuePhysicalField
 	var native []any
 	peerAt, err := time.Parse(time.RFC3339Nano, "2026-11-14T13:22:33.123456789+05:45")
 	if err != nil {
@@ -628,9 +628,9 @@ func TestScaleP21IssuePersistenceCanonicalPeerRebase(t *testing.T) {
 	body := strings.Repeat("canonical peer body ", 150000)
 	var peak int
 	for _, bounded := range []bool{false, true} {
-		f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
+		f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
 		workspace := f.data.Workspace.URLKey
-		repo := scaleP21IssuePersistenceView(t, f, bounded, false)
+		repo := scaleIssuePersistenceView(t, f, bounded, false)
 		var raw []byte
 		if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key='p21-project'`, workspace).Scan(&raw); err != nil {
 			t.Fatal(err)
@@ -654,9 +654,9 @@ func TestScaleP21IssuePersistenceCanonicalPeerRebase(t *testing.T) {
 				peak = max(peak, repo.MetadataWorkUsedForTesting())
 			}
 		})
-		scaleP21IssuePersistenceUpdate(t, repo, workspace, issue, false, ctx)
-		physical = append(physical, scaleP21IssuePhysical(t, repo, workspace, "projects"))
-		records := scaleP21IssueNative(t, repo, workspace, "projects").([]domain.Project)
+		scaleIssuePersistenceUpdate(t, repo, workspace, issue, false, ctx)
+		physical = append(physical, scaleIssuePhysical(t, repo, workspace, "projects"))
+		records := scaleIssueNative(t, repo, workspace, "projects").([]domain.Project)
 		native = append(native, records)
 		if len(records) != 1 || records[0].Name != project.Name || records[0].Description != body || !records[0].CreatedAt.Equal(peerAt) || len(records[0].ProgressHistory) == 0 {
 			t.Fatal("canonical peer fields or progress lost")
@@ -679,10 +679,10 @@ func TestScaleP21IssuePersistenceCanonicalPeerRebase(t *testing.T) {
 	t.Logf("selected_canonical_bytes=%d live_admission=%d", len(body), peak)
 }
 
-func TestScaleP21IssuePersistenceMixedShapeBoundary(t *testing.T) {
+func TestScaleIssuePersistenceMixedShapeBoundary(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
+	f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
 	workspace := f.data.Workspace.URLKey
 	var raw []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -697,25 +697,25 @@ func TestScaleP21IssuePersistenceMixedShapeBoundary(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_states SET data=? WHERE workspace_key=?`, raw, workspace); err != nil {
 		t.Fatal(err)
 	}
-	view := scaleP21IssuePersistenceView(t, f, true, true)
-	prior := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
+	view := scaleIssuePersistenceView(t, f, true, true)
+	prior := scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")
 	_, err := view.UpdateIssueRecord(t.Context(), workspace, issue.ID, &issue.Version, IssueMutationScope{Payload: domain.IssueUpdateInput{ProjectID: &issue.Project.ID}}, func(_ *domain.Bootstrap, current *domain.Issue) error {
 		current.Title = "Must roll back"
 		return nil
 	})
 	stored, readErr := f.IssueRecord(t.Context(), workspace, issue.ID)
 	if !errors.Is(err, ErrBoundedMetadataCoverage) || readErr != nil || stored.Title != issue.Title ||
-		!reflect.DeepEqual(prior, scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
+		!reflect.DeepEqual(prior, scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("mixed physical shape was silently accepted or mutated", err, readErr)
 	}
 }
 
-func TestScaleP21IssuePersistenceCanonicalIdentityBoundary(t *testing.T) {
+func TestScaleIssuePersistenceCanonicalIdentityBoundary(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
+	f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Selected"}}, nil)
 	workspace := f.data.Workspace.URLKey
-	view := scaleP21IssuePersistenceView(t, f, true, false)
+	view := scaleIssuePersistenceView(t, f, true, false)
 	var raw []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key='p21-project'`, workspace).Scan(&raw); err != nil {
 		t.Fatal(err)
@@ -729,14 +729,14 @@ func TestScaleP21IssuePersistenceCanonicalIdentityBoundary(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='projects' AND record_key='p21-project'`, raw, workspace); err != nil {
 		t.Fatal(err)
 	}
-	prior := scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")
+	prior := scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")
 	_, err := view.UpdateIssueRecord(t.Context(), workspace, issue.ID, &issue.Version, IssueMutationScope{Payload: domain.IssueUpdateInput{ProjectID: &issue.Project.ID}}, func(_ *domain.Bootstrap, current *domain.Issue) error {
 		current.Title = "Must roll back"
 		return nil
 	})
 	stored, readErr := f.IssueRecord(t.Context(), workspace, issue.ID)
 	if !errors.Is(err, ErrBoundedMetadataCoverage) || readErr != nil || stored.Title != issue.Title ||
-		!reflect.DeepEqual(prior, scaleP21IssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
+		!reflect.DeepEqual(prior, scaleIssuePhysical(t, f.SQLiteStore, workspace, "projects")) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("canonical identity mismatch was silently accepted or mutated", err, readErr)
 	}
 }

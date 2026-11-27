@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW202DisplayInput(t *testing.T, bounded *SQLiteStore, before domain.Bootstrap) domain.Bootstrap {
+func displayInput(t *testing.T, bounded *SQLiteStore, before domain.Bootstrap) domain.Bootstrap {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), before, copyStamp{workspaceID: before.Workspace.ID})
 	if err != nil {
@@ -57,7 +57,7 @@ func scaleP21SW202DisplayInput(t *testing.T, bounded *SQLiteStore, before domain
 	return next
 }
 
-func TestScaleP21SW202ProjectDisplayFieldsClosed(t *testing.T) {
+func TestProjectDisplayFieldsClosed(t *testing.T) {
 	for _, changed := range []string{"Lead", "Creator", "LeadID", "CreatorNil", "Name", "Description", "IssueCount", "UpdatedAt"} {
 		before := domain.Bootstrap{Projects: []domain.Project{{
 			ID: "sw202", Lead: &domain.User{ID: "lead", Name: "Old lead"},
@@ -82,7 +82,7 @@ func TestScaleP21SW202ProjectDisplayFieldsClosed(t *testing.T) {
 		case "UpdatedAt":
 			next.Projects[0].UpdatedAt = next.Projects[0].UpdatedAt.AddDate(0, 0, 1)
 		}
-		plan, field := scaleP21SW196HeaderPlan(t, before, next, "projects")
+		plan, field := headerPlan(t, before, next, "projects")
 		if err := plan.headers(t.Context(), field); err != nil {
 			t.Fatal(err)
 		}
@@ -93,11 +93,11 @@ func TestScaleP21SW202ProjectDisplayFieldsClosed(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202ProjectDisplayLegacyDifferential(t *testing.T) {
+func TestProjectDisplayLegacyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -141,14 +141,14 @@ func TestScaleP21SW202ProjectDisplayLegacyDifferential(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					next := scaleP21SW202DisplayInput(t, bounded, before)
+					next := displayInput(t, bounded, before)
 					if strings.Contains(mode, "actor") {
 						actor := cloneSnapshotValue(reflect.ValueOf(current)).Interface().(domain.User)
 						actor.Name, actor.JobTitle = "Later request actor", "Later request title"
 						next.Viewer, next.Users[len(next.Users)-1] = actor, actor
 					}
-					want, _ := scaleP21SW197Run(t, fixture, bounded, before, next, mode, false)
-					got, peak := scaleP21SW197Run(t, fixture, bounded, before, next, mode, true)
+					want, _ := projectProgressStreamRun(t, fixture, bounded, before, next, mode, false)
+					got, peak := projectProgressStreamRun(t, fixture, bounded, before, next, mode, true)
 					// A canonical name edit forces the literal rebase. Its
 					// stale -> current display refresh then conflicts with the
 					// later request actor used as canonical display authority.

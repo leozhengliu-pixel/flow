@@ -13,17 +13,17 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotDeliveryEmailDifferential(t *testing.T) {
+func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	config.MaxOpenConns = 1
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace := f.data.Workspace.URLKey
 	issueID := idgen.New("issue_")
 	now := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
@@ -95,7 +95,7 @@ func TestScaleP21HotDeliveryEmailDifferential(t *testing.T) {
 				for _, message := range sink.take() {
 					messages = append(messages, []any{message.header.Get("To"), mailSubject(t, message), message.text, message.html})
 				}
-				effects := scaleP21HotDeliveryEffects(t, repo, workspace)
+				effects := scaleHotDeliveryEffects(t, repo, workspace)
 				if !bounded {
 					wantMail, wantEffects = messages, effects
 				} else if !reflect.DeepEqual(messages, wantMail) || !reflect.DeepEqual(effects, wantEffects) {
@@ -116,7 +116,7 @@ func TestScaleP21HotDeliveryEmailDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21HotDeliveryEffects(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]any {
+func scaleHotDeliveryEffects(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]any {
 	t.Helper()
 	data, err := repo.NotificationDeliveries(t.Context(), workspace, []string{"pending", "pending-disabled", "delivering", "delivered", "failed", "digest"}, time.Now().UTC().Add(48*time.Hour))
 	if err != nil {

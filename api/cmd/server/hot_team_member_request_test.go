@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21TeamMemberRequestOutcome(t *testing.T, service *server, request *http.Request) any {
+func scaleTeamMemberRequestOutcome(t *testing.T, service *server, request *http.Request) any {
 	t.Helper()
 	request, finish := beginRequestResourceReads(request)
 	defer finish()
@@ -29,19 +29,19 @@ func scaleP21TeamMemberRequestOutcome(t *testing.T, service *server, request *ht
 	if ok {
 		writeJSON(writer, http.StatusOK, map[string]string{"workspaceId": data.Workspace.ID, "teamId": team.ID, "key": team.Key})
 	}
-	return []any{ok, writer.Code, scaleP21M3JSON(t, writer.Body.Bytes())}
+	return []any{ok, writer.Code, normalizeSettingsPointJSON(t, writer.Body.Bytes())}
 }
 
-func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
+func TestScaleHotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	workspace := f.data.Workspace.URLKey
 	prefix := idgen.New("team_request_")
 	private, child := "", ""
@@ -91,10 +91,10 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 				r.SetPathValue("id", ref)
 				return r
 			}
-			want := scaleP21TeamMemberRequestOutcome(t, literal, request())
-			got := scaleP21TeamMemberRequestOutcome(t, bounded, request())
+			want := scaleTeamMemberRequestOutcome(t, literal, request())
+			got := scaleTeamMemberRequestOutcome(t, bounded, request())
 			if !reflect.DeepEqual(want, got) {
-				t.Fatalf("team reference %q differs: %s", ref, scaleP21M2Diff(want, got))
+				t.Fatalf("team reference %q differs: %s", ref, policyFirstDifference(want, got))
 			}
 		}
 	})
@@ -108,10 +108,10 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 				r.SetPathValue("id", ref)
 				return r
 			}
-			want := scaleP21TeamMemberRequestOutcome(t, literal, request())
-			got := scaleP21TeamMemberRequestOutcome(t, bounded, request())
+			want := scaleTeamMemberRequestOutcome(t, literal, request())
+			got := scaleTeamMemberRequestOutcome(t, bounded, request())
 			if !reflect.DeepEqual(want, got) {
-				t.Fatal("legacy/application credential narrowing changed", scaleP21M2Diff(want, got))
+				t.Fatal("legacy/application credential narrowing changed", policyFirstDifference(want, got))
 			}
 		}
 	}
@@ -136,10 +136,10 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 			r.SetPathValue("id", ref)
 			return r
 		}
-		want := scaleP21TeamMemberRequestOutcome(t, literal, request())
-		got := scaleP21TeamMemberRequestOutcome(t, bounded, request())
+		want := scaleTeamMemberRequestOutcome(t, literal, request())
+		got := scaleTeamMemberRequestOutcome(t, bounded, request())
 		if !reflect.DeepEqual(want, got) {
-			t.Fatal("installed application's explicit/public team grants changed", ref, scaleP21M2Diff(want, got))
+			t.Fatal("installed application's explicit/public team grants changed", ref, policyFirstDifference(want, got))
 		}
 	}
 	// Exercise every direct caller on the same unchanged membership state.
@@ -171,17 +171,17 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 			r.SetPathValue("userId", f.principals[2].user.ID)
 			r, close := beginRequestResourceReads(r)
 			scope := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
-			writer := scaleP21MemberEncodingWriter{ResponseRecorder: httptest.NewRecorder(), check: func() {
+			writer := scaleMemberEncodingWriter{ResponseRecorder: httptest.NewRecorder(), check: func() {
 				if service == bounded && (scope.closed || len(scope.closers) == 0) {
 					t.Fatal("team request inputs released before caller encoding")
 				}
 			}}
 			operation.run(service, writer, r)
-			outcomes = append(outcomes, []any{writer.Code, scaleP21M3JSON(t, writer.Body.Bytes())})
+			outcomes = append(outcomes, []any{writer.Code, normalizeSettingsPointJSON(t, writer.Body.Bytes())})
 			close()
 		}
 		if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-			t.Fatalf("direct %s caller differs: %s", operation.method, scaleP21M2Diff(outcomes[0], outcomes[1]))
+			t.Fatalf("direct %s caller differs: %s", operation.method, policyFirstDifference(outcomes[0], outcomes[1]))
 		}
 	}
 	// A one-shot authorization projection remains the handler's source.
@@ -192,8 +192,8 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 		handOffPagedMetadata(r, workspace, f.data.Viewer.ID, domain.Bootstrap{
 			Workspace: f.data.Workspace, Teams: []domain.Team{{ID: "handoff-only", Key: "HANDOFF"}},
 		})
-		first := scaleP21TeamMemberRequestOutcome(t, service, r)
-		second := scaleP21TeamMemberRequestOutcome(t, service, r)
+		first := scaleTeamMemberRequestOutcome(t, service, r)
+		second := scaleTeamMemberRequestOutcome(t, service, r)
 		if first.([]any)[0] != true || second.([]any)[0] != false {
 			close()
 			t.Fatal("authorization handoff was ignored or consumed twice", first, second)
@@ -205,15 +205,15 @@ func TestScaleP21HotTeamMemberRequestVisibilityAndCallers(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotTeamMemberRequestDevelopmentAndErrors(t *testing.T) {
+func TestScaleHotTeamMemberRequestDevelopmentAndErrors(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	view, err := repo.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestScaleP21HotTeamMemberRequestDevelopmentAndErrors(t *testing.T) {
 				outcomes = append(outcomes, []any{writer.Code, writer.Body.String()})
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("development source key=%q ref=%q differs: %s", key, ref, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("development source key=%q ref=%q differs: %s", key, ref, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		}
 	}
@@ -260,10 +260,10 @@ func TestScaleP21HotTeamMemberRequestDevelopmentAndErrors(t *testing.T) {
 			r.Header.Set("X-Workspace-Key", key)
 			r.SetPathValue("id", target)
 			r = r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, f.data.Viewer))
-			outcomes = append(outcomes, scaleP21TeamMemberRequestOutcome(t, &server{store: source}, r))
+			outcomes = append(outcomes, scaleTeamMemberRequestOutcome(t, &server{store: source}, r))
 		}
 		if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-			t.Fatal("authenticated missing-workspace error changed", key, scaleP21M2Diff(outcomes[0], outcomes[1]))
+			t.Fatal("authenticated missing-workspace error changed", key, policyFirstDifference(outcomes[0], outcomes[1]))
 		}
 	}
 }

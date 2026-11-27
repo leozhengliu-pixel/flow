@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW226Framed(t *testing.T, repo *SQLiteStore, kind reflect.Type, raw string) {
+func integrationStreamFramed(t *testing.T, repo *SQLiteStore, kind reflect.Type, raw string) {
 	t.Helper()
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	frames, err := newMetadataLogicalBuilder(t.Context())
@@ -67,8 +67,8 @@ func scaleP21SW226Framed(t *testing.T, repo *SQLiteStore, kind reflect.Type, raw
 	}
 }
 
-func TestScaleP21SW226IntegrationCanonicalFrames(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationCanonicalFrames(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	for _, group := range []struct {
 		name string
 		kind reflect.Type
@@ -105,15 +105,15 @@ func TestScaleP21SW226IntegrationCanonicalFrames(t *testing.T) {
 		t.Run(group.name, func(t *testing.T) {
 			for index, raw := range group.raw {
 				t.Run(fmt.Sprint(index), func(t *testing.T) {
-					scaleP21SW226Framed(t, repo, group.kind, raw)
+					integrationStreamFramed(t, repo, group.kind, raw)
 				})
 			}
 		})
 	}
 }
 
-func TestScaleP21SW226IntegrationEveryLargeString(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationEveryLargeString(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	large := strings.Repeat("large string <>& \u2028 \ufffd ", 55000)
 	for _, kind := range []reflect.Type{reflect.TypeFor[domain.IntegrationDelivery](), reflect.TypeFor[domain.IntegrationConnection]()} {
 		for index := range kind.NumField() {
@@ -128,14 +128,14 @@ func TestScaleP21SW226IntegrationEveryLargeString(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				scaleP21SW226Framed(t, repo, kind, string(raw))
+				integrationStreamFramed(t, repo, kind, string(raw))
 			})
 		}
 	}
 }
 
-func TestScaleP21SW226IntegrationLoadedDefaultsAndIgnoredFields(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationLoadedDefaultsAndIgnoredFields(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	frames, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -202,14 +202,14 @@ func TestScaleP21SW226IntegrationLoadedDefaultsAndIgnoredFields(t *testing.T) {
 	}
 }
 
-type scaleP21SW226ReadAt func([]byte, int64) (int, error)
+type integrationStreamReadAt func([]byte, int64) (int, error)
 
-func (read scaleP21SW226ReadAt) ReadAt(dst []byte, offset int64) (int, error) {
+func (read integrationStreamReadAt) ReadAt(dst []byte, offset int64) (int, error) {
 	return read(dst, offset)
 }
 
-func TestScaleP21SW226IntegrationCanonicalCancellationAndRelease(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationCanonicalCancellationAndRelease(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	for _, kind := range []reflect.Type{reflect.TypeFor[domain.IntegrationDelivery](), reflect.TypeFor[domain.IntegrationConnection]()} {
 		for _, moment := range []string{"before", "during"} {
 			t.Run(kind.Name()+"/"+moment, func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestScaleP21SW226IntegrationCanonicalCancellationAndRelease(t *testing.T) {
 				}
 				input := strings.NewReader(raw)
 				readBytes := 0
-				reader := scaleP21SW226ReadAt(func(dst []byte, offset int64) (int, error) {
+				reader := integrationStreamReadAt(func(dst []byte, offset int64) (int, error) {
 					n, err := input.ReadAt(dst, offset)
 					readBytes += n
 					if moment == "during" && readBytes >= 64<<10 {
@@ -255,7 +255,7 @@ func TestScaleP21SW226IntegrationCanonicalCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW226IntegrationClosedStreamGuards(t *testing.T) {
+func TestIntegrationClosedStreamGuards(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	delivery := domain.IntegrationDelivery{ID: "delivery", ConnectionID: "connection", Status: "pending", Payload: json.RawMessage(`{"body":"unchanged"}`)}
 	connection := domain.IntegrationConnection{ID: "connection", Config: map[string]string{"body": "unchanged"}}
@@ -323,8 +323,8 @@ func TestScaleP21SW226IntegrationClosedStreamGuards(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW226IntegrationValidatedObjectEquality(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationValidatedObjectEquality(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	large := strings.Repeat("unchanged payload ", 6000)
 	for _, test := range []struct {
 		name, left, right string
@@ -388,8 +388,8 @@ func TestScaleP21SW226IntegrationValidatedObjectEquality(t *testing.T) {
 	})
 }
 
-func TestScaleP21SW226IntegrationWriterFastProof(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationWriterFastProof(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	delivery := domain.IntegrationDelivery{ID: "delivery", Attempts: 2, Status: "pending", UpdatedAt: at}
 	connection := domain.IntegrationConnection{ID: "connection", DeliveryAttempts: 2}
@@ -450,8 +450,8 @@ func TestScaleP21SW226IntegrationWriterFastProof(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW226IntegrationInvalidBeforeTime(t *testing.T) {
-	repo := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
+func TestIntegrationInvalidBeforeTime(t *testing.T) {
+	repo := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {}})
 	invalid := time.Date(10000, 1, 2, 3, 4, 5, 0, time.UTC)
 	valid := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	large := strings.Repeat("large unchanged body ", 5000)
@@ -510,7 +510,7 @@ func TestScaleP21SW226IntegrationInvalidBeforeTime(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW226IntegrationStoredJSONIdentity(t *testing.T) {
+func TestIntegrationStoredJSONIdentity(t *testing.T) {
 	for _, test := range []struct {
 		name, raw string
 		identity  bool
@@ -563,7 +563,7 @@ func TestScaleP21SW226IntegrationStoredJSONIdentity(t *testing.T) {
 	}
 }
 
-type scaleP21SW226Result struct {
+type integrationStreamResult struct {
 	delivery, connection, root json.RawMessage
 	payloads, previous         []json.RawMessage
 	rows                       [][]any
@@ -573,7 +573,7 @@ type scaleP21SW226Result struct {
 	peak, sql, rootWrites      int
 }
 
-func scaleP21SW226ConflictKeys(err error) []string {
+func conflictKeys(err error) []string {
 	keys, _ := conflictedMetadataKeys(err)
 	names := make([]string, len(keys))
 	for index, key := range keys {
@@ -583,12 +583,12 @@ func scaleP21SW226ConflictKeys(err error) []string {
 	return names
 }
 
-type scaleP21SW226PeerMutation struct {
+type peerMutation struct {
 	mutate func(*domain.Bootstrap) error
 	shapes map[string]string
 }
 
-func scaleP21SW226Clone(data domain.Bootstrap) domain.Bootstrap {
+func integrationStreamClone(data domain.Bootstrap) domain.Bootstrap {
 	clone := cloneBootstrap(data)
 	for index := range clone.IntegrationConnections {
 		// The direct row-kernel oracle deliberately exercises the existing
@@ -598,7 +598,7 @@ func scaleP21SW226Clone(data domain.Bootstrap) domain.Bootstrap {
 	return clone
 }
 
-func scaleP21SW226Capture(ctx context.Context, data domain.Bootstrap, stamp copyStamp) (*metadataLogicalSource, error) {
+func integrationStreamCapture(ctx context.Context, data domain.Bootstrap, stamp copyStamp) (*metadataLogicalSource, error) {
 	source, err := captureMetadataLogicalSource(ctx, data, stamp)
 	if err != nil {
 		return nil, err
@@ -636,7 +636,7 @@ func scaleP21SW226Capture(ctx context.Context, data domain.Bootstrap, stamp copy
 	})
 }
 
-func scaleP21SW226LogPhysicalRows(t *testing.T, literal, bounded [][]any) {
+func logPhysicalRows(t *testing.T, literal, bounded [][]any) {
 	t.Helper()
 	for _, table := range []struct {
 		name string
@@ -673,15 +673,15 @@ func scaleP21SW226LogPhysicalRows(t *testing.T, literal, bounded [][]any) {
 	}
 }
 
-func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteStore, before, requested domain.Bootstrap, peers map[string][]byte, deleted string, bounded bool, cancelPhase string, peerMutations ...scaleP21SW226PeerMutation) scaleP21SW226Result {
+func integrationStreamExecute(t *testing.T, fixture scaleFixture, view *SQLiteStore, before, requested domain.Bootstrap, peers map[string][]byte, deleted string, bounded bool, cancelPhase string, peerMutations ...peerMutation) integrationStreamResult {
 	t.Helper()
 	workspace := before.Workspace.URLKey
 	if err := fixture.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
 	if err := fixture.MutateWorkspace(t.Context(), workspace, "scale_p21.sw226_seed", "", nil, func(data *domain.Bootstrap) error {
-		data.IntegrationDeliveries = scaleP21SW226Clone(before).IntegrationDeliveries
-		data.IntegrationConnections = scaleP21SW226Clone(before).IntegrationConnections
+		data.IntegrationDeliveries = integrationStreamClone(before).IntegrationDeliveries
+		data.IntegrationConnections = integrationStreamClone(before).IntegrationConnections
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -763,14 +763,14 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 	}
 	defer tx.Rollback()
 	ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: fixture.db, workspace: workspace, reader: tx})
-	baseline := scaleP21SW77Image(t, tx, workspace)
-	result := scaleP21SW226Result{}
+	baseline := legacyDeltaBudgetImage(t, tx, workspace)
+	result := integrationStreamResult{}
 	if !bounded {
-		target := scaleP21SW226Clone(requested)
-		_, err = fixture.writeWorkspaceMetadataDelta(ctx, tx, workspace, scaleP21SW226Clone(before), &target)
+		target := integrationStreamClone(requested)
+		_, err = fixture.writeWorkspaceMetadataDelta(ctx, tx, workspace, integrationStreamClone(before), &target)
 		if errors.Is(err, ErrConcurrentWrite) {
 			result.conflict = true
-			result.conflicts = scaleP21SW226ConflictKeys(err)
+			result.conflicts = conflictKeys(err)
 			return result
 		}
 		if err != nil {
@@ -791,12 +791,12 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			result.previous = append(result.previous, bytes.Clone(delivery.PreviousValues))
 		}
 	} else {
-		left, err := scaleP21SW226Capture(ctx, before, copyStamp{workspaceID: before.Workspace.ID})
+		left, err := integrationStreamCapture(ctx, before, copyStamp{workspaceID: before.Workspace.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer left.Release()
-		right, err := scaleP21SW226Capture(ctx, requested, left.Stamp())
+		right, err := integrationStreamCapture(ctx, requested, left.Stamp())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -837,7 +837,7 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			if err != nil {
 				t.Fatal(err)
 			}
-			unchanged := reflect.DeepEqual(baseline, scaleP21SW77Image(t, verify, workspace))
+			unchanged := reflect.DeepEqual(baseline, legacyDeltaBudgetImage(t, verify, workspace))
 			verify.Rollback()
 			if !unchanged || view.MetadataWorkUsedForTesting() != 0 {
 				t.Fatal("cancelled integration delta changed durable rows or retained work")
@@ -852,7 +852,7 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 				merged.Release()
 			}
 			result.conflict = true
-			result.conflicts = scaleP21SW226ConflictKeys(runErr)
+			result.conflicts = conflictKeys(runErr)
 			return result
 		}
 		if runErr != nil {
@@ -933,7 +933,7 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 			t.Fatal("integration delta retained native work")
 		}
 	}
-	image := scaleP21SW77Image(t, tx, workspace)
+	image := legacyDeltaBudgetImage(t, tx, workspace)
 	result.root = json.RawMessage(image.Root)
 	for key, row := range image.Rows {
 		if key.field == "integrationDeliveries" || key.field == "integrationConnections" {
@@ -953,7 +953,7 @@ func scaleP21SW226Execute(t *testing.T, fixture scaleP09Fixture, view *SQLiteSto
 	return result
 }
 
-func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
+func TestIntegrationRowStreamDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -968,7 +968,7 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 		t.Run(test, func(t *testing.T) {
 			// Peer key/shape writes commit. Each scenario needs its own
 			// workspace so a prior physical alias cannot change its seed.
-			fixture := scaleP09Database(t)
+			fixture := journalScaleDatabase(t)
 			view := &SQLiteStore{db: fixture.db, dialect: fixture.dialect, maxStateBytes: fixture.maxStateBytes, metadataResidency: newMetadataResidency()}
 			before := cloneBootstrap(fixture.data)
 			before.IntegrationDeliveries = []domain.IntegrationDelivery{{
@@ -995,7 +995,7 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 				before.IntegrationConnections[0].ID = "sw226-\x00connection"
 				before.IntegrationDeliveries[0].ConnectionID = before.IntegrationConnections[0].ID
 			}
-			requested := scaleP21SW226Clone(before)
+			requested := integrationStreamClone(before)
 			delivery, connection := &requested.IntegrationDeliveries[0], &requested.IntegrationConnections[0]
 			delivery.Attempts++
 			delivery.Status, delivery.LastError, delivery.UpdatedAt = "failed", "HTTP 502", at.Add(time.Hour)
@@ -1003,7 +1003,7 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 			connection.DeliveryAttempts++
 			connection.LastDeliveryAt, connection.LastError = &delivery.UpdatedAt, delivery.LastError
 			peers := map[string][]byte{}
-			peer := scaleP21SW226Clone(before)
+			peer := integrationStreamClone(before)
 			deleted := ""
 			switch test {
 			case "loaded-only-defaults":
@@ -1061,8 +1061,8 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 			case "peer-connection-deleted":
 				deleted = "integrationConnections"
 			}
-			literal := scaleP21SW226Execute(t, fixture, view, before, requested, peers, deleted, false, "")
-			bounded := scaleP21SW226Execute(t, fixture, view, before, requested, peers, deleted, true, "")
+			literal := integrationStreamExecute(t, fixture, view, before, requested, peers, deleted, false, "")
+			bounded := integrationStreamExecute(t, fixture, view, before, requested, peers, deleted, true, "")
 			if literal.conflict != bounded.conflict || !reflect.DeepEqual(literal.conflicts, bounded.conflicts) {
 				t.Fatal("streamed integration scalar CAS/key receipts differ", literal.conflict, bounded.conflict, literal.conflicts, bounded.conflicts)
 			}
@@ -1071,7 +1071,7 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 				!reflect.DeepEqual(literal.payloads, bounded.payloads) || !reflect.DeepEqual(literal.previous, bounded.previous) ||
 				!bytes.Equal(literal.root, bounded.root) || !reflect.DeepEqual(literal.rows, bounded.rows)) {
 				if !reflect.DeepEqual(literal.rows, bounded.rows) {
-					scaleP21SW226LogPhysicalRows(t, literal.rows, bounded.rows)
+					logPhysicalRows(t, literal.rows, bounded.rows)
 				}
 				t.Fatalf("streamed integration delta changed native image, SQL rows, root or ignored fields: delivery=%t connection=%t secret=%t payloads=%t previous=%t root=%t rows=%t",
 					bytes.Equal(literal.delivery, bounded.delivery), bytes.Equal(literal.connection, bounded.connection),
@@ -1093,7 +1093,7 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 	}
 	for _, phase := range []string{"read", "write"} {
 		t.Run("cancel-"+phase, func(t *testing.T) {
-			fixture := scaleP09Database(t)
+			fixture := journalScaleDatabase(t)
 			view := &SQLiteStore{db: fixture.db, dialect: fixture.dialect, maxStateBytes: fixture.maxStateBytes, metadataResidency: newMetadataResidency()}
 			before := cloneBootstrap(fixture.data)
 			before.IntegrationDeliveries = []domain.IntegrationDelivery{{
@@ -1101,10 +1101,10 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 				Payload: json.RawMessage(`{"body":"` + strings.Repeat("large body ", 100000) + `"}`), CreatedAt: at, UpdatedAt: at,
 			}}
 			before.IntegrationConnections = []domain.IntegrationConnection{{ID: "sw226-connection"}}
-			requested := scaleP21SW226Clone(before)
+			requested := integrationStreamClone(before)
 			requested.IntegrationDeliveries[0].Status = "delivering"
 			requested.IntegrationDeliveries[0].UpdatedAt = at.Add(time.Hour)
-			scaleP21SW226Execute(t, fixture, view, before, requested, nil, "", true, phase)
+			integrationStreamExecute(t, fixture, view, before, requested, nil, "", true, phase)
 		})
 	}
 	for _, name := range []string{"integrationDeliveries", "integrationConnections"} {
@@ -1120,4 +1120,4 @@ func TestScaleP21SW226IntegrationRowStreamDifferential(t *testing.T) {
 	}
 }
 
-var _ io.ReaderAt = scaleP21SW226ReadAt(nil)
+var _ io.ReaderAt = integrationStreamReadAt(nil)

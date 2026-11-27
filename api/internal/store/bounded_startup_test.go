@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW557: the startup work runs with bounded metadata on exactly as it does
+// The startup work runs with bounded metadata on exactly as it does
 // with it off. A database seeded flag off (an OAuth application whose app
 // user and installation carry a stale name and logo, and whose icon has no
 // recorded owner) and then given a workspace created with bounded metadata
@@ -30,7 +30,7 @@ import (
 // the same rows in every table (timestamps and generated ids masked), the
 // app user renamed and the icon owner recorded: the OpenDatabase startup
 // stages and both syncs write the same thing in both modes.
-func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
+func TestBoundedStartupMatchesLegacy(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -85,7 +85,7 @@ func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A bounded store starts once the metadata catalog covers every record.
-	if err := scaleP21SW557CompleteCatalog(ctx, repo); err != nil {
+	if err := completeCatalog(ctx, repo); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Close(); err != nil {
@@ -102,7 +102,7 @@ func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
 	dumps := map[bool]string{}
 	for _, bounded := range []bool{false, true} {
 		path := filepath.Join(dir, fmt.Sprintf("copy-%v.db", bounded))
-		scaleP21SW557CopyDatabase(t, seed, path)
+		copyDatabase(t, seed, path)
 		repo := open(path, bounded)
 		run := ctx
 		if bounded {
@@ -122,7 +122,7 @@ func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
 		if err := repo.Close(); err != nil {
 			t.Fatal(err)
 		}
-		dumps[bounded] = scaleP21SW557Dump(t, path)
+		dumps[bounded] = boundedStartupDump(t, path)
 	}
 	if dumps[false] != dumps[true] {
 		legacy, bounded := strings.Split(dumps[false], "\n"), strings.Split(dumps[true], "\n")
@@ -140,9 +140,9 @@ func TestScaleP21SW557BoundedStartupMatchesLegacy(t *testing.T) {
 	}
 }
 
-// scaleP21SW557CompleteCatalog runs the metadata catalog backfill over every
+// completeCatalog runs the metadata catalog backfill over every
 // collection to completion (what the load rig does before a bounded start).
-func scaleP21SW557CompleteCatalog(ctx context.Context, s *SQLiteStore) error {
+func completeCatalog(ctx context.Context, s *SQLiteStore) error {
 	cursor := metadataCollectionCursor{}
 	for {
 		var err error
@@ -175,7 +175,7 @@ func scaleP21SW557CompleteCatalog(ctx context.Context, s *SQLiteStore) error {
 	}
 }
 
-func scaleP21SW557CopyDatabase(t *testing.T, from, to string) {
+func copyDatabase(t *testing.T, from, to string) {
 	t.Helper()
 	for _, suffix := range []string{"", "-wal", "-shm"} {
 		source, err := os.Open(from + suffix)
@@ -200,13 +200,13 @@ func scaleP21SW557CopyDatabase(t *testing.T, from, to string) {
 }
 
 var (
-	scaleP21SW557Times = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?`)
-	scaleP21SW557IDs   = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9_-]+-[0-9a-f]{16,}|[a-z0-9]*_?\d{16,}_[a-z0-9]+|\b\d{13,}\b`)
+	boundedStartupTimes = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?`)
+	boundedStartupIDs   = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9_-]+-[0-9a-f]{16,}|[a-z0-9]*_?\d{16,}_[a-z0-9]+|\b\d{13,}\b`)
 )
 
-// scaleP21SW557Dump renders every row of every table, timestamps and
+// dump renders every row of every table, timestamps and
 // generated ids masked, sorted.
-func scaleP21SW557Dump(t *testing.T, path string) string {
+func boundedStartupDump(t *testing.T, path string) string {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -255,8 +255,8 @@ func scaleP21SW557Dump(t *testing.T, path string) string {
 				cells[i] = columns[i] + "=" + fmt.Sprint(value)
 			}
 			line := table + ": " + strings.Join(cells, " | ")
-			line = scaleP21SW557Times.ReplaceAllString(line, "<time>")
-			line = scaleP21SW557IDs.ReplaceAllString(line, "<id>")
+			line = boundedStartupTimes.ReplaceAllString(line, "<time>")
+			line = boundedStartupIDs.ReplaceAllString(line, "<id>")
 			lines = append(lines, line)
 		}
 		rows.Close()

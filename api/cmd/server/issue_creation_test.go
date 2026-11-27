@@ -20,12 +20,12 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW186CreateOptions struct {
+type createOptions struct {
 	authorization bool
 	creationKey   string
 }
 
-func scaleP21SW186Create(t *testing.T, f scaleP21IssueUpdateFixture, service *server, user domain.User, key *domain.APIKey, body map[string]any, development, cancelled bool, options ...scaleP21SW186CreateOptions) *httptest.ResponseRecorder {
+func issueCreationCreate(t *testing.T, f scaleIssueUpdateFixture, service *server, user domain.User, key *domain.APIKey, body map[string]any, development, cancelled bool, options ...createOptions) *httptest.ResponseRecorder {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -67,7 +67,7 @@ func scaleP21SW186Create(t *testing.T, f scaleP21IssueUpdateFixture, service *se
 	return w
 }
 
-func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
+func TestBorrowedQueryServerFields(t *testing.T) {
 	wanted := map[string]bool{"issueRecordsQuery": false, "issueRecordsQueryWithStore": false, "issueRecordAccess": false, "requestIssueQueryAccess": false, "requestIssueQueryAccessWithStore": false}
 	allowed := map[string]bool{
 		"store": true, "authDisabled": true,
@@ -81,7 +81,7 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 	allowedStore := map[string]bool{
 		"BoundedMetadataEnabled": true, "WorkspaceMetadata": true,
 		"IssueAccessMetadata": true, "IssueQueryAccess": true,
-		// SW215 pins fresh cold reads in the existing legacy-only branches.
+		// credential point reads pins fresh cold reads in the existing legacy-only branches.
 		"RefreshColdMetadataRead": true,
 	}
 	for _, path := range []string{"issue_query_access.go", "issue_records_api.go", "issue_request_access.go"} {
@@ -132,11 +132,11 @@ func TestScaleP21SW186BorrowedQueryServerFields(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW186CreationProjectionScope(t *testing.T) {
+func TestCreationProjectionScope(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	for _, source := range []string{"warm", "reloaded"} {
 		service := f.reset(t, source)
 		for _, principal := range f.principals {
@@ -189,7 +189,7 @@ func TestScaleP21SW186CreationProjectionScope(t *testing.T) {
 	}
 }
 
-func scaleP21SW186Installed(t *testing.T, repo *store.SQLiteStore, workspace string) json.RawMessage {
+func issueCreationInstalled(t *testing.T, repo *store.SQLiteStore, workspace string) json.RawMessage {
 	t.Helper()
 	names := []string{"workflowDefinitions", "workflowRuns", "triageResponsibilities", "triageAssignments", "issueSlas", "slaEvents"}
 	values := map[string]json.RawMessage{}
@@ -230,11 +230,11 @@ func scaleP21SW186Installed(t *testing.T, repo *store.SQLiteStore, workspace str
 	return raw
 }
 
-func TestScaleP21SW186IssueCreationAutomationDifferential(t *testing.T) {
+func TestIssueCreationAutomationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	member := f.principals[2].user
 	for _, test := range []struct {
 		name        string
@@ -296,8 +296,8 @@ func TestScaleP21SW186IssueCreationAutomationDifferential(t *testing.T) {
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			seed := f.prepare(scaleP21IssueUpdateCase{})
-			f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+			seed := f.prepare(scaleIssueUpdateCase{})
+			f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 				seed(t)
 				if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw186_seed", "", nil, func(data *domain.Bootstrap) error {
 					test.edit(data)
@@ -309,34 +309,34 @@ func TestScaleP21SW186IssueCreationAutomationDifferential(t *testing.T) {
 					test.setup(t)
 				}
 			}
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			var previous string
 			for _, source := range []string{"legacy", "warm", "reloaded"} {
 				var installed json.RawMessage
 				got, started := f.run(t, source, func(service *server) *httptest.ResponseRecorder {
-					w := scaleP21SW186Create(t, f, service, f.data.Viewer, nil, test.body, false, false, scaleP21SW186CreateOptions{creationKey: test.creationKey})
-					installed = scaleP21SW186Installed(t, service.store, f.data.Workspace.URLKey)
+					w := issueCreationCreate(t, f, service, f.data.Viewer, nil, test.body, false, false, createOptions{creationKey: test.creationKey})
+					installed = issueCreationInstalled(t, service.store, f.data.Workspace.URLKey)
 					return w
 				})
 				reloaded, err := store.OpenDatabase(f.reader.config)
 				if err != nil {
 					t.Fatal(err)
 				}
-				reloadedImage := scaleP21SW186Installed(t, reloaded, f.data.Workspace.URLKey)
+				reloadedImage := issueCreationInstalled(t, reloaded, f.data.Workspace.URLKey)
 				if err := reloaded.Close(); err != nil {
 					t.Fatal(err)
 				}
-				if scaleP21IssueUpdateNormalize(t, installed, started) != scaleP21IssueUpdateNormalize(t, reloadedImage, started) {
-					t.Fatalf("%s installed automation differs from SQL reload: %s", source, scaleP21M2Diff(string(installed), string(reloadedImage)))
+				if scaleIssueUpdateNormalize(t, installed, started) != scaleIssueUpdateNormalize(t, reloadedImage, started) {
+					t.Fatalf("%s installed automation differs from SQL reload: %s", source, policyFirstDifference(string(installed), string(reloadedImage)))
 				}
 				outcome := struct {
-					Result    scaleP21IssueUpdateOutcome
+					Result    scaleIssueUpdateOutcome
 					Metadata  [][]any
 					Installed json.RawMessage
 				}{got, f.rows(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, f.data.Workspace.URLKey), installed}
-				normalized := scaleP21IssueUpdateNormalize(t, outcome, started)
+				normalized := scaleIssueUpdateNormalize(t, outcome, started)
 				if previous != "" && previous != normalized {
-					t.Fatalf("%s changed: %s", source, scaleP21M2Diff(previous, normalized))
+					t.Fatalf("%s changed: %s", source, policyFirstDifference(previous, normalized))
 				}
 				previous = normalized
 				if got.Code >= 500 {
@@ -347,13 +347,13 @@ func TestScaleP21SW186IssueCreationAutomationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW186ConcurrentCreationDifferential(t *testing.T) {
+func TestConcurrentCreationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	seed := f.prepare(scaleP21IssueUpdateCase{})
-	f.scaleP21TriageWriterFixture.prepare = func(t *testing.T) {
+	f := scaleIssueUpdateSetup(t)
+	seed := f.prepare(scaleIssueUpdateCase{})
+	f.scaleTriageWriterFixture.prepare = func(t *testing.T) {
 		seed(t)
 		if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw186_concurrent_seed", "", nil, func(data *domain.Bootstrap) error {
 			// The separate postcommit heuristic sees whichever concurrent
@@ -375,7 +375,7 @@ func TestScaleP21SW186ConcurrentCreationDifferential(t *testing.T) {
 				group.Add(1)
 				go func() {
 					defer group.Done()
-					w := scaleP21SW186Create(t, f, service, f.data.Viewer, nil, map[string]any{"title": "Concurrent creation", "teamId": f.public}, false, false)
+					w := issueCreationCreate(t, f, service, f.data.Viewer, nil, map[string]any{"title": "Concurrent creation", "teamId": f.public}, false, false)
 					mu.Lock()
 					codes = append(codes, w.Code)
 					mu.Unlock()
@@ -389,26 +389,26 @@ func TestScaleP21SW186ConcurrentCreationDifferential(t *testing.T) {
 				t.Fatalf("%s concurrent creation status %d", source, code)
 			}
 		}
-		got.Webhooks = scaleP21IssueUpdateSorted(t, got.Webhooks, started)
-		got.Realtime = scaleP21IssueUpdateSorted(t, got.Realtime, started)
+		got.Webhooks = scaleIssueUpdateSorted(t, got.Webhooks, started)
+		got.Realtime = scaleIssueUpdateSorted(t, got.Realtime, started)
 		slices.SortFunc(got.State.Events, func(a, b []any) int {
 			left, _ := json.Marshal(a)
 			right, _ := json.Marshal(b)
-			return strings.Compare(scaleP21IssueUpdateNormalize(t, json.RawMessage(left), started), scaleP21IssueUpdateNormalize(t, json.RawMessage(right), started))
+			return strings.Compare(scaleIssueUpdateNormalize(t, json.RawMessage(left), started), scaleIssueUpdateNormalize(t, json.RawMessage(right), started))
 		})
-		normalized := scaleP21IssueUpdateNormalize(t, got, started)
+		normalized := scaleIssueUpdateNormalize(t, got, started)
 		if expected != "" && expected != normalized {
-			t.Fatalf("%s concurrent creation changed: %s", source, scaleP21M2Diff(expected, normalized))
+			t.Fatalf("%s concurrent creation changed: %s", source, policyFirstDifference(expected, normalized))
 		}
 		expected = normalized
 	}
 }
 
-func TestScaleP21SW186IssueCreationDifferential(t *testing.T) {
+func TestIssueCreationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
+	f := scaleIssueUpdateSetup(t)
 	owner, member, guest, sub := f.data.Viewer, f.principals[2].user, f.principals[3].user, f.principals[4].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	empty := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{}}
@@ -460,10 +460,10 @@ func TestScaleP21SW186IssueCreationDifferential(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{})
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{})
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
-				return scaleP21SW186Create(t, f, service, test.user, test.key, test.body, test.development, test.cancelled, scaleP21SW186CreateOptions{authorization: test.authorization, creationKey: test.creationKey})
+				return issueCreationCreate(t, f, service, test.user, test.key, test.body, test.development, test.cancelled, createOptions{authorization: test.authorization, creationKey: test.creationKey})
 			})
 			if test.cancelled && (outcomes[0].Code != http.StatusRequestTimeout || len(outcomes[0].State.Events) != 0) {
 				t.Fatal("canceled creation must report a failure without publishing events")

@@ -22,22 +22,22 @@ import (
 // (metadataTermSelection), with stale, missing, orphan and unchanged
 // documents in the same page.
 
-// TestScaleP21SW467LegacyMetadataSearchRepairKeepsDocumentsFindable covers
+// TestLegacyMetadataSearchRepairKeepsDocumentsFindable covers
 // the flag-off repair (migrateMetadataSearchIndex).
-func TestScaleP21SW467LegacyMetadataSearchRepairKeepsDocumentsFindable(t *testing.T) {
-	scaleP21SW467MetadataSearchRepair(t, false)
+func TestLegacyMetadataSearchRepairKeepsDocumentsFindable(t *testing.T) {
+	metadataSearchRepair(t, false)
 }
 
-// TestScaleP21SW468BoundedMetadataSearchRepairKeepsDocumentsFindable covers
-// the bounded repair (sw17MigrateMetadataSearchIndexBounded).
-func TestScaleP21SW468BoundedMetadataSearchRepairKeepsDocumentsFindable(t *testing.T) {
-	scaleP21SW467MetadataSearchRepair(t, true)
+// TestBoundedMetadataSearchRepairKeepsDocumentsFindable covers
+// the bounded repair (MigrateMetadataSearchIndexBounded).
+func TestBoundedMetadataSearchRepairKeepsDocumentsFindable(t *testing.T) {
+	metadataSearchRepair(t, true)
 }
 
-func scaleP21SW467MetadataSearchRepair(t *testing.T, bounded bool) {
+func metadataSearchRepair(t *testing.T, bounded bool) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw467-")
 	var keys []string
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21_sw467.search", "", nil, func(data *domain.Bootstrap) error {

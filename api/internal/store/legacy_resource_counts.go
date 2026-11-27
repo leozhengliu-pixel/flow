@@ -40,7 +40,7 @@ func (s *SQLiteStore) refreshLegacyResourceCountsSource(ctx context.Context, tx 
 	}
 	// Membership and deduplication live on disk. Only one row or projected
 	// directory entry is materialized at a time.
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}

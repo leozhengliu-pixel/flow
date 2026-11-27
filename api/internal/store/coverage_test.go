@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-var scaleP21SnapshotMethods = strings.Fields(`WorkspaceMetadata WorkspaceMetadataForRead WorkspaceReadSnapshotReservation WorkspaceMetadataFields Bootstrap BootstrapFor BootstrapForContext BootstrapForUser PagedWorkspaceMetadata BeginWorkspaceRead MutateWorkspace MutateWorkspaceWithAggregate MutateWorkspaceAudited MutateWorkspaceMetadata workspaceData publicMetadata mcpWorkspaceData mcpWorkspaceDataForTool chatAuthorizedMutation storedWorkspace loadWorkspaceState loadWorkspaceStamped decodeWorkspaceMetadata mutateFull mutateScoped mutateTeamMetadata WorkspaceMetadataScoped WorkspaceMetadataFieldsScoped MutateWorkspaceScoped MutateWorkspaceScopedWithAggregate MutateWorkspaceAppending MutateWorkspaceAppendingWithAggregate MutateWorkspaceResolved MutateWorkspaceResolvedWithAggregate ProjectScopedMetadata workspaceDataScoped applicationWebhookDataScoped ScanMetadataRecords StreamMetadataRecords BeginMetadataCollectionRead BeginMetadataArrayRead StreamMetadataArray MetadataCollectionsInSnapshot metadataCollectionsInSnapshot metadataRootCursorInSnapshot readRawMetadataLogicalSource readRawMetadataLogicalSourceValidated readRawMetadataLogicalSourceRoot readRawMetadataLogicalSourcePart workerLoopDefinition BeginFormerMembersRead ViewerVisibilityKeys BeginViewerVisibilityKeysRead BeginInstalledWorkspaceIdentityRead BeginInstalledTeamsWireRead BeginProjectTemplatesRead BeginGitLabConnectionConfigsRead BeginDueNotificationDeliveryRead BeginInstalledMetadataRead DefaultViewer BeginAccountRead BeginResourceWindowRead BeginAccountCollectionRead requestAccountSettings captureLogicalTestView
+var scaleSnapshotMethods = strings.Fields(`WorkspaceMetadata WorkspaceMetadataForRead WorkspaceReadSnapshotReservation WorkspaceMetadataFields Bootstrap BootstrapFor BootstrapForContext BootstrapForUser PagedWorkspaceMetadata BeginWorkspaceRead MutateWorkspace MutateWorkspaceWithAggregate MutateWorkspaceAudited MutateWorkspaceMetadata workspaceData publicMetadata mcpWorkspaceData mcpWorkspaceDataForTool chatAuthorizedMutation storedWorkspace loadWorkspaceState loadWorkspaceStamped decodeWorkspaceMetadata mutateFull mutateScoped mutateTeamMetadata WorkspaceMetadataScoped WorkspaceMetadataFieldsScoped MutateWorkspaceScoped MutateWorkspaceScopedWithAggregate MutateWorkspaceAppending MutateWorkspaceAppendingWithAggregate MutateWorkspaceResolved MutateWorkspaceResolvedWithAggregate ProjectScopedMetadata workspaceDataScoped applicationWebhookDataScoped ScanMetadataRecords StreamMetadataRecords BeginMetadataCollectionRead BeginMetadataArrayRead StreamMetadataArray MetadataCollectionsInSnapshot metadataCollectionsInSnapshot metadataRootCursorInSnapshot readRawMetadataLogicalSource readRawMetadataLogicalSourceValidated readRawMetadataLogicalSourceRoot readRawMetadataLogicalSourcePart workerLoopDefinition BeginFormerMembersRead ViewerVisibilityKeys BeginViewerVisibilityKeysRead BeginInstalledWorkspaceIdentityRead BeginInstalledTeamsWireRead BeginProjectTemplatesRead BeginGitLabConnectionConfigsRead BeginDueNotificationDeliveryRead BeginInstalledMetadataRead DefaultViewer BeginAccountRead BeginResourceWindowRead BeginAccountCollectionRead requestAccountSettings captureLogicalTestView
 BeginCycleScheduleRead MutateAgentSessionLifecycle CreateChatRequestAsk BeginLoopRunStartRead MutateLoopRunStart MutateLoopNextRun CreateTeamRecords BeginColdMetadataRead beginColdMetadataRead readMetadataLogicalWorkspaceAdmitted sweepAgentLiveWorkspace mutateBoundedScopedImage
 UpdatePortfolioProject CreatePortfolioDocument DeletePortfolioDocument
 BeginWorkflowScheduleRead MutateWorkflowRun BeginIntegrationDeliveryRead MutateIntegrationDelivery BeginAdvancedScheduleRead maintainAdvancedSchedulesAt MutateUserSettings`)
 
-func scaleP21RouteBinding(set *token.FileSet, call *ast.CallExpr) (string, error) {
+func scaleRouteBinding(set *token.FileSet, call *ast.CallExpr) (string, error) {
 	var handler bytes.Buffer
 	if err := printer.Fprint(&handler, set, call.Args[1]); err != nil {
 		return "", err
@@ -41,7 +41,7 @@ func scaleP21RouteBinding(set *token.FileSet, call *ast.CallExpr) (string, error
 	return "EXPR " + pattern.String() + "\t" + handler.String(), nil
 }
 
-func scaleP21SnapshotConsumer(node ast.Node) bool {
+func scaleSnapshotConsumer(node ast.Node) bool {
 	found := false
 	ast.Inspect(node, func(node ast.Node) bool {
 		selector, ok := node.(*ast.SelectorExpr)
@@ -54,7 +54,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 		if slices.Contains([]string{"projectedWorkspace", "ProjectedWorkspaceWithScope", "ProjectionScope", "WithColdMetadataRead", "WithColdMetadataMutation", "withColdMetadataRequest", "workspaceDataWithError"}, selector.Sel.Name) {
 			found = true
 		}
-		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "chatAuthorizedBootstrapHeaders", "chatAuthorizedWorkflowHeaders", "beginIssueRecordsBootstrapRead", "openIssueRecordsBootstrapRead", "BeginIssueWriteAuthorizationRead", "BeginCollaborationDocumentRead", "BeginCollaborationDocumentContentRead", "socketWorkspaceMetadata", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow", "ReadIssueSuggestions", "ViewerProjectionScope", "AuthorizationProjectionScope", "IssueAuthorizationReleaseVisible", "CycleVisibleInProjection", "ProjectVisibleInProjection", "ReadIssueSuggestion", "VisitIssueSuggestions", "LabelVisibleInProjection", "mutateBoundedIssueSuggestions", "ProjectedWorkspace", "mcpWorkspaceDataFrom", "TriageScoringInputs"}, selector.Sel.Name) || slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
+		if slices.Contains([]string{"sweepWorkerChatWorkspace", "BeginAskStatusRead", "BeginResourceRelationRead", "BeginSlackNotificationRead", "BeginMetadataJSONRead", "chatAuthorizedPointRead", "chatAuthorizedBootstrapHeaders", "chatAuthorizedWorkflowHeaders", "beginIssueRecordsBootstrapRead", "openIssueRecordsBootstrapRead", "BeginIssueWriteAuthorizationRead", "BeginCollaborationDocumentRead", "BeginCollaborationDocumentContentRead", "socketWorkspaceMetadata", "BeginPresenceDocumentRead", "BeginIssueBootstrapRead", "BeginGeneralBootstrapRead", "BeginRecurringNormalizationRead", "mutateBoundedScopedIssuePoint", "ReadCommentActions", "CommentActionExists", "LoadValidationHeaders", "LoadWorkflow", "ReadIssueSuggestions", "ViewerProjectionScope", "AuthorizationProjectionScope", "IssueAuthorizationReleaseVisible", "CycleVisibleInProjection", "ProjectVisibleInProjection", "ReadIssueSuggestion", "VisitIssueSuggestions", "LabelVisibleInProjection", "mutateBoundedIssueSuggestions", "ProjectedWorkspace", "mcpWorkspaceDataFrom", "TriageScoringInputs"}, selector.Sel.Name) || slices.Contains(scaleSnapshotMethods, selector.Sel.Name) ||
 			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginInstalledResourcePointRead", "BeginProjectedInstalledResourcePointRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseSourceRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginDocumentDirectoryRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginWebhookAggregateRead", "BeginLoopScheduleRead", "BeginChatDisplayRead", "BeginChatEventPolicyRead", "BeginApplicationAccessRead", "BeginApplicationListRead", "BeginAgentSessionRead", "BeginApplicationWebhookSweepRead", "BeginApplicationSLAEventRead", "BeginApplicationTaskContextRead", "BeginResourceDirectoryRead", "BeginAttachmentVisibilityRead", "CommitPulseSummaries", "RecordWebhookDeliveryFailure", "MutateFailingWebhookDisable"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
@@ -65,7 +65,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 	return found
 }
 
-func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
+func TestScaleFullWorkspaceConsumerInventory(t *testing.T) {
 	actual, routes := map[string]bool{}, map[string]bool{}
 	for prefix, dir := range map[string]string{"store": ".", "server": "../../cmd/server"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
@@ -86,7 +86,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 				if group, ok := decl.(*ast.GenDecl); ok {
 					for _, spec := range group.Specs {
 						value, ok := spec.(*ast.ValueSpec)
-						if !ok || !scaleP21SnapshotConsumer(value) {
+						if !ok || !scaleSnapshotConsumer(value) {
 							continue
 						}
 						for _, name := range value.Names {
@@ -94,7 +94,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 						}
 					}
 				}
-				if ok && scaleP21SnapshotConsumer(fn) {
+				if ok && scaleSnapshotConsumer(fn) {
 					actual[prefix+"/"+filepath.Base(path)+":"+fn.Name.Name] = true
 				}
 				if ok && prefix == "server" && strings.HasPrefix(filepath.Base(path), "mcp") {
@@ -136,7 +136,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 				if !ok || selector.Sel.Name != "Handle" && selector.Sel.Name != "HandleFunc" {
 					return true
 				}
-				binding, err := scaleP21RouteBinding(set, call)
+				binding, err := scaleRouteBinding(set, call)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -163,7 +163,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 		}
 		expected[name] = true
 	}
-	for name, reason := range scaleP21MigrateReviewedConsumers() {
+	for name, reason := range scaleMigrateReviewedConsumers() {
 		if expected[name] || strings.TrimSpace(reason) == "" {
 			t.Errorf("duplicate or unexplained consumer review: %s", name)
 		}
@@ -180,7 +180,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 		}
 	}
 	expectedRoutes := map[string]bool{}
-	for _, route := range scaleP21ReviewedRoutes {
+	for _, route := range scaleReviewedRoutes {
 		expectedRoutes[route] = true
 	}
 	for route := range routes {
@@ -196,7 +196,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 	t.Logf("registered snapshot consumers=%d; handler bindings=%d; activation blockers=%d", len(actual), len(routes), len(metadataFullWorkspaceConsumers()))
 }
 
-func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
+func TestScaleEveryMetadataFieldHasResidencyDecision(t *testing.T) {
 	fields := map[string]bool{}
 	kind := reflect.TypeFor[domain.Bootstrap]()
 	for i := 0; i < kind.NumField(); i++ {
@@ -206,7 +206,7 @@ func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
 			continue
 		}
 		if name == "-" {
-			if !slices.Contains(strings.Fields(scaleP21RuntimeMetadataFields), field.Name) {
+			if !slices.Contains(strings.Fields(scaleRuntimeMetadataFields), field.Name) {
 				t.Errorf("unregistered runtime Bootstrap field: %s", field.Name)
 			}
 			continue
@@ -228,7 +228,7 @@ func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
 			t.Errorf("stale field residency registration: %s", name)
 		}
 	}
-	for _, name := range strings.Fields(scaleP21RuntimeMetadataFields) {
+	for _, name := range strings.Fields(scaleRuntimeMetadataFields) {
 		field, ok := kind.FieldByName(name)
 		if !ok || field.Tag.Get("json") != "-" {
 			t.Errorf("stale runtime field residency registration: %s", name)
@@ -237,7 +237,7 @@ func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
 	t.Logf("explicit field decisions=%d", len(fields))
 }
 
-func TestScaleP21MCPToolInventory(t *testing.T) {
+func TestScaleMCPToolInventory(t *testing.T) {
 	raw, err := os.ReadFile("../../cmd/server/flow_mcp_tools.json")
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestScaleP21MCPToolInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := map[string]string{}
-	for access, names := range scaleP21ReviewedMCPTools {
+	for access, names := range scaleReviewedMCPTools {
 		for _, name := range strings.Fields(names) {
 			if expected[name] != "" {
 				t.Errorf("duplicate MCP registration: %s", name)
@@ -276,9 +276,9 @@ func TestScaleP21MCPToolInventory(t *testing.T) {
 
 // ActivityHistory* are transaction-scoped issue-edit inputs (a per-issue head
 // loader and the heads it read); like FormerMembers they are never resident.
-const scaleP21RuntimeMetadataFields = `NextIssueNumber ViewerTeamIDs TeamByID TeamByKey TeamChildren LabelIndex FormerMembers CollaborationUpdates ActivityHistoryLoader ActivityHistoryHeads ActivityHistoryError CollaborationWork`
+const scaleRuntimeMetadataFields = `NextIssueNumber ViewerTeamIDs TeamByID TeamByKey TeamChildren LabelIndex FormerMembers CollaborationUpdates ActivityHistoryLoader ActivityHistoryHeads ActivityHistoryError CollaborationWork`
 
-func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
+func TestScaleInventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 	for _, source := range []string{
 		`package probe; func handler() { s.workspaceData(r) }`,
 		`package probe; func handler() { callback := s.workspaceData; _ = callback }`,
@@ -372,13 +372,13 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !scaleP21SnapshotConsumer(file) {
+		if !scaleSnapshotConsumer(file) {
 			t.Fatal("new full-workspace consumer escaped registration")
 		}
 	}
 }
 
-func TestScaleP21InventoryIncludesDynamicRouteBindings(t *testing.T) {
+func TestScaleInventoryIncludesDynamicRouteBindings(t *testing.T) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, "new.go", `package probe; func routes() { mux.HandleFunc(pattern, s.newHandler) }`, 0)
 	if err != nil {
@@ -387,7 +387,7 @@ func TestScaleP21InventoryIncludesDynamicRouteBindings(t *testing.T) {
 	bindings := []string{}
 	ast.Inspect(file, func(node ast.Node) bool {
 		if call, ok := node.(*ast.CallExpr); ok {
-			binding, err := scaleP21RouteBinding(fileSet, call)
+			binding, err := scaleRouteBinding(fileSet, call)
 			if err != nil {
 				t.Fatal(err)
 			}

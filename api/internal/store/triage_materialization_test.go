@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW185CandidateSpoolOwnership(t *testing.T) {
+func TestCandidateSpoolOwnership(t *testing.T) {
 	s := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	read, err := s.BeginIssueSuggestionCandidates(t.Context())
 	if err != nil {
@@ -112,7 +112,7 @@ func TestIssueSuggestionTransitionBatchesRowsAndJournal(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	f.db.boundedCatalog.Store(true)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -150,7 +150,7 @@ func TestIssueSuggestionTransitionBatchesRowsAndJournal(t *testing.T) {
 			catalogWrites++
 		}
 	})
-	before := scaleP09Head(t, f)
+	before := scaleHead(t, f)
 	write := func(run func(*legacyMetadataWritePlan) error) {
 		t.Helper()
 		tx, err := f.db.BeginTx(ctx, nil)
@@ -249,7 +249,7 @@ func TestIssueSuggestionTransitionBatchesRowsAndJournal(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW185InlineFieldMaterializationOwnership(t *testing.T) {
+func TestInlineFieldMaterializationOwnership(t *testing.T) {
 	before := domain.Bootstrap{IssueSuggestions: []domain.IssueSuggestion{{ID: "duplicate"}, {ID: "duplicate"}}}
 	after := cloneBootstrap(before)
 	for index := 0; index < 1000; index++ {
@@ -325,7 +325,7 @@ func TestIssueSuggestionBatchedWritesMoveTheMetadataRevision(t *testing.T) {
 	for _, journal := range []string{"off", "on"} {
 		t.Run("journal "+journal, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_JOURNAL", journal)
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			ids := []string{"suggestion-a", "suggestion-b", "suggestion-c"}
 			revision := func() int64 {

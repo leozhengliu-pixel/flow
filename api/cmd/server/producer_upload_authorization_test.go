@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW334ProducerUploadBasenameAuthorization(t *testing.T) {
+func TestProducerUploadBasenameAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -29,7 +29,7 @@ func TestScaleP21SW334ProducerUploadBasenameAuthorization(t *testing.T) {
 				"/uploads/customer_request_attachment_id_report%2Fpart.txt",
 				"/%75ploads/attachment_id_report%2fpart.txt",
 			} {
-				if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if !membershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("supported producer URL not selected", method, path)
 				}
 			}
@@ -39,13 +39,13 @@ func TestScaleP21SW334ProducerUploadBasenameAuthorization(t *testing.T) {
 				"/uploads/customer_request_attachment_id_report/part.txt",
 				"/uploads%2Fextra/attachment_id_report%2Fpart.txt",
 			} {
-				if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if membershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("producer addition captured an uncertified upload path", method, path)
 				}
 			}
 		}
 		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
-			if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(method, "/uploads/attachment_id_report%2Fpart.txt", nil)) {
+			if membershipAuthorizationRequest(httptest.NewRequest(method, "/uploads/attachment_id_report%2Fpart.txt", nil)) {
 				t.Fatal("producer upload selector captured another method", method)
 			}
 		}
@@ -57,10 +57,10 @@ func TestScaleP21SW334ProducerUploadBasenameAuthorization(t *testing.T) {
 		Pattern string
 		Name    string
 	}
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo := f.repository
 	t.Run(f.reader.config.Driver, func(t *testing.T) {
-		foreign := scaleP03Fixture(t, repo)
+		foreign := resourceAccessScaleFixture(t, repo)
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.data.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
@@ -161,7 +161,7 @@ func TestScaleP21SW334ProducerUploadBasenameAuthorization(t *testing.T) {
 													}
 												}
 												if phase == "reloaded" {
-													scaleP21SW201ReloadSource(t, f.reader, source)
+													metadataReloadSourceReloadSource(t, f.reader, source)
 												}
 												request := f.literalRequest(user, key, nil)
 												path := produced[kind][row.filename]

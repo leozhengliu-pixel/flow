@@ -13,17 +13,17 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW7DeferredAuditsDifferential(t *testing.T) {
+func TestDeferredAuditsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 		prefix := idgen.New("sw7-audit-")
 		missingWorkspace, missingUser := prefix+"-missing-workspace", prefix+"-missing-user"
-		projectHash := scaleP21M3Fingerprint(t, repo, workspace, "projects")
-		settingsHash := scaleP21M2UnrelatedHash(t, t.Context(), repo, workspace)
+		projectHash := pointRecordFingerprint(t, repo, workspace, "projects")
+		settingsHash := unrelatedPolicyRowsHash(t, t.Context(), repo, workspace)
 		otherUser := func(actor domain.User) domain.User {
 			if actor.ID == missingUser {
 				return actor
@@ -246,7 +246,7 @@ func TestScaleP21SW7DeferredAuditsDifferential(t *testing.T) {
 						for i := range got.Realtime {
 							got.Realtime[i].ID, got.Realtime[i].Seq, got.Realtime[i].CreatedAt = "", 0, time.Time{}
 						}
-						got.Records = scaleP21M2Canonical(t, repo, workspace,
+						got.Records = policyCanonicalRecords(t, repo, workspace,
 							store.RecordKey{Kind: "settings", ID: prefix}, store.RecordKey{Kind: "users", ID: principal.ID})
 						after, ok, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{})
 						if err != nil || !ok {
@@ -256,14 +256,14 @@ func TestScaleP21SW7DeferredAuditsDifferential(t *testing.T) {
 						if !reflect.DeepEqual(got.BeforeViewer, got.Viewer) {
 							t.Fatal("audit-only helpers changed the persisted root viewer")
 						}
-						if scaleP21M3Fingerprint(t, source, workspace, "projects") != projectHash ||
-							scaleP21M2UnrelatedHash(t, t.Context(), source, workspace) != settingsHash {
+						if pointRecordFingerprint(t, source, workspace, "projects") != projectHash ||
+							unrelatedPolicyRowsHash(t, t.Context(), source, workspace) != settingsHash {
 							t.Fatal("deferred audits changed unrelated canonical rows")
 						}
 						outcomes = append(outcomes, got)
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("deferred audit semantics differ: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("deferred audit semantics differ: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 					if phase == "revoked" {
 						if err := repo.ResumeMember(t.Context(), workspaceID, principal.ID); err != nil {

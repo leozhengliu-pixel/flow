@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW153Start struct {
+type commentActionReadsStart struct {
 	Workspace string
 	Actor     domain.User
 	Allowed   bool
@@ -24,12 +24,12 @@ type scaleP21SW153Start struct {
 
 // This is the literal original startCommentActions path up to its goroutine.
 // The legacy oracle does not call the new bounded input selector.
-func scaleP21SW153LegacyStart(s *server, r *http.Request, issueID string, comment domain.Comment) scaleP21SW153Start {
+func legacyStart(s *server, r *http.Request, issueID string, comment domain.Comment) commentActionReadsStart {
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && !apiKeyHasScope(key, "write") {
-		return scaleP21SW153Start{}
+		return commentActionReadsStart{}
 	}
 	if comment.User.App || comment.BotActor != nil || comment.User.Via != nil {
-		return scaleP21SW153Start{}
+		return commentActionReadsStart{}
 	}
 	var data domain.Bootstrap
 	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
@@ -41,7 +41,7 @@ func scaleP21SW153LegacyStart(s *server, r *http.Request, issueID string, commen
 	if read, bounded := r.Context().Value(boundedIssueWriteAuthorizationContext{}).(*store.IssueWriteAuthorizationRead); bounded {
 		settings, ok, err := read.CurrentCommentActionSettings(r.Context(), data.Viewer.ID)
 		if err != nil {
-			return scaleP21SW153Start{}
+			return commentActionReadsStart{}
 		}
 		if ok && settings.UserID != "" {
 			data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
@@ -51,17 +51,17 @@ func scaleP21SW153LegacyStart(s *server, r *http.Request, issueID string, commen
 	}
 	issue, err := issueByID(&data, issueID)
 	if err != nil || !s.commentActionsAllowed(data, *issue) {
-		return scaleP21SW153Start{}
+		return commentActionReadsStart{}
 	}
-	return scaleP21SW153Start{Workspace: data.Workspace.URLKey, Actor: data.Viewer, Allowed: true}
+	return commentActionReadsStart{Workspace: data.Workspace.URLKey, Actor: data.Viewer, Allowed: true}
 }
 
-func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
+func TestCommentActionReadRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 				if test.gate == "write-tools" {
 					service.agent.WriteTools = false
 				}
-				request := scaleP21SW47Request(f.scaleP21M2Fixture, test.actor, test.key, http.MethodGet, "/api/issue-records/"+issue.ID+"/comment-actions", issue.ID, "", nil)
+				request := issueChildAuthorizationRequest(f.policyDifferentialFixture, test.actor, test.key, http.MethodGet, "/api/issue-records/"+issue.ID+"/comment-actions", issue.ID, "", nil)
 				if test.operation == "start" {
 					request.Method, request.URL.Path = http.MethodPost, "/api/issue-records/"+issue.ID+"/comments"
 				}
@@ -272,7 +272,7 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 				func() {
 					request, closeOutput := beginRequestResourceReads(request)
 					defer closeOutput()
-					response := &scaleP21SW59ResponseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.code == http.StatusOK}
+					response := &responseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.code == http.StatusOK}
 					if !service.resourceAllowedLegacy(request, workspace, test.actor.ID) {
 						writeError(response, http.StatusForbidden, "This resource is outside your teams")
 					} else {
@@ -293,7 +293,7 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 								data.CommentActions = append(data.CommentActions, extra)
 							})
 						}
-						before := scaleP21SW59SQL(t, f)
+						before := discussionWriteSql(t, f)
 						mux := http.NewServeMux()
 						handler := service.issueRecordAlias(func(w http.ResponseWriter, r *http.Request) {
 							if test.operation == "list" {
@@ -309,12 +309,12 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 							case "via-comment":
 								currentComment.User.Via = &domain.ActorBot{ID: prefix + "via"}
 							}
-							var gate scaleP21SW153Start
+							var gate commentActionReadsStart
 							if source.BoundedMetadataEnabled() {
 								workspace, actor, allowed := service.commentActionStartRead(r, issue.ID, currentComment)
-								gate = scaleP21SW153Start{Workspace: workspace, Actor: actor, Allowed: allowed}
+								gate = commentActionReadsStart{Workspace: workspace, Actor: actor, Allowed: allowed}
 							} else {
-								gate = scaleP21SW153LegacyStart(service, r, issue.ID, currentComment)
+								gate = legacyStart(service, r, issue.ID, currentComment)
 							}
 							if gate.Allowed != test.allowed || gate.Allowed && (gate.Workspace != workspace || !reflect.DeepEqual(gate.Actor, test.actor)) {
 								t.Fatal("comment-action synchronous production launch gate changed", source.BoundedMetadataEnabled(), gate)
@@ -332,7 +332,7 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 						}
 						mux.HandleFunc(request.Method+" /api/issue-records/{id}"+tail, handler)
 						mux.ServeHTTP(response, request)
-						if !reflect.DeepEqual(before, scaleP21SW59SQL(t, f)) {
+						if !reflect.DeepEqual(before, discussionWriteSql(t, f)) {
 							t.Fatal("comment-action read or denied start changed business rows")
 						}
 						if test.operation == "list" && test.code == http.StatusOK {
@@ -363,7 +363,7 @@ func TestScaleP21SW153CommentActionReadRoutesDifferential(t *testing.T) {
 				outcomes = append(outcomes, got)
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("comment-action route or synchronous start-gate differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("comment-action route or synchronous start-gate differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 			pairs++
 		})

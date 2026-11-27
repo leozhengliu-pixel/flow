@@ -18,9 +18,9 @@ import (
 
 // The fixture, authentication and response encoding are included in each
 // request measurement; seeding, warmup and GC are outside the timed region.
-func TestScaleP16WriteAllocations(t *testing.T) {
+func TestScaleWriteAllocations(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
-	database := newScaleP04Database(t)
+	database := newScaleDatabase(t)
 	data, _ := database.repo.BootstrapFor(database.key)
 	if err := database.repo.SeedSyntheticMetadata(t.Context(), database.key, store.SyntheticMetadata{
 		Projects: 20000, ProjectBytes: 2048, TeamIDs: []string{data.Teams[0].ID},

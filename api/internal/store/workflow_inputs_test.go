@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW201NextIssueNumber(issues []domain.Issue) int {
+func workflowInputsNextIssueNumber(issues []domain.Issue) int {
 	next := 1
 	for _, issue := range issues {
 		if issue.Number >= next {
@@ -23,7 +23,7 @@ func scaleP21SW201NextIssueNumber(issues []domain.Issue) int {
 	return next
 }
 
-func TestScaleP21SW201WorkflowSelectedInputs(t *testing.T) {
+func TestWorkflowSelectedInputs(t *testing.T) {
 	clock := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	for _, numbers := range [][]int{
 		nil, {-4, -2}, {1, 4, 3}, {math.MaxInt}, {math.MaxInt, -10},
@@ -56,7 +56,7 @@ func TestScaleP21SW201WorkflowSelectedInputs(t *testing.T) {
 						Status: "failed", NextRetryAt: &clock, Output: map[string]string{"prior": "retained"},
 					})
 				}
-				view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+				view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 				source, err := view.retainMetadataLogicalSource(t.Context(), "physical")
 				if err != nil {
 					t.Fatal(err)
@@ -75,8 +75,8 @@ func TestScaleP21SW201WorkflowSelectedInputs(t *testing.T) {
 				// oracle, including multiple creates and legal SQL/import ints.
 				fullIssues := append([]domain.Issue(nil), data.Issues...)
 				for range 4 {
-					expected := scaleP21SW201NextIssueNumber(fullIssues)
-					got := scaleP21SW201NextIssueNumber(inputs.data.Issues)
+					expected := workflowInputsNextIssueNumber(fullIssues)
+					got := workflowInputsNextIssueNumber(inputs.data.Issues)
 					if expected != got {
 						t.Fatal("selected number headers changed ordered fold", numbers, expected, got)
 					}
@@ -130,7 +130,7 @@ func TestScaleP21SW201WorkflowSelectedInputs(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowLargeRetainedRunBodies(t *testing.T) {
+func TestWorkflowLargeRetainedRunBodies(t *testing.T) {
 	now := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	body := strings.Repeat("x", 4<<20)
 	data := domain.Bootstrap{
@@ -144,7 +144,7 @@ func TestScaleP21SW201WorkflowLargeRetainedRunBodies(t *testing.T) {
 			Error: body, Output: map[string]string{"retained": body},
 		})
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	source, err := view.retainMetadataLogicalSource(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +185,7 @@ func TestScaleP21SW201WorkflowLargeRetainedRunBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowRetainedRunPatchGuard(t *testing.T) {
+func TestWorkflowRetainedRunPatchGuard(t *testing.T) {
 	now := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	for _, mode := range []string{"old-attempt", "old-status", "old-output", "older-retry-clear", "retry-retarget", "extra-new-run", "delete", "reorder"} {
 		t.Run(mode, func(t *testing.T) {
@@ -196,7 +196,7 @@ func TestScaleP21SW201WorkflowRetainedRunPatchGuard(t *testing.T) {
 					{ID: "last", WorkflowID: "target", Status: "failed", Attempt: 2, NextRetryAt: &now},
 				},
 			}
-			view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+			view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 			source, err := view.retainMetadataLogicalSource(t.Context(), "physical")
 			if err != nil {
 				t.Fatal(err)
@@ -242,7 +242,7 @@ func TestScaleP21SW201WorkflowRetainedRunPatchGuard(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowDueReadInstalledChoiceAndGeneration(t *testing.T) {
+func TestWorkflowDueReadInstalledChoiceAndGeneration(t *testing.T) {
 	now := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	data := func(prefix string) domain.Bootstrap {
 		return domain.Bootstrap{
@@ -251,7 +251,7 @@ func TestScaleP21SW201WorkflowDueReadInstalledChoiceAndGeneration(t *testing.T) 
 			WorkflowRuns:        []domain.WorkflowRun{{WorkflowID: prefix + "-retry", Status: "failed", NextRetryAt: &now, ResourceType: "issue", ResourceID: prefix + "-issue"}},
 		}
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data("old")})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data("old")})
 	parent, found, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -302,7 +302,7 @@ func TestScaleP21SW201WorkflowDueReadInstalledChoiceAndGeneration(t *testing.T) 
 	}
 }
 
-func TestScaleP21SW201WorkflowDueRead(t *testing.T) {
+func TestWorkflowDueRead(t *testing.T) {
 	now := time.Date(2026, 11, 16, 2, 3, 4, 0, time.UTC)
 	earlier, later := now.Add(-time.Minute), now.Add(time.Minute)
 	data := domain.Bootstrap{
@@ -329,7 +329,7 @@ func TestScaleP21SW201WorkflowDueRead(t *testing.T) {
 		{WorkflowID: "scheduled", Trigger: "retry", ResourceType: "issue", ResourceID: "issue"},
 		{WorkflowID: "scheduled", Trigger: "retry", ResourceType: "issue", ResourceID: "same-again"},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, found, err := view.BeginWorkflowScheduleRead(t.Context(), "physical")
 	if err != nil || !found {
 		t.Fatal(err, found)
@@ -374,11 +374,11 @@ func TestScaleP21SW201WorkflowDueRead(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowRunFailureBoundaries(t *testing.T) {
+func TestWorkflowRunFailureBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	workflowID := "sw201-" + f.data.Workspace.ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw201_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -456,11 +456,11 @@ func TestScaleP21SW201WorkflowRunFailureBoundaries(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW201WorkflowCallbackNativeOwnership(t *testing.T) {
+func TestWorkflowCallbackNativeOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	workflowID := "sw201-native-" + f.data.Workspace.ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw201_native_seed", "", nil, func(data *domain.Bootstrap) error {

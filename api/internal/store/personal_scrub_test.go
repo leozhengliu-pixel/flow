@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW21ScrubRow struct {
+type scrubRow struct {
 	target int
 	column string
 	keys   []string
@@ -25,19 +25,19 @@ type scaleP21SW21ScrubRow struct {
 	about  bool
 }
 
-type scaleP21SW21ScrubFixture struct {
-	scaleP09Fixture
+type scrubFixture struct {
+	scaleFixture
 	person string
-	rows   []scaleP21SW21ScrubRow
+	rows   []scrubRow
 }
 
-func scaleP21SW21ScrubSeed(t *testing.T) scaleP21SW21ScrubFixture {
+func scrubSeed(t *testing.T) scrubFixture {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	result := scaleP21SW21ScrubFixture{scaleP09Fixture: f, person: idgen.New("sw21-%_!-person-")}
+	f := journalScaleDatabase(t)
+	result := scrubFixture{scaleFixture: f, person: idgen.New("sw21-%_!-person-")}
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Format(time.RFC3339Nano)
 	quotedPerson, _ := json.Marshal(result.person)
@@ -72,21 +72,21 @@ func scaleP21SW21ScrubSeed(t *testing.T) scaleP21SW21ScrubFixture {
 		if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'settings',?,?,?)`, workspace, key, i, raw); err != nil {
 			t.Fatal(err)
 		}
-		result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 2, column: "data", keys: []string{"settings", key}, raw: raw})
+		result.rows = append(result.rows, scrubRow{target: 2, column: "data", keys: []string{"settings", key}, raw: raw})
 	}
 	unchanged := []byte(`{ "z":1,"literal":` + string(quotedPerson) + `, "a":2 }`)
 	key := idgen.New("sw21-scrub-unchanged-")
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'settings',?,100,?)`, workspace, key, unchanged); err != nil {
 		t.Fatal(err)
 	}
-	result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 2, column: "data", keys: []string{"settings", key}, raw: unchanged})
+	result.rows = append(result.rows, scrubRow{target: 2, column: "data", keys: []string{"settings", key}, raw: unchanged})
 	for _, kind := range []string{"comment", "notification"} {
 		id, resource := idgen.New("sw21-scrub-content-"), idgen.New("sw21-scrub-resource-")
 		raw := body(id, "retained content")
 		if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data) VALUES(?,?,?,?,?,?)`, workspace, kind, resource, id, stamp, raw); err != nil {
 			t.Fatal(err)
 		}
-		result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 1, column: "data", keys: []string{kind, resource, id}, raw: raw})
+		result.rows = append(result.rows, scrubRow{target: 1, column: "data", keys: []string{kind, resource, id}, raw: raw})
 	}
 	issueID := idgen.New("sw21-scrub-issue-")
 	issueRaw := body(issueID, "retained issue")
@@ -95,7 +95,7 @@ func scaleP21SW21ScrubSeed(t *testing.T) scaleP21SW21ScrubFixture {
 		t.Fatal(err)
 	}
 	for _, column := range []string{"data", "list_data"} {
-		result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 0, column: column, keys: []string{issueID}, raw: issueRaw})
+		result.rows = append(result.rows, scrubRow{target: 0, column: column, keys: []string{issueID}, raw: issueRaw})
 	}
 	for _, about := range []bool{false, true} {
 		id, aggregate := idgen.New("sw21-scrub-event-"), idgen.New("sw21-other-")
@@ -117,7 +117,7 @@ func scaleP21SW21ScrubSeed(t *testing.T) scaleP21SW21ScrubFixture {
 			t.Fatal(err)
 		}
 		for _, column := range []string{"payload", "previous_values"} {
-			result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 4, column: column, keys: []string{id}, raw: payload, about: about})
+			result.rows = append(result.rows, scrubRow{target: 4, column: column, keys: []string{id}, raw: payload, about: about})
 		}
 	}
 	var original []byte
@@ -141,11 +141,11 @@ func scaleP21SW21ScrubSeed(t *testing.T) scaleP21SW21ScrubFixture {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_states SET data=? WHERE workspace_key=?`, raw, workspace); err != nil {
 		t.Fatal(err)
 	}
-	result.rows = append(result.rows, scaleP21SW21ScrubRow{target: 3, column: "data", raw: raw})
+	result.rows = append(result.rows, scrubRow{target: 3, column: "data", raw: raw})
 	return result
 }
 
-func (f scaleP21SW21ScrubFixture) restore(t *testing.T) {
+func (f scrubFixture) restore(t *testing.T) {
 	t.Helper()
 	for _, row := range f.rows {
 		target := personScrubTargets[row.target]
@@ -167,7 +167,7 @@ func (f scaleP21SW21ScrubFixture) restore(t *testing.T) {
 	}
 }
 
-func (f scaleP21SW21ScrubFixture) verify(t *testing.T, rewritten bool) int {
+func (f scrubFixture) verify(t *testing.T, rewritten bool) int {
 	t.Helper()
 	changes := 0
 	anonymous := domain.DeletedUserIdentity(f.person)
@@ -201,8 +201,8 @@ func (f scaleP21SW21ScrubFixture) verify(t *testing.T, rewritten bool) int {
 	return changes
 }
 
-func TestScaleP21SW21PersonalScrubBaseline(t *testing.T) {
-	f := scaleP21SW21ScrubSeed(t)
+func TestPersonalScrubBaseline(t *testing.T) {
+	f := scrubSeed(t)
 	f.verify(t, false)
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -220,8 +220,8 @@ func TestScaleP21SW21PersonalScrubBaseline(t *testing.T) {
 	t.Logf("legacy scrub values=%d bytes/op=%d allocs/op=%d elapsed=%s", count, after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs, elapsed)
 }
 
-func TestScaleP21SW21PersonalScrubDifferential(t *testing.T) {
-	f := scaleP21SW21ScrubSeed(t)
+func TestPersonalScrubDifferential(t *testing.T) {
+	f := scrubSeed(t)
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestScaleP21SW21PersonalScrubDifferential(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'settings',?,0,?)`, foreign.Workspace.URLKey, idgen.New("sw21-foreign-copy-"), f.rows[0].raw); err != nil {
 		t.Fatal(err)
 	}
-	foreignBefore := scaleP21SW21MetadataHash(t, f.SQLiteStore, foreign.Workspace.URLKey)
+	foreignBefore := metadataHash(t, f.SQLiteStore, foreign.Workspace.URLKey)
 	events := 0
 	for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 		source.SetWebhookSink(func(string, domain.DomainEvent) { events++ })
@@ -274,15 +274,15 @@ func TestScaleP21SW21PersonalScrubDifferential(t *testing.T) {
 	if _, err := probe.ScrubPersonCopies(t.Context(), idgen.New("sw21-missing-"), f.person); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatalf("missing workspace=%v", err)
 	}
-	if foreignBefore != scaleP21SW21MetadataHash(t, f.SQLiteStore, foreign.Workspace.URLKey) ||
+	if foreignBefore != metadataHash(t, f.SQLiteStore, foreign.Workspace.URLKey) ||
 		events != 0 || probe.WorkspaceMetadataDecodes() != 0 ||
 		probe.metadataResidency.work.used != 0 || probe.metadataResidency.work.waiting != 0 {
 		t.Fatal("scrub changed foreign rows, published, decoded full metadata or leaked work")
 	}
 }
 
-func TestScaleP21SW21PersonalScrubAtomicAdmission(t *testing.T) {
-	f := scaleP21SW21ScrubSeed(t)
+func TestPersonalScrubAtomicAdmission(t *testing.T) {
+	f := scrubSeed(t)
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -347,13 +347,13 @@ func TestScaleP21SW21PersonalScrubAtomicAdmission(t *testing.T) {
 	}
 }
 
-type scaleP21SW21ScrubFailedReader struct{ err error }
+type scrubFailedReader struct{ err error }
 
-func (r scaleP21SW21ScrubFailedReader) ReadAt([]byte, int64) (int, error) {
-	return 0, &scaleP21SW21ScrubReadError{r.err}
+func (r scrubFailedReader) ReadAt([]byte, int64) (int, error) {
+	return 0, &scrubReadError{r.err}
 }
 
-func TestScaleP21SW21PersonalScrubCodec(t *testing.T) {
+func TestPersonalScrubCodec(t *testing.T) {
 	anonymous := domain.DeletedUserIdentity("sw21-person")
 	for _, raw := range [][]byte{
 		[]byte(`{"id":"sw21-person","name":"Private","displayName":"Private","n":123456789012345678901234567890,"x":"first","x":"last"}`),
@@ -369,7 +369,7 @@ func TestScaleP21SW21PersonalScrubCodec(t *testing.T) {
 	} {
 		for _, about := range []bool{false, true} {
 			expected, changed := ScrubPersonJSON(raw, anonymous, about)
-			part, cost, valid, err := scaleP21SW21ScrubPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)))
+			part, cost, valid, err := scrubPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -389,28 +389,28 @@ func TestScaleP21SW21PersonalScrubCodec(t *testing.T) {
 		}
 	}
 	large := []byte(`{"id":"sw21-person","email":"private","x":"` + strings.Repeat("<", 8<<20) + `"}`)
-	if _, _, _, err := scaleP21SW21ScrubPreflight(t.Context(), bytes.NewReader(large), int64(len(large))); !errors.Is(err, ErrMetadataWorkBudget) {
+	if _, _, _, err := scrubPreflight(t.Context(), bytes.NewReader(large), int64(len(large))); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("oversized escaped output was not refused: %v", err)
 	}
 	structural := []byte("[" + strings.Repeat("{},", 260000) + "{}]")
-	if _, _, _, err := scaleP21SW21ScrubPreflight(t.Context(), bytes.NewReader(structural), int64(len(structural))); !errors.Is(err, ErrMetadataWorkBudget) {
+	if _, _, _, err := scrubPreflight(t.Context(), bytes.NewReader(structural), int64(len(structural))); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("small encoded input with excessive containers was not refused: %v", err)
 	}
-	if _, _, _, err := scaleP21SW21ScrubPreflight(t.Context(), scaleP21SW21ScrubFailedReader{io.ErrUnexpectedEOF}, 100); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, _, _, err := scrubPreflight(t.Context(), scrubFailedReader{io.ErrUnexpectedEOF}, 100); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("SQL read failure was treated as unchanged JSON: %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, _, _, err := scaleP21SW21ScrubPreflight(ctx, bytes.NewReader([]byte(`{}`)), 2); !errors.Is(err, context.Canceled) {
+	if _, _, _, err := scrubPreflight(ctx, bytes.NewReader([]byte(`{}`)), 2); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled preflight=%v", err)
 	}
 }
 
-func TestScaleP21SW21PersonalScrubNestedLease(t *testing.T) {
+func TestPersonalScrubNestedLease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, person, key := f.data.Workspace.URLKey, idgen.New("sw21-nested-person-"), idgen.New("sw21-nested-record-")
 	quoted, _ := json.Marshal(person)
 	raw := []byte(`{"id":` + string(quoted) + `,"displayName":"Private","name":"Private","email":"private@example.test"}`)
@@ -425,7 +425,7 @@ func TestScaleP21SW21PersonalScrubNestedLease(t *testing.T) {
 	for _, source := range []*SQLiteStore{f.SQLiteStore, probe} {
 		source.SetWebhookSink(func(string, domain.DomainEvent) { events++ })
 		source.SetRealtimeSink(func(string, domain.RealtimeEvent) { events++ })
-		for _, allowance := range []int{scaleP21SW21ScrubFixedWork, metadataPolicyBytes + scaleP21SW21ScrubFixedWork} {
+		for _, allowance := range []int{scrubFixedWork, metadataPolicyBytes + scrubFixedWork} {
 			if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='settings' AND record_key=?`, raw, workspace, key); err != nil {
 				t.Fatal(err)
 			}
@@ -442,7 +442,7 @@ func TestScaleP21SW21PersonalScrubNestedLease(t *testing.T) {
 				release()
 				t.Fatal(err)
 			}
-			rejected := source.BoundedMetadataEnabled() && allowance == scaleP21SW21ScrubFixedWork
+			rejected := source.BoundedMetadataEnabled() && allowance == scrubFixedWork
 			expected, _ := ScrubPersonJSON(raw, domain.DeletedUserIdentity(person), false)
 			if rejected {
 				expected = raw

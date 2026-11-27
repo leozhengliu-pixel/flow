@@ -130,7 +130,7 @@ func writeIssueAttributes(ctx context.Context, tx *sqlTx, workspace string, issu
 
 func (s *SQLiteStore) migrateIssueAttributes(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
-		return s.sw17MigrateIssueAttributesBounded(ctx)
+		return s.migrateIssueAttributesBounded(ctx)
 	}
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_attribute_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
@@ -337,7 +337,7 @@ func recurringIssueIDQuery(dueBy bool) string {
 // later writes keep the attribute current.
 func (s *SQLiteStore) migrateRecurrenceInstances(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
-		return s.sw17MigrateRecurrenceInstancesBounded(ctx)
+		return s.migrateRecurrenceInstancesBounded(ctx)
 	}
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS recurrence_instance_migrations(workspace_key VARCHAR(191) PRIMARY KEY)`); err != nil {
 		return err

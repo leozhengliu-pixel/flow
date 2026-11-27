@@ -10,10 +10,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21ActivationRealtimeDifferential(t *testing.T) {
+func TestScaleActivationRealtimeDifferential(t *testing.T) {
 	for _, mode := range []string{"off", "current", "full"} {
 		t.Run(mode, func(t *testing.T) {
-			peers, fixture, issue, _ := scaleP21ActivationHTTPPeers(t, mode)
+			peers, fixture, issue, _ := scaleActivationHTTPPeers(t, mode)
 			workspace := fixture.data.Workspace.URLKey
 			writer, reader := peers[0].service, peers[1].service
 			// Drive the receiver's poll explicitly, between commit and the

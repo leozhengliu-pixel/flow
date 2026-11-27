@@ -18,7 +18,7 @@
     "findIssueForPermissions": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Both HOT GET/HEAD permission paths consume the retained authorized issue headers with the flag on (SW113, SW114, SW274). The workspaceDataWithError fallback serves COLD permission writes and flag-off permission lists, preserving read errors before granting access (SW270 relay walk).",
+      "reason": "Both HOT GET/HEAD permission paths consume the retained authorized issue headers with the flag on. The workspaceDataWithError fallback serves COLD permission writes and flag-off permission lists, preserving read errors before granting access (server compatibility wrapper relay walk).",
       "accessors": [
         "Bootstrap",
         "workspaceDataWithError"

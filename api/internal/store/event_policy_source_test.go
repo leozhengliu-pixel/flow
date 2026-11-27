@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW73EventPolicySourceDifferential(t *testing.T) {
+func TestEventPolicySourceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	credentials := []struct {
 		name string
@@ -33,9 +33,9 @@ func TestScaleP21SW73EventPolicySourceDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	// Reuse the SW23 fixture/row helper; the typed projection's alias,
+	// Reuse the team-policy projection fixture/row helper; the typed projection's alias,
 	// duplicate-field and physical-order corpus is already proved there.
-	for _, row := range []scaleP21SW23MetadataRow{
+	for _, row := range []metadataRow{
 		{Field: "teams", Key: "sw73-physical-parent", Order: -3, Data: []byte(`{"id":"sw73-parent","key":"PARENT","private":false,"Private":true,"externalSource":"null","name":"ignored parent"}`)},
 		{Field: "teams", Key: "sw73-physical-child", Order: -2, Data: []byte(`{"ID":"sw73-child","key":"CHILD","private":false,"name":"ignored child"}`)},
 		{Field: "teams", Key: "sw73-physical-public", Order: -1, Data: []byte(`{"id":"sw73-public","key":"PUBLIC","private":false}`)},
@@ -91,7 +91,7 @@ func TestScaleP21SW73EventPolicySourceDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeRoot, beforeRows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	beforeRoot, beforeRows := migrationRows(t, f.SQLiteStore, workspace)
 	document := domain.Document{InheritedTeamIDs: []string{"sw73-child", "sw73-public"}}
 	type accessOutcome struct {
 		Error, Workspace, Fingerprint string
@@ -294,7 +294,7 @@ func TestScaleP21SW73EventPolicySourceDifferential(t *testing.T) {
 			}
 		})
 	}
-	afterRoot, afterRows := scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	afterRoot, afterRows := migrationRows(t, f.SQLiteStore, workspace)
 	if !bytes.Equal(beforeRoot, afterRoot) || !reflect.DeepEqual(beforeRows, afterRows) {
 		t.Fatal("event policy source read changed canonical metadata")
 	}
@@ -388,13 +388,13 @@ func TestScaleP21SW73EventPolicySourceDifferential(t *testing.T) {
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 		t.Fatal(err)
 	}
-	beforeRoot, beforeRows = scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	beforeRoot, beforeRows = migrationRows(t, f.SQLiteStore, workspace)
 	for _, repository := range []*SQLiteStore{f.SQLiteStore, view} {
 		if source, err := repository.ReadEventPolicySource(t.Context(), workspace, version); source != nil || !errors.Is(err, ErrEventSourceBudget) {
 			t.Fatal("oversized selected policy did not retain the source budget error", err)
 		}
 	}
-	afterRoot, afterRows = scaleP21SW23MigrationRows(t, f.SQLiteStore, workspace)
+	afterRoot, afterRows = migrationRows(t, f.SQLiteStore, workspace)
 	if !bytes.Equal(beforeRoot, afterRoot) || !reflect.DeepEqual(beforeRows, afterRows) ||
 		view.WorkspaceMetadataDecodes() != 0 || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("event source refusal changed canonical state, decoded full metadata or leaked work")

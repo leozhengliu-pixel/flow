@@ -16,7 +16,7 @@ import (
 // unlinked document, of a linked one (its project resource follows the
 // title) and an unlink. Legacy, bounded warm and bounded SQL-reloaded writers
 // must leave the same rows, events and installed values.
-func scaleP21HotDocumentSeed(t *testing.T, f scaleP09Fixture, projects int) {
+func scaleHotDocumentSeed(t *testing.T, f scaleFixture, projects int) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	clock := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
@@ -54,7 +54,7 @@ func scaleP21HotDocumentSeed(t *testing.T, f scaleP09Fixture, projects int) {
 	}
 }
 
-func scaleP21HotDocumentRows(t *testing.T, f scaleP09Fixture) []string {
+func scaleHotDocumentRows(t *testing.T, f scaleFixture) []string {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	var result []string
@@ -96,7 +96,7 @@ func scaleP21HotDocumentRows(t *testing.T, f scaleP09Fixture) []string {
 	return result
 }
 
-func scaleP21HotDocumentInstalled(t *testing.T, repo *SQLiteStore, workspace string) map[string]any {
+func scaleHotDocumentInstalled(t *testing.T, repo *SQLiteStore, workspace string) map[string]any {
 	t.Helper()
 	names := []string{"documents", "projects", "favorites"}
 	raw := map[string]json.RawMessage{}
@@ -137,7 +137,7 @@ func scaleP21HotDocumentInstalled(t *testing.T, repo *SQLiteStore, workspace str
 	return result
 }
 
-func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
+func TestScaleHotDocumentWriteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -154,8 +154,8 @@ func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
 	var outcomes [][]any
 	modes := []string{"legacy-warm", "bounded-warm", "legacy-reloaded", "bounded-reloaded"}
 	for _, mode := range modes {
-		f := scaleP09Database(t)
-		scaleP21HotDocumentSeed(t, f, 120)
+		f := journalScaleDatabase(t)
+		scaleHotDocumentSeed(t, f, 120)
 		workspace := f.data.Workspace.URLKey
 		repo := f.SQLiteStore
 		if strings.HasPrefix(mode, "bounded") {
@@ -218,9 +218,9 @@ func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
 			if strings.HasPrefix(mode, "bounded") && repo.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("bounded document edit hydrated the workspace", mode)
 			}
-			outcome = append(outcome, scaleP21HotDocumentInstalled(t, repo, workspace))
+			outcome = append(outcome, scaleHotDocumentInstalled(t, repo, workspace))
 		}
-		outcome = append(outcome, scaleP21HotDocumentRows(t, f))
+		outcome = append(outcome, scaleHotDocumentRows(t, f))
 		// Every mode then decodes its rows again: the SQL postimage itself.
 		if err := repo.ForgetInstalledMetadataRevisionForTesting(workspace); err != nil {
 			t.Fatal(err)
@@ -228,7 +228,7 @@ func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
 		if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 			t.Fatal(err)
 		}
-		outcome = append(outcome, scaleP21HotDocumentInstalled(t, repo, workspace))
+		outcome = append(outcome, scaleHotDocumentInstalled(t, repo, workspace))
 		if strings.HasPrefix(mode, "bounded") && repo.metadataResidency.work.used != 0 {
 			t.Fatal("bounded document edit leaked work", mode)
 		}
@@ -253,7 +253,7 @@ func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
 	for index := 1; index < len(outcomes); index += 2 {
 		for step := range outcomes[index-1] {
 			if !reflect.DeepEqual(outcomes[index-1][step], outcomes[index][step]) {
-				t.Fatalf("%s step %d differs from %s: %s", modes[index], step, modes[index-1], scaleP21HotDocumentDiff(outcomes[index-1][step], outcomes[index][step], ""))
+				t.Fatalf("%s step %d differs from %s: %s", modes[index], step, modes[index-1], scaleHotDocumentDiff(outcomes[index-1][step], outcomes[index][step], ""))
 			}
 		}
 	}
@@ -263,15 +263,15 @@ func TestScaleP21HotDocumentWriteDifferential(t *testing.T) {
 // byte or rewrite the collection when no project changes: the spool bytes an
 // edit reads (cached or not) grow with the project bytes only by the passes
 // that re-frame the image. A linked edit also rewrites the collection.
-func TestScaleP21HotDocumentWriteBoundedReads(t *testing.T) {
+func TestScaleHotDocumentWriteBoundedReads(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	metadataLogicalSpoolCounting.Store(true)
 	t.Cleanup(func() { metadataLogicalSpoolCounting.Store(false) })
 	measure := func(projects int) (unlinked, linked, projectBytes int64) {
-		f := scaleP09Database(t)
-		scaleP21HotDocumentSeed(t, f, projects)
+		f := journalScaleDatabase(t)
+		scaleHotDocumentSeed(t, f, projects)
 		workspace := f.data.Workspace.URLKey
 		view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
@@ -334,7 +334,7 @@ func TestScaleP21HotDocumentWriteBoundedReads(t *testing.T) {
 	}
 }
 
-func scaleP21HotDocumentDiff(left, right any, path string) string {
+func scaleHotDocumentDiff(left, right any, path string) string {
 	switch l := left.(type) {
 	case map[string]any:
 		r, ok := right.(map[string]any)
@@ -343,7 +343,7 @@ func scaleP21HotDocumentDiff(left, right any, path string) string {
 		}
 		for key, value := range l {
 			if !reflect.DeepEqual(value, r[key]) {
-				return scaleP21HotDocumentDiff(value, r[key], path+"."+key)
+				return scaleHotDocumentDiff(value, r[key], path+"."+key)
 			}
 		}
 		for key, value := range r {
@@ -358,7 +358,7 @@ func scaleP21HotDocumentDiff(left, right any, path string) string {
 		}
 		for index := range l {
 			if !reflect.DeepEqual(l[index], r[index]) {
-				return scaleP21HotDocumentDiff(l[index], r[index], fmt.Sprintf("%s[%d]", path, index))
+				return scaleHotDocumentDiff(l[index], r[index], fmt.Sprintf("%s[%d]", path, index))
 			}
 		}
 	case []string:

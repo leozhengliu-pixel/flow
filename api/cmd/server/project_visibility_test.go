@@ -22,7 +22,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW84ProjectVisibilityBoundary(t *testing.T) {
+func TestProjectVisibilityBoundary(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate production source")
@@ -152,13 +152,13 @@ func TestScaleP21SW84ProjectVisibilityBoundary(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW84ProjectVisibilityDifferential(t *testing.T) {
+func TestProjectVisibilityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_SYNC_V2", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw84-project-")
 		private := ""
 		cases := []struct {
@@ -237,8 +237,8 @@ func TestScaleP21SW84ProjectVisibilityDifferential(t *testing.T) {
 			for _, event := range events {
 				want, wantVisible, wantErr := services[0].legacyPagedRealtimeEvent(r, event)
 				got, visible, err := services[1].legacyPagedRealtimeEvent(r, event)
-				if wantErr != nil || err != nil || visible != wantVisible || !reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
-					t.Fatalf("event=%s/%s visible=%v/%v errors=%v/%v difference=%s", event.Type, event.ID, wantVisible, visible, wantErr, err, scaleP21M2Diff(want, got))
+				if wantErr != nil || err != nil || visible != wantVisible || !reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
+					t.Fatalf("event=%s/%s visible=%v/%v errors=%v/%v difference=%s", event.Type, event.ID, wantVisible, visible, wantErr, err, policyFirstDifference(want, got))
 				}
 				a, b := httptest.NewRecorder(), httptest.NewRecorder()
 				okA := services[0].writeProjectedRealtime(a, r, event)
@@ -286,7 +286,7 @@ func TestScaleP21SW84ProjectVisibilityDifferential(t *testing.T) {
 		got, visible, err := service.legacyPagedRealtimeEvent(r, events[1])
 		if wantVisible || visible || wantErr == nil || err == nil ||
 			reflect.TypeOf(wantErr) != reflect.TypeOf(err) || wantErr.Error() != err.Error() ||
-			!reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
+			!reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
 			t.Fatalf("canceled policy behavior changed: visible=%v/%v errors=%T %v/%T %v", wantVisible, visible, wantErr, wantErr, err, err)
 		}
 		oldOutput, output := httptest.NewRecorder(), httptest.NewRecorder()

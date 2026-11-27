@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP18MCPHTTPVisibility(t *testing.T) {
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+func TestScaleMCPHTTPVisibility(t *testing.T) {
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		public, private, child := "p18-public", "p18-private", "p18-child"
 		if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p18.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -47,7 +47,7 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 			role  string
 			teams []string
 		}{{"admin", []string{public}}, {"member", []string{public}}, {"guest", []string{public}}, {"member", []string{private}}} {
-			_, user := scaleP03Join(t, f, "P18 "+spec.role, idgen.New("p18-")+"@example.test", spec.role, spec.teams...)
+			_, user := resourceAccessScaleJoin(t, f, "P18 "+spec.role, idgen.New("p18-")+"@example.test", spec.role, spec.teams...)
 			principals = append(principals, user)
 		}
 		for index, user := range principals {
@@ -108,7 +108,7 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 						visible := map[string]bool{}
 						for _, project := range page.Items {
 							visible[project.ID] = true
-							httpResult := scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/projects/"+project.ID, workspace)
+							httpResult := resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/projects/"+project.ID, workspace)
 							if httpResult.Code != http.StatusOK {
 								t.Fatalf("%s MCP visible but HTTP=%d", project.ID, httpResult.Code)
 							}
@@ -121,7 +121,7 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 							}
 						}
 						for _, id := range []string{"p18-open", "p18-secret", "p18-child", "p18-mixed", "p18-workspace"} {
-							httpResult := scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/projects/"+id, workspace)
+							httpResult := resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/projects/"+id, workspace)
 							if (httpResult.Code == http.StatusOK) != visible[id] {
 								t.Fatalf("%s MCP=%v HTTP=%d", id, visible[id], httpResult.Code)
 							}

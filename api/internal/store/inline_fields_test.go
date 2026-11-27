@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW217Selected(t *testing.T, repo *SQLiteStore, tx *sqlTx, workspace string, before, target domain.Bootstrap, name string) (*legacyMetadataWritePlan, *legacyMetadataWriteField, func()) {
+func inlineFieldsSelected(t *testing.T, repo *SQLiteStore, tx *sqlTx, workspace string, before, target domain.Bootstrap, name string) (*legacyMetadataWritePlan, *legacyMetadataWriteField, func()) {
 	t.Helper()
 	left, err := captureMetadataLogicalSource(t.Context(), before, copyStamp{workspaceID: before.Workspace.ID})
 	if err != nil {
@@ -46,7 +46,7 @@ func scaleP21SW217Selected(t *testing.T, repo *SQLiteStore, tx *sqlTx, workspace
 	}
 }
 
-func scaleP21SW217Shapes(t *testing.T, ctx context.Context, tx *sqlTx, workspace string) (int64, map[string]string) {
+func inlineFieldsShapes(t *testing.T, ctx context.Context, tx *sqlTx, workspace string) (int64, map[string]string) {
 	t.Helper()
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, "SELECT data FROM workspace_states WHERE workspace_key=?", workspace).Scan(&raw); err != nil {
@@ -63,12 +63,12 @@ func scaleP21SW217Shapes(t *testing.T, ctx context.Context, tx *sqlTx, workspace
 	return int64(len(raw)), shapes
 }
 
-func scaleP21SW217GenericWrite(t *testing.T, ctx context.Context, repo *SQLiteStore, tx *sqlTx, before, target domain.Bootstrap, name string, session bool) error {
+func inlineFieldsGenericWrite(t *testing.T, ctx context.Context, repo *SQLiteStore, tx *sqlTx, before, target domain.Bootstrap, name string, session bool) error {
 	t.Helper()
 	workspace := before.Workspace.URLKey
-	plan, field, release := scaleP21SW217Selected(t, repo, tx, workspace, before, target, name)
+	plan, field, release := inlineFieldsSelected(t, repo, tx, workspace, before, target, name)
 	defer release()
-	size, shapes := scaleP21SW217Shapes(t, ctx, tx, workspace)
+	size, shapes := inlineFieldsShapes(t, ctx, tx, workspace)
 	ready, err := plan.inlineFieldReady(ctx, field, shapes)
 	if err != nil || !ready {
 		t.Fatal("inline fixture did not select streamed field", ready, err)
@@ -119,10 +119,10 @@ func scaleP21SW217GenericWrite(t *testing.T, ctx context.Context, repo *SQLiteSt
 	return repo.writeLegacyInlineFieldsRootPatch(ctx, tx, workspace, target.Workspace.ID, root, ordinary, owner, true, patch)
 }
 
-func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
+func TestInlineFieldsLiteralDifferential(t *testing.T) {
 	for _, variant := range []string{"ask-5.5MiB", "cycles-20001", "empty-id", "overlong-id", "invalid-UTF8-collision", "ordinary-and-session", "update-duplicate-5.5MiB", "update-parent-UTF8-collision"} {
 		t.Run(variant, func(t *testing.T) {
-			f, view, before := scaleP21SW77Fixture(t)
+			f, view, before := legacyDeltaBudgetFixture(t)
 			name := "asks"
 			before.Asks = []domain.Ask{{ID: "same", Title: "first"}, {ID: "same", Title: "later"}}
 			switch variant {
@@ -171,13 +171,13 @@ func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
 				target.Workspace.Name = "ordinary scalar changed"
 				target.AgentSessions[0].Title = "session changed"
 			}
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			start := tx.writtenBytes
 			want := cloneBootstrap(target)
 			if _, err := f.writeWorkspaceMetadataDelta(ctx, tx, before.Workspace.URLKey, before, &want); err != nil {
 				t.Fatal("literal inline oracle", err)
 			}
-			expected := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey)
+			expected := metadataImage(t, tx, before.Workspace.URLKey)
 			var stamp string
 			if err := tx.QueryRowContext(ctx, "SELECT updated_at FROM workspace_states WHERE workspace_key=?", before.Workspace.URLKey).Scan(&stamp); err != nil {
 				t.Fatal(err)
@@ -187,19 +187,19 @@ func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}
-			tx, ctx = scaleP21SW77Begin(t, f, before)
+			tx, ctx = legacyDeltaBudgetBegin(t, f, before)
 			start = tx.writtenBytes
 			rootWrites := 0
 			ctx = WithSQLStatementObserver(ctx, func(query string) {
-				if _, root := scaleP21SW83MetadataWrite(query); root {
+				if _, root := isLegacyMetadataWriteStatement(query); root {
 					rootWrites++
 				}
 			})
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			if err := scaleP21SW217GenericWrite(t, ctx, view, tx, before, target, name, session); err != nil {
+			if err := inlineFieldsGenericWrite(t, ctx, view, tx, before, target, name, session); err != nil {
 				t.Fatal("streamed inline root", err)
 			}
-			actual := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey)
+			actual := metadataImage(t, tx, before.Workspace.URLKey)
 			if !reflect.DeepEqual(actual, expected) {
 				t.Fatal("literal/streamed inline root or canonical rows differ")
 			}
@@ -221,10 +221,10 @@ func TestScaleP21SW217InlineFieldsLiteralDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW217InlineEligibilityAndTransitions(t *testing.T) {
+func TestInlineEligibilityAndTransitions(t *testing.T) {
 	for _, variant := range []string{"nil", "empty", "unique", "invalid-UTF8-unique", "invalid-UTF8-collision", "normalized-overlong", "empty-id", "overlong", "canonical-row", "split-root"} {
 		t.Run(variant, func(t *testing.T) {
-			f, view, before := scaleP21SW77Fixture(t)
+			f, view, before := legacyDeltaBudgetFixture(t)
 			before.Asks = []domain.Ask{{ID: "same"}, {ID: "same"}}
 			if variant == "split-root" {
 				before.Asks = []domain.Ask{{ID: "first"}, {ID: "second"}}
@@ -253,15 +253,15 @@ func TestScaleP21SW217InlineEligibilityAndTransitions(t *testing.T) {
 				target.Asks = []domain.Ask{{ID: strings.Repeat("x", 192)}}
 				want = true
 			}
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			if variant == "canonical-row" {
 				if err := writeMetadataRecordRow(ctx, tx, before.Workspace.URLKey,
 					metadataRecordKey{"asks", "unexpected"}, metadataRecord{data: []byte(`{"id":"unexpected"}`)}, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
-			_, shapes := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
-			plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
+			_, shapes := inlineFieldsShapes(t, ctx, tx, before.Workspace.URLKey)
+			plan, field, release := inlineFieldsSelected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
 			ready, err := plan.inlineFieldReady(ctx, field, shapes)
 			release()
 			if err != nil || ready != want || view.MetadataWorkUsedForTesting() != 0 {
@@ -274,7 +274,7 @@ func TestScaleP21SW217InlineEligibilityAndTransitions(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW217InlineUpdateEligibilityAndTransitions(t *testing.T) {
+func TestInlineUpdateEligibilityAndTransitions(t *testing.T) {
 	for _, variant := range []string{
 		"nil", "empty-map", "nil-list", "empty-list", "unique", "wide-unique",
 		"ordinary-duplicate", "boundary-parent", "wide-duplicate", "wide-empty-id",
@@ -282,7 +282,7 @@ func TestScaleP21SW217InlineUpdateEligibilityAndTransitions(t *testing.T) {
 		"parent-collision-winner-valid", "parent-collision-winner-invalid", "canonical-row", "split-root",
 	} {
 		t.Run(variant, func(t *testing.T) {
-			f, view, before := scaleP21SW77Fixture(t)
+			f, view, before := legacyDeltaBudgetFixture(t)
 			parent := strings.Repeat("p", 192)
 			before.ProjectUpdates = map[string][]domain.ProjectUpdate{parent: {{ID: "same"}, {ID: "same"}}}
 			if variant == "split-root" {
@@ -342,16 +342,16 @@ func TestScaleP21SW217InlineUpdateEligibilityAndTransitions(t *testing.T) {
 			if err != nil || (literalShapes["projectUpdates"] == "" && target.ProjectUpdates != nil) != literalWant {
 				t.Fatal("eligibility expectation differs from literal splitter", literalShapes["projectUpdates"], want, err)
 			}
-			tx, ctx := scaleP21SW77Begin(t, f, before)
+			tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 			if variant == "canonical-row" {
 				if err := writeMetadataRecordRow(ctx, tx, before.Workspace.URLKey,
 					metadataRecordKey{"projectUpdates", "unexpected"}, metadataRecord{data: []byte(`[]`)}, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
-			_, shapes := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+			_, shapes := inlineFieldsShapes(t, ctx, tx, before.Workspace.URLKey)
 			disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-			plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
+			plan, field, release := inlineFieldsSelected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
 			ready, err := plan.inlineFieldReady(ctx, field, shapes)
 			release()
 			if err != nil || ready != want || view.MetadataWorkUsedForTesting() != 0 ||
@@ -365,20 +365,20 @@ func TestScaleP21SW217InlineUpdateEligibilityAndTransitions(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW217InlineUpdateCancellationAndRelease(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestInlineUpdateCancellationAndRelease(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	parent := strings.Repeat("p", 192)
 	before.ProjectUpdates = map[string][]domain.ProjectUpdate{
 		parent: {{ID: "same", Body: strings.Repeat("x", 11<<19)}, {ID: "same"}},
 	}
 	target := cloneBootstrap(before)
 	target.ProjectUpdates[parent][0].Missing = true
-	tx, ctx := scaleP21SW77Begin(t, f, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, f, before)
 	defer tx.Rollback()
-	plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
+	plan, field, release := inlineFieldsSelected(t, view, tx, before.Workspace.URLKey, before, target, "projectUpdates")
 	defer release()
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-	_, shapes := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+	_, shapes := inlineFieldsShapes(t, ctx, tx, before.Workspace.URLKey)
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	ready, err := plan.inlineFieldReady(cancelled, field, shapes)
@@ -408,13 +408,13 @@ func TestScaleP21SW217InlineUpdateCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
-	f, view, before := scaleP21SW77Fixture(t)
+func TestInlineCancellationAndRelease(t *testing.T) {
+	f, view, before := legacyDeltaBudgetFixture(t)
 	before.Asks = []domain.Ask{{ID: "same", Body: strings.Repeat("x", 11<<19)}, {ID: "same"}}
 	target := cloneBootstrap(before)
 	target.Asks[0].Title = "changed"
-	tx, ctx := scaleP21SW77Begin(t, f, before)
-	plan, field, release := scaleP21SW217Selected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
+	tx, ctx := legacyDeltaBudgetBegin(t, f, before)
+	plan, field, release := inlineFieldsSelected(t, view, tx, before.Workspace.URLKey, before, target, "asks")
 	defer release()
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	canceled, cancel := context.WithCancel(ctx)
@@ -441,7 +441,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 		metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("idempotent inline release retained work/spools")
 	}
-	expected := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey)
+	expected := metadataImage(t, tx, before.Workspace.URLKey)
 	limitBytes := view.maxStateBytes
 	view.maxStateBytes = 1024
 	patch, err = plan.prepareInlineFields(ctx, []*legacyMetadataWriteField{field})
@@ -449,7 +449,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 	if patch != nil || err == nil || !strings.Contains(err.Error(), "workspace state exceeds") {
 		t.Fatal("inline field bypassed the original max-state limit", err)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) ||
+	if got := metadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) ||
 		view.MetadataWorkUsedForTesting() != 0 || metadataLogicalDiskUsed.Load() != disk ||
 		metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("max-state refusal changed metadata or retained work/spools")
@@ -463,7 +463,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 		patch.Close()
 		t.Fatal(err)
 	}
-	size, _ := scaleP21SW217Shapes(t, ctx, tx, before.Workspace.URLKey)
+	size, _ := inlineFieldsShapes(t, ctx, tx, before.Workspace.URLKey)
 	root, err := view.scanMetadataInlineRoot(ctx, tx, before.Workspace.URLKey, size)
 	if err != nil {
 		owner.Close()
@@ -489,7 +489,7 @@ func TestScaleP21SW217InlineCancellationAndRelease(t *testing.T) {
 		metadataLogicalDiskUsed.Load() != disk || metadataLogicalDescriptorsUsed.Load() != descriptors {
 		t.Fatal("canceled root SQL staging retained its owner, stage or spool", err)
 	}
-	if got := scaleP21SW76MetadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) {
+	if got := metadataImage(t, tx, before.Workspace.URLKey); !reflect.DeepEqual(got, expected) {
 		t.Fatal("canceled root staging changed metadata")
 	}
 	if err := tx.Rollback(); err != nil {

@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-func scaleP21SW306MembershipAuthorizationRequest(r *http.Request) bool {
+func membershipAuthorizationRequest(r *http.Request) bool {
 	parts := strings.Split(r.URL.Path, "/")
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		if r.URL.Path == "/api/issues" || r.URL.Path == "/api/files/sign" {
 			return true
 		}
 		if len(parts) != 3 || parts[0] != "" || parts[1] != "uploads" || parts[2] == "" {
-			decoded, matched := scaleP21EscapedRouteParts(r, "/uploads/{name}")
+			decoded, matched := scaleEscapedRouteParts(r, "/uploads/{name}")
 			// These producers emit raw URLs with a nonreserved literal prefix.
 			// Encoded filename slashes reach the leaf's basename rejection.
 			return matched && len(decoded) >= 2 &&
@@ -39,14 +39,14 @@ func scaleP21SW306MembershipAuthorizationRequest(r *http.Request) bool {
 			return true
 		}
 	}
-	if _, matched := scaleP21EscapedRouteParts(r, "/api/workspaces/{workspaceKey}/teams"); matched {
+	if _, matched := scaleEscapedRouteParts(r, "/api/workspaces/{workspaceKey}/teams"); matched {
 		return true
 	}
 	for _, pattern := range []string{
 		"/api/agent/sessions/{id}/messages/stream",
 		"/api/agent/sessions/{id}/approvals/{approvalId}",
 	} {
-		if _, matched := scaleP21EscapedRouteParts(r, pattern); matched {
+		if _, matched := scaleEscapedRouteParts(r, pattern); matched {
 			return true
 		}
 	}
@@ -56,7 +56,7 @@ func scaleP21SW306MembershipAuthorizationRequest(r *http.Request) bool {
 // These exact roots have no target predicate after successful projection.
 // Three upload names retain the literal switch's independent guest refusal.
 func (s *server) boundedMembershipAuthorization(r *http.Request, workspace, userID string) (allowed, handled bool) {
-	if !s.store.BoundedMetadataEnabled() || !scaleP21SW306MembershipAuthorizationRequest(r) {
+	if !s.store.BoundedMetadataEnabled() || !membershipAuthorizationRequest(r) {
 		return false, false
 	}
 	request := r
@@ -71,7 +71,7 @@ func (s *server) boundedMembershipAuthorization(r *http.Request, workspace, user
 		query.Del("workspace")
 		request.URL.RawQuery = query.Encode()
 	}
-	if parts, matched := scaleP21EscapedRouteParts(request, "/api/workspaces/{workspaceKey}/teams"); matched && len(parts) >= 5 && parts[3] == "teams" {
+	if parts, matched := scaleEscapedRouteParts(request, "/api/workspaces/{workspaceKey}/teams"); matched && len(parts) >= 5 && parts[3] == "teams" {
 		return s.boundedTeamRowAuthorization(request, workspace, userID, parts[4]), true
 	}
 	data, _, err := s.requestIssueQueryAccess(request)

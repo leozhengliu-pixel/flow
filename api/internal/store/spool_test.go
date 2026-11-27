@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP15BSpoolConfigurationAndAccounting(t *testing.T) {
+func TestScaleBSpoolConfigurationAndAccounting(t *testing.T) {
 	for _, value := range []string{"", "invalid", "-1", "9223372036854775808"} {
 		t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", value)
 		if got := recordSpoolMaxBytes(); got != 256<<20 {
@@ -61,7 +61,7 @@ func TestScaleP15BSpoolConfigurationAndAccounting(t *testing.T) {
 	}
 }
 
-func TestScaleP15BOwnedSpoolContention(t *testing.T) {
+func TestScaleBOwnedSpoolContention(t *testing.T) {
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", "17")
 	t.Setenv("TMPDIR", t.TempDir())
 	other, err := NewRecordSpool()
@@ -108,7 +108,7 @@ func TestScaleP15BOwnedSpoolContention(t *testing.T) {
 	}
 }
 
-func TestScaleP15BConcurrentSpoolsStayWithinProcessBudget(t *testing.T) {
+func TestScaleBConcurrentSpoolsStayWithinProcessBudget(t *testing.T) {
 	const limit = 256 << 10
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(limit))
 	dir := t.TempDir()
@@ -168,7 +168,7 @@ func TestScaleP15BConcurrentSpoolsStayWithinProcessBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP15BSpoolChargesPartialOSWrites(t *testing.T) {
+func TestScaleBSpoolChargesPartialOSWrites(t *testing.T) {
 	t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", strconv.Itoa(1<<20))
 	t.Setenv("TMPDIR", t.TempDir())
 	spool, err := NewRecordSpool()
@@ -207,8 +207,8 @@ func TestScaleP15BSpoolChargesPartialOSWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP15BCanonicalStreamFallbackAndCleanup(t *testing.T) {
-	repo, _ := scaleP04OwnedStore(t)
+func TestScaleBCanonicalStreamFallbackAndCleanup(t *testing.T) {
+	repo, _ := scaleOwnedStore(t)
 	workspace := repo.Bootstrap().Workspace.URLKey
 	description := make([]byte, 256<<10)
 	for i := range description {
@@ -235,7 +235,7 @@ func TestScaleP15BCanonicalStreamFallbackAndCleanup(t *testing.T) {
 				defer cancel()
 				var got bytes.Buffer
 				failure := errors.New("destination failed")
-				dst := scaleP15BWriterFunc(func(p []byte) (int, error) {
+				dst := scaleBWriterFunc(func(p []byte) (int, error) {
 					switch mode {
 					case "error":
 						return 0, failure
@@ -290,6 +290,6 @@ func TestScaleP15BCanonicalStreamFallbackAndCleanup(t *testing.T) {
 	}
 }
 
-type scaleP15BWriterFunc func([]byte) (int, error)
+type scaleBWriterFunc func([]byte) (int, error)
 
-func (f scaleP15BWriterFunc) Write(p []byte) (int, error) { return f(p) }
+func (f scaleBWriterFunc) Write(p []byte) (int, error) { return f(p) }

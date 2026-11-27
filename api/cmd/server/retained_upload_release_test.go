@@ -17,21 +17,21 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW133Storage struct {
+type retainedUploadReleaseStorage struct {
 	t       *testing.T
 	repo    *store.SQLiteStore
 	deleted []string
 }
 
-func (s *scaleP21SW133Storage) Put(context.Context, string, io.Reader, string) (int64, error) {
+func (s *retainedUploadReleaseStorage) Put(context.Context, string, io.Reader, string) (int64, error) {
 	panic("unexpected Put")
 }
 
-func (s *scaleP21SW133Storage) Open(context.Context, string) (io.ReadCloser, string, int64, error) {
+func (s *retainedUploadReleaseStorage) Open(context.Context, string) (io.ReadCloser, string, int64, error) {
 	panic("unexpected Open")
 }
 
-func (s *scaleP21SW133Storage) Delete(ctx context.Context, name string) error {
+func (s *retainedUploadReleaseStorage) Delete(ctx context.Context, name string) error {
 	if ctx.Err() != nil {
 		s.t.Fatal("literal detached purge inherited cancellation")
 	}
@@ -48,13 +48,13 @@ func (s *scaleP21SW133Storage) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func TestScaleP21SW133RetainedUploadReleaseDifferential(t *testing.T) {
+func TestRetainedUploadReleaseDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			prefix := idgen.New("sw133-")
 			other, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW133 other", prefix+"other", "us")
@@ -116,7 +116,7 @@ func TestScaleP21SW133RetainedUploadReleaseDifferential(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				storage := &scaleP21SW133Storage{t: t, repo: source}
+				storage := &retainedUploadReleaseStorage{t: t, repo: source}
 				service := &server{store: source, objectStore: storage}
 				queries := 0
 				ctx, cancel := context.WithCancel(store.WithSQLStatementObserver(store.ContextWithActor(t.Context(), f.data.Viewer), func(string) { queries++ }))

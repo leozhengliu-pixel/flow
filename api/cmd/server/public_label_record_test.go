@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21PublicLabelRecordDifferential(t *testing.T) {
+func TestScalePublicLabelRecordDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("label-record-")
 		at := time.Date(2025, 3, 4, 5, 6, 7, 8, time.UTC)
 		private := ""
@@ -99,7 +99,7 @@ func TestScaleP21PublicLabelRecordDifferential(t *testing.T) {
 			}
 			for _, test := range cases {
 				for _, ref := range []string{prefix + "duplicate", prefix + "private", prefix + "workspace", prefix + "archived", prefix + "hidden-first", "First\x00label", prefix + "missing"} {
-					serve := func(selected *store.SQLiteStore) *scaleP21PublicResourceRecordWriter {
+					serve := func(selected *store.SQLiteStore) *scalePublicResourceRecordWriter {
 						service := &server{store: selected, authDisabled: test.development}
 						r := f.literalRequest(test.user, test.key, nil)
 						r.Method, r.URL.Path = http.MethodGet, "/api/issue-labels/record"
@@ -126,7 +126,7 @@ func TestScaleP21PublicLabelRecordDifferential(t *testing.T) {
 						if test.refused {
 							r = r.WithContext(context.WithValue(r.Context(), projectionHoldKey{}, &projectionHold{gate: &metadataReadGate{}, retryAfter: time.Second}))
 						}
-						w := &scaleP21PublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
+						w := &scalePublicResourceRecordWriter{ResponseRecorder: httptest.NewRecorder(), repo: selected}
 						service.getIssueLabelRecord(w, r)
 						return w
 					}

@@ -20,22 +20,22 @@ import (
 // every owned SQL row, the metadata rows and installed image of the fields
 // these writers read or write, and every webhook and realtime publication.
 
-var scaleP21WriterFields = []string{
+var scaleWriterFields = []string{
 	"commentActions", "users", "threadSubscriptions", "issueSlas", "slaEvents", "labels",
 	"projects", "documents", "notificationPreferences", "members", "teamMembers", "issueSuggestions",
 }
 
-type scaleP21WriterOutcome struct {
+type scaleWriterOutcome struct {
 	Code               int
 	Body               json.RawMessage
-	State              scaleP21IssueUpdateState
+	State              scaleIssueUpdateState
 	Metadata           [][]any
 	Webhooks, Realtime []json.RawMessage
 	Installed          json.RawMessage
 	Extra              any
 }
 
-func scaleP21WriterInstalled(t *testing.T, workspace string, repo *store.SQLiteStore, names []string) json.RawMessage {
+func scaleWriterInstalled(t *testing.T, workspace string, repo *store.SQLiteStore, names []string) json.RawMessage {
 	t.Helper()
 	result := map[string]any{}
 	if !repo.BoundedMetadataEnabled() {
@@ -89,22 +89,22 @@ func scaleP21WriterInstalled(t *testing.T, workspace string, repo *store.SQLiteS
 	return raw
 }
 
-// scaleP21WriterOutputFields are the installed fields these writers change;
+// scaleWriterOutputFields are the installed fields these writers change;
 // a source's installed image must equal its SQL reload for each of them.
 // Other fields are compared through the SQL reload only: a legacy snapshot
 // keeps their pre-normalization shape (label resource types, canonical
 // document owners, default preferences) until reloaded.
-var scaleP21WriterOutputFields = []string{
+var scaleWriterOutputFields = []string{
 	"commentActions", "threadSubscriptions", "issueSlas", "slaEvents", "issueSuggestions",
 }
 
 // run executes call against source and records everything it may change.
-func (f scaleP21IssueUpdateFixture) runWriter(t *testing.T, source string, call func(*server) (*httptest.ResponseRecorder, any)) (scaleP21WriterOutcome, time.Time) {
+func (f scaleIssueUpdateFixture) runWriter(t *testing.T, source string, call func(*server) (*httptest.ResponseRecorder, any)) (scaleWriterOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.reset(t, source)
 	workspace := f.data.Workspace.URLKey
-	got := scaleP21WriterOutcome{}
+	got := scaleWriterOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
@@ -112,7 +112,7 @@ func (f scaleP21IssueUpdateFixture) runWriter(t *testing.T, source string, call 
 		if strings.HasPrefix(event.Type, "scale_p21.") {
 			return
 		}
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -125,7 +125,7 @@ func (f scaleP21IssueUpdateFixture) runWriter(t *testing.T, source string, call 
 		if event.Type == "agent_task.updated" || strings.HasPrefix(event.Type, "scale_p21.") {
 			return
 		}
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -168,44 +168,44 @@ func (f scaleP21IssueUpdateFixture) runWriter(t *testing.T, source string, call 
 		t.Fatalf("%s: bounded writer decoded full metadata (%d) or retained work (%d)", source,
 			service.store.WorkspaceMetadataDecodes(), service.store.MetadataWorkUsedForTesting())
 	}
-	installed := scaleP21WriterInstalled(t, workspace, service.store, scaleP21WriterOutputFields)
+	installed := scaleWriterInstalled(t, workspace, service.store, scaleWriterOutputFields)
 	reloaded, err := store.OpenDatabase(f.reader.config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded := scaleP21WriterInstalled(t, workspace, reloaded, scaleP21WriterOutputFields)
-	got.Installed = scaleP21WriterInstalled(t, workspace, reloaded, scaleP21WriterFields)
+	loaded := scaleWriterInstalled(t, workspace, reloaded, scaleWriterOutputFields)
+	got.Installed = scaleWriterInstalled(t, workspace, reloaded, scaleWriterFields)
 	if err := reloaded.Close(); err != nil {
 		t.Fatal(err)
 	}
 	nul := strings.NewReplacer(`\u0000`, "")
 	if installed, loaded := nul.Replace(string(installed)), nul.Replace(string(loaded)); installed != loaded {
-		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, loaded))
+		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, policyFirstDifference(installed, loaded))
 	}
 	return got, started
 }
 
-func (f scaleP21IssueUpdateFixture) writerDifferential(t *testing.T, name string, call func(*server) (*httptest.ResponseRecorder, any)) []scaleP21WriterOutcome {
+func (f scaleIssueUpdateFixture) writerDifferential(t *testing.T, name string, call func(*server) (*httptest.ResponseRecorder, any)) []scaleWriterOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21WriterOutcome
+	var outcomes []scaleWriterOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		got, started := f.runWriter(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21IssueUpdateNormalize(t, got, started))
+		normalized = append(normalized, scaleIssueUpdateNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
 			if dir := os.Getenv("FLOW_ISSUE_UPDATE_DUMP"); dir != "" {
 				_ = os.WriteFile(dir+"/legacy.json", []byte(normalized[0]), 0o600)
 				_ = os.WriteFile(dir+"/"+source+".json", []byte(normalized[len(normalized)-1]), 0o600)
 			}
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
 // seed applies change through the literal full writer after each reset.
-func (f scaleP21IssueUpdateFixture) seedWriter(t *testing.T, change func(*domain.Bootstrap)) {
+func (f scaleIssueUpdateFixture) seedWriter(t *testing.T, change func(*domain.Bootstrap)) {
 	t.Helper()
 	restore := store.ForceFullMutationsForTesting(true)
 	err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.writer_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -218,7 +218,7 @@ func (f scaleP21IssueUpdateFixture) seedWriter(t *testing.T, change func(*domain
 	}
 }
 
-func scaleP21WriterContent(outcome scaleP21WriterOutcome, kind string) []map[string]any {
+func scaleWriterContent(outcome scaleWriterOutcome, kind string) []map[string]any {
 	var result []map[string]any
 	for _, row := range outcome.State.Content {
 		if row[0] != kind {

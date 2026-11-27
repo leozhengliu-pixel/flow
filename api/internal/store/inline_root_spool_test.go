@@ -12,12 +12,12 @@ import (
 	"testing"
 )
 
-func scaleP21SW229Fixture(t *testing.T, raw string) (scaleP09Fixture, *SQLiteStore) {
+func inlineRootSpoolFixture(t *testing.T, raw string) (scaleFixture, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -38,12 +38,12 @@ func scaleP21SW229Fixture(t *testing.T, raw string) (scaleP09Fixture, *SQLiteSto
 	return f, view
 }
 
-func scaleP21SW229RootQuery(query string) bool {
+func inlineRootSpoolRootQuery(query string) bool {
 	value := strings.ToLower(strings.TrimSpace(query))
 	return strings.HasPrefix(value, "select substr(") && strings.Contains(value, "from workspace_states")
 }
 
-func scaleP21SW229AssertRootBytes(t *testing.T, root *metadataInlineRoot, raw string) {
+func assertRootBytes(t *testing.T, root *metadataInlineRoot, raw string) {
 	t.Helper()
 	buffer := make([]byte, metadataRecordChunkBytes)
 	for offset := int64(0); offset < int64(len(raw)); {
@@ -56,7 +56,7 @@ func scaleP21SW229AssertRootBytes(t *testing.T, root *metadataInlineRoot, raw st
 	}
 }
 
-func TestScaleP21SW229InlineRootCopiesOnceAndBorrows(t *testing.T) {
+func TestInlineRootCopiesOnceAndBorrows(t *testing.T) {
 	for _, size := range []int{32, 3 << 20} {
 		t.Run(map[bool]string{true: "large", false: "small"}[size > 32], func(t *testing.T) {
 			body, err := json.Marshal(strings.Repeat("x", size))
@@ -65,11 +65,11 @@ func TestScaleP21SW229InlineRootCopiesOnceAndBorrows(t *testing.T) {
 			}
 			raw := `{"workspace":{"id":"stored","name":"First"},"settings":{"opaque":` + string(body) +
 				`},"viewerRole":"earlier","viewerRole":"final","_flowCollections":{"projects":"array"}}`
-			f, view := scaleP21SW229Fixture(t, raw)
+			f, view := inlineRootSpoolFixture(t, raw)
 			workspace := f.data.Workspace.URLKey
 			queries := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) {
-				if scaleP21SW229RootQuery(query) {
+				if inlineRootSpoolRootQuery(query) {
 					queries++
 				}
 			})
@@ -94,7 +94,7 @@ func TestScaleP21SW229InlineRootCopiesOnceAndBorrows(t *testing.T) {
 				t.Fatal("body size changed fixed root work or caused native hydration")
 			}
 			for range 3 {
-				scaleP21SW229AssertRootBytes(t, root, raw)
+				assertRootBytes(t, root, raw)
 				shapes, err := root.shapes()
 				if err != nil || !reflect.DeepEqual(shapes, map[string]string{"projects": "array"}) {
 					t.Fatal("captured manifest differs", shapes, err)
@@ -109,13 +109,13 @@ func TestScaleP21SW229InlineRootCopiesOnceAndBorrows(t *testing.T) {
 				borrowed.Close()
 				t.Fatal("borrowed root lost its original occurrence ranges")
 			}
-			scaleP21SW229AssertRootBytes(t, borrowed, raw)
+			assertRootBytes(t, borrowed, raw)
 			borrowed.Close()
 			borrowed.Close()
 			if queries != expected || view.MetadataWorkUsedForTesting()-work != ownedWork {
 				t.Fatal("borrow reread SQL or released the original owner's work", queries)
 			}
-			scaleP21SW229AssertRootBytes(t, root, raw)
+			assertRootBytes(t, root, raw)
 			root.Close()
 			root.Close()
 			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) ||
@@ -126,7 +126,7 @@ func TestScaleP21SW229InlineRootCopiesOnceAndBorrows(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW229InlineRootMatchesExistingScanner(t *testing.T) {
+func TestInlineRootMatchesExistingScanner(t *testing.T) {
 	for _, test := range []struct {
 		name, raw string
 	}{
@@ -138,7 +138,7 @@ func TestScaleP21SW229InlineRootMatchesExistingScanner(t *testing.T) {
 		{"truncated", `{"workspace":{"id":"stored"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f, view := scaleP21SW229Fixture(t, test.raw)
+			f, view := inlineRootSpoolFixture(t, test.raw)
 			workspace := f.data.Workspace.URLKey
 			tx, err := view.db.BeginTx(t.Context(), metadataReadOptions(view.dialect))
 			if err != nil {
@@ -185,9 +185,9 @@ func TestScaleP21SW229InlineRootMatchesExistingScanner(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW229InlineRootCancellationAndFailures(t *testing.T) {
+func TestInlineRootCancellationAndFailures(t *testing.T) {
 	raw := `{"workspace":{"id":"stored"},"settings":{"opaque":"` + strings.Repeat("x", 3*metadataRecordChunkBytes) + `"}}`
-	f, view := scaleP21SW229Fixture(t, raw)
+	f, view := inlineRootSpoolFixture(t, raw)
 	workspace := f.data.Workspace.URLKey
 	for _, moment := range []string{"before", "during-copy", "after-capture", "short-read", "work-denial", "disk-denial"} {
 		t.Run(moment, func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestScaleP21SW229InlineRootCancellationAndFailures(t *testing.T) {
 			defer cancel()
 			queries := 0
 			ctx := WithSQLStatementObserver(cancelled, func(query string) {
-				if scaleP21SW229RootQuery(query) {
+				if inlineRootSpoolRootQuery(query) {
 					queries++
 					if moment == "during-copy" && queries == 2 {
 						cancel()
@@ -255,13 +255,13 @@ func TestScaleP21SW229InlineRootCancellationAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW229InlineRootCaptureBindingAndLifetime(t *testing.T) {
+func TestInlineRootCaptureBindingAndLifetime(t *testing.T) {
 	raw := `{"workspace":{"id":"stored","name":"Before"},"_flowCollections":{}}`
-	f, view := scaleP21SW229Fixture(t, raw)
+	f, view := inlineRootSpoolFixture(t, raw)
 	workspace := f.data.Workspace.URLKey
 	queries := 0
 	ctx := WithSQLStatementObserver(t.Context(), func(query string) {
-		if scaleP21SW229RootQuery(query) {
+		if inlineRootSpoolRootQuery(query) {
 			queries++
 		}
 	})
@@ -302,7 +302,7 @@ func TestScaleP21SW229InlineRootCaptureBindingAndLifetime(t *testing.T) {
 	}
 	// A successful capture is detached from SQL and keeps the original bytes
 	// even after its caller ends that transaction.
-	scaleP21SW229AssertRootBytes(t, root, raw)
+	assertRootBytes(t, root, raw)
 	if queries != captured {
 		t.Fatal("detached root retained a SQL reader")
 	}

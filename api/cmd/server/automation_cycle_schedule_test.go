@@ -21,14 +21,14 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW182Fixture struct {
-	scaleP21SW10Fixture
+type automationCycleScheduleFixture struct {
+	notificationsFixture
 	prefix, team, other, project string
 	base                         domain.Bootstrap
 	actor                        domain.User
 }
 
-type scaleP21SW182Case struct {
+type automationCycleScheduleCase struct {
 	name                       string
 	schedule                   string
 	duplicates, upcoming, bulk int
@@ -44,18 +44,18 @@ type scaleP21SW182Case struct {
 	stableHistory              bool
 }
 
-type scaleP21SW182MetadataRow struct {
+type metadataRow struct {
 	Field, Key string
 	Order      int64
 	Data       json.RawMessage
 }
 
-type scaleP21SW182Run struct {
+type automationCycleScheduleRun struct {
 	Normalized any
-	Before     scaleP21SW59Rows
-	After      scaleP21SW59Rows
-	BeforeMeta []scaleP21SW182MetadataRow
-	Metadata   []scaleP21SW182MetadataRow
+	Before     discussionWriteRows
+	After      discussionWriteRows
+	BeforeMeta []metadataRow
+	Metadata   []metadataRow
 	PriorCycle []domain.Cycle
 	Cycles     []domain.Cycle
 	Started    time.Time
@@ -67,21 +67,21 @@ type scaleP21SW182Run struct {
 	SQL        int
 }
 
-func scaleP21SW182Setup(t *testing.T) scaleP21SW182Fixture {
+func automationCycleScheduleSetup(t *testing.T) automationCycleScheduleFixture {
 	t.Helper()
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	platform := scaleP03Fixture(t, repo)
-	_, actor := scaleP03Join(t, platform, "SW182 inherited actor", idgen.New("sw182-actor-")+"@example.test", "member")
+	platform := resourceAccessScaleFixture(t, repo)
+	_, actor := resourceAccessScaleJoin(t, platform, "SW182 inherited actor", idgen.New("sw182-actor-")+"@example.test", "member")
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), platform.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &scaleP04Database{config: config}
+	reader := &scaleDatabase{config: config}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
@@ -96,16 +96,16 @@ func scaleP21SW182Setup(t *testing.T) scaleP21SW182Fixture {
 		t.Fatal("inherited actor fixture does not differ from the native viewer role", base.ViewerRole, role, status, err)
 	}
 	prefix := idgen.New("sw182-")
-	return scaleP21SW182Fixture{
-		scaleP21SW10Fixture: scaleP21SW10Fixture{
-			scaleP21M2Fixture: scaleP21M2Fixture{scaleP03PlatformFixture: platform, probe: probe, testingT: t},
-			reader:            reader,
+	return automationCycleScheduleFixture{
+		notificationsFixture: notificationsFixture{
+			policyDifferentialFixture: policyDifferentialFixture{scalePlatformFixture: platform, probe: probe, testingT: t},
+			reader:                    reader,
 		},
 		prefix: prefix, team: prefix + "team", other: prefix + "other", project: prefix + "project", base: base, actor: actor,
 	}
 }
 
-func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182Case, now time.Time, reload bool) (domain.Bootstrap, time.Time) {
+func automationCycleScheduleSeed(t *testing.T, f automationCycleScheduleFixture, test automationCycleScheduleCase, now time.Time, reload bool) (domain.Bootstrap, time.Time) {
 	t.Helper()
 	for _, source := range []*store.SQLiteStore{f.repository, f.probe} {
 		source.SetWebhookSink(nil)
@@ -267,7 +267,7 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 		t.Fatal(err)
 	}
 	if test.poisonCount {
-		scaleP21SW182PoisonCount(t, f)
+		automationCycleSchedulePoisonCount(t, f)
 	}
 	if reload {
 		if err := f.repository.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
@@ -284,10 +284,10 @@ func scaleP21SW182Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 	return before, freshAt
 }
 
-func scaleP21SW182PoisonCount(t *testing.T, f scaleP21SW182Fixture) {
+func automationCycleSchedulePoisonCount(t *testing.T, f automationCycleScheduleFixture) {
 	t.Helper()
-	var selected *scaleP21SW182MetadataRow
-	for _, row := range scaleP21SW182Metadata(t, f) {
+	var selected *metadataRow
+	for _, row := range automationCycleScheduleMetadata(t, f) {
 		if row.Field == "projects" && row.Key == f.project {
 			value := row
 			selected = &value
@@ -323,13 +323,13 @@ func scaleP21SW182PoisonCount(t *testing.T, f scaleP21SW182Fixture) {
 	}
 }
 
-func scaleP21SW182Metadata(t *testing.T, f scaleP21SW182Fixture) []scaleP21SW182MetadataRow {
+func automationCycleScheduleMetadata(t *testing.T, f automationCycleScheduleFixture) []metadataRow {
 	t.Helper()
 	rows := f.reader.query(t, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, f.data.Workspace.URLKey)
 	defer rows.Close()
-	result := []scaleP21SW182MetadataRow{}
+	result := []metadataRow{}
 	for rows.Next() {
-		var item scaleP21SW182MetadataRow
+		var item metadataRow
 		var raw []byte
 		if err := rows.Scan(&item.Field, &item.Key, &item.Order, &raw); err != nil {
 			t.Fatal(err)
@@ -343,7 +343,7 @@ func scaleP21SW182Metadata(t *testing.T, f scaleP21SW182Fixture) []scaleP21SW182
 	return result
 }
 
-func scaleP21SW182Events(t *testing.T, f scaleP21SW182Fixture) []domain.DomainEvent {
+func automationCycleScheduleEvents(t *testing.T, f automationCycleScheduleFixture) []domain.DomainEvent {
 	t.Helper()
 	rows := f.reader.query(t, `SELECT id,event_type,aggregate_id,payload,previous_values,created_at FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID)
 	defer rows.Close()
@@ -373,7 +373,7 @@ func scaleP21SW182Events(t *testing.T, f scaleP21SW182Fixture) []domain.DomainEv
 	return result
 }
 
-func scaleP21SW182Native(t *testing.T, f scaleP21SW182Fixture, source *store.SQLiteStore, before domain.Bootstrap) domain.Bootstrap {
+func automationCycleScheduleNative(t *testing.T, f automationCycleScheduleFixture, source *store.SQLiteStore, before domain.Bootstrap) domain.Bootstrap {
 	t.Helper()
 	var data domain.Bootstrap
 	var closeRead func()
@@ -388,7 +388,7 @@ func scaleP21SW182Native(t *testing.T, f scaleP21SW182Fixture, source *store.SQL
 			t.Fatal(err)
 		}
 		defer streamWork.Close()
-		buffer := &scaleP21SW182Stream{work: streamWork, ctx: t.Context()}
+		buffer := &automationCycleScheduleStream{work: streamWork, ctx: t.Context()}
 		if err := parent.StreamFieldJSON(t.Context(), "cycles", buffer); err != nil {
 			parent.Close()
 			t.Fatal("stream native occurrence array", err)
@@ -469,27 +469,27 @@ func scaleP21SW182Native(t *testing.T, f scaleP21SW182Fixture, source *store.SQL
 	return out
 }
 
-type scaleP21SW182Stream struct {
+type automationCycleScheduleStream struct {
 	bytes.Buffer
 	work *store.MetadataJSONRead
 	ctx  context.Context
 }
 
-func (w *scaleP21SW182Stream) Write(value []byte) (int, error) {
+func (w *automationCycleScheduleStream) Write(value []byte) (int, error) {
 	if err := w.work.ReserveEncoded(w.ctx, w.Len()+len(value)); err != nil {
 		return 0, err
 	}
 	return w.Buffer.Write(value)
 }
 
-func (w *scaleP21SW182Stream) WriteString(value string) (int, error) {
+func (w *automationCycleScheduleStream) WriteString(value string) (int, error) {
 	if err := w.work.ReserveEncoded(w.ctx, w.Len()+len(value)); err != nil {
 		return 0, err
 	}
 	return w.Buffer.WriteString(value)
 }
 
-func scaleP21SW182Project(t *testing.T, f scaleP21SW182Fixture, source *store.SQLiteStore) any {
+func automationCycleScheduleProject(t *testing.T, f automationCycleScheduleFixture, source *store.SQLiteStore) any {
 	t.Helper()
 	if source.BoundedMetadataEnabled() {
 		read, found, err := source.BeginInstalledResourcePointRead(t.Context(), f.data.Workspace.URLKey, "projects", f.project)
@@ -497,18 +497,18 @@ func scaleP21SW182Project(t *testing.T, f scaleP21SW182Fixture, source *store.SQ
 			t.Fatal("missing native post-source project", found, err)
 		}
 		defer read.Close()
-		return scaleP21SW10JSON(t, read.Data.Projects[0])
+		return notificationsJSON(t, read.Data.Projects[0])
 	}
 	data, found := source.WorkspaceMetadataFields(f.data.Workspace.URLKey, "projects")
 	if !found || len(data.Projects) != 1 || data.Projects[0].ID != f.project {
 		t.Fatal("missing literal post-source project")
 	}
-	return scaleP21SW10JSON(t, data.Projects[0])
+	return notificationsJSON(t, data.Projects[0])
 }
 
-func scaleP21SW182CanonicalProject(t *testing.T, f scaleP21SW182Fixture) map[string]any {
+func canonicalProject(t *testing.T, f automationCycleScheduleFixture) map[string]any {
 	t.Helper()
-	for _, row := range scaleP21SW182Metadata(t, f) {
+	for _, row := range automationCycleScheduleMetadata(t, f) {
 		if row.Field == "projects" && row.Key == f.project {
 			var project map[string]any
 			if err := json.Unmarshal(row.Data, &project); err != nil {
@@ -521,11 +521,11 @@ func scaleP21SW182CanonicalProject(t *testing.T, f scaleP21SW182Fixture) map[str
 	return nil
 }
 
-func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP21SW59Rows, metadata []scaleP21SW182MetadataRow, native, prior domain.Bootstrap, project any, started, finished time.Time, freshID string, freshAt time.Time) any {
+func automationCycleScheduleNormalize(t *testing.T, got discussionWriteOutcome, before discussionWriteRows, metadata []metadataRow, native, prior domain.Bootstrap, project any, started, finished time.Time, freshID string, freshAt time.Time) any {
 	t.Helper()
-	value := scaleP21SW59Normalized(t, got, before, started, finished).(map[string]any)
-	value["Metadata"] = scaleP21SW10JSON(t, metadata)
-	value["Native"] = scaleP21SW10JSON(t, native)
+	value := discussionWriteNormalized(t, got, before, started, finished).(map[string]any)
+	value["Metadata"] = notificationsJSON(t, metadata)
+	value["Native"] = notificationsJSON(t, native)
 	value["NativeProject"] = project
 	if publications, ok := value["Realtime"].([]any); ok {
 		for _, publication := range publications {
@@ -579,23 +579,23 @@ func scaleP21SW182Normalize(t *testing.T, got scaleP21SW59Outcome, before scaleP
 	return visit(value, "")
 }
 
-func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLiteStore, test scaleP21SW182Case, now time.Time, reload bool, key, failure string) scaleP21SW182Run {
+func automationCycleScheduleTick(t *testing.T, f automationCycleScheduleFixture, source *store.SQLiteStore, test automationCycleScheduleCase, now time.Time, reload bool, key, failure string) automationCycleScheduleRun {
 	t.Helper()
-	nativeBefore, freshAt := scaleP21SW182Seed(t, f, test, now, reload)
+	nativeBefore, freshAt := automationCycleScheduleSeed(t, f, test, now, reload)
 	if test.poisonCount {
 		// Reload normalizes native counts against its unloaded issue slice.
 		// The canonical marker distinguishes writes by the actual branches.
-		project := scaleP21SW182CanonicalProject(t, f)
+		project := canonicalProject(t, f)
 		if project["issueCount"] != float64(777777) {
 			t.Fatal("full/scoped marker was repaired during fixture construction", project["issueCount"])
 		}
 	}
-	before, metadataBefore := scaleP21SW59SQL(t, f.scaleP21SW10Fixture), scaleP21SW182Metadata(t, f)
+	before, metadataBefore := discussionWriteSql(t, f.notificationsFixture), automationCycleScheduleMetadata(t, f)
 	priorIDs := map[string]bool{}
-	for _, event := range scaleP21SW182Events(t, f) {
+	for _, event := range automationCycleScheduleEvents(t, f) {
 		priorIDs[event.ID] = true
 	}
-	got, result := scaleP21SW59Outcome{}, scaleP21SW182Run{Before: before, BeforeMeta: metadataBefore, PriorCycle: nativeBefore.Cycles}
+	got, result := discussionWriteOutcome{}, automationCycleScheduleRun{Before: before, BeforeMeta: metadataBefore, PriorCycle: nativeBefore.Cycles}
 	var peak, statements, writes atomic.Int64
 	var stopped atomic.Bool
 	var peakMu sync.Mutex
@@ -755,9 +755,9 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 			t.Fatal("budget refusal retained an attempt after its caller released work")
 		}
 	}
-	got.Rows = scaleP21SW59SQL(t, f.scaleP21SW10Fixture)
-	result.After, result.Metadata = got.Rows, scaleP21SW182Metadata(t, f)
-	for _, event := range scaleP21SW182Events(t, f) {
+	got.Rows = discussionWriteSql(t, f.notificationsFixture)
+	result.After, result.Metadata = got.Rows, automationCycleScheduleMetadata(t, f)
+	for _, event := range automationCycleScheduleEvents(t, f) {
 		if !priorIDs[event.ID] {
 			got.Events = append(got.Events, event)
 		}
@@ -801,7 +801,7 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 	if wantedEvents == 0 && (!reflect.DeepEqual(before, got.Rows) || !reflect.DeepEqual(metadataBefore, result.Metadata)) {
 		t.Fatal("no-op/refused/rolled-back ticker changed business SQL rows")
 	}
-	native := scaleP21SW182Native(t, f, source, nativeBefore)
+	native := automationCycleScheduleNative(t, f, source, nativeBefore)
 	result.Cycles = native.Cycles
 	if test.collision && wantedEvents != 0 {
 		var publication struct {
@@ -825,7 +825,7 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 			t.Fatal("ticker lost its inherited realtime client")
 		}
 	}
-	project := scaleP21SW182Project(t, f, source)
+	project := automationCycleScheduleProject(t, f, source)
 	if test.poisonCount {
 		// The scoped progress rewrite persists the normalized native zero;
 		// ordinary full mutation hydrates every issue and repairs the count.
@@ -833,7 +833,7 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 		if test.fullFallback {
 			expected = 10 + test.bulk
 		}
-		object := scaleP21SW182CanonicalProject(t, f)
+		object := canonicalProject(t, f)
 		if object["issueCount"] != float64(expected) {
 			t.Fatal("ticker did not take the literal scoped/full count-repair branch", test.fullFallback, expected, object)
 		}
@@ -857,7 +857,7 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 			t.Fatalf("ticker changed issue creation time: got %s, want %s", issue.CreatedAt, freshAt)
 		}
 	}
-	result.Normalized = scaleP21SW182Normalize(t, got, before, result.Metadata, native, nativeBefore, project, started, finished, freshID, freshAt)
+	result.Normalized = automationCycleScheduleNormalize(t, got, before, result.Metadata, native, nativeBefore, project, started, finished, freshID, freshAt)
 	if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 		t.Fatal("ticker/native verification leaked ownership or decoded a full workspace", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 	}
@@ -865,7 +865,7 @@ func scaleP21SW182Tick(t *testing.T, f scaleP21SW182Fixture, source *store.SQLit
 	return result
 }
 
-func scaleP21SW182History(t *testing.T, f scaleP21SW182Fixture, result scaleP21SW182Run, test scaleP21SW182Case) {
+func automationCycleScheduleHistory(t *testing.T, f automationCycleScheduleFixture, result automationCycleScheduleRun, test automationCycleScheduleCase) {
 	t.Helper()
 	activities := map[string][]domain.ActivityEvent{}
 	for _, row := range result.After.Content {
@@ -926,16 +926,16 @@ func scaleP21SW182History(t *testing.T, f scaleP21SW182Fixture, result scaleP21S
 	}
 }
 
-func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182Case, reload bool, key string) scaleP21SW182Run {
+func automationCycleSchedulePair(t *testing.T, f automationCycleScheduleFixture, test automationCycleScheduleCase, reload bool, key string) automationCycleScheduleRun {
 	t.Helper()
 	now := time.Now().UTC()
-	old := scaleP21SW182Tick(t, f, f.repository, test, now, reload, key, "")
-	bounded := scaleP21SW182Tick(t, f, f.probe, test, now, reload, key, "")
+	old := automationCycleScheduleTick(t, f, f.repository, test, now, reload, key, "")
+	bounded := automationCycleScheduleTick(t, f, f.probe, test, now, reload, key, "")
 	if !reflect.DeepEqual(old.Normalized, bounded.Normalized) {
 		if !reflect.DeepEqual(old.Before, bounded.Before) {
-			t.Log("ticker fixture SQL preimages differ", scaleP21M2Diff(old.Before, bounded.Before))
+			t.Log("ticker fixture SQL preimages differ", policyFirstDifference(old.Before, bounded.Before))
 		}
-		t.Fatal("actual cycle ticker native/SQL/publication differential", scaleP21M2Diff(old.Normalized, bounded.Normalized))
+		t.Fatal("actual cycle ticker native/SQL/publication differential", policyFirstDifference(old.Normalized, bounded.Normalized))
 	}
 	// The seed's native values come back from the legacy in-memory copy as
 	// time.Local, while the bounded side decodes the identical stored JSON.
@@ -956,7 +956,7 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 		}
 		return cycles
 	}
-	normalizeNative := func(result scaleP21SW182Run) []domain.Cycle {
+	normalizeNative := func(result automationCycleScheduleRun) []domain.Cycle {
 		cycles := canonicalZone(result.Cycles)
 		existing, generated := map[string]bool{}, map[string]string{}
 		for _, prior := range result.PriorCycle {
@@ -981,7 +981,7 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 	// cycle rebase. Preserve that actual AFTER value; never sanitize either
 	// side or demand seed-to-after invariance for a changed occurrence.
 	if !reflect.DeepEqual(normalizeNative(old), normalizeNative(bounded)) {
-		t.Fatal("typed native cycle AFTER values differ", scaleP21M2Diff(normalizeNative(old), normalizeNative(bounded)))
+		t.Fatal("typed native cycle AFTER values differ", policyFirstDifference(normalizeNative(old), normalizeNative(bounded)))
 	}
 	oldPrior, oldCycles := canonicalZone(old.PriorCycle), canonicalZone(old.Cycles)
 	boundedPrior, boundedCycles := canonicalZone(bounded.PriorCycle), canonicalZone(bounded.Cycles)
@@ -993,7 +993,7 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 			t.Fatal("bounded ticker changed a native cycle the literal ticker preserved", index, before.ID)
 		}
 	}
-	oldAfter, boundedAfter := map[string]scaleP21SW182MetadataRow{}, map[string]scaleP21SW182MetadataRow{}
+	oldAfter, boundedAfter := map[string]metadataRow{}, map[string]metadataRow{}
 	for _, row := range old.Metadata {
 		oldAfter[row.Field+"\n"+row.Key] = row
 	}
@@ -1009,20 +1009,20 @@ func scaleP21SW182Pair(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW182C
 		}
 	}
 	if test.schedule == "cooldown" || test.schedule == "immediate" || test.schedule == "duplicates" {
-		scaleP21SW182History(t, f, old, test)
-		scaleP21SW182History(t, f, bounded, test)
+		automationCycleScheduleHistory(t, f, old, test)
+		automationCycleScheduleHistory(t, f, bounded, test)
 	}
 	return bounded
 }
 
-func TestScaleP21SW182CycleScheduleTickerDifferential(t *testing.T) {
+func TestCycleScheduleTickerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	for _, reload := range []bool{false, true} {
 		for _, key := range []string{f.data.Workspace.URLKey, ""} {
-			for _, test := range []scaleP21SW182Case{
+			for _, test := range []automationCycleScheduleCase{
 				{name: "inclusive-last-day", schedule: "inclusive"},
 				{name: "inclusive-UTC-day-with-process-local-offset", schedule: "inclusive-zone"},
 				{name: "RFC3339-offset-through-actual-parseCycleDate", schedule: "parsed-offset"},
@@ -1038,31 +1038,31 @@ func TestScaleP21SW182CycleScheduleTickerDifferential(t *testing.T) {
 				{name: "independent-of-parent-frame", schedule: "immediate", parentOwner: true},
 			} {
 				t.Run(fmt.Sprintf("reload=%t/default=%t/%s", reload, key == "", test.name), func(t *testing.T) {
-					scaleP21SW182Pair(t, f, test, reload, key)
+					automationCycleSchedulePair(t, f, test, reload, key)
 				})
 			}
 		}
 	}
 }
 
-func TestScaleP21SW182CycleScheduleFullScopeFallback(t *testing.T) {
+func TestCycleScheduleFullScopeFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	t.Run("1000-batch-boundary-remains-scoped", func(t *testing.T) {
-		test := scaleP21SW182Case{name: "scoped-control", schedule: "immediate", bulk: 1001,
+		test := automationCycleScheduleCase{name: "scoped-control", schedule: "immediate", bulk: 1001,
 			collision: true, background: true, inherited: true, poisonCount: true, minimal: true}
-		scaleP21SW182Pair(t, f, test, false, f.data.Workspace.URLKey)
+		automationCycleSchedulePair(t, f, test, false, f.data.Workspace.URLKey)
 	})
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprintf("raw-20000-threshold/reload=%t/inherited-member", reload), func(t *testing.T) {
 			// The actual resolver supplies >10,500 duplicate cycle IDs.
 			// Each old 500-value IN batch returns ~1,010 genuine issues;
 			// the literal raw pre-dedup total exceeds maxScopedIssues=20,000.
-			test := scaleP21SW182Case{name: "full-scope", schedule: "immediate", bulk: 1001, rawHeaders: 10500,
+			test := automationCycleScheduleCase{name: "full-scope", schedule: "immediate", bulk: 1001, rawHeaders: 10500,
 				collision: true, background: true, inherited: true, poisonCount: true, fullFallback: true, minimal: true, stableHistory: true}
-			result := scaleP21SW182Pair(t, f, test, reload, "")
+			result := automationCycleSchedulePair(t, f, test, reload, "")
 			if len(result.After.Issues) != 1011 || result.Events != 1 || result.Peak == 0 {
 				t.Fatal("full fallback omitted native rows or its publication owner", len(result.After.Issues), result.Events, result.Peak)
 			}
@@ -1070,16 +1070,16 @@ func TestScaleP21SW182CycleScheduleFullScopeFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW182CycleScheduleAdmissionShape(t *testing.T) {
+func TestCycleScheduleAdmissionShape(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	var singlePeak int
 	for _, duplicates := range []int{1, 64} {
 		t.Run(fmt.Sprintf("duplicate-teams=%d", duplicates), func(t *testing.T) {
-			test := scaleP21SW182Case{name: "future-batch", schedule: "empty", duplicates: duplicates, upcoming: 256}
-			result := scaleP21SW182Pair(t, f, test, false, f.data.Workspace.URLKey)
+			test := automationCycleScheduleCase{name: "future-batch", schedule: "empty", duplicates: duplicates, upcoming: 256}
+			result := automationCycleSchedulePair(t, f, test, false, f.data.Workspace.URLKey)
 			if len(result.Cycles) != 258 {
 				t.Fatal("literal duplicate headers generated a second future batch", len(result.Cycles))
 			}
@@ -1097,8 +1097,8 @@ func TestScaleP21SW182CycleScheduleAdmissionShape(t *testing.T) {
 			// Large race fixtures can take longer than the creator's grace
 			// window. Prove explicit appended history there; the small table
 			// still proves suppression inside the initial three minutes.
-			test := scaleP21SW182Case{name: "unrelated-growth", schedule: "cooldown", bodyCopies: copies, stableHistory: copies > 1}
-			result := scaleP21SW182Pair(t, f, test, true, f.data.Workspace.URLKey)
+			test := automationCycleScheduleCase{name: "unrelated-growth", schedule: "cooldown", bodyCopies: copies, stableHistory: copies > 1}
+			result := automationCycleSchedulePair(t, f, test, true, f.data.Workspace.URLKey)
 			if smallPeak == 0 {
 				smallPeak = result.Peak
 			}
@@ -1109,31 +1109,31 @@ func TestScaleP21SW182CycleScheduleAdmissionShape(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW182CycleScheduleRefusalRollbackAndRelease(t *testing.T) {
+func TestCycleScheduleRefusalRollbackAndRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
-	test := scaleP21SW182Case{name: "failure", schedule: "immediate", collision: true}
+	f := automationCycleScheduleSetup(t)
+	test := automationCycleScheduleCase{name: "failure", schedule: "immediate", collision: true}
 	for _, failure := range []string{"cancelled", "rollback", "missing-workspace"} {
 		t.Run(failure, func(t *testing.T) {
 			now, key := time.Now().UTC(), f.data.Workspace.URLKey
 			if failure == "missing-workspace" {
 				key = f.prefix + "missing-workspace"
 			}
-			old := scaleP21SW182Tick(t, f, f.repository, test, now, false, key, failure)
-			bounded := scaleP21SW182Tick(t, f, f.probe, test, now, false, key, failure)
+			old := automationCycleScheduleTick(t, f, f.repository, test, now, false, key, failure)
+			bounded := automationCycleScheduleTick(t, f, f.probe, test, now, false, key, failure)
 			if !reflect.DeepEqual(old.Normalized, bounded.Normalized) {
-				t.Fatal("refused ticker differs from literal state/publications", scaleP21M2Diff(old.Normalized, bounded.Normalized))
+				t.Fatal("refused ticker differs from literal state/publications", policyFirstDifference(old.Normalized, bounded.Normalized))
 			}
 		})
 	}
 	t.Run("aggregate-admission-refusal", func(t *testing.T) {
-		result := scaleP21SW182Tick(t, f, f.probe, test, time.Now().UTC(), false, f.data.Workspace.URLKey, "budget")
+		result := automationCycleScheduleTick(t, f, f.probe, test, time.Now().UTC(), false, f.data.Workspace.URLKey, "budget")
 		if result.Events != 0 || !reflect.DeepEqual(result.Before, result.After) {
 			t.Fatal("admission refusal committed a cycle/issue/history mutation")
 		}
 	})
 	// The same bounded store remains usable after cancellation and rollback.
-	scaleP21SW182Pair(t, f, scaleP21SW182Case{name: "after-refusal", schedule: "immediate", background: true}, false, "")
+	automationCycleSchedulePair(t, f, automationCycleScheduleCase{name: "after-refusal", schedule: "immediate", background: true}, false, "")
 }

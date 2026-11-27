@@ -10,11 +10,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW492: cycles by ID. The literal projection keeps a cycle only for a team
+// Cycles by ID. The literal projection keeps a cycle only for a team
 // whose content the viewer reads; cycleAllowed then requires teamAllowed of
 // that team. The bounded reader decides it from the unfiltered cycle header.
-func TestScaleP21SW492CycleAuthorizationDifferential(t *testing.T) {
-	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
+func TestCycleAuthorizationDifferential(t *testing.T) {
+	fx := harnessSetup(t, func(fx *harnessFixture, data *domain.Bootstrap) {
 		start := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
 		cycle := func(id, team string, number int) domain.Cycle {
 			return domain.Cycle{ID: id, Number: number, Name: id, TeamID: team, StartsAt: start, EndsAt: start.AddDate(0, 0, 14), Status: "upcoming"}
@@ -36,7 +36,7 @@ func TestScaleP21SW492CycleAuthorizationDifferential(t *testing.T) {
 		data.Trash = append(data.Trash, domain.TrashEntry{ID: p + "cycle-trash", ResourceType: "cycle", ResourceID: p + "cycle-trashed", Title: "trashed", Payload: json.RawMessage(`{}`), DeletedAt: fx.archived, ExpiresAt: fx.archived.AddDate(1, 0, 0)})
 	})
 	p, esc := fx.prefix, url.PathEscape
-	rows := []scaleP21SW491Row{}
+	rows := []harnessRow{}
 	for _, ref := range []struct{ name, id string }{
 		{"public", p + "cycle-public"}, {"private", p + "cycle-private"}, {"child", p + "cycle-child"},
 		{"retired-team", p + "cycle-retired"}, {"archived-team", p + "cycle-archived"}, {"no-team", p + "cycle-no-team"},
@@ -44,25 +44,25 @@ func TestScaleP21SW492CycleAuthorizationDifferential(t *testing.T) {
 		{"missing", p + "cycle-missing"}, {"team-id-as-ref", fx.public},
 	} {
 		rows = append(rows,
-			scaleP21SW491Row{"get-" + ref.name, http.MethodGet, "GET /api/cycles/{id}", "/api/cycles/" + esc(ref.id), ""},
-			scaleP21SW491Row{"patch-" + ref.name, http.MethodPatch, "PATCH /api/cycles/{id}", "/api/cycles/" + esc(ref.id), `{"name":"x"}`},
-			scaleP21SW491Row{"resource-delete-" + ref.name, http.MethodDelete, "DELETE /api/cycles/{id}/resources/{resourceId}", "/api/cycles/" + esc(ref.id) + "/resources/r", ""},
+			harnessRow{"get-" + ref.name, http.MethodGet, "GET /api/cycles/{id}", "/api/cycles/" + esc(ref.id), ""},
+			harnessRow{"patch-" + ref.name, http.MethodPatch, "PATCH /api/cycles/{id}", "/api/cycles/" + esc(ref.id), `{"name":"x"}`},
+			harnessRow{"resource-delete-" + ref.name, http.MethodDelete, "DELETE /api/cycles/{id}/resources/{resourceId}", "/api/cycles/" + esc(ref.id) + "/resources/r", ""},
 		)
 	}
 	rows = append(rows,
-		scaleP21SW491Row{"head-public", http.MethodHead, "GET /api/cycles/{id}", "/api/cycles/" + p + "cycle-public", ""},
-		scaleP21SW491Row{"capacity-get", http.MethodGet, "GET /api/cycles/{id}/capacity", "/api/cycles/" + p + "cycle-private/capacity", ""},
-		scaleP21SW491Row{"capacity-put", http.MethodPut, "PUT /api/cycles/{id}/capacity", "/api/cycles/" + p + "cycle-public/capacity", `{"capacity":3}`},
-		scaleP21SW491Row{"graph", http.MethodGet, "GET /api/cycles/{id}/graph", "/api/cycles/" + p + "cycle-child/graph", ""},
-		scaleP21SW491Row{"calendar-token", http.MethodPost, "POST /api/cycles/{id}/calendar-token", "/api/cycles/" + p + "cycle-public/calendar-token", ""},
-		scaleP21SW491Row{"resources-post", http.MethodPost, "POST /api/cycles/{id}/resources", "/api/cycles/" + p + "cycle-dup/resources", `{}`},
-		scaleP21SW491Row{"start", http.MethodPost, "POST /api/cycles/{id}/start", "/api/cycles/" + p + "cycle-private/start", ""},
-		scaleP21SW491Row{"favorite-patch", http.MethodPatch, "PATCH /api/cycles/{id}", "/api/cycles/" + p + "cycle-public", `{"favorite":true}`},
-		scaleP21SW491Row{"escaped-slash-id", http.MethodGet, "GET /api/cycles/{id}/graph", "/api/cycles/" + esc(p+"cycle/slash") + "/graph", ""},
-		scaleP21SW491Row{"escaped-prefix", http.MethodGet, "GET /api/cycles/{id}", "/%61pi/%63ycles/" + p + "cycle-public", ""},
-		scaleP21SW491Row{"empty-ref", http.MethodGet, "GET /api/cycles/{id}", "/api/cycles//capacity", ""},
+		harnessRow{"head-public", http.MethodHead, "GET /api/cycles/{id}", "/api/cycles/" + p + "cycle-public", ""},
+		harnessRow{"capacity-get", http.MethodGet, "GET /api/cycles/{id}/capacity", "/api/cycles/" + p + "cycle-private/capacity", ""},
+		harnessRow{"capacity-put", http.MethodPut, "PUT /api/cycles/{id}/capacity", "/api/cycles/" + p + "cycle-public/capacity", `{"capacity":3}`},
+		harnessRow{"graph", http.MethodGet, "GET /api/cycles/{id}/graph", "/api/cycles/" + p + "cycle-child/graph", ""},
+		harnessRow{"calendar-token", http.MethodPost, "POST /api/cycles/{id}/calendar-token", "/api/cycles/" + p + "cycle-public/calendar-token", ""},
+		harnessRow{"resources-post", http.MethodPost, "POST /api/cycles/{id}/resources", "/api/cycles/" + p + "cycle-dup/resources", `{}`},
+		harnessRow{"start", http.MethodPost, "POST /api/cycles/{id}/start", "/api/cycles/" + p + "cycle-private/start", ""},
+		harnessRow{"favorite-patch", http.MethodPatch, "PATCH /api/cycles/{id}", "/api/cycles/" + p + "cycle-public", `{"favorite":true}`},
+		harnessRow{"escaped-slash-id", http.MethodGet, "GET /api/cycles/{id}/graph", "/api/cycles/" + esc(p+"cycle/slash") + "/graph", ""},
+		harnessRow{"escaped-prefix", http.MethodGet, "GET /api/cycles/{id}", "/%61pi/%63ycles/" + p + "cycle-public", ""},
+		harnessRow{"empty-ref", http.MethodGet, "GET /api/cycles/{id}", "/api/cycles//capacity", ""},
 	)
-	fx.run(t, "SW492", rows, []scaleP21SW491Control{
+	fx.run(t, "SW492", rows, []harnessControl{
 		{"get-public/member-private-outsider/session", true},
 		{"get-public/guest-explicit/session", true},
 		{"get-public/member-private-outsider/selected-empty", false},

@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW327EscapedResourceAuthorization(t *testing.T) {
+func TestEscapedResourceAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -29,7 +29,7 @@ func TestScaleP21SW327EscapedResourceAuthorization(t *testing.T) {
 			{"/api/projects/%2Fa/updates", "/api/projects/{id}/updates", "", 5},
 		} {
 			request := httptest.NewRequest(http.MethodGet, row.path, nil)
-			parts, matched := scaleP21EscapedRouteParts(request, row.pattern)
+			parts, matched := scaleEscapedRouteParts(request, row.pattern)
 			ref := ""
 			if len(parts) >= 3 {
 				ref = parts[2]
@@ -46,25 +46,25 @@ func TestScaleP21SW327EscapedResourceAuthorization(t *testing.T) {
 			{"/api/projects%2Fa/b/updates", "/api/projects/{id}/updates"},
 			{"/api/projects/a/updates/diff-preview/child", "/api/projects/{id}/updates/diff-preview"},
 		} {
-			if _, matched := scaleP21EscapedRouteParts(httptest.NewRequest(http.MethodGet, row.path, nil), row.pattern); matched {
+			if _, matched := scaleEscapedRouteParts(httptest.NewRequest(http.MethodGet, row.path, nil), row.pattern); matched {
 				t.Fatal("shape helper accepted another escaped boundary", row)
 			}
 		}
 		for _, path := range []string{"/api/projects/a%2Fb", "/api/initiatives/a%2Frelations%2Fx/updates/diff-preview", "/api/projects/a%2Fb/history", "/api/initiatives/a%2Fb/history"} {
 			for _, method := range []string{http.MethodGet, http.MethodHead} {
-				_, ref, selected := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(method, path, nil))
+				_, ref, selected := resourceAuthorizationRequestShape(httptest.NewRequest(method, path, nil))
 				if !selected || ref != "a" {
 					t.Fatal("point classifier did not preserve decoded first ref", method, path, ref, selected)
 				}
 			}
 			for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodDelete} {
-				if _, _, selected := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(method, path, nil)); selected {
+				if _, _, selected := resourceAuthorizationRequestShape(httptest.NewRequest(method, path, nil)); selected {
 					t.Fatal("escaped point classifier captured a write", method, path)
 				}
 			}
 		}
 		for _, path := range []string{"/api/initiatives/a/relations/x", "/api/teams/a%2Fb/members", "/api/issue-labels/a%2Fb", "/api/issues/a%2Fb/permissions"} {
-			if _, _, selected := scaleP21SW255ResourceAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)); selected {
+			if _, _, selected := resourceAuthorizationRequestShape(httptest.NewRequest(http.MethodGet, path, nil)); selected {
 				t.Fatal("SW327 expanded another consumer/P16 route", path)
 			}
 		}
@@ -75,10 +75,10 @@ func TestScaleP21SW327EscapedResourceAuthorization(t *testing.T) {
 		Body    string
 		Pattern string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			foreign := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			foreign := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw327-")
 			p, q, hidden := prefix+"public", prefix+"other-public", prefix+"private"
 			i, j, privateInitiative := prefix+"initiative", prefix+"other-initiative", prefix+"private-initiative"

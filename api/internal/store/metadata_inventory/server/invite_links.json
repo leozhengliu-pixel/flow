@@ -5,7 +5,7 @@
     "createOrRotateWorkspaceInviteLink": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted workspaceSettings precheck and complete workspaceSettings/workspaceInviteLink transaction scope; retained enabled recheck, actor fallback and random-token creation. TestScaleP21M2PolicyDifferential compares matrix, canonical link and hooks; CredentialsAndUploadDifferential proves oversized policy fails before writing.",
+      "reason": "Trusted workspaceSettings precheck and complete workspaceSettings/workspaceInviteLink transaction scope; retained enabled recheck, actor fallback and random-token creation. TestScalePolicyDifferential compares matrix, canonical link and hooks; CredentialsAndUploadDifferential proves oversized policy fails before writing.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -15,7 +15,7 @@
     "decideOAuthSyncGroupRequest": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Loads and writes only oauthSyncGroupRequests/requestID, retaining application ID binding, status validation and reviewer attribution. TestScaleP21M2PolicyDifferential compares matrix, unrelated request, canonical state and event hooks.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Loads and writes only oauthSyncGroupRequests/requestID, retaining application ID binding, status validation and reviewer attribution. TestScalePolicyDifferential compares matrix, unrelated request, canonical state and event hooks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -29,7 +29,7 @@
     "disableWorkspaceInviteLink": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Complete scalar workspaceInviteLink scope, retaining missing-link semantics and timestamp update. Existing route authorization remains independent. TestScaleP21M2PolicyDifferential compares matrix, canonical link and event hooks.",
+      "reason": "Complete scalar workspaceInviteLink scope, retaining missing-link semantics and timestamp update. Existing route authorization remains independent. TestScalePolicyDifferential compares matrix, canonical link and event hooks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -38,7 +38,7 @@
     "getWorkspaceInviteLink": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted complete workspaceSettings/workspaceInviteLink selection; unchanged disabled, missing and response shapes with explicit errors. TestScaleP21M2PolicyDifferential compares every principal/key class without loading unrelated bodies.",
+      "reason": "Trusted complete workspaceSettings/workspaceInviteLink selection; unchanged disabled, missing and response shapes with explicit errors. TestScalePolicyDifferential compares every principal/key class without loading unrelated bodies.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -96,7 +96,7 @@
     "rotateSCIMToken": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and complete workspaceSettings mutation; live admin check, SQL token rotation sequence and staged audit preserved. TestScaleP21M2CredentialsAndUploadDifferential compares rotation and subsequent revocation; policy test covers admin matrix.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and complete workspaceSettings mutation; live admin check, SQL token rotation sequence and staged audit preserved. TestScaleCredentialsAndUploadDifferential compares rotation and subsequent revocation; policy test covers admin matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

@@ -24,10 +24,10 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW202IntegrationEnvelopeDifferential(t *testing.T) {
+func TestIntegrationEnvelopeDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
@@ -66,7 +66,7 @@ func TestScaleP21SW202IntegrationEnvelopeDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW202Normalize(t *testing.T, value any, started, finished time.Time, endpoints map[string]string) any {
+func deliveryWorkerNormalize(t *testing.T, value any, started, finished time.Time, endpoints map[string]string) any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -110,7 +110,7 @@ func scaleP21SW202Normalize(t *testing.T, value any, started, finished time.Time
 	return result
 }
 
-func scaleP21SW202Difference(left, right any) string {
+func deliveryWorkerDifference(left, right any) string {
 	var difference func(string, any, any) string
 	difference = func(path string, left, right any) string {
 		if reflect.DeepEqual(left, right) {
@@ -172,7 +172,7 @@ func scaleP21SW202Difference(left, right any) string {
 	return difference("$", left, right)
 }
 
-func scaleP21SW202Native(t *testing.T, repo *store.SQLiteStore, workspace string) (map[string]json.RawMessage, func()) {
+func deliveryWorkerNative(t *testing.T, repo *store.SQLiteStore, workspace string) (map[string]json.RawMessage, func()) {
 	t.Helper()
 	result := map[string]json.RawMessage{}
 	if !repo.BoundedMetadataEnabled() {
@@ -208,7 +208,7 @@ func scaleP21SW202Native(t *testing.T, repo *store.SQLiteStore, workspace string
 			t.Fatal(err)
 		}
 		closes = append(closes, work.Close)
-		buffer := &scaleP21SW182Stream{work: work, ctx: t.Context()}
+		buffer := &automationCycleScheduleStream{work: work, ctx: t.Context()}
 		if err := read.StreamFieldJSON(t.Context(), field, buffer); err != nil {
 			t.Fatal("stream native worker occurrences", err)
 		}
@@ -217,7 +217,7 @@ func scaleP21SW202Native(t *testing.T, repo *store.SQLiteStore, workspace string
 	return result, close
 }
 
-func scaleP21SW202ProcessCPU(t *testing.T) time.Duration {
+func processCPU(t *testing.T) time.Duration {
 	t.Helper()
 	var usage syscall.Rusage
 	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
@@ -226,7 +226,7 @@ func scaleP21SW202ProcessCPU(t *testing.T) time.Duration {
 	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 
-func scaleP21SW202ReloadOracle(t *testing.T, repo *store.SQLiteStore, workspace string) {
+func deliveryWorkerReloadOracle(t *testing.T, repo *store.SQLiteStore, workspace string) {
 	t.Helper()
 	if repo.BoundedMetadataEnabled() {
 		t.Fatal("SQL oracle must use the independent literal fixture")
@@ -243,26 +243,26 @@ func scaleP21SW202ReloadOracle(t *testing.T, repo *store.SQLiteStore, workspace 
 	}
 }
 
-func TestScaleP21SW202DeliveryWorkerNetworkAndCAS(t *testing.T) {
-	scaleP21SW202DeliveryWorkerNetworkAndCAS(t, []string{
+func TestDeliveryWorkerNetworkAndCAS(t *testing.T) {
+	deliveryWorkerNetworkAndCAS(t, []string{
 		"delivered", "large-delivered", "failed", "canceled-network",
 		"attempts-cas", "status-cas", "connection-move", "hipaa-after-claim",
 	})
 }
 
-func scaleP21SW202DeliveryWorkerNetworkAndCAS(t *testing.T, modes []string) {
-	scaleP21SW202DeliveryWorker(t, modes, nil)
+func deliveryWorkerNetworkAndCAS(t *testing.T, modes []string) {
+	deliveryWorker(t, modes, nil)
 }
 
-// scaleP21SW202DeliveryWorker optionally records, per leg, the wall and
+// deliveryWorker optionally records, per leg, the wall and
 // process CPU time from the held response's release to the worker's return:
 // the response close plus the background retry persistence.
-func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bounded bool, mode string, reload bool, elapsed, cpu time.Duration)) {
+func deliveryWorker(t *testing.T, modes []string, record func(bounded bool, mode string, reload bool, elapsed, cpu time.Duration)) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw202-worker-")
 		id, connection, replacement := prefix+"delivery", prefix+"connection", prefix+"replacement"
 		at := time.Date(2026, 11, 16, 1, 2, 3, 4, time.UTC)
@@ -273,7 +273,7 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 					rawUTF8 := strings.HasPrefix(mode, "http-invalid-utf8")
 					var acceptedPayload json.RawMessage
 					if rawUTF8 {
-						acceptedPayload = scaleP21SW345AcceptedPayload(t, repo, f, connection)
+						acceptedPayload = integrationRawUTF8AcceptedPayload(t, repo, f, connection)
 					}
 					type outcome struct {
 						Result                      domain.IntegrationDelivery
@@ -287,7 +287,7 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 					var results []any
 					for _, bounded := range []bool{false, true} {
 						workspace := workspace
-						var duplicateWitness *scaleP21SW345Duplicates
+						var duplicateWitness *integrationRawUTF8Duplicates
 						repo.SetWebhookSink(nil)
 						repo.SetRealtimeSink(nil)
 						received := make(chan struct{}, 1)
@@ -351,7 +351,7 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							if rawUTF8 {
 								data.Documents = nil
 								if mode == "http-invalid-utf8-inline" {
-									duplicateWitness = scaleP21SW345DuplicateWitness(data)
+									duplicateWitness = integrationRawUTF8DuplicateWitness(data)
 								} else {
 									data.IntegrationDeliveries = data.IntegrationDeliveries[:1]
 									data.IntegrationConnections = []domain.IntegrationConnection{
@@ -390,7 +390,7 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							t.Fatal(err)
 						}
 						if reload {
-							scaleP21SW202ReloadOracle(t, repo, workspace)
+							deliveryWorkerReloadOracle(t, repo, workspace)
 						}
 						source := repo
 						if bounded {
@@ -466,11 +466,11 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 						}
 						if mode == "attempts-cas" || mode == "status-cas" || mode == "connection-move" || mode == "hipaa-after-claim" {
 							var closeNative func()
-							got.BeforePeer, closeNative = scaleP21SW202Native(t, source, workspace)
+							got.BeforePeer, closeNative = deliveryWorkerNative(t, source, workspace)
 							nativeCloses = append(nativeCloses, closeNative)
 							// The peer starts from the same canonical generation
 							// in both runs, after native warm state is captured.
-							scaleP21SW202ReloadOracle(t, repo, workspace)
+							deliveryWorkerReloadOracle(t, repo, workspace)
 							peerCtx, peerCancel := context.WithTimeout(t.Context(), 3*time.Second)
 							err := repo.MutateWorkspace(peerCtx, workspace, "scale_p21.sw202_peer", "", nil, func(data *domain.Bootstrap) error {
 								t.Logf("peer input bounded=%t mode=%s status=%s attempts=%d connection=%s", bounded, mode, data.IntegrationDeliveries[0].Status, data.IntegrationDeliveries[0].Attempts, data.IntegrationDeliveries[0].ConnectionID)
@@ -504,12 +504,12 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							joined = true
 							releaseOutbound()
 						} else {
-							released, releasedCPU := time.Now(), scaleP21SW202ProcessCPU(t)
+							released, releasedCPU := time.Now(), processCPU(t)
 							releaseOutbound()
 							result = <-done
 							joined = true
 							if record != nil {
-								record(bounded, mode, reload, time.Since(released), scaleP21SW202ProcessCPU(t)-releasedCPU)
+								record(bounded, mode, reload, time.Since(released), processCPU(t)-releasedCPU)
 							}
 						}
 						cancel()
@@ -520,9 +520,9 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							got.Error = result.err.Error()
 						}
 						var closeNative func()
-						got.Native, closeNative = scaleP21SW202Native(t, source, workspace)
+						got.Native, closeNative = deliveryWorkerNative(t, source, workspace)
 						nativeCloses = append(nativeCloses, closeNative)
-						scaleP21SW202ReloadOracle(t, repo, workspace)
+						deliveryWorkerReloadOracle(t, repo, workspace)
 						state, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
 						got.Deliveries, got.Connections = state.IntegrationDeliveries, state.IntegrationConnections
 						finished := time.Now().UTC()
@@ -543,7 +543,7 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							t.Fatal("large delivery was truncated")
 						}
 						if rawUTF8 {
-							scaleP21SW345WorkerPayload(t, acceptedPayload, got.Result, got.Native, got.Deliveries, got.Connections, got.RequestBody, duplicateWitness)
+							workerPayload(t, acceptedPayload, got.Result, got.Native, got.Deliveries, got.Connections, got.RequestBody, duplicateWitness)
 						}
 						if strings.HasPrefix(mode, "near-limit-no-shadow-") {
 							if len(got.RequestBody) <= 15<<20 || len(got.RequestBody) >= 16<<20 ||
@@ -571,11 +571,11 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 								}
 							}
 						}
-						normalized := scaleP21SW202Normalize(t, got, started, finished, map[string]string{
+						normalized := deliveryWorkerNormalize(t, got, started, finished, map[string]string{
 							destination.URL: "<captured-endpoint>", other.URL: "<other-endpoint>",
 						})
 						if rawUTF8 {
-							results = append(results, []any{normalized, scaleP21SW345RawWitnesses(t, got)})
+							results = append(results, []any{normalized, rawWitnesses(t, got)})
 						} else {
 							results = append(results, normalized)
 						}
@@ -590,11 +590,11 @@ func scaleP21SW202DeliveryWorker(t *testing.T, modes []string, record func(bound
 							t.Fatal("worker retained work or decoded full metadata")
 						}
 						if rawUTF8 {
-							scaleP21SW345UnrelatedWrite(t, repo, workspace, connection)
+							unrelatedWrite(t, repo, workspace, connection)
 						}
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatal("literal/bounded delivery worker differs:", scaleP21SW202Difference(results[0], results[1]))
+						t.Fatal("literal/bounded delivery worker differs:", deliveryWorkerDifference(results[0], results[1]))
 					}
 				})
 			}

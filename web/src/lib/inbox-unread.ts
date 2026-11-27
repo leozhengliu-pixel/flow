@@ -102,7 +102,7 @@ export const inboxUnread = {
     listeners.add(listener)
     return () => { listeners.delete(listener) }
   },
-  /** P13 configures this from each manifest and clears it on logout/epoch change. */
+  /** Sync v2 configures this from each manifest and clears it on logout/epoch change. */
   configure(options?: { workspaceKey: string; viewerId: string; capabilities: readonly string[]; authzEpoch?: string }) {
     const enabled = Boolean(options?.capabilities.includes(INBOX_STATE_CAPABILITY))
     const next = enabled && options ? { workspaceKey: options.workspaceKey, viewerId: options.viewerId } : undefined
@@ -117,7 +117,7 @@ export const inboxUnread = {
     if (restoreLegacy) inboxUnread.schedule(restoreLegacy.workspaceKey, 0)
   },
   overlayEnabled(workspaceKey: string, viewerId?: string) { return overlay?.workspaceKey === workspaceKey && (viewerId === undefined || overlay.viewerId === viewerId) },
-  /** P13 forwards recipient frames here before its ordinary business-event path. */
+  /** Sync v2 forwards recipient frames here before its ordinary business-event path. */
   receive(workspaceKey: string, viewerId: string, event: { type: string; aggregateId?: string; payload?: unknown }) {
     if (overlay?.workspaceKey !== workspaceKey || overlay.viewerId !== viewerId || event.type !== INBOX_STATE_REALTIME_EVENT) return false
     if (event.aggregateId !== viewerId) return true

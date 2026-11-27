@@ -16,7 +16,7 @@ func (s *SQLiteStore) readFormerMembersLogicalFallback(ctx context.Context, read
 	if source == nil {
 		return fmt.Errorf("%w: former-member fallback needs logical source provenance", ErrBoundedMetadataCoverage)
 	}
-	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW16FormerWorkBytes)
+	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, formerWorkBytes)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (s *SQLiteStore) readFormerMembersLogicalFallback(ctx context.Context, read
 		if id.typ == nil || id.typ.Kind() != reflect.String {
 			return ErrMetadataRecordQuery
 		}
-		if id.cost > scaleP21SW16FormerMapBytes {
+		if id.cost > formerMapBytes {
 			return ErrMetadataWorkBudget
 		}
 		value, err := id.Value(ctx, int(id.cost))

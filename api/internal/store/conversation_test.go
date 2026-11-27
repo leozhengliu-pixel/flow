@@ -11,9 +11,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP18ConversationTargetsAndRecovery(t *testing.T) {
+func TestScaleConversationTargetsAndRecovery(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	data := repo.Bootstrap()
 	workspace, owner := data.Workspace.URLKey, data.Viewer.ID
 	body := strings.Repeat("complete reply and tool result ", 1000)
@@ -64,9 +64,9 @@ func TestScaleP18ConversationTargetsAndRecovery(t *testing.T) {
 	}
 }
 
-func TestScaleP18ConversationScopePreservesUnloadedContexts(t *testing.T) {
+func TestScaleConversationScopePreservesUnloadedContexts(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	data := repo.Bootstrap()
 	workspace := data.Workspace.URLKey
 	if err := repo.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p18.seeded", "", nil, func(next *domain.Bootstrap) error {

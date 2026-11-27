@@ -18,12 +18,12 @@ import (
 
 // These witnesses retain the exact source/atomicity contracts required before
 // the customer taxonomy consumers can leave the activation guard.
-func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
+func TestCustomerTaxonomySourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, itemID := f.data.Workspace.URLKey, idgen.New("sw22-status-")
 		teamID := idgen.New("sw22-taxonomy-team-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "teams", "teamSettings"), workspace, "scale_p21_sw22.taxonomy_team", teamID, nil, func(data *domain.Bootstrap) error {
@@ -35,7 +35,7 @@ func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
 		}
 		principals := []domain.User{f.data.Viewer}
 		for _, role := range []string{"member", "guest"} {
-			_, user := scaleP03Join(t, f, "SW22 "+role, idgen.New("sw22-taxonomy-")+"@example.test", role, teamID)
+			_, user := resourceAccessScaleJoin(t, f, "SW22 "+role, idgen.New("sw22-taxonomy-")+"@example.test", role, teamID)
 			principals = append(principals, user)
 		}
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "customerStatuses", "customerTiers"), workspace, "customer_taxonomy.updated", itemID, nil, func(data *domain.Bootstrap) error {
@@ -97,7 +97,7 @@ func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
 			}
 			return store.ErrNoMutation
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "customerStatuses") + scaleP21M3Fingerprint(t, repo, workspace, "customerTiers")
+		before := pointRecordFingerprint(t, repo, workspace, "customerStatuses") + pointRecordFingerprint(t, repo, workspace, "customerTiers")
 		var events, realtime int
 		for _, source := range []*store.SQLiteStore{repo, probe} {
 			source.SetWebhookSink(func(string, domain.DomainEvent) { events++ })
@@ -114,19 +114,19 @@ func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
 			source.SetWebhookSink(nil)
 			source.SetRealtimeSink(nil)
 		}
-		if events != 0 || realtime != 0 || before != scaleP21M3Fingerprint(t, repo, workspace, "customerStatuses")+scaleP21M3Fingerprint(t, repo, workspace, "customerTiers") {
+		if events != 0 || realtime != 0 || before != pointRecordFingerprint(t, repo, workspace, "customerStatuses")+pointRecordFingerprint(t, repo, workspace, "customerTiers") {
 			t.Fatal("no-op validation published effects or changed canonical rows", events, realtime)
 		}
 		t.Log("installed list and bounded mutation preserve warm typed names; raw canonical SQL still changes duplicate validation")
 	}
 }
 
-func TestScaleP21SW22CustomerTaxonomyAtomicScopeHold(t *testing.T) {
+func TestCustomerTaxonomyAtomicScopeHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		targetID, fallbackID := idgen.New("sw22-target-"), idgen.New("sw22-fallback-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "customerStatuses", "customers"), workspace, "customer_taxonomy.updated", targetID, nil, func(data *domain.Bootstrap) error {

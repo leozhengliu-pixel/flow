@@ -18,9 +18,9 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21TriageWriterFixture struct {
-	scaleP21TriageFixture
-	reader   *scaleP04Database
+type scaleTriageWriterFixture struct {
+	scaleTriageFixture
+	reader   *scaleDatabase
 	baseline []byte
 	// editBaseline adds read-only case inputs to the owned reset image.
 	editBaseline func(*domain.Bootstrap)
@@ -28,26 +28,26 @@ type scaleP21TriageWriterFixture struct {
 	prepare func(*testing.T)
 }
 
-type scaleP21TriageState struct {
+type scaleTriageState struct {
 	Issues, Content, Suggestions, Projects, Events [][]any
 }
 
-type scaleP21TriageOutcome struct {
+type scaleTriageOutcome struct {
 	Code               int
 	Body               json.RawMessage
-	State              scaleP21TriageState
+	State              scaleTriageState
 	Webhooks, Realtime []json.RawMessage
 }
 
 var (
-	scaleP21TriageStamp = regexp.MustCompile(`\d{19}_[0-9a-z]{10}`)
-	scaleP21TriageClock = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+	scaleTriageStamp = regexp.MustCompile(`\d{19}_[0-9a-z]{10}`)
+	scaleTriageClock = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
 )
 
-func scaleP21TriageWriterSetup(t *testing.T) scaleP21TriageWriterFixture {
+func scaleTriageWriterSetup(t *testing.T) scaleTriageWriterFixture {
 	t.Helper()
-	sw := scaleP21SW10Setup(t)
-	f := scaleP21TriageWriterFixture{scaleP21TriageFixture: scaleP21TriageSeed(t, sw.scaleP21M2Fixture), reader: sw.reader}
+	sw := notificationsSetup(t)
+	f := scaleTriageWriterFixture{scaleTriageFixture: scaleTriageSeed(t, sw.policyDifferentialFixture), reader: sw.reader}
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func scaleP21TriageWriterSetup(t *testing.T) scaleP21TriageWriterFixture {
 // reset restores the complete fixture through the literal full writer and
 // returns the service for source: the legacy store, its warm bounded view, or
 // a bounded view freshly loaded from canonical SQL.
-func (f *scaleP21TriageWriterFixture) reset(t *testing.T, source string) *server {
+func (f *scaleTriageWriterFixture) reset(t *testing.T, source string) *server {
 	t.Helper()
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	var data domain.Bootstrap
@@ -130,7 +130,7 @@ func (f *scaleP21TriageWriterFixture) reset(t *testing.T, source string) *server
 	return &server{store: reloaded}
 }
 
-func (f *scaleP21TriageWriterFixture) rows(t *testing.T, query string, arg any) [][]any {
+func (f *scaleTriageWriterFixture) rows(t *testing.T, query string, arg any) [][]any {
 	t.Helper()
 	rows := f.reader.query(t, query, arg)
 	defer rows.Close()
@@ -163,10 +163,10 @@ func (f *scaleP21TriageWriterFixture) rows(t *testing.T, query string, arg any) 
 
 // state reads every SQL row the writers own, the complete suggestion list in
 // canonical collection order and all domain events.
-func (f *scaleP21TriageWriterFixture) state(t *testing.T) scaleP21TriageState {
+func (f *scaleTriageWriterFixture) state(t *testing.T) scaleTriageState {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	return scaleP21TriageState{
+	return scaleTriageState{
 		Issues:      f.rows(t, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, workspace),
 		Content:     f.rows(t, `SELECT kind,resource_id,created_at,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,data`, workspace),
 		Suggestions: f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='issueSuggestions' ORDER BY collection_order,record_key`, workspace),
@@ -175,25 +175,25 @@ func (f *scaleP21TriageWriterFixture) state(t *testing.T) scaleP21TriageState {
 	}
 }
 
-func (f *scaleP21TriageWriterFixture) events(t *testing.T) [][]any {
+func (f *scaleTriageWriterFixture) events(t *testing.T) [][]any {
 	t.Helper()
 	return f.rows(t, `SELECT id,event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id`, f.data.Workspace.ID)
 }
 
 // run executes one writer call against source and records the response,
 // the complete owned SQL state and every publication.
-func (f *scaleP21TriageWriterFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleP21TriageOutcome, time.Time) {
+func (f *scaleTriageWriterFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleTriageOutcome, time.Time) {
 	t.Helper()
 	service := f.reset(t, source)
-	got := scaleP21TriageOutcome{}
+	got := scaleTriageOutcome{}
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
 	})
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -224,33 +224,33 @@ func (f *scaleP21TriageWriterFixture) run(t *testing.T, source string, call func
 
 // normalize replaces only generated stamps (IDs) and clocks read during the
 // call; every other byte, order and count is compared.
-func scaleP21TriageNormalize(t *testing.T, value any, started time.Time) string {
+func scaleTriageNormalize(t *testing.T, value any, started time.Time) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Exactly scaleP21TriageStamp then scaleP21TriageClock (see
-	// TestScaleP21NormalizeScanMatchesRegexp), without regexp's cost.
-	return scaleP21NormalizeStampsAndClocks(string(raw), started)
+	// Exactly scaleTriageStamp then scaleTriageClock (see
+	// TestScaleNormalizeScanMatchesRegexp), without regexp's cost.
+	return scaleNormalizeStampsAndClocks(string(raw), started)
 }
 
-func (f *scaleP21TriageWriterFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21TriageOutcome {
+func (f *scaleTriageWriterFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleTriageOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21TriageOutcome
+	var outcomes []scaleTriageOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func (f *scaleP21TriageWriterFixture) stateRequest(service *server, user domain.User, key *domain.APIKey, issueID, suggestionID string, accept, cancelled bool) *httptest.ResponseRecorder {
+func (f *scaleTriageWriterFixture) stateRequest(service *server, user domain.User, key *domain.APIKey, issueID, suggestionID string, accept, cancelled bool) *httptest.ResponseRecorder {
 	r := f.literalRequest(user, key, nil)
 	r.SetPathValue("id", issueID)
 	r.SetPathValue("suggestionId", suggestionID)
@@ -266,11 +266,11 @@ func (f *scaleP21TriageWriterFixture) stateRequest(service *server, user domain.
 	return w
 }
 
-func TestScaleP21TriageSuggestionStateWriterDifferential(t *testing.T) {
+func TestScaleTriageSuggestionStateWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	owner, member := f.data.Viewer, f.principals[2].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	cases := []struct {
@@ -321,14 +321,14 @@ func TestScaleP21TriageSuggestionStateWriterDifferential(t *testing.T) {
 		})
 	}
 	// Team acceptances that move the issue are covered by
-	// TestScaleP21TeamMoveAcceptDifferential.
+	// TestScaleTeamMoveAcceptDifferential.
 }
 
-func TestScaleP21TriagePruneWriterDifferential(t *testing.T) {
+func TestScaleTriagePruneWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	for _, test := range []struct {
 		name  string
 		stale func(domain.IssueSuggestion) bool
@@ -360,11 +360,11 @@ func TestScaleP21TriagePruneWriterDifferential(t *testing.T) {
 
 // Concurrent writers on one issue serialize: the bounded outcome equals one of
 // the legacy sequential orders, with no lost suggestion or activity update.
-func TestScaleP21TriageWriterConcurrentSameIssue(t *testing.T) {
+func TestScaleTriageWriterConcurrentSameIssue(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	owner := f.data.Viewer
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.stateRequest(service, owner, nil, f.triage.ID, "triage-s-assignee", true, false)
@@ -379,7 +379,7 @@ func TestScaleP21TriageWriterConcurrentSameIssue(t *testing.T) {
 			order[1](service)
 			return nil
 		})
-		expected[scaleP21TriageNormalize(t, got.State, started)] = true
+		expected[scaleTriageNormalize(t, got.State, started)] = true
 	}
 	for _, source := range []string{"warm", "reloaded"} {
 		for attempt := range 3 {
@@ -399,7 +399,7 @@ func TestScaleP21TriageWriterConcurrentSameIssue(t *testing.T) {
 				}
 				return nil
 			})
-			if state := scaleP21TriageNormalize(t, got.State, started); !expected[state] {
+			if state := scaleTriageNormalize(t, got.State, started); !expected[state] {
 				t.Fatalf("%s attempt %d: concurrent state matches no sequential legacy order", source, attempt)
 			}
 		}
@@ -410,11 +410,11 @@ func TestScaleP21TriageWriterConcurrentSameIssue(t *testing.T) {
 // storeTriageSuggestions callback removes an issue's rows and re-appends its
 // dismissed rows and new suggestions, while other scoped issues' rows keep
 // their positions. Generated IDs are fixed so stored rows compare exactly.
-func TestScaleP21TriageRegenerationWriterDifferential(t *testing.T) {
+func TestScaleTriageRegenerationWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	at := time.Date(2026, 4, 5, 6, 7, 8, 9, time.UTC)
 	generated := func(issueID, prefix string) []domain.IssueSuggestion {
 		var items []domain.IssueSuggestion
@@ -505,11 +505,11 @@ func TestScaleP21TriageRegenerationWriterDifferential(t *testing.T) {
 // generateTriageIntelligenceForIssues: the heuristic callback scores complete
 // projects, labels and users inside the bounded write. Titles share words so
 // candidate search finds the related issue.
-func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
+func TestScaleTriageGenerateWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	workspace := f.data.Workspace.URLKey
 	triage := func(settings func(*domain.TriageIntelligenceSettings), triaged ...string) func(*testing.T) {
 		return func(t *testing.T) {
@@ -588,24 +588,24 @@ func TestScaleP21TriageGenerateWriterDifferential(t *testing.T) {
 			if outcomes[0].Code != test.expected {
 				t.Fatalf("legacy status %d: %s", outcomes[0].Code, outcomes[0].Body)
 			}
-			if count := strings.Count(scaleP21TriageNormalize(t, outcomes[0].State.Suggestions, time.Now()), "issue_suggestion_"); count < test.minimum {
+			if count := strings.Count(scaleTriageNormalize(t, outcomes[0].State.Suggestions, time.Now()), "issue_suggestion_"); count < test.minimum {
 				t.Fatalf("legacy generated %d suggestions, want at least %d", count, test.minimum)
 			}
 		})
 	}
 	// Auto-applied team moves are covered by
-	// TestScaleP21TeamMoveAutoApplyDifferential.
+	// TestScaleTeamMoveAutoApplyDifferential.
 }
 
 // runTriageIntelligence through the "Run again" route: heuristic and
 // model-backed runs (a fixed model reply over the bounded projected context)
 // write the same rows, order, events and publications. The model receives a
 // byte-identical prompt from every source.
-func TestScaleP21TriageRunWriterDifferential(t *testing.T) {
+func TestScaleTriageRunWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	workspace := f.data.Workspace.URLKey
 	setup := func(settings func(*domain.TriageIntelligenceSettings), triaged bool) func(*testing.T) {
 		return func(t *testing.T) {
@@ -692,5 +692,5 @@ func TestScaleP21TriageRunWriterDifferential(t *testing.T) {
 		})
 	}
 	// Runs whose team suggestions auto-move the issue are covered by
-	// TestScaleP21TeamMoveAutoApplyDifferential.
+	// TestScaleTeamMoveAutoApplyDifferential.
 }

@@ -9,9 +9,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21M1APIKeyTelemetryDifferential(t *testing.T) {
+func TestScaleAPIKeyTelemetryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var original [2][]byte

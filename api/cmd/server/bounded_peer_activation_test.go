@@ -10,14 +10,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21BoundedPeerActivation(t *testing.T) {
+func TestScaleBoundedPeerActivation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	open := func() *store.SQLiteStore {
 		t.Helper()
 		repo, err := store.OpenDatabase(config)
@@ -28,7 +28,7 @@ func TestScaleP21BoundedPeerActivation(t *testing.T) {
 		return repo
 	}
 	seed := open()
-	fixture := scaleP03Fixture(t, seed)
+	fixture := resourceAccessScaleFixture(t, seed)
 	workspace, user, team := fixture.data.Workspace.URLKey, fixture.data.Viewer, fixture.data.Teams[0].ID
 	project := idgen.New("peer-project-")
 	if err := seed.MutateWorkspace(t.Context(), workspace, "test.peer_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -59,8 +59,8 @@ func TestScaleP21BoundedPeerActivation(t *testing.T) {
 	}
 	var published domain.RealtimeEvent
 	writer.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { published = event })
-	f := scaleP21M2Fixture{scaleP03PlatformFixture: fixture, testingT: t}
-	w := scaleP21ProjectUpdateServe(f, writer, token, user, nil, project, map[string]string{"name": "After"})
+	f := policyDifferentialFixture{scalePlatformFixture: fixture, testingT: t}
+	w := scaleProjectUpdateServe(f, writer, token, user, nil, project, map[string]string{"name": "After"})
 	if w.Code != http.StatusOK || published.Type != "project.updated" {
 		t.Fatalf("writer did not publish the project edit: status=%d", w.Code)
 	}

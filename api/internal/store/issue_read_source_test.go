@@ -7,7 +7,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW318BorrowedIssueSourceDiscriminator(t *testing.T) {
+func TestBorrowedIssueSourceDiscriminator(t *testing.T) {
 	db, foreign := &sqlDatabase{}, &sqlDatabase{}
 	repo := &SQLiteStore{db: db}
 	for _, row := range []struct {

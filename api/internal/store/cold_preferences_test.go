@@ -26,7 +26,7 @@ type coldPreferenceSnapshot struct {
 	search map[string]string
 }
 
-func scaleP21ColdPreferenceSnapshot(t *testing.T, repo *SQLiteStore, workspace string) coldPreferenceSnapshot {
+func scaleColdPreferenceSnapshot(t *testing.T, repo *SQLiteStore, workspace string) coldPreferenceSnapshot {
 	t.Helper()
 	result := coldPreferenceSnapshot{search: map[string]string{}}
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&result.root); err != nil {
@@ -67,7 +67,7 @@ func scaleP21ColdPreferenceSnapshot(t *testing.T, repo *SQLiteStore, workspace s
 	return result
 }
 
-func scaleP21ColdPreferenceRestore(t *testing.T, f scaleP09Fixture, workspace string, saved coldPreferenceSnapshot, data domain.Bootstrap) {
+func scaleColdPreferenceRestore(t *testing.T, f scaleFixture, workspace string, saved coldPreferenceSnapshot, data domain.Bootstrap) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -99,7 +99,7 @@ type coldPreferenceCase struct {
 	change                 func(*domain.Bootstrap)
 }
 
-func scaleP21ColdPreferenceCases(user string) []coldPreferenceCase {
+func scaleColdPreferenceCases(user string) []coldPreferenceCase {
 	stamp := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	return []coldPreferenceCase{
 		{"user-settings", "user_settings.updated", user, map[string]any{"language": "zh"}, func(data *domain.Bootstrap) {
@@ -124,9 +124,9 @@ func scaleP21ColdPreferenceCases(user string) []coldPreferenceCase {
 	}
 }
 
-func scaleP21ColdPreferenceFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func scaleColdPreferenceFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+	f, view, workspace := scaleColdWriteFixture(t)
 	if err := f.MutateWorkspace(t.Context(), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		stamp := time.Date(2026, 11, 13, 11, 0, 0, 0, time.UTC)
 		data.Favorites = []domain.Favorite{
@@ -145,15 +145,15 @@ func scaleP21ColdPreferenceFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore,
 	return f, view, workspace
 }
 
-func TestScaleP21ColdPreferencesDispatchDifferential(t *testing.T) {
-	for index := range scaleP21ColdPreferenceCases("") {
-		t.Run(scaleP21ColdPreferenceCases("")[index].name, func(t *testing.T) {
-			f, view, workspace := scaleP21ColdPreferenceFixture(t)
-			test := scaleP21ColdPreferenceCases(f.data.Viewer.ID)[index]
+func TestScaleColdPreferencesDispatchDifferential(t *testing.T) {
+	for index := range scaleColdPreferenceCases("") {
+		t.Run(scaleColdPreferenceCases("")[index].name, func(t *testing.T) {
+			f, view, workspace := scaleColdPreferenceFixture(t)
+			test := scaleColdPreferenceCases(f.data.Viewer.ID)[index]
 			f.mu.RLock()
 			original := cloneBootstrap(f.workspaces[workspace])
 			f.mu.RUnlock()
-			saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			type effects struct {
 				webhooks []domain.DomainEvent
 				realtime []domain.RealtimeEvent
@@ -190,9 +190,9 @@ func TestScaleP21ColdPreferencesDispatchDifferential(t *testing.T) {
 			if err := f.MutateWorkspaceWithAggregate(ctx, workspace, test.event, test.payload, callback(false)); err != nil {
 				t.Fatal(err)
 			}
-			want := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			want := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			wantNative, _ := f.WorkspaceMetadata(workspace)
-			scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
+			scaleColdPreferenceRestore(t, f, workspace, saved, original)
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -217,7 +217,7 @@ func TestScaleP21ColdPreferencesDispatchDifferential(t *testing.T) {
 			if err := view.withColdMutation(ctx, workspace, test.event, test.payload, callback(true)); err != nil {
 				t.Fatal(err)
 			}
-			got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+			got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			if !reflect.DeepEqual(got, want) || calls != 2 {
 				t.Fatal("cold dispatch changed canonical/search rows or callback count", calls)
 			}
@@ -253,12 +253,12 @@ func TestScaleP21ColdPreferencesDispatchDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdPreferencesFailuresAndNoop(t *testing.T) {
-	for index := range scaleP21ColdPreferenceCases("") {
-		t.Run(scaleP21ColdPreferenceCases("")[index].name, func(t *testing.T) {
-			f, view, workspace := scaleP21ColdPreferenceFixture(t)
-			test := scaleP21ColdPreferenceCases(f.data.Viewer.ID)[index]
-			before := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+func TestScaleColdPreferencesFailuresAndNoop(t *testing.T) {
+	for index := range scaleColdPreferenceCases("") {
+		t.Run(scaleColdPreferenceCases("")[index].name, func(t *testing.T) {
+			f, view, workspace := scaleColdPreferenceFixture(t)
+			test := scaleColdPreferenceCases(f.data.Viewer.ID)[index]
+			before := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 			var count int
 			if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID).Scan(&count); err != nil {
 				t.Fatal(err)
@@ -315,7 +315,7 @@ func TestScaleP21ColdPreferencesFailuresAndNoop(t *testing.T) {
 					if mode == "commit" && !prepared {
 						t.Fatal("commit rejection missed prepared native publication")
 					}
-					if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, before) {
+					if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got, before) {
 						t.Fatal("failed write changed canonical/search rows")
 					}
 					current, err := view.retainMetadataLogicalSource(t.Context(), workspace)
@@ -341,12 +341,12 @@ func TestScaleP21ColdPreferencesFailuresAndNoop(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdPreferencesLatestParentAndDefaultBinding(t *testing.T) {
-	for index := range scaleP21ColdPreferenceCases("") {
-		t.Run(scaleP21ColdPreferenceCases("")[index].name, func(t *testing.T) {
-			f, view, workspace := scaleP21ColdPreferenceFixture(t)
-			test := scaleP21ColdPreferenceCases(f.data.Viewer.ID)[index]
-			second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("p21-cold-pref-second-")).Workspace.URLKey
+func TestScaleColdPreferencesLatestParentAndDefaultBinding(t *testing.T) {
+	for index := range scaleColdPreferenceCases("") {
+		t.Run(scaleColdPreferenceCases("")[index].name, func(t *testing.T) {
+			f, view, workspace := scaleColdPreferenceFixture(t)
+			test := scaleColdPreferenceCases(f.data.Viewer.ID)[index]
+			second := selectedExtraWorkspace(t, f, idgen.New("p21-cold-pref-second-")).Workspace.URLKey
 			if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 				t.Fatal(err)
 			}
@@ -364,7 +364,7 @@ func TestScaleP21ColdPreferencesLatestParentAndDefaultBinding(t *testing.T) {
 					return err
 				}
 				var locked string
-				facade.coordinator = scaleP21ColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
+				facade.coordinator = scaleColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
 					locked = key
 					view.mu.Lock()
 					view.lastWorkspaceKey = second
@@ -402,8 +402,8 @@ func TestScaleP21ColdPreferencesLatestParentAndDefaultBinding(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdPreferencesUserSettingsConflictRetry(t *testing.T) {
-	f, view, workspace := scaleP21ColdPreferenceFixture(t)
+func TestScaleColdPreferencesUserSettingsConflictRetry(t *testing.T) {
+	f, view, workspace := scaleColdPreferenceFixture(t)
 	other := idgen.New("p21-cold-pref-other-")
 	if err := f.MutateWorkspace(t.Context(), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.UserSettings[other] = domain.UserSettings{UserID: other, Language: "before"}

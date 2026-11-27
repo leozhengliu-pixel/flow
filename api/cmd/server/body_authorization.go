@@ -132,7 +132,7 @@ func (s *server) boundedProjectMutationAllowed(r *http.Request, access store.Acc
 
 // boundedProjectBodyPredicate mirrors the "projects" body branches: the
 // create root, POST .../relations and PATCH (other than a relation ID).
-func (s *server) boundedProjectBodyPredicate(r *http.Request, workspace, userID, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedProjectBodyPredicate(r *http.Request, workspace, userID, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		var input domain.ProjectMutationInput
 		if create {
@@ -164,7 +164,7 @@ func boundedTeamsAllowed(access store.AccessContext, ids *[]string) bool {
 }
 
 // boundedInitiativeBodyPredicate mirrors the "initiatives" body branches.
-func (s *server) boundedInitiativeBodyPredicate(r *http.Request, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedInitiativeBodyPredicate(r *http.Request, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		var input domain.InitiativeMutationInput
 		if create {
@@ -227,7 +227,7 @@ func (s *server) boundedInitiativeBodyPredicate(r *http.Request, ref string, cre
 }
 
 // boundedDocumentCreatePredicate mirrors POST /api/documents.
-func (s *server) boundedDocumentCreatePredicate(r *http.Request) scaleP21RecordPredicate {
+func (s *server) boundedDocumentCreatePredicate(r *http.Request) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		var input documentInput
 		if !peekRequestJSON(r, &input) {

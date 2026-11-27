@@ -15,14 +15,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP05CanonicalBatchesAndLargeRecords(t *testing.T) {
-	s, workspace := scaleP05Database(t)
+func TestScaleCanonicalBatchesAndLargeRecords(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
 	large := strings.Repeat("body ", 1<<20)
 	document := domain.Document{ID: "document", Title: "Title", Content: large, ContentState: large, Revisions: []domain.DocumentRevision{{ID: "old", Content: large}}, Permissions: []domain.DocumentPermission{{ID: "grant", SubjectType: "user", SubjectID: "guest", Role: "viewer"}}}
-	raw := scaleP05Put(t, s, workspace, "documents", document.ID, 0, document)
-	small := scaleP05Put(t, s, workspace, "documents", "small", 1, domain.Document{ID: "small", Title: "Small", Content: "Exact full content", TeamIDs: []string{}})
+	raw := catalogScalePut(t, s, workspace, "documents", document.ID, 0, document)
+	small := catalogScalePut(t, s, workspace, "documents", "small", 1, domain.Document{ID: "small", Title: "Small", Content: "Exact full content", TeamIDs: []string{}})
 	trash := domain.TrashEntry{ID: "trash", ResourceID: "document", ResourceType: "document", Title: "Deleted", Payload: json.RawMessage(raw)}
-	scaleP05Put(t, s, workspace, "trash", "trash", 0, trash)
+	catalogScalePut(t, s, workspace, "trash", "trash", 0, trash)
 	batch, err := s.ReadCanonicalRecords(t.Context(), workspace, []RecordKey{{"documents", "document"}, {"documents", "small"}, {"documents", "missing"}}, "detail")
 	if err != nil || len(batch.Items) != 3 {
 		t.Fatalf("batch: %v", err)
@@ -46,9 +46,9 @@ func TestScaleP05CanonicalBatchesAndLargeRecords(t *testing.T) {
 				if err := s.db.QueryRowContext(t.Context(), `PRAGMA database_list`).Scan(&sequence, &name, &path); err != nil {
 					t.Fatal(err)
 				}
-				second = scaleP05Connect(t, "sqlite", sqliteDSN(path))
+				second = scaleConnect(t, "sqlite", sqliteDSN(path))
 			} else {
-				second = scaleP05Connect(t, s.dialect, os.Getenv("FLOW_TEST_DATABASE_URL"))
+				second = scaleConnect(t, s.dialect, os.Getenv("FLOW_TEST_DATABASE_URL"))
 			}
 			defer second.Close()
 			done := make(chan error, 1)
@@ -69,7 +69,7 @@ func TestScaleP05CanonicalBatchesAndLargeRecords(t *testing.T) {
 				t.Fatalf("large-body shadow preparation blocked an old writer: write=%v backfill=%v", writeErr, backfillErr)
 			}
 		}
-		scaleP05Finish(t, s, workspace, kind)
+		scaleFinish(t, s, workspace, kind)
 		page, err := s.ReadMetadataCatalogPage(t.Context(), workspace, PageRequest{Kind: kind})
 		if err != nil || len(page.Items) == 0 || strings.Contains(string(page.Items[0].Data), "body ") {
 			t.Fatalf("%s body survived summary: %v", kind, err)
@@ -87,12 +87,12 @@ func TestScaleP05CanonicalBatchesAndLargeRecords(t *testing.T) {
 	}
 }
 
-func TestScaleP05BatchReservesEveryKeyAndOwnsItsResults(t *testing.T) {
-	s, workspace := scaleP05Database(t)
+func TestScaleBatchReservesEveryKeyAndOwnsItsResults(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
 	keys := make([]RecordKey, 50)
 	for i := range keys {
 		keys[i] = RecordKey{Kind: "documents", ID: fmt.Sprintf("d-%02d", i)}
-		scaleP05Put(t, s, workspace, "documents", keys[i].ID, i, domain.Document{ID: keys[i].ID, Content: strings.Repeat("x", 235<<10)})
+		catalogScalePut(t, s, workspace, "documents", keys[i].ID, i, domain.Document{ID: keys[i].ID, Content: strings.Repeat("x", 235<<10)})
 	}
 	batch, err := s.ReadCanonicalRecords(t.Context(), workspace, keys, "detail")
 	if err != nil || len(batch.Items) != len(keys) {
@@ -109,13 +109,13 @@ func TestScaleP05BatchReservesEveryKeyAndOwnsItsResults(t *testing.T) {
 	}
 }
 
-func TestScaleP05PagesRespectEncodedBudgetAndCanonicalShapes(t *testing.T) {
-	s, workspace := scaleP05Database(t)
+func TestScalePagesRespectEncodedBudgetAndCanonicalShapes(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
 	for i := range 80 {
 		// Escaping expands the encoded JSON; budget the actual wire shape.
-		scaleP05Put(t, s, workspace, "documents", fmt.Sprintf("d-%03d", i), i/2, domain.Document{ID: fmt.Sprintf("d-%03d", i), Title: strings.Repeat("<>&", 500), Content: strings.Repeat("detail", 10000), ProjectIDs: []string{}})
+		catalogScalePut(t, s, workspace, "documents", fmt.Sprintf("d-%03d", i), i/2, domain.Document{ID: fmt.Sprintf("d-%03d", i), Title: strings.Repeat("<>&", 500), Content: strings.Repeat("detail", 10000), ProjectIDs: []string{}})
 	}
-	scaleP05Finish(t, s, workspace, "documents")
+	scaleFinish(t, s, workspace, "documents")
 	for _, canonical := range []bool{false, true} {
 		for _, budget := range []int{16 << 10, MetadataRecordPageMaxBytes} {
 			seen := map[string]bool{}
@@ -162,13 +162,13 @@ func TestScaleP05PagesRespectEncodedBudgetAndCanonicalShapes(t *testing.T) {
 	}
 }
 
-func TestScaleP05OversizedSummaryAndEmptyMapKey(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Put(t, s, workspace, "documents", "huge", 0, domain.Document{ID: "huge", Title: strings.Repeat("title", 1<<20)})
-	scaleP05Put(t, s, workspace, "teamSettings", "", 0, map[string]any{"access": "private"})
-	scaleP05Put(t, s, workspace, "teamSettings", "next", 0, map[string]any{"access": "workspace"})
+func TestScaleOversizedSummaryAndEmptyMapKey(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	catalogScalePut(t, s, workspace, "documents", "huge", 0, domain.Document{ID: "huge", Title: strings.Repeat("title", 1<<20)})
+	catalogScalePut(t, s, workspace, "teamSettings", "", 0, map[string]any{"access": "private"})
+	catalogScalePut(t, s, workspace, "teamSettings", "next", 0, map[string]any{"access": "workspace"})
 	for _, kind := range []string{"documents", "teamSettings"} {
-		scaleP05Finish(t, s, workspace, kind)
+		scaleFinish(t, s, workspace, kind)
 	}
 	page, err := s.ReadMetadataCatalogPage(t.Context(), workspace, PageRequest{Kind: "documents"})
 	if err != nil || len(page.Items) != 1 || !page.Items[0].Omitted || page.Items[0].Detail == nil || len(page.Items[0].Data) > 1024 {
@@ -183,17 +183,17 @@ func TestScaleP05OversizedSummaryAndEmptyMapKey(t *testing.T) {
 		t.Fatalf("empty-key cursor: %+v %v", page, err)
 	}
 	archived := time.Now().UTC()
-	scaleP05Put(t, s, workspace, "projects", "huge", 0, domain.Project{ID: "huge", Name: strings.Repeat("huge", 20000), TeamIDs: []string{"private"}, ArchivedAt: &archived})
-	scaleP05Finish(t, s, workspace, "projects")
+	catalogScalePut(t, s, workspace, "projects", "huge", 0, domain.Project{ID: "huge", Name: strings.Repeat("huge", 20000), TeamIDs: []string{"private"}, ArchivedAt: &archived})
+	scaleFinish(t, s, workspace, "projects")
 	if _, err := s.ReadMetadataCatalogPage(t.Context(), workspace, PageRequest{Kind: "projects", Filter: `{"Archived":"true","TeamIDs":["private"]}`}); !errors.Is(err, ErrMetadataCatalogGap) {
 		t.Fatalf("omitted filter fields silently excluded a canonical record: %v", err)
 	}
 }
 
-func TestScaleP05CatalogCursorBindingAndRevision(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05Projects(t, s, workspace, 4)
-	scaleP05Finish(t, s, workspace, "projects")
+func TestScaleCatalogCursorBindingAndRevision(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	scaleProjects(t, s, workspace, 4)
+	scaleFinish(t, s, workspace, "projects")
 	q := PageRequest{Kind: "projects", Filter: `{"Archived":"all"}`, Limit: 1}
 	page, err := s.ReadMetadataCatalogPage(t.Context(), workspace, q)
 	if err != nil || !page.HasMore {
@@ -208,11 +208,11 @@ func TestScaleP05CatalogCursorBindingAndRevision(t *testing.T) {
 			t.Fatalf("rebound cursor accepted: %+v %v", change, err)
 		}
 	}
-	scaleP05Put(t, s, workspace, "projects", "p-000", 0, domain.Project{ID: "p-000", Name: "Changed"})
+	catalogScalePut(t, s, workspace, "projects", "p-000", 0, domain.Project{ID: "p-000", Name: "Changed"})
 	if err := s.ResetMetadataCatalogBackfill(t.Context(), workspace, "projects"); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Finish(t, s, workspace, "projects")
+	scaleFinish(t, s, workspace, "projects")
 	q.Cursor = page.Next
 	if _, err := s.ReadMetadataCatalogPage(t.Context(), workspace, q); !errors.Is(err, ErrMetadataCursor) {
 		t.Fatalf("stale revision cursor accepted: %v", err)
@@ -222,13 +222,13 @@ func TestScaleP05CatalogCursorBindingAndRevision(t *testing.T) {
 	}
 }
 
-func TestScaleP05CatalogReadsFetchNoCanonicalBodies(t *testing.T) {
-	s, workspace := scaleP05Database(t)
+func TestScaleCatalogReadsFetchNoCanonicalBodies(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
 	if s.dialect != "sqlite" {
 		t.Skip("table-isolation proof uses a private SQLite database; external plans checked separately")
 	}
-	scaleP05Projects(t, s, workspace, 10)
-	scaleP05Finish(t, s, workspace, "projects")
+	scaleProjects(t, s, workspace, 10)
+	scaleFinish(t, s, workspace, "projects")
 	if _, err := s.db.ExecContext(t.Context(), `ALTER TABLE workspace_metadata_records RENAME TO scale_p05_canonical_held`); err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestScaleP05CatalogReadsFetchNoCanonicalBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP05ShadowFlagWorkerStopAndRestart(t *testing.T) {
+func TestScaleShadowFlagWorkerStopAndRestart(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	for _, mode := range []string{"", "shadow", "off", "on", "invalid"} {
 		t.Setenv("FLOW_METADATA_CATALOG", mode)
@@ -260,12 +260,12 @@ func TestScaleP05ShadowFlagWorkerStopAndRestart(t *testing.T) {
 	if _, err := s.CreateWorkspace(t.Context(), "Shadow", "shadow", "us"); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Put(t, s, "shadow", "projects", "project", 0, domain.Project{ID: "project", Name: "Canonical"})
+	catalogScalePut(t, s, "shadow", "projects", "project", 0, domain.Project{ID: "project", Name: "Canonical"})
 	status, err := s.MetadataCatalogStatus(t.Context(), "shadow", "projects")
 	if err != nil || status.Complete || status.Ready {
 		t.Fatalf("off flag built catalog: %+v %v", status, err)
 	}
-	scaleP05Finish(t, s, "shadow", "projects")
+	scaleFinish(t, s, "shadow", "projects")
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestScaleP05ShadowFlagWorkerStopAndRestart(t *testing.T) {
 	}
 }
 
-func TestScaleP05WorkspaceRenamePurgeAndOldReplicaDeletion(t *testing.T) {
+func TestScaleWorkspaceRenamePurgeAndOldReplicaDeletion(t *testing.T) {
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	s, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "lifecycle.db"))
 	if err != nil {
@@ -327,7 +327,7 @@ func TestScaleP05WorkspaceRenamePurgeAndOldReplicaDeletion(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Finish(t, s, key, "projects")
+	scaleFinish(t, s, key, "projects")
 	workspace := data.Workspace
 	workspace.URLKey = "scale-p05-renamed"
 	if _, err := s.UpdateWorkspace(t.Context(), key, workspace); err != nil {
@@ -354,14 +354,14 @@ func TestScaleP05WorkspaceRenamePurgeAndOldReplicaDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	key = "scale-p05-old-delete"
-	scaleP05Put(t, s, key, "projects", "stale", 0, domain.Project{ID: "stale", Name: "Protected name"})
-	scaleP05Finish(t, s, key, "projects")
+	catalogScalePut(t, s, key, "projects", "stale", 0, domain.Project{ID: "stale", Name: "Protected name"})
+	scaleFinish(t, s, key, "projects")
 	// An old binary removes the authoritative workspace catalog before it
 	// purges the canonical rows, without knowing the new sidecar tables.
 	if _, err := s.db.ExecContext(t.Context(), `DELETE FROM workspace_states WHERE workspace_key=?`, key); err != nil {
 		t.Fatal(err)
 	}
-	scaleP05Finish(t, s, key, "projects")
+	scaleFinish(t, s, key, "projects")
 	for _, table := range []string{"metadata_catalog", "metadata_catalog_relations", "metadata_catalog_collections"} {
 		var count int
 		if err := s.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM `+table+` WHERE workspace_key=?`, key).Scan(&count); err != nil || count != 0 {

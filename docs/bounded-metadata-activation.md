@@ -208,7 +208,7 @@ recovery on the restarted replica before restoring traffic.
 ## Rehearsal evidence
 
 The activation profile passed on SQLite (385 seconds), MySQL 8.4.13
-(876 seconds) and PostgreSQL 17.12 (772 seconds). The SW530 sweep exercised
+(876 seconds) and PostgreSQL 17.12 (772 seconds). The flag-on route sweep exercised
 891 requests on each and retained the existing trash-window result of 501
 on the unbounded path and 200 on the bounded path. The peer activation test
 verified that an installed read sees the edit when the peer publishes it.
@@ -266,7 +266,7 @@ PostgreSQL recheck caught the same refusal on an issue create. Bounded
 create, edit and discussion writers now wait for room after releasing
 their transaction and write lock. They can repeat admission before the
 callback. Sustained contention returns 503 with `Retry-After`.
-`TestScaleP21ActivationIssueWriteBudget` checks that a refusal commits
+`TestScaleActivationIssueWriteBudget` checks that a refusal commits
 no event and that a retry after the budget frees commits exactly one.
 
 The diagnostic run passed Pulse writes and reads in both directions. The
@@ -279,7 +279,7 @@ credential events. It waits up to two poll intervals for Redis client
 correlation. A missing hint after that wait signals recovery. The durable
 change feed retains the event and later correlated events can still reach
 live streams.
-`TestScaleP21ActivationRealtimeDifferential` checks delivery order,
+`TestScaleActivationRealtimeDifferential` checks delivery order,
 deduplication, client correlation and durable replay after a lost hint.
 The issue-write, Pulse and realtime differentials passed on SQLite,
 MySQL 8.4.13 and PostgreSQL 17.12 in off, current and full profiles.

@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-func scaleP21SW343Target(workspace, workspaceID, field string, size int) metadataSQLStageTarget {
-	target := scaleP21SW333Target(workspace, workspaceID, field, size)
+func integrationStagePagesTarget(workspace, workspaceID, field string, size int) metadataSQLStageTarget {
+	target := integrationSqlChunksTarget(workspace, workspaceID, field, size)
 	if !target.workspaceState {
 		target.key = "sw343-" + workspaceID
 	}
 	return target
 }
 
-func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
+func TestIntegrationStagePages(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
-	view := scaleP21ResidentProbe(f.SQLiteStore)
+	f := journalScaleDatabase(t)
+	view := scaleResidentProbe(f.SQLiteStore)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	const ownedChunk = 1 << 20
 	const eventChunk = 256 << 10
@@ -76,7 +76,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 				if err != nil || readPage != 0 && readPage != eventChunk || test.private != (readPage == eventChunk) {
 					t.Fatal("SQL append scope changed the physical reader", readPage, err)
 				}
-				stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW343Target(workspace, workspaceID, test.field, test.size))
+				stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationStagePagesTarget(workspace, workspaceID, test.field, test.size))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -92,7 +92,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 		}
 	})
 	t.Run("invalid-owner-before-sql", func(t *testing.T) {
-		foreign := scaleP09Database(t)
+		foreign := journalScaleDatabase(t)
 		tx, err := f.db.BeginTx(t.Context(), nil)
 		if err != nil {
 			t.Fatal(err)
@@ -147,7 +147,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 				if test.tx != nil {
 					billed, owners, stages = test.tx.writtenBytes, len(test.tx.metadataSQLStageOwners), test.tx.metadataSQLStages
 				}
-				stage, err := beginMetadataSQLWriteStage(ctx, test.tx, scaleP21SW343Target(workspace, workspaceID, "integrationDeliveries", ownedChunk+1))
+				stage, err := beginMetadataSQLWriteStage(ctx, test.tx, integrationStagePagesTarget(workspace, workspaceID, "integrationDeliveries", ownedChunk+1))
 				if stage != nil || !errors.Is(err, test.err) || queries != 0 {
 					t.Fatal("invalid private SQL stage reached SQL", stage != nil, err, queries)
 				}
@@ -177,7 +177,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer closePages()
-				stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW343Target(workspace, workspaceID, "integrationDeliveries", ownedChunk+1))
+				stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationStagePagesTarget(workspace, workspaceID, "integrationDeliveries", ownedChunk+1))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -239,7 +239,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 		defer closePages()
 		queries := 0
 		ctx = WithSQLStatementObserver(ctx, func(string) { queries++ })
-		stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW343Target(workspace, workspaceID, "integrationDeliveries", 2*ownedChunk))
+		stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationStagePagesTarget(workspace, workspaceID, "integrationDeliveries", 2*ownedChunk))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -275,7 +275,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 				appends++
 			}
 		})
-		target := scaleP21SW343Target(workspace, workspaceID, "integrationDeliveries", len(raw))
+		target := integrationStagePagesTarget(workspace, workspaceID, "integrationDeliveries", len(raw))
 		target.order = 17
 		stage, err := beginMetadataSQLWriteStage(ctx, tx, target)
 		if err != nil {
@@ -326,7 +326,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 				}
 			}
 		})
-		stage, err := beginMetadataSQLWriteStage(ctx, tx, scaleP21SW343Target(workspace, workspaceID, "integrationDeliveries", 3*ownedChunk))
+		stage, err := beginMetadataSQLWriteStage(ctx, tx, integrationStagePagesTarget(workspace, workspaceID, "integrationDeliveries", 3*ownedChunk))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -348,7 +348,7 @@ func TestScaleP21SW343IntegrationStagePages(t *testing.T) {
 	t.Run("literal-row-and-root-byte-bills", func(t *testing.T) {
 		raw := []byte(`{"body":"` + strings.Repeat("x", ownedChunk+37) + `"}`)
 		for _, field := range []string{"integrationDeliveries", ""} {
-			target := scaleP21SW343Target(workspace, workspaceID, field, len(raw))
+			target := integrationStagePagesTarget(workspace, workspaceID, field, len(raw))
 			bill := len(metadataSQLStageLegacyRowSQL) + len(workspace) + len(field) + len(target.key) + 16 + len(raw)
 			if target.workspaceState {
 				bill = len(metadataSQLStageLegacyRootSQL) + len(workspaceID) + len(raw) + len(target.updatedAt) + len(workspace)

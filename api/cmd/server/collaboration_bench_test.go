@@ -7,7 +7,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func BenchmarkScaleP21SW189LegacyMentions(b *testing.B) {
+func BenchmarkLegacyMentions(b *testing.B) {
 	for _, count := range []int{100, 1000} {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {
 			ids := make([]string, count)

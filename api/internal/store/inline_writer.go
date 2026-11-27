@@ -39,7 +39,7 @@ func validateDiscussionInlineSelection(data domain.Bootstrap, scope MetadataReco
 // The same SQL snapshot and root lock are used by normal writes and retries.
 func (w *pulseSummaryWork) inlineCursor(tx *sqlTx, workspace, lock string) ([]byte, bool, error) {
 	var size int64
-	length := w.store.scaleP21SW22VisibilityLength("data")
+	length := w.store.visibilityLength("data")
 	if err := tx.QueryRowContext(w.ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=?"+lock, workspace).Scan(&size); err != nil {
 		return nil, false, err
 	}

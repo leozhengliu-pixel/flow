@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// SW420: loop run starts (MutateLoopRunStart with the server's start read
+// Loop run starts (MutateLoopRunStart with the server's start read
 // held, as startBoundedLoopRun holds it) for loops whose instructions reach
 // the literal writer's transaction maxima, compared byte for byte with the
 // literal start: first version of an empty version collection, a v1
@@ -22,16 +22,16 @@ import (
 // the loop row between the read and the stamp (merged, or conflicting and
 // retried).
 
-// scaleP21SW420Peak samples the admitted metadata work of store until stop.
-type scaleP21SW420Peak struct {
+// peak samples the admitted metadata work of store until stop.
+type largeLoopRunStampPeak struct {
 	mu   sync.Mutex
 	peak int
 	done chan struct{}
 	wait sync.WaitGroup
 }
 
-func scaleP21SW420Watch(source *SQLiteStore) *scaleP21SW420Peak {
-	p := &scaleP21SW420Peak{done: make(chan struct{})}
+func watch(source *SQLiteStore) *largeLoopRunStampPeak {
+	p := &largeLoopRunStampPeak{done: make(chan struct{})}
 	if source.metadataResidency == nil {
 		close(p.done)
 		return p
@@ -53,7 +53,7 @@ func scaleP21SW420Watch(source *SQLiteStore) *scaleP21SW420Peak {
 	return p
 }
 
-func (p *scaleP21SW420Peak) sample(source *SQLiteStore) {
+func (p *largeLoopRunStampPeak) sample(source *SQLiteStore) {
 	if source.metadataResidency == nil {
 		return
 	}
@@ -63,7 +63,7 @@ func (p *scaleP21SW420Peak) sample(source *SQLiteStore) {
 	p.mu.Unlock()
 }
 
-func (p *scaleP21SW420Peak) stop() int {
+func (p *largeLoopRunStampPeak) stop() int {
 	select {
 	case <-p.done:
 	default:
@@ -75,9 +75,9 @@ func (p *scaleP21SW420Peak) stop() int {
 	return p.peak
 }
 
-// scaleP21SW420PeerLoop commits edit to the canonical loop row directly,
+// peerLoop commits edit to the canonical loop row directly,
 // as a writer in another process would, after both copies were installed.
-func scaleP21SW420PeerLoop(t *testing.T, f scaleP09Fixture, workspace, id string, edit func(*domain.Loop)) {
+func largeLoopRunStampPeerLoop(t *testing.T, f scaleFixture, workspace, id string, edit func(*domain.Loop)) {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -93,39 +93,39 @@ func scaleP21SW420PeerLoop(t *testing.T, f scaleP09Fixture, workspace, id string
 		t.Fatal(err)
 	}
 	edit(&loop)
-	scaleP21SW296Put(t, tx, workspace, "loops", id, loop, scaleP21SW296Order(t, tx, workspace, "loops", id))
+	largeRowWritePut(t, tx, workspace, "loops", id, loop, largeRowWriteOrder(t, tx, workspace, "loops", id))
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestScaleP21SW420LargeLoopRunStampDifferential(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 0, false, true)
+func TestLargeLoopRunStampDifferential(t *testing.T) {
+	largeLoopRunStamps(t, 0, false, true)
 }
 
-func TestScaleP21SW420LargeLoopRunStampDifferentialPart2(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 1, false)
+func TestLargeLoopRunStampDifferentialPart2(t *testing.T) {
+	largeLoopRunStamps(t, 1, false)
 }
 
-func TestScaleP21SW420LargeLoopRunStampDifferentialPart2Reloaded(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 1, true)
+func TestLargeLoopRunStampDifferentialPart2Reloaded(t *testing.T) {
+	largeLoopRunStamps(t, 1, true)
 }
 
-func TestScaleP21SW420LargeLoopRunStampDifferentialPart3(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 2, false, true)
+func TestLargeLoopRunStampDifferentialPart3(t *testing.T) {
+	largeLoopRunStamps(t, 2, false, true)
 }
 
-func TestScaleP21SW420LargeLoopRunStampDifferentialPart4(t *testing.T) {
-	scaleP21SW420LargeLoopRunStamps(t, 3, false, true)
+func TestLargeLoopRunStampDifferentialPart4(t *testing.T) {
+	largeLoopRunStamps(t, 3, false, true)
 }
 
-func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
+func largeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != scaleP21SW296Tx {
+	f := journalScaleDatabase(t)
+	if metadataWorkBytes() != 256<<20 || f.db.maxTransactionBytes != largeRowWriteTx {
 		t.Fatal("SW420 sizes assume the production work and transaction budgets", f.db.maxTransactionBytes)
 	}
 	workspace := f.data.Workspace.URLKey
@@ -139,7 +139,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	now := time.Date(2026, 11, 17, 4, 5, 6, 7, time.UTC)
 	peerAt := now.Add(-time.Hour)
-	// The literal writer's maxima for this body (SW296): a stamp that also
+	// The literal writer's maxima for this body: a stamp that also
 	// writes the v1 snapshot fits at 11 MiB and is refused at 13 MiB; a
 	// stamp of a loop that already has a version fits at 15 MiB.
 	stampMax, stampOver, touchMax := 11<<20, 13<<20, 15<<20
@@ -151,7 +151,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	}
 	instructions := func(size int) func(*domain.Bootstrap) {
 		return func(data *domain.Bootstrap) {
-			data.Loops[1].Instructions = scaleP21SW296Body("legal large loop instructions", size)
+			data.Loops[1].Instructions = largeRowWriteBody("legal large loop instructions", size)
 		}
 	}
 	otherVersion := func(seed func(*domain.Bootstrap)) func(*domain.Bootstrap) {
@@ -188,7 +188,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 			peer: func(loop *domain.Loop) { loop.LastRunAt = &peerAt }},
 		{name: "peer-instructions-conflict", seed: otherVersion(instructions(4 << 20)), want: target + "_v1",
 			peer: func(loop *domain.Loop) {
-				loop.Instructions = scaleP21SW296Body("peer replaced instructions", 4<<20)
+				loop.Instructions = largeRowWriteBody("peer replaced instructions", 4<<20)
 			}},
 		{name: "peer-existing-version-stamped", seed: ownVersion(instructions(6 << 20)), want: target + "_v3",
 			peer: func(loop *domain.Loop) { loop.LastRunAt = &peerAt }},
@@ -295,8 +295,8 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 					// The server's start read stays open over the stamp.
 					var read *LoopRunStartRead
 					ctx := t.Context()
-					owner := &scaleP21SW261Owner{}
-					peak := scaleP21SW420Watch(source)
+					owner := &loopRunStartOwner{}
+					peak := watch(source)
 					if bounded {
 						var found bool
 						read, found, err = source.BeginLoopRunStartRead(t.Context(), workspace, target)
@@ -311,7 +311,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 						ctx = owner.context(ctx)
 					}
 					if spec.peer != nil {
-						scaleP21SW420PeerLoop(t, f, workspace, target, spec.peer)
+						largeLoopRunStampPeerLoop(t, f, workspace, target, spec.peer)
 					}
 					prior := map[string]bool{}
 					events, err := f.Events(t.Context(), target)
@@ -327,7 +327,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { live = append(live, event) })
 					var version domain.LoopVersion
 					attempts := 0
-					stamp := scaleP21SW261Stamp(target, now, &version, func(*domain.Bootstrap) {
+					stamp := loopRunStartStamp(target, now, &version, func(*domain.Bootstrap) {
 						attempts++
 						peak.sample(source)
 					})
@@ -367,7 +367,7 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 						t.Fatalf("bounded version %+v, literal %+v", version.ID, wantVersion.ID)
 					}
 					if got != want {
-						t.Fatalf("bounded stamp effects differ\nliteral: %s\nbounded: %s", scaleP21SW420Diff(want, got), scaleP21SW420Diff(got, want))
+						t.Fatalf("bounded stamp effects differ\nliteral: %s\nbounded: %s", largeLoopRunStampDiff(want, got), largeLoopRunStampDiff(got, want))
 					}
 				}
 			})
@@ -375,8 +375,8 @@ func scaleP21SW420LargeLoopRunStamps(t *testing.T, part int, reloads ...bool) {
 	}
 }
 
-// scaleP21SW420Diff clips text around its first difference from other.
-func scaleP21SW420Diff(text, other string) string {
+// diff clips text around its first difference from other.
+func largeLoopRunStampDiff(text, other string) string {
 	index := 0
 	for index < len(text) && index < len(other) && text[index] == other[index] {
 		index++

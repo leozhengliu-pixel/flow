@@ -23,14 +23,14 @@ const (
 	issueDeleteDocument   = "delete-custom-collaboration"
 )
 
-func seedIssueDelete(t *testing.T, x *sw530Sweep) {
+func seedIssueDelete(t *testing.T, x *routeSweepSweep) {
 	t.Helper()
 	owner, member, inherited := x.principals[0].user, x.principals[2].user, x.principals[4].user
 	workspaceID := x.fx.f.data.Workspace.ID
 	if err := x.legacy.store.SetTeamMembership(t.Context(), workspaceID, x.ids["private-team"], inherited.ID, "owner", true); err != nil {
 		t.Fatal(err)
 	}
-	table := sw530Table{"team_memberships", "workspace_id"}
+	table := routeSweepTable{"team_memberships", "workspace_id"}
 	x.sidecars[table] = x.sidecarRows(t, table)
 	at := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
 	if err := x.legacy.store.MutateWorkspace(t.Context(), x.workspace, "issue-delete.fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -94,12 +94,12 @@ func seedIssueDelete(t *testing.T, x *sw530Sweep) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW201ReloadSource(t, x.fx.f.reader, x.legacy.store)
+	metadataReloadSourceReloadSource(t, x.fx.f.reader, x.legacy.store)
 	reloadIssueDeleteBaseline(t, x)
 	x.reset(t)
 }
 
-func reloadIssueDeleteBaseline(t *testing.T, x *sw530Sweep) {
+func reloadIssueDeleteBaseline(t *testing.T, x *routeSweepSweep) {
 	t.Helper()
 	if err := x.legacy.store.ReloadWorkspace(t.Context(), x.workspace); err != nil {
 		t.Fatal(err)
@@ -117,20 +117,20 @@ func reloadIssueDeleteBaseline(t *testing.T, x *sw530Sweep) {
 	x.probeStale = true
 }
 
-func issueDeleteRequest(family, ref, query, body string, principal *sw530Principal, bearer bool) sw530Request {
-	return sw530Request{pattern: "DELETE /api/" + family + "/{id}", method: http.MethodDelete,
+func issueDeleteRequest(family, ref, query, body string, principal *routeSweepPrincipal, bearer bool) routeSweepRequest {
+	return routeSweepRequest{pattern: "DELETE /api/" + family + "/{id}", method: http.MethodDelete,
 		path: "/api/" + family + "/" + ref + query, body: body, principal: principal, bearer: bearer}
 }
 
-func checkIssueDelete(t *testing.T, x *sw530Sweep, request sw530Request, expected int, children ...string) {
+func checkIssueDelete(t *testing.T, x *routeSweepSweep, request routeSweepRequest, expected int, children ...string) {
 	t.Helper()
 	slots, views := x.totalSlots, x.totalViews
-	got := map[string]sw530Outcome{}
+	got := map[string]routeSweepOutcome{}
 	started := time.Now().UTC()
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		// Reset writes a hydrated bootstrap with derived project counts. Use
 		// the record-backed SQL preimage for the comparison in every mode.
-		scaleP21SW201ReloadSource(t, x.fx.f.reader, x.legacy.store)
+		metadataReloadSourceReloadSource(t, x.fx.f.reader, x.legacy.store)
 		x.probeStale = true
 		outcome, dirty := x.run(t, source, request, started)
 		got[source] = outcome
@@ -143,7 +143,7 @@ func checkIssueDelete(t *testing.T, x *sw530Sweep, request sw530Request, expecte
 		if outcome.TimedOut || outcome.Status != expected {
 			t.Errorf("%s: status %d, want %d (timeout=%t)", source, outcome.Status, expected, outcome.TimedOut)
 		}
-		if kind, want, actual := sw530Differences(got["legacy"], outcome); kind != "" {
+		if kind, want, actual := routeSweepDifferences(got["legacy"], outcome); kind != "" {
 			t.Errorf("%s differs in %s%s", source, kind, issueDeleteDifferenceFields(kind, want, actual))
 		}
 		if expected == http.StatusNoContent {
@@ -166,7 +166,7 @@ func checkIssueDelete(t *testing.T, x *sw530Sweep, request sw530Request, expecte
 	}
 }
 
-func checkIssueDeleteWebhook(t *testing.T, source string, outcome sw530Outcome) {
+func checkIssueDeleteWebhook(t *testing.T, source string, outcome routeSweepOutcome) {
 	t.Helper()
 	var count int
 	for _, raw := range outcome.Webhooks {
@@ -229,7 +229,7 @@ func issueDeleteDifferenceFields(kind, a, b string) string {
 
 func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	t.Setenv("FLOW_API_RATE_LIMIT", "off")
-	x := sw530Setup(t)
+	x := routeSweepSetup(t)
 	// The 1,000-child fixture takes over 8s with race and coverage on CI.
 	// Wait for each request to finish before comparing or resetting its rows.
 	x.requestContext = t.Context()
@@ -238,7 +238,7 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	children := []string{issueDeleteSibling, issueDeleteChild}
 	for _, tc := range []struct {
 		name, family, ref, query, body string
-		principal                      *sw530Principal
+		principal                      *routeSweepPrincipal
 		bearer                         bool
 		status                         int
 		children                       []string
@@ -319,13 +319,13 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 			x.exec(t, `INSERT INTO auth_users(id,name,display_name,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`,
 				viewer.ID, viewer.Name, viewer.DisplayName, "", 1, at, at)
 		}
-		for _, source := range []*sw530Source{&x.legacy, &x.bounded} {
+		for _, source := range []*routeSweepSource{&x.legacy, &x.bounded} {
 			if err := x.legacy.store.EnsureWorkspaceMembership(t.Context(), x.fx.f.data.Workspace.ID, source.store.DefaultViewer().ID); err != nil {
 				t.Fatal(err)
 			}
 			source.handler = issueDeleteDevHandler(t, x, source.store)
 		}
-		table := sw530Table{"workspace_memberships", "workspace_id"}
+		table := routeSweepTable{"workspace_memberships", "workspace_id"}
 		x.sidecars[table] = x.sidecarRows(t, table)
 		reloadIssueDeleteBaseline(t, x)
 		for _, tc := range []struct {
@@ -344,7 +344,7 @@ func TestBoundedIssueLifecycleDifferential(t *testing.T) {
 	})
 }
 
-func checkIssueDeleteCollaboration(t *testing.T, x *sw530Sweep, owner *sw530Principal) {
+func checkIssueDeleteCollaboration(t *testing.T, x *routeSweepSweep, owner *routeSweepPrincipal) {
 	t.Helper()
 	rows := x.rows(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' AND record_key='delete-document'`, x.workspace)
 	if len(rows) != 1 {
@@ -361,11 +361,11 @@ func checkIssueDeleteCollaboration(t *testing.T, x *sw530Sweep, owner *sw530Prin
 	}
 	documents := []string{issueDeleteDocument, "document_content_" + issueDeleteChild, "document_content_" + issueDeleteGrandchild}
 	started := time.Now().UTC()
-	got := map[string]sw530Outcome{}
+	got := map[string]routeSweepOutcome{}
 	slots, views := x.totalSlots, x.totalViews
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		x.exec(t, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='documents' AND record_key='delete-document'`, raw, x.workspace)
-		scaleP21SW201ReloadSource(t, x.fx.f.reader, x.legacy.store)
+		metadataReloadSourceReloadSource(t, x.fx.f.reader, x.legacy.store)
 		x.probeStale = true
 		for _, id := range documents {
 			update := store.DocumentCollaborationUpdate{ID: "update_" + id, DocumentID: id, Data: []byte{1, 2, 3}, CreatedAt: started}
@@ -383,7 +383,7 @@ func checkIssueDeleteCollaboration(t *testing.T, x *sw530Sweep, owner *sw530Prin
 				t.Errorf("%s collaboration cleanup changed the wrong rows", source)
 			}
 		}
-		if kind, _, _ := sw530Differences(got["legacy"], got[source]); kind != "" {
+		if kind, _, _ := routeSweepDifferences(got["legacy"], got[source]); kind != "" {
 			t.Errorf("%s old-document deletion differs in %s", source, kind)
 		}
 		x.reset(t)
@@ -393,7 +393,7 @@ func checkIssueDeleteCollaboration(t *testing.T, x *sw530Sweep, owner *sw530Prin
 	}
 }
 
-func checkIssueDeleteLargeFamily(t *testing.T, x *sw530Sweep, owner *sw530Principal, children []string) {
+func checkIssueDeleteLargeFamily(t *testing.T, x *routeSweepSweep, owner *routeSweepPrincipal, children []string) {
 	t.Helper()
 	const largeRoot = "issue_delete_large_root"
 	err := x.legacy.store.MutateWorkspace(t.Context(), x.workspace, "issue-delete.large-fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -417,7 +417,7 @@ func checkIssueDeleteLargeFamily(t *testing.T, x *sw530Sweep, owner *sw530Princi
 	checkIssueDelete(t, x, issueDeleteRequest("issues", issueDeleteRoot, "", "", owner, false), 204, children...)
 }
 
-func issueDeleteDevHandler(t *testing.T, x *sw530Sweep, repo *store.SQLiteStore) http.Handler {
+func issueDeleteDevHandler(t *testing.T, x *routeSweepSweep, repo *store.SQLiteStore) http.Handler {
 	t.Helper()
 	s := &server{store: repo, uploadPath: t.TempDir(), authDisabled: true}
 	for _, started := range []interface{ Store(bool) }{&s.socketAccessSweepStarted, &s.workflowSchedulerStarted, &s.deliverySchedulerStarted, &s.loopReconcilerStarted, &s.agentRunReconcilerStarted, &s.agentLiveSweepStarted, &s.coordinationStarted} {
@@ -427,12 +427,12 @@ func issueDeleteDevHandler(t *testing.T, x *sw530Sweep, repo *store.SQLiteStore)
 	repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		x.mu.Lock()
 		defer x.mu.Unlock()
-		x.webhooks = append(x.webhooks, string(scaleP21SW106Envelope(t, event)))
+		x.webhooks = append(x.webhooks, string(discussionRoutesEnvelope(t, event)))
 	})
 	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		x.mu.Lock()
 		defer x.mu.Unlock()
-		x.realtime = append(x.realtime, string(scaleP21SW106Envelope(t, event)))
+		x.realtime = append(x.realtime, string(discussionRoutesEnvelope(t, event)))
 	})
 	return handler
 }

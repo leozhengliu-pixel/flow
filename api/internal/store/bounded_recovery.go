@@ -25,12 +25,12 @@ var errResidentReloadRace = errors.New("resident reload raced with a newer insta
 
 // Canonical policy projections remain admitted through their final consumer.
 // This is separate from installed recovery, which must retain complete Teams.
-type scaleP21SW23TeamPolicyRowsRead struct {
+type teamPolicyRowsRead struct {
 	rows    []metadataCacheRow
 	release func()
 }
 
-func (r *scaleP21SW23TeamPolicyRowsRead) Close() {
+func (r *teamPolicyRowsRead) Close() {
 	if r != nil && r.release != nil {
 		r.rows = nil
 		r.release()
@@ -40,7 +40,7 @@ func (r *scaleP21SW23TeamPolicyRowsRead) Close() {
 
 // Read only canonical Team policy fields within the caller's SQL snapshot.
 // Installed recovery still retains complete Teams from its own source.
-func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sqlTx, workspace string) (_ *scaleP21SW23TeamPolicyRowsRead, err error) {
+func (s *SQLiteStore) readTeamPolicyRows(ctx context.Context, tx *sqlTx, workspace string) (_ *teamPolicyRowsRead, err error) {
 	if tx == nil || tx.database != s.db || tx.dialect != s.dialect {
 		return nil, ErrMetadataRecordQuery
 	}
@@ -51,7 +51,7 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 	if err != nil {
 		return nil, err
 	}
-	result := &scaleP21SW23TeamPolicyRowsRead{release: release}
+	result := &teamPolicyRowsRead{release: release}
 	defer func() {
 		if err != nil {
 			result.Close()
@@ -120,7 +120,7 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 			return result, nil
 		}
 		for _, item := range page {
-			var input io.ReaderAt = &scaleP21SW23TeamPolicyReaderAt{
+			var input io.ReaderAt = &teamPolicyReaderAt{
 				ctx: ctx, tx: tx, workspace: workspace, key: item.key,
 				blob: s.dialect == "mysql" || item.storage == "blob", size: item.size,
 			}
@@ -130,7 +130,7 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 				}
 				input = bytes.NewReader(item.raw)
 			}
-			projected, err := s.scaleP21SW23BeginTeamProjection(ctx, MetadataArrayRecord{
+			projected, err := s.beginTeamProjection(ctx, MetadataArrayRecord{
 				Reader: io.NewSectionReader(input, 0, item.size), EncodedBytes: item.size,
 			})
 			if err != nil {
@@ -159,7 +159,7 @@ func (s *SQLiteStore) scaleP21SW23ReadTeamPolicyRows(ctx context.Context, tx *sq
 	}
 }
 
-type scaleP21SW23TeamPolicyReaderAt struct {
+type teamPolicyReaderAt struct {
 	ctx            context.Context
 	tx             *sqlTx
 	workspace, key string
@@ -167,7 +167,7 @@ type scaleP21SW23TeamPolicyReaderAt struct {
 	size           int64
 }
 
-func (r *scaleP21SW23TeamPolicyReaderAt) ReadAt(p []byte, offset int64) (int, error) {
+func (r *teamPolicyReaderAt) ReadAt(p []byte, offset int64) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}

@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP01PrincipalCounts(t *testing.T) {
+func TestScalePrincipalCounts(t *testing.T) {
 	for _, count := range []int{5, 2000} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "principals.db"))
@@ -33,7 +33,7 @@ func TestScaleP01PrincipalCounts(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			people, err := repo.SeedScaleP01Principals(t.Context(), "test-workspace", teams, count, true)
+			people, err := repo.SeedScalePrincipals(t.Context(), "test-workspace", teams, count, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -62,7 +62,7 @@ func TestScaleP01PrincipalCounts(t *testing.T) {
 	}
 }
 
-func TestScaleP01MetadataScales(t *testing.T) {
+func TestScaleMetadataScales(t *testing.T) {
 	for _, factors := range [][2]float64{{1, 1}, {10, 1}, {1, 10}} {
 		t.Run(fmt.Sprint(factors), func(t *testing.T) {
 			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "metadata.db"))
@@ -94,23 +94,23 @@ func TestScaleP01MetadataScales(t *testing.T) {
 		})
 	}
 	for _, factor := range []float64{-1, math.NaN(), math.Inf(1)} {
-		if _, err := scaleP01SyntheticSpec(SyntheticMetadata{CountScale: factor}); err == nil {
+		if _, err := scaleSyntheticSpec(SyntheticMetadata{CountScale: factor}); err == nil {
 			t.Fatal("invalid scale accepted")
 		}
 	}
-	if _, err := scaleP01SyntheticSpec(SyntheticMetadata{Projects: 1}); err == nil {
+	if _, err := scaleSyntheticSpec(SyntheticMetadata{Projects: 1}); err == nil {
 		t.Fatal("missing team must return an error rather than panic")
 	}
 }
 
-func TestScaleP01SQLProbeCommitAndRollback(t *testing.T) {
+func TestScaleSQLProbeCommitAndRollback(t *testing.T) {
 	config := DatabaseConfig{Driver: "sqlite", Path: filepath.Join(t.TempDir(), "probe.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
 	repo, err := OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Close()
-	probe, err := repo.EnableScaleP01Probe(config)
+	probe, err := repo.EnableScaleProbe(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestScaleP01SQLProbeCommitAndRollback(t *testing.T) {
 		t.Fatal("rolled back event recorded as committed")
 	}
 	// The membership commit precedes a separately committed audit/event.
-	ctx = ScaleP01RequestContext(ctx, "probe-request")
+	ctx = ScaleRequestContext(ctx, "probe-request")
 	tx, err = repo.db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)

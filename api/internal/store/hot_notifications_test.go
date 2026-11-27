@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21HotNotificationsPagingAndAuthority(t *testing.T) {
+func TestScaleHotNotificationsPagingAndAuthority(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, principal := f.data.Workspace.URLKey, f.data.Viewer.ID
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	var ids []string
@@ -150,11 +150,11 @@ func TestScaleP21HotNotificationsPagingAndAuthority(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotNotificationsSourceChoiceAndBudgets(t *testing.T) {
+func TestScaleHotNotificationsSourceChoiceAndBudgets(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, principal := f.data.Workspace.URLKey, f.data.Viewer.ID
 	team := f.data.Teams[0].ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.hot_notifications_source", "", nil, func(data *domain.Bootstrap) error {
@@ -240,11 +240,11 @@ func TestScaleP21HotNotificationsSourceChoiceAndBudgets(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotNotificationsUnrelatedCountBound(t *testing.T) {
+func TestScaleHotNotificationsUnrelatedCountBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, principal := f.data.Workspace.URLKey, f.data.Viewer.ID
 	key := &domain.APIKey{ID: "hot-notification-count-key", TeamRestriction: "selected", TeamIDs: []string{f.data.Teams[0].ID}, Scopes: []string{"read"}}
 	held := map[bool]int{}

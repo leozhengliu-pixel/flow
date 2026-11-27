@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP06ReplaySQLByteGuard(t *testing.T) {
+func TestScaleReplaySQLByteGuard(t *testing.T) {
 	var repo *SQLiteStore
 	var err error
 	if driver, url := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); driver != "" && url != "" {

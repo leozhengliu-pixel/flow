@@ -51,7 +51,7 @@ func writeIssueSearchIndex(ctx context.Context, tx *sqlTx, workspace string, iss
 
 func (s *SQLiteStore) migrateIssueSearchIndex(ctx context.Context) error {
 	if s.BoundedMetadataEnabled() {
-		return s.scaleP21SW18MigrateIssueSearchIndex(ctx)
+		return s.migrateIssueSearchIndexBounded(ctx)
 	}
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_search_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
@@ -120,7 +120,7 @@ func (s *SQLiteStore) migrateIssueSearchIndex(ctx context.Context) error {
 
 // Only ID headers cross the driver boundary. Canonical issue text, including
 // uncapped legal bodies, is copied into its index inside the same SQL transaction.
-func (s *SQLiteStore) scaleP21SW18MigrateIssueSearchIndex(ctx context.Context) error {
+func (s *SQLiteStore) migrateIssueSearchIndexBounded(ctx context.Context) error {
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return err

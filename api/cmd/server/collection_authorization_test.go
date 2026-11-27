@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
+func TestHotCollectionAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "on")
@@ -29,7 +29,7 @@ func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
 				"/api/documents?connection=1", "/api/documents?first=1", "/api/documents?last=1",
 				"/api/documents?after=x", "/api/documents?before=x", "/api/documents?orderBy=id",
 			} {
-				if !scaleP21SW253CollectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if !collectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("membership-only collection root not selected", method, path)
 				}
 			}
@@ -39,7 +39,7 @@ func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
 			"/api/issue-labels", "/api/issue-suggestions", "/api/documents?connection=true",
 		} {
 			for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete, http.MethodOptions} {
-				if scaleP21SW253CollectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if collectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("collection authorization captured a mutation or other method", method, path)
 				}
 			}
@@ -52,7 +52,7 @@ func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
 			"/api/workspaces/target/teams", "/api/desktop-notifications/ack",
 		} {
 			for _, method := range []string{http.MethodGet, http.MethodHead} {
-				if scaleP21SW253CollectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if collectionAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("collection authorization bypassed an independent route predicate", method, path)
 				}
 			}
@@ -96,7 +96,7 @@ func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
 		Status  int
 		Body    string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			type sqlCounts struct {
 				pairs, legacy, bounded, legacyMax, boundedMax       int
@@ -134,8 +134,8 @@ func TestScaleP21SW253HotCollectionAuthorization(t *testing.T) {
 					t.Logf("authorization SQL %s pairs=%d legacy/bounded=%d/%d max=%d/%d regressed-pairs=%d worst-pair=%d/%d increase=%d", route, counts.pairs, counts.legacy, counts.bounded, counts.legacyMax, counts.boundedMax, counts.regressions, counts.worstLegacy, counts.worstBounded, counts.maxIncrease)
 				}
 			}()
-			other := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			other := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw253_features", "", nil, func(data *domain.Bootstrap) error {
 				if data.WorkspaceSettings.FeatureFlags == nil {

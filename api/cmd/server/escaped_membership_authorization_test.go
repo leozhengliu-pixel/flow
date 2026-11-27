@@ -20,7 +20,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW332EscapedMembershipAuthorization(t *testing.T) {
+func TestEscapedMembershipAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -37,11 +37,11 @@ func TestScaleP21SW332EscapedMembershipAuthorization(t *testing.T) {
 			"/%61pi/%77orkspaces/a%2fb/%74eams",
 			"/api/workspaces/id%2Fteams/teams", "/api/workspaces/id%2Fteams%2Fprivate/teams",
 		} {
-			if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
+			if !membershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
 				t.Fatal("registered opaque POST shape not selected", path)
 			}
 			for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
-				if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
+				if membershipAuthorizationRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("opaque POST selector captured another method", method, path)
 				}
 			}
@@ -55,19 +55,19 @@ func TestScaleP21SW332EscapedMembershipAuthorization(t *testing.T) {
 			"/api/workspaces//teams", "/api/workspaces/id/teams/",
 			"/api/workspaces/id/teams/child", "/api/workspaces%2Fextra/id/teams",
 		} {
-			if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
+			if membershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
 				t.Fatal("opaque selector captured another predicate", path)
 			}
 		}
 		for _, path := range []string{"/api/workflows/a%2Fb/run", "/%61pi/workflows/a%2Fb/%72un", "/api/workflows/%2F/run"} {
-			if !scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
+			if !membershipAuthorizationRequest(httptest.NewRequest(http.MethodPost, path, nil)) {
 				t.Fatal("existing escaped workflow fix changed", path)
 			}
 		}
 		// Upload basename-invalid names remain an audit limitation. This
 		// batch does not widen the existing upload selector.
 		for _, path := range []string{"/uploads/a%2Fb", "/uploads/%2F", "/uploads/a/b"} {
-			if scaleP21SW306MembershipAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
+			if membershipAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
 				t.Fatal("opaque POST change widened uploads", path)
 			}
 		}
@@ -123,10 +123,10 @@ func TestScaleP21SW332EscapedMembershipAuthorization(t *testing.T) {
 		Body    string
 		Pattern string
 	}
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo := f.repository
 	t.Run(f.reader.config.Driver, func(t *testing.T) {
-		foreign := scaleP03Fixture(t, repo)
+		foreign := resourceAccessScaleFixture(t, repo)
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.data.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
@@ -251,7 +251,7 @@ func TestScaleP21SW332EscapedMembershipAuthorization(t *testing.T) {
 									}
 								}
 								if phase == "reloaded" {
-									scaleP21SW201ReloadSource(t, f.reader, source)
+									metadataReloadSourceReloadSource(t, f.reader, source)
 								}
 								request := f.literalRequest(user, key, nil)
 								path := "/api/agent/sessions/" + url.PathEscape(row.ref) + "/messages/stream"

@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21HotPulseWireEqual(t *testing.T, got, want any) {
+func scaleHotPulseWireEqual(t *testing.T, got, want any) {
 	t.Helper()
 	actual, actualErr := json.Marshal(got)
 	expected, expectedErr := json.Marshal(want)
@@ -27,7 +27,7 @@ func scaleP21HotPulseWireEqual(t *testing.T, got, want any) {
 	}
 }
 
-func scaleP21HotPulseCompactIndexEqual(got, want []*PulseFeedEntry) bool {
+func scaleHotPulseCompactIndexEqual(got, want []*PulseFeedEntry) bool {
 	if len(got) != len(want) {
 		return false
 	}
@@ -41,7 +41,7 @@ func scaleP21HotPulseCompactIndexEqual(got, want []*PulseFeedEntry) bool {
 	return true
 }
 
-func TestScaleP21HotPulseGroupNativeOwnership(t *testing.T) {
+func TestScaleHotPulseGroupNativeOwnership(t *testing.T) {
 	now := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	user := domain.User{ID: "user", Name: "Native", DisplayName: "Native Person", Email: "native@example.test"}
 	data := domain.Bootstrap{
@@ -59,14 +59,14 @@ func TestScaleP21HotPulseGroupNativeOwnership(t *testing.T) {
 		InitiativeUpdates: map[string][]domain.InitiativeUpdate{"initiative": {{ID: "initiative-update", Body: "Initiative", User: user, CreatedAt: now.Add(-time.Minute)}}},
 	}
 	literal := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}, lastWorkspaceKey: "physical"}
-	view := scaleP21HotLogoStore(t, literal.workspaces)
+	view := scaleHotLogoStore(t, literal.workspaces)
 	view.lastWorkspaceKey = "physical"
 	want, _ := literal.PulseFeed("")
 	read, found, err := view.BeginPulseRead(t.Context(), "", true)
 	if err != nil || !found {
 		t.Fatal(found, err)
 	}
-	if !scaleP21HotPulseCompactIndexEqual(read.Snapshot.Recent, want.Recent) || !scaleP21HotPulseCompactIndexEqual(read.Snapshot.Popular, want.Popular) {
+	if !scaleHotPulseCompactIndexEqual(read.Snapshot.Recent, want.Recent) || !scaleHotPulseCompactIndexEqual(read.Snapshot.Popular, want.Popular) {
 		t.Fatal("native ordered index, mentions, author or engagement changed")
 	}
 	if read.Snapshot.ProjectUpdates != nil || read.Snapshot.InitiativeUpdates != nil || read.Snapshot.Projects[0].Description != "" {
@@ -130,10 +130,10 @@ func TestScaleP21HotPulseGroupNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotPulseGroupBoundsAndInstalledGeneration(t *testing.T) {
+func TestScaleHotPulseGroupBoundsAndInstalledGeneration(t *testing.T) {
 	data := domain.Bootstrap{Workspace: domain.Workspace{URLKey: "logical"}, Projects: []domain.Project{{ID: "p"}},
 		ProjectUpdates: map[string][]domain.ProjectUpdate{"p": {{ID: "old", Body: "original"}}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, found, err := view.BeginPulseRead(t.Context(), "physical", false)
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -176,7 +176,7 @@ func TestScaleP21HotPulseGroupBoundsAndInstalledGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotPulseGroupScheduleProjection(t *testing.T) {
+func TestScaleHotPulseGroupScheduleProjection(t *testing.T) {
 	cursor := time.Date(2026, 11, 14, 1, 0, 0, 0, time.UTC)
 	data := domain.Bootstrap{Workspace: domain.Workspace{URLKey: "logical"},
 		Settings:     map[string]any{"pulseDeliveryCursors": map[string]time.Time{"user": cursor}, "unrelated": strings.Repeat("skipped ", 500000)},
@@ -184,7 +184,7 @@ func TestScaleP21HotPulseGroupScheduleProjection(t *testing.T) {
 		TeamSettings: map[string]domain.TeamSettings{"team": {Timezone: "Europe/London", AgentGuidance: strings.Repeat("skipped ", 500000)}},
 		Projects:     []domain.Project{{ID: "p", Description: strings.Repeat("skipped ", 500000)}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	read, found, err := view.BeginPulseScheduleRead(t.Context(), "physical")
 	if err != nil || !found {
 		t.Fatal(found, err)
@@ -216,7 +216,7 @@ func TestScaleP21HotPulseGroupScheduleProjection(t *testing.T) {
 	data.TeamSettings["team"] = teamSettings
 	data.Settings["unrelated"] = strings.Repeat("skipped ", 50000)
 	data.Projects[0].Description = strings.Repeat("skipped ", 50000)
-	small := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	small := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	smallRead, _, err := small.BeginPulseScheduleRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -228,10 +228,10 @@ func TestScaleP21HotPulseGroupScheduleProjection(t *testing.T) {
 	t.Logf("scheduler ignored-body 1x/10x held_work=%d/%d", small.metadataResidency.work.used, held)
 }
 
-func TestScaleP21HotPulseGroupWarmReload(t *testing.T) {
+func TestScaleHotPulseGroupWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, id := f.data.Workspace.URLKey, idgen.New("pulse-group-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects", "projectUpdates", "userSettings"), workspace, "scale_p21.pulse_group_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects, domain.Project{ID: id, Name: "Owned", Description: strings.Repeat("unrelated ", 300000)})
@@ -258,7 +258,7 @@ func TestScaleP21HotPulseGroupWarmReload(t *testing.T) {
 		if err != nil || !found {
 			t.Fatal(found, err)
 		}
-		if !scaleP21HotPulseCompactIndexEqual(read.Snapshot.Recent, want.Recent) || !scaleP21HotPulseCompactIndexEqual(read.Snapshot.Popular, want.Popular) {
+		if !scaleHotPulseCompactIndexEqual(read.Snapshot.Recent, want.Recent) || !scaleHotPulseCompactIndexEqual(read.Snapshot.Popular, want.Popular) {
 			t.Fatal("warm/reloaded index differs", reload)
 		}
 		if err := read.LoadUpdates(t.Context(), "project", id, nil); err != nil || !reflect.DeepEqual(read.Snapshot.ProjectUpdates[id], want.ProjectUpdates[id]) {
@@ -272,7 +272,7 @@ func TestScaleP21HotPulseGroupWarmReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotPulseGroupUpdateBodyScaling(t *testing.T) {
+func TestScaleHotPulseGroupUpdateBodyScaling(t *testing.T) {
 	var held, summaryHeld int
 	for _, repeat := range []int{32768, 327680} {
 		body := "@mention " + strings.Repeat("padding ", repeat) + "FinalΣ"
@@ -298,7 +298,7 @@ func TestScaleP21HotPulseGroupUpdateBodyScaling(t *testing.T) {
 				})
 			}
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 		read, found, err := view.BeginPulseRead(t.Context(), "physical", true)
 		if err != nil || !found || len(read.Snapshot.Recent) != 12 {
 			t.Fatal("body scaling failed ordinary feed/unread index", repeat, found, err)
@@ -371,10 +371,10 @@ func TestScaleP21HotPulseGroupUpdateBodyScaling(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotPulseGroupWireTimestamps(t *testing.T) {
+func TestScaleHotPulseGroupWireTimestamps(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, project, initiative := f.data.Workspace.URLKey, idgen.New("pulse-wire-project-"), idgen.New("pulse-wire-initiative-")
 	at := time.Date(2026, 11, 14, 9, 17, 33, 987654321, time.FixedZone(strings.Repeat("detached-pulse-zone", 1000), 5*3600+45*60+31))
 	edited, due := at.Add(time.Minute), at.Add(time.Hour)
@@ -424,7 +424,7 @@ func TestScaleP21HotPulseGroupWireTimestamps(t *testing.T) {
 		for index, entry := range read.Snapshot.Recent {
 			expected := *want.Recent[index]
 			expected.Search = ""
-			scaleP21HotPulseWireEqual(t, entry, expected)
+			scaleHotPulseWireEqual(t, entry, expected)
 			if !entry.CreatedAt.Equal(expected.CreatedAt) || entry.CreatedAt.UnixNano() != expected.CreatedAt.UnixNano() || entry.Score != expected.Score {
 				t.Fatal("wire projection changed ordering/score instant", reload)
 			}
@@ -445,19 +445,19 @@ func TestScaleP21HotPulseGroupWireTimestamps(t *testing.T) {
 				t.Fatal("detached fixed-zone source rejected", reload, err)
 			}
 			if target.kind == "project" {
-				scaleP21HotPulseWireEqual(t, read.Snapshot.ProjectUpdates[project], want.ProjectUpdates[project])
-				scaleP21HotPulseWireEqual(t, snapshot, want.ProjectUpdates[project][0].Snapshot)
+				scaleHotPulseWireEqual(t, read.Snapshot.ProjectUpdates[project], want.ProjectUpdates[project])
+				scaleHotPulseWireEqual(t, snapshot, want.ProjectUpdates[project][0].Snapshot)
 				for index, source := range want.Projects {
 					if source.ID == project {
-						scaleP21HotPulseWireEqual(t, read.Snapshot.Projects[index], source)
+						scaleHotPulseWireEqual(t, read.Snapshot.Projects[index], source)
 					}
 				}
 			} else {
-				scaleP21HotPulseWireEqual(t, read.Snapshot.InitiativeUpdates[initiative], want.InitiativeUpdates[initiative])
-				scaleP21HotPulseWireEqual(t, snapshot, want.InitiativeUpdates[initiative][0].Snapshot)
+				scaleHotPulseWireEqual(t, read.Snapshot.InitiativeUpdates[initiative], want.InitiativeUpdates[initiative])
+				scaleHotPulseWireEqual(t, snapshot, want.InitiativeUpdates[initiative][0].Snapshot)
 				for index, source := range want.Initiatives {
 					if source.ID == initiative {
-						scaleP21HotPulseWireEqual(t, read.Snapshot.Initiatives[index], source)
+						scaleHotPulseWireEqual(t, read.Snapshot.Initiatives[index], source)
 					}
 				}
 			}
@@ -477,7 +477,7 @@ func TestScaleP21HotPulseGroupWireTimestamps(t *testing.T) {
 			t.Fatal("detached fixed-zone cursor rejected", reload, err)
 		}
 		metadata, _ := f.WorkspaceMetadataFields(workspace, "settings")
-		scaleP21HotPulseWireEqual(t, schedule.Snapshot.Settings["pulseDeliveryCursors"], metadata.Settings["pulseDeliveryCursors"])
+		scaleHotPulseWireEqual(t, schedule.Snapshot.Settings["pulseDeliveryCursors"], metadata.Settings["pulseDeliveryCursors"])
 		schedule.Close()
 		if view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("wire timestamp read leaked work or decoded full metadata", reload)

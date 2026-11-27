@@ -10,16 +10,16 @@ import (
 	"testing"
 )
 
-// SW557: with bounded metadata on, a COLD consumer (an unmigrated consumer
+// With bounded metadata on, a COLD consumer (an unmigrated consumer
 // reviewed COLD, or a reviewed consumer dispatched through the registered
 // COLD facade) keeps its legacy behaviour only inside a COLD context: a
-// request's COLD scope (default COLD routing, SW550) or background COLD work
+// request's COLD scope (default COLD routing) or background COLD work
 // (store.WithColdWork, which store.WorkerContext returns when bounded).
-// Outside one the store refuses its whole-workspace needs (SW531), which is a
+// Outside one the store refuses its whole-workspace needs, which is a
 // functional failure, not a slowdown.
 //
-// SW550 classifies goroutine roots by hand. SW557 proves the context instead,
-// inductively over the SW286 reference graph of cmd/server and
+// The route-temperature guard classifies goroutine roots by hand. This test
+// proves the context instead, inductively over the store-wrapper reference graph of cmd/server and
 // internal/store: for every call site whose callee reaches a COLD consumer on
 // a flag-on path, every context.Context argument (by the callee's declared
 // parameter type) is traced back through locals, derivations
@@ -31,13 +31,13 @@ import (
 //
 //   - COLD: store.WithColdWork or SQLiteStore.WorkerContext;
 //   - request: Request.Context() of an http.Request parameter (its route's
-//     temperature is SW550's: a HOT route reaches no COLD consumer);
+//     temperature guard: a HOT route reaches no COLD consumer);
 //   - a parameter of the caller: the obligation moves to the caller's own
 //     call sites, which this test checks too (the caller reaches the
 //     consumer through the callee);
 //   - anything else (context.Background/TODO, a package variable, a channel
 //     value, an unresolved expression): a violation unless reviewed in
-//     scaleP21SW557Reviewed with the reason the path is bounded or COLD.
+//     reviewed with the reason the path is bounded or COLD.
 //
 // Background entries are thereby covered whatever starts them: go
 // statements, time/context AfterFunc callbacks, schedulers and tickers,
@@ -45,14 +45,14 @@ import (
 // context.Background) and helpers that build their own context. A function
 // invoked only as a value (a sink or listener the store calls back) receives
 // its invoker's context, which the invoker's own call site proves; such
-// value references are listed in scaleP21SW557Callbacks with that invoker.
+// value references are listed in backgroundCOLDContextCallbacks with that invoker.
 
-// scaleP21SW557Reviewed names every flagged call (caller -> callee: origin)
+// reviewed names every flagged call (caller -> callee: origin)
 // whose context is not COLD and whose path is reviewed bounded. Each one
-// reaches only the store's own needs (scaleP21SW557StoreNeeds) through a
+// reaches only the store's own needs (storeNeeds) through a
 // migrated writer it selects explicitly, or a bounded projection; running it
 // COLD would turn its bounded reads into whole-workspace legacy views.
-var scaleP21SW557Reviewed = map[string]string{
+var reviewed = map[string]string{
 	"server/main -> server/server.runRecurringIssueScheduler: background context.Background()": "HOT ticker on shutdownSignal. " +
 		"Its only store needs are createRecurringOccurrence (issue.created with store.ContextWithRecurringOccurrenceWrite: mutateBoundedRecurringOccurrence) " +
 		"and normalizeRecurringIssueTimingBounded (issue.updated with store.ContextWithIssueRecurrenceTimingMutation: mutateBoundedIssueRecurrenceTiming), " +
@@ -60,9 +60,9 @@ var scaleP21SW557Reviewed = map[string]string{
 	"server/main -> server/server.runReviewImportScheduler: background context.Background()": "The ticker scans due leases in SQL. " +
 		"runReviewImport wraps the per-workspace context with store.WithColdWork before executing an import.",
 	"server/server.mcpResolveDeletion -> server/server.invokeMCPRoute: unknown function literal value": "The deletion's run closure is invoked by deleteMCPResource " +
-		"with the MCP tool call's context: the /mcp routes run COLD and their tools COLD per operation (SW550, SW556).",
+		"with the MCP tool call's context: the /mcp routes run COLD and their tools COLD per operation.",
 	"server/server.mcpResolveSkillDeletion -> server/server.invokeMCPRoute: unknown function literal value": "The deletion's run closure is invoked by deleteMCPResource " +
-		"with the MCP tool call's context: the /mcp routes run COLD and their tools COLD per operation (SW550, SW556).",
+		"with the MCP tool call's context: the /mcp routes run COLD and their tools COLD per operation.",
 	"server/server.realtimeSocket -> server/server.handleBudgetedCollaboration: background context.Background()": "The collaboration socket's own lifetime " +
 		"context. Its only store need is PagedWorkspaceMetadata inside store.InstalledMetadataRead's bounded projection (the snapshot scopes the read to the " +
 		"installed records); no COLD consumer is reachable from the socket's commands.",
@@ -76,33 +76,33 @@ var scaleP21SW557Reviewed = map[string]string{
 		"under the schema lock. runDataMigrations later invokes the registered callbacks with WithColdWork.",
 }
 
-// scaleP21SW557OpenStage is the review of an OpenDatabase stage or data
+// openStage is the review of an OpenDatabase stage or data
 // migration referenced as a value (stage.run / migration.apply).
-const scaleP21SW557OpenStage = "OpenDatabase runs it before the store serves under the schema lock. Pending data migrations can use the legacy image " +
-	"before admission. The resident loader requires complete coverage. TestScaleP21SW557BoundedStartupMatchesLegacy checks the persisted rows across startup modes."
+const openStage = "OpenDatabase runs it before the store serves under the schema lock. Pending data migrations can use the legacy image " +
+	"before admission. The resident loader requires complete coverage. The bounded-startup test checks the persisted rows across startup modes."
 
-// scaleP21SW557Callbacks names every function that reaches a COLD consumer or
+// backgroundCOLDContextCallbacks names every function that reaches a COLD consumer or
 // store need, takes a context and is referenced as a value no traced call
 // invokes, with who invokes it and with which context. Callbacks the coding
 // service, a store sink or another package makes through an interface are
 // not edges of the graph; main hands the coding service a COLD-work context
 // (runCoding), and store sinks run on the context of the write that fires
 // them.
-var scaleP21SW557Callbacks = map[string]string{
-	"store/SQLiteStore.migrateIssueCollections":         scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateWorkspaceMetadataRecords": scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateIssueListProjection":      scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateLoopRunRecords":           scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateDocumentDefaultAccess":    scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateDocumentInheritedScope":   scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateDocumentOwnerGrants":      scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateResourceSlugs":            scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateMemberDirectory":          scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateCommentActions":           scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateCycleCapacityOverrides":   scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateIntegrationOAuthTokens":   scaleP21SW557OpenStage,
-	"store/SQLiteStore.migrateRenamedWorkspaceKeys":     scaleP21SW557OpenStage,
-	"store/SQLiteStore.MigrateLegacyAuditLog":           scaleP21SW557OpenStage,
+var backgroundCOLDContextCallbacks = map[string]string{
+	"store/SQLiteStore.migrateIssueCollections":         openStage,
+	"store/SQLiteStore.migrateWorkspaceMetadataRecords": openStage,
+	"store/SQLiteStore.migrateIssueListProjection":      openStage,
+	"store/SQLiteStore.migrateLoopRunRecords":           openStage,
+	"store/SQLiteStore.migrateDocumentDefaultAccess":    openStage,
+	"store/SQLiteStore.migrateDocumentInheritedScope":   openStage,
+	"store/SQLiteStore.migrateDocumentOwnerGrants":      openStage,
+	"store/SQLiteStore.migrateResourceSlugs":            openStage,
+	"store/SQLiteStore.migrateMemberDirectory":          openStage,
+	"store/SQLiteStore.migrateCommentActions":           openStage,
+	"store/SQLiteStore.migrateCycleCapacityOverrides":   openStage,
+	"store/SQLiteStore.migrateIntegrationOAuthTokens":   openStage,
+	"store/SQLiteStore.migrateRenamedWorkspaceKeys":     openStage,
+	"store/SQLiteStore.MigrateLegacyAuditLog":           openStage,
 	"server/server.notifyAgentReply": "The store's agent reply listener, invoked after a reply commits with the replying write's context. " +
 		"Its write selects the bounded agent-reply writer (store.ContextWithAgentReplyNotification: dispatchMutation's agent_task.replied branch) " +
 		"and it owns its reads' outputs (beginIndependentMetadataOutputReads).",
@@ -112,20 +112,20 @@ var scaleP21SW557Callbacks = map[string]string{
 		"context (store.WithColdWork in main) or by a request transition inside its route's COLD scope.",
 }
 
-type scaleP21SW557Tracer struct {
-	g        *scaleP21SW286Graph
-	fields   map[types.Object][]scaleP21SW557Assign
+type backgroundCOLDContextTracer struct {
+	g        *storeWrapperBoundaryGraph
+	fields   map[types.Object][]backgroundCOLDContextAssign
 	visiting map[string]bool
 	memo     map[string][]string
 }
 
-type scaleP21SW557Assign struct {
-	fn   *scaleP21SW286Func
+type backgroundCOLDContextAssign struct {
+	fn   *storeWrapperBoundaryFunc
 	expr ast.Expr
 }
 
-// scaleP21SW557ContextType reports a context.Context type expression.
-func scaleP21SW557ContextType(expression ast.Expr) bool {
+// contextType reports a context.Context type expression.
+func contextType(expression ast.Expr) bool {
 	selector, ok := expression.(*ast.SelectorExpr)
 	if !ok {
 		return false
@@ -134,9 +134,9 @@ func scaleP21SW557ContextType(expression ast.Expr) bool {
 	return ok && pkg.Name == "context" && selector.Sel.Name == "Context"
 }
 
-// scaleP21SW557ContextParams returns the indexes of fn's context.Context
+// contextParams returns the indexes of fn's context.Context
 // parameters (variadic parameters excluded).
-func scaleP21SW557ContextParams(fields *ast.FieldList) []int {
+func contextParams(fields *ast.FieldList) []int {
 	var result []int
 	index := 0
 	if fields == nil {
@@ -145,7 +145,7 @@ func scaleP21SW557ContextParams(fields *ast.FieldList) []int {
 	for _, field := range fields.List {
 		count := max(1, len(field.Names))
 		for range count {
-			if scaleP21SW557ContextType(field.Type) {
+			if contextType(field.Type) {
 				result = append(result, index)
 			}
 			index++
@@ -154,8 +154,8 @@ func scaleP21SW557ContextParams(fields *ast.FieldList) []int {
 	return result
 }
 
-// scaleP21SW557ParamIndex reports the index of obj among the parameters.
-func (tr *scaleP21SW557Tracer) paramIndex(fields *ast.FieldList, obj types.Object) (int, ast.Expr, bool) {
+// paramIndex reports the index of obj among the parameters.
+func (tr *backgroundCOLDContextTracer) paramIndex(fields *ast.FieldList, obj types.Object) (int, ast.Expr, bool) {
 	if fields == nil {
 		return 0, nil, false
 	}
@@ -175,13 +175,13 @@ func (tr *scaleP21SW557Tracer) paramIndex(fields *ast.FieldList, obj types.Objec
 	return 0, nil, false
 }
 
-func (tr *scaleP21SW557Tracer) position(node ast.Node) string {
+func (tr *backgroundCOLDContextTracer) position(node ast.Node) string {
 	position := tr.g.fset.Position(node.Pos())
 	return fmt.Sprintf("%s:%d", position.Filename[strings.LastIndex(position.Filename, "/")+1:], position.Line)
 }
 
 // parents maps every node of fn's body to its parent.
-func scaleP21SW557Parents(fn *scaleP21SW286Func) map[ast.Node]ast.Node {
+func backgroundCOLDContextParents(fn *storeWrapperBoundaryFunc) map[ast.Node]ast.Node {
 	parents := map[ast.Node]ast.Node{}
 	var stack []ast.Node
 	ast.Inspect(fn.decl, func(node ast.Node) bool {
@@ -201,7 +201,7 @@ func scaleP21SW557Parents(fn *scaleP21SW286Func) map[ast.Node]ast.Node {
 // trace returns the origins of the context expression in fn: "cold",
 // "request", "param:<fn>#<index>" or a violation ("background ...",
 // "unknown ...").
-func (tr *scaleP21SW557Tracer) trace(fn *scaleP21SW286Func, expression ast.Expr) []string {
+func (tr *backgroundCOLDContextTracer) trace(fn *storeWrapperBoundaryFunc, expression ast.Expr) []string {
 	defer tr.g.enter(fn)()
 	expression = ast.Unparen(expression)
 	switch e := expression.(type) {
@@ -223,12 +223,12 @@ func (tr *scaleP21SW557Tracer) trace(fn *scaleP21SW286Func, expression ast.Expr)
 		if selection := tr.g.info.Selections[e]; selection != nil && selection.Kind() == types.FieldVal {
 			return tr.traceField(selection.Obj(), e)
 		}
-		return []string{"unknown selector " + scaleP21SW286Source(tr.g.fset, e) + " at " + tr.position(e)}
+		return []string{"unknown selector " + storeWrapperBoundarySource(tr.g.fset, e) + " at " + tr.position(e)}
 	}
-	return []string{"unknown expression " + scaleP21SW286Source(tr.g.fset, expression) + " at " + tr.position(expression)}
+	return []string{"unknown expression " + storeWrapperBoundarySource(tr.g.fset, expression) + " at " + tr.position(expression)}
 }
 
-func (tr *scaleP21SW557Tracer) traceObject(fn *scaleP21SW286Func, object types.Object, at ast.Node) []string {
+func (tr *backgroundCOLDContextTracer) traceObject(fn *storeWrapperBoundaryFunc, object types.Object, at ast.Node) []string {
 	key := fmt.Sprintf("object %s %p", fn.key, object)
 	if tr.visiting[key] {
 		return nil // a self-derivation (ctx = context.WithValue(ctx, ...)): its other assignments decide
@@ -250,7 +250,7 @@ func (tr *scaleP21SW557Tracer) traceObject(fn *scaleP21SW286Func, object types.O
 			return []string{"unknown receiver at " + tr.position(at)}
 		}
 	}
-	parents := scaleP21SW557Parents(fn)
+	parents := backgroundCOLDContextParents(fn)
 	found := false
 	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
 		switch n := node.(type) {
@@ -308,8 +308,8 @@ func (tr *scaleP21SW557Tracer) traceObject(fn *scaleP21SW286Func, object types.O
 // traceLiteralParam traces the index-th parameter of a function literal: the
 // argument of an immediate invocation (go func(ctx) {...}(x)), or for a
 // callback literal the context argument of the call it is passed to.
-func (tr *scaleP21SW557Tracer) traceLiteralParam(fn *scaleP21SW286Func, literal *ast.FuncLit, index int, typ ast.Expr, parents map[ast.Node]ast.Node) []string {
-	if !scaleP21SW557ContextType(typ) {
+func (tr *backgroundCOLDContextTracer) traceLiteralParam(fn *storeWrapperBoundaryFunc, literal *ast.FuncLit, index int, typ ast.Expr, parents map[ast.Node]ast.Node) []string {
+	if !contextType(typ) {
 		return []string{"unknown literal parameter at " + tr.position(literal)}
 	}
 	call, ok := parents[literal].(*ast.CallExpr)
@@ -324,7 +324,7 @@ func (tr *scaleP21SW557Tracer) traceLiteralParam(fn *scaleP21SW286Func, literal 
 	}
 	origins, ok := tr.callbackOrigins(fn, call, slices.Index(call.Args, ast.Expr(literal)), index, true)
 	if !ok {
-		return []string{"unknown callback " + scaleP21SW286Source(tr.g.fset, call.Fun) + " at " + tr.position(literal)}
+		return []string{"unknown callback " + storeWrapperBoundarySource(tr.g.fset, call.Fun) + " at " + tr.position(literal)}
 	}
 	return origins
 }
@@ -334,7 +334,7 @@ func (tr *scaleP21SW557Tracer) traceLiteralParam(fn *scaleP21SW286Func, literal 
 // invokes that parameter by name (a parameter of the callee is the call's own
 // argument). With derived, a callee that never invokes it by name is taken to
 // hand it a context derived from the call's context argument.
-func (tr *scaleP21SW557Tracer) callbackOrigins(fn *scaleP21SW286Func, call *ast.CallExpr, argument, index int, derived bool) ([]string, bool) {
+func (tr *backgroundCOLDContextTracer) callbackOrigins(fn *storeWrapperBoundaryFunc, call *ast.CallExpr, argument, index int, derived bool) ([]string, bool) {
 	var result []string
 	traced := false
 	for _, target := range tr.g.targets(call.Fun, call) {
@@ -358,7 +358,7 @@ func (tr *scaleP21SW557Tracer) callbackOrigins(fn *scaleP21SW286Func, call *ast.
 		if !derived {
 			continue
 		}
-		for _, param := range scaleP21SW557ContextParams(callee.decl.Type.Params) {
+		for _, param := range contextParams(callee.decl.Type.Params) {
 			if param < len(call.Args) {
 				traced = true
 				result = append(result, tr.trace(fn, call.Args[param])...)
@@ -372,7 +372,7 @@ func (tr *scaleP21SW557Tracer) callbackOrigins(fn *scaleP21SW286Func, call *ast.
 // index-th argument of every invocation of its argument-th parameter (a
 // function value): called by name, or forwarded to another function that
 // invokes it.
-func (tr *scaleP21SW557Tracer) invokedOrigins(callee *scaleP21SW286Func, argument, index int) ([]string, bool) {
+func (tr *backgroundCOLDContextTracer) invokedOrigins(callee *storeWrapperBoundaryFunc, argument, index int) ([]string, bool) {
 	if argument < 0 {
 		return nil, false
 	}
@@ -426,7 +426,7 @@ func (tr *scaleP21SW557Tracer) invokedOrigins(callee *scaleP21SW286Func, argumen
 	return result, found
 }
 
-func (tr *scaleP21SW557Tracer) traceCall(fn *scaleP21SW286Func, call *ast.CallExpr) []string {
+func (tr *backgroundCOLDContextTracer) traceCall(fn *storeWrapperBoundaryFunc, call *ast.CallExpr) []string {
 	if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
 		if pkg, ok := selector.X.(*ast.Ident); ok && (isPkgName(tr.g.info.Uses[pkg]) || tr.g.info.Uses[pkg] == nil && tr.g.info.Defs[pkg] == nil && fn.imports[pkg.Name]) {
 			name := selector.Sel.Name
@@ -449,7 +449,7 @@ func (tr *scaleP21SW557Tracer) traceCall(fn *scaleP21SW286Func, call *ast.CallEx
 	}
 	targets := tr.g.targets(call.Fun, call)
 	if len(targets) == 0 {
-		return []string{"unknown call " + scaleP21SW286Source(tr.g.fset, call.Fun) + " at " + tr.position(call)}
+		return []string{"unknown call " + storeWrapperBoundarySource(tr.g.fset, call.Fun) + " at " + tr.position(call)}
 	}
 	var result []string
 	for _, target := range targets {
@@ -466,7 +466,7 @@ func (tr *scaleP21SW557Tracer) traceCall(fn *scaleP21SW286Func, call *ast.CallEx
 		}
 		// A helper that derives the context it returns from its own
 		// context parameter (beginMetadataOutputReads, WithMetadataOutputOwner).
-		if params := scaleP21SW557ContextParams(callee.decl.Type.Params); len(params) > 0 && params[0] < len(call.Args) {
+		if params := contextParams(callee.decl.Type.Params); len(params) > 0 && params[0] < len(call.Args) {
 			result = append(result, tr.trace(fn, call.Args[params[0]])...)
 			continue
 		}
@@ -482,7 +482,7 @@ func isPkgName(object types.Object) bool {
 }
 
 // returned traces the context results of fn's return statements.
-func (tr *scaleP21SW557Tracer) returned(fn *scaleP21SW286Func) []string {
+func (tr *backgroundCOLDContextTracer) returned(fn *storeWrapperBoundaryFunc) []string {
 	key := "returned " + fn.key
 	if tr.visiting[key] {
 		return nil
@@ -492,7 +492,7 @@ func (tr *scaleP21SW557Tracer) returned(fn *scaleP21SW286Func) []string {
 	}
 	tr.visiting[key] = true
 	defer delete(tr.visiting, key)
-	results := scaleP21SW557ContextParams(fn.decl.Type.Results)
+	results := contextParams(fn.decl.Type.Results)
 	var result []string
 	ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
 		if _, ok := node.(*ast.FuncLit); ok {
@@ -517,7 +517,7 @@ func (tr *scaleP21SW557Tracer) returned(fn *scaleP21SW286Func) []string {
 }
 
 // requestValue reports an *http.Request parameter (or local) of fn.
-func (tr *scaleP21SW557Tracer) requestValue(fn *scaleP21SW286Func, expression ast.Expr) bool {
+func (tr *backgroundCOLDContextTracer) requestValue(fn *storeWrapperBoundaryFunc, expression ast.Expr) bool {
 	ident, ok := ast.Unparen(expression).(*ast.Ident)
 	if !ok {
 		return false
@@ -548,7 +548,7 @@ func (tr *scaleP21SW557Tracer) requestValue(fn *scaleP21SW286Func, expression as
 }
 
 // traceField traces every value stored into the struct field.
-func (tr *scaleP21SW557Tracer) traceField(field types.Object, at ast.Node) []string {
+func (tr *backgroundCOLDContextTracer) traceField(field types.Object, at ast.Node) []string {
 	key := fmt.Sprintf("field %p", field)
 	if tr.visiting[key] {
 		return nil
@@ -570,8 +570,8 @@ func (tr *scaleP21SW557Tracer) traceField(field types.Object, at ast.Node) []str
 }
 
 // indexFields records every assignment and keyed literal of a struct field.
-func (tr *scaleP21SW557Tracer) indexFields() {
-	tr.fields = map[types.Object][]scaleP21SW557Assign{}
+func (tr *backgroundCOLDContextTracer) indexFields() {
+	tr.fields = map[types.Object][]backgroundCOLDContextAssign{}
 	for _, fn := range tr.g.funcs {
 		ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
 			switch n := node.(type) {
@@ -586,15 +586,15 @@ func (tr *scaleP21SW557Tracer) indexFields() {
 						continue
 					}
 					if len(n.Lhs) == len(n.Rhs) {
-						tr.fields[selection.Obj()] = append(tr.fields[selection.Obj()], scaleP21SW557Assign{fn, n.Rhs[index]})
+						tr.fields[selection.Obj()] = append(tr.fields[selection.Obj()], backgroundCOLDContextAssign{fn, n.Rhs[index]})
 					} else if len(n.Rhs) == 1 {
-						tr.fields[selection.Obj()] = append(tr.fields[selection.Obj()], scaleP21SW557Assign{fn, n.Rhs[0]})
+						tr.fields[selection.Obj()] = append(tr.fields[selection.Obj()], backgroundCOLDContextAssign{fn, n.Rhs[0]})
 					}
 				}
 			case *ast.KeyValueExpr:
 				if key, ok := n.Key.(*ast.Ident); ok {
 					if field, ok := tr.g.info.Uses[key].(*types.Var); ok && field.IsField() {
-						tr.fields[field] = append(tr.fields[field], scaleP21SW557Assign{fn, n.Value})
+						tr.fields[field] = append(tr.fields[field], backgroundCOLDContextAssign{fn, n.Value})
 					}
 				}
 			}
@@ -603,15 +603,15 @@ func (tr *scaleP21SW557Tracer) indexFields() {
 	}
 }
 
-// scaleP21SW557Reach returns, for every function, the path to the first COLD
+// backgroundCOLDContextReach returns, for every function, the path to the first COLD
 // consumer a flag-on walk from it reaches ("" when none).
-func scaleP21SW557Reach(t *testing.T, graph *scaleP21SW286Graph) func(string) string {
+func backgroundCOLDContextReach(t *testing.T, graph *storeWrapperBoundaryGraph) func(string) string {
 	t.Helper()
-	inventory := scaleP21SW550Inventory(t)
+	inventory := routeTemperatureGuardInventory(t)
 	isCold := func(key string) bool {
 		review, ok := inventory[graph.inventoryKey(key)]
 		cold := review.Temperature == "cold" && strings.TrimSpace(review.TemperatureReason) != ""
-		return ok && (review.Status == "unmigrated" && cold || review.ColdDispatch != "") || scaleP21SW557StoreNeeds[key]
+		return ok && (review.Status == "unmigrated" && cold || review.ColdDispatch != "") || storeNeeds[key]
 	}
 	out := map[string][]int{}
 	for index, ref := range graph.refs {
@@ -633,7 +633,7 @@ func scaleP21SW557Reach(t *testing.T, graph *scaleP21SW286Graph) func(string) st
 			queue = queue[1:]
 			for _, index := range out[current] {
 				ref := graph.refs[index]
-				if ref.offOnly || ref.kind == "route" || ref.byName || scaleP21SW286Cut(ref) || paths[ref.to] != "" {
+				if ref.offOnly || ref.kind == "route" || ref.byName || storeWrapperBoundaryCut(ref) || paths[ref.to] != "" {
 					continue
 				}
 				paths[ref.to] = paths[current] + " -> " + ref.to
@@ -649,28 +649,28 @@ func scaleP21SW557Reach(t *testing.T, graph *scaleP21SW286Graph) func(string) st
 	}
 }
 
-// scaleP21SW557StoreNeeds are the store's own COLD needs: with bounded
+// storeNeeds are the store's own COLD needs: with bounded
 // metadata on each serves a COLD context (store.coldCapable) the legacy way
 // and refuses, or answers bounded, anything else.
-var scaleP21SW557StoreNeeds = map[string]bool{
+var storeNeeds = map[string]bool{
 	"store/SQLiteStore.dispatchMutation":       true,
 	"store/SQLiteStore.PagedWorkspaceMetadata": true,
 	"store/SQLiteStore.BeginWorkspaceRead":     true,
 	"store/SQLiteStore.UpdateWorkspace":        true,
 }
 
-type scaleP21SW557Finding struct {
+type backgroundCOLDContextFinding struct {
 	key, origin, path string
 }
 
-// scaleP21SW557Check returns every call whose context argument reaches a
+// backgroundColdContextCheck returns every call whose context argument reaches a
 // COLD consumer from a non-COLD origin, and every value reference of a
 // COLD-reaching function that takes a context.
-func scaleP21SW557Check(t *testing.T) (findings []scaleP21SW557Finding, callbacks map[string]string, calls int) {
+func backgroundColdContextCheck(t *testing.T) (findings []backgroundCOLDContextFinding, callbacks map[string]string, calls int) {
 	t.Helper()
-	graph := scaleP21SW286Load(t)
-	reach := scaleP21SW557Reach(t, graph)
-	tracer := &scaleP21SW557Tracer{g: graph, visiting: map[string]bool{}, memo: map[string][]string{}}
+	graph := storeWrapperBoundaryLoad(t)
+	reach := backgroundCOLDContextReach(t, graph)
+	tracer := &backgroundCOLDContextTracer{g: graph, visiting: map[string]bool{}, memo: map[string][]string{}}
 	tracer.indexFields()
 	callbacks = map[string]string{}
 	seen := map[string]bool{}
@@ -703,7 +703,7 @@ func scaleP21SW557Check(t *testing.T) (findings []scaleP21SW557Finding, callback
 				if callee == nil {
 					continue
 				}
-				params := scaleP21SW557ContextParams(callee.decl.Type.Params)
+				params := contextParams(callee.decl.Type.Params)
 				if len(params) == 0 {
 					continue
 				}
@@ -720,7 +720,7 @@ func scaleP21SW557Check(t *testing.T) (findings []scaleP21SW557Finding, callback
 						}
 						return tracer.trace(fn, call.Args[param])
 					}
-				case scaleP21SW286RouteCall(parent) || slices.ContainsFunc(ancestors, scaleP21SW286RouteCall):
+				case storeWrapperBoundaryRouteCall(parent) || slices.ContainsFunc(ancestors, storeWrapperBoundaryRouteCall):
 					continue
 				default:
 					// A function value: passed to a call that invokes it by
@@ -764,7 +764,7 @@ func scaleP21SW557Check(t *testing.T) (findings []scaleP21SW557Finding, callback
 							continue
 						}
 						seen[id+origin] = true
-						findings = append(findings, scaleP21SW557Finding{key: id, origin: origin, path: path})
+						findings = append(findings, backgroundCOLDContextFinding{key: id, origin: origin, path: path})
 					}
 				}
 			}
@@ -775,29 +775,29 @@ func scaleP21SW557Check(t *testing.T) (findings []scaleP21SW557Finding, callback
 	return findings, callbacks, calls
 }
 
-func TestScaleP21SW557BackgroundColdContext(t *testing.T) {
-	findings, callbacks, calls := scaleP21SW557Check(t)
-	t.Logf("SW557: %d calls into COLD-reaching functions checked, %d findings, %d callbacks", calls, len(findings), len(callbacks))
+func TestBackgroundColdContext(t *testing.T) {
+	findings, callbacks, calls := backgroundColdContextCheck(t)
+	t.Logf("%d calls into COLD-reaching functions checked, %d findings, %d callbacks", calls, len(findings), len(callbacks))
 	flagged := map[string]bool{}
 	for _, finding := range findings {
 		flagged[finding.key] = true
-		if scaleP21SW557Reviewed[finding.key] == "" {
-			t.Errorf("SW557 %s\n  origin: %s\n  reaches: %s", finding.key, finding.origin, finding.path)
+		if reviewed[finding.key] == "" {
+			t.Errorf("%s\n  origin: %s\n  reaches: %s", finding.key, finding.origin, finding.path)
 		}
 	}
-	for key := range scaleP21SW557Reviewed {
+	for key := range reviewed {
 		if !flagged[key] {
-			t.Errorf("SW557 stale review %s", key)
+			t.Errorf("stale review %s", key)
 		}
 	}
 	for target, from := range callbacks {
-		if scaleP21SW557Callbacks[target] == "" {
-			t.Errorf("SW557 COLD-reaching function %s is used as a value (%s): name its invoker and context in scaleP21SW557Callbacks", target, from)
+		if backgroundCOLDContextCallbacks[target] == "" {
+			t.Errorf("COLD-reaching function %s is used as a value (%s): name its invoker and context in backgroundCOLDContextCallbacks", target, from)
 		}
 	}
-	for target := range scaleP21SW557Callbacks {
+	for target := range backgroundCOLDContextCallbacks {
 		if callbacks[target] == "" {
-			t.Errorf("SW557 stale callback %s", target)
+			t.Errorf("stale callback %s", target)
 		}
 	}
 }

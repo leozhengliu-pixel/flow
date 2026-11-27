@@ -51,7 +51,7 @@ var hotMutationDispatches = map[string]string{
 // or carry a COLD context. The route and background guards check where those
 // contexts originate. Inspect both HOT handlers and their helpers, including
 // callers that do not use a bootstrap accessor of their own.
-func checkHotMutationDispatches(t *testing.T, graph *scaleP21SW292Graph, inventory map[string]scaleP21SW292Review) {
+func checkHotMutationDispatches(t *testing.T, graph *writeChainBoundaryGraph, inventory map[string]writeChainBoundaryReview) {
 	t.Helper()
 	hot := map[string]bool{}
 	var queue []string
@@ -72,12 +72,12 @@ func checkHotMutationDispatches(t *testing.T, graph *scaleP21SW292Graph, invento
 			continue
 		}
 		if ref.kind == "route" {
-			if scaleP21RouteTemperature[ref.pattern] == "hot" {
+			if scaleRouteTemperature[ref.pattern] == "hot" {
 				add(ref.to)
 			}
 			continue
 		}
-		if _, cut := scaleP21SW286Boundaries[ref.from+"->"+ref.to]; !ref.byName && !cut {
+		if _, cut := storeWrapperBoundaryBoundaries[ref.from+"->"+ref.to]; !ref.byName && !cut {
 			out[ref.from] = append(out[ref.from], ref.to)
 		}
 	}
@@ -111,11 +111,11 @@ func checkHotMutationDispatches(t *testing.T, graph *scaleP21SW292Graph, invento
 			if !ok || call.Fun != path[len(path)-1] || len(call.Args) <= eventArg || graph.offOnly(path) {
 				continue
 			}
-			event := scaleP21SW292Source(graph.fset, call.Args[eventArg])
+			event := writeChainBoundarySource(graph.fset, call.Args[eventArg])
 			site := ref.from + " " + event
 			// Context distinguishes branches that dispatch the same event.
 			if hotMutationDispatches[site] == "" {
-				site += " with " + scaleP21SW292Source(graph.fset, call.Args[0])
+				site += " with " + writeChainBoundarySource(graph.fset, call.Args[0])
 			}
 			if hotMutationDispatches[site] == "" || seen[site] {
 				t.Errorf("HOT generic mutation requires review: %s at %s:%d", site, ref.file, ref.line)

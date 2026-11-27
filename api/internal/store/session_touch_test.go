@@ -20,46 +20,46 @@ import (
 )
 
 // Count statements at the driver, including UPDATEs that match no rows.
-type scaleP02SQL struct {
+type scaleSQL struct {
 	selects, updates, affected               atomic.Int64
 	failTouch, failSessionRead, failUserRead atomic.Bool
 	beforeTouch                              func()
 }
 
-type scaleP02Connector struct {
+type sessionTouchScaleConnector struct {
 	driver driver.Driver
 	dsn    string
-	stats  *scaleP02SQL
+	stats  *scaleSQL
 }
 
-func (c scaleP02Connector) Driver() driver.Driver { return c.driver }
+func (c sessionTouchScaleConnector) Driver() driver.Driver { return c.driver }
 
-func (c scaleP02Connector) Connect(context.Context) (driver.Conn, error) {
+func (c sessionTouchScaleConnector) Connect(context.Context) (driver.Conn, error) {
 	conn, err := c.driver.Open(c.dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &scaleP02Conn{Conn: conn, stats: c.stats}, nil
+	return &sessionTouchScaleConn{Conn: conn, stats: c.stats}, nil
 }
 
-type scaleP02Conn struct {
+type sessionTouchScaleConn struct {
 	driver.Conn
-	stats *scaleP02SQL
+	stats *scaleSQL
 }
 
-var errScaleP02AuthRead = errors.New("injected authentication read failure")
+var errScaleAuthRead = errors.New("injected authentication read failure")
 
-func (c *scaleP02Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *sessionTouchScaleConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if strings.HasPrefix(query, "SELECT ") {
 		c.stats.selects.Add(1)
 	}
 	if c.stats.failSessionRead.Load() && strings.Contains(query, "FROM auth_sessions") || c.stats.failUserRead.Load() && strings.Contains(query, "FROM auth_users") {
-		return nil, errScaleP02AuthRead
+		return nil, errScaleAuthRead
 	}
 	return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
 }
 
-func (c *scaleP02Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (c *sessionTouchScaleConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	touch := strings.HasPrefix(query, "UPDATE auth_sessions SET last_seen_at=")
 	if touch {
 		c.stats.updates.Add(1)
@@ -78,12 +78,12 @@ func (c *scaleP02Conn) ExecContext(ctx context.Context, query string, args []dri
 	return result, err
 }
 
-func scaleP02Store(t *testing.T) (*SQLiteStore, *scaleP02SQL) {
+func sessionTouchScaleStore(t *testing.T) (*SQLiteStore, *scaleSQL) {
 	t.Helper()
-	return scaleP02StoreAt(t, scaleP02Config(t))
+	return scaleStoreAt(t, scaleConfig(t))
 }
 
-func scaleP02Config(t *testing.T) DatabaseConfig {
+func scaleConfig(t *testing.T) DatabaseConfig {
 	t.Helper()
 	config := DatabaseConfig{Driver: "sqlite", Path: filepath.Join(t.TempDir(), "sessions.db"), MaxOpenConns: 1}
 	databaseDriver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
@@ -102,7 +102,7 @@ func scaleP02Config(t *testing.T) DatabaseConfig {
 	return config
 }
 
-func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP02SQL) {
+func scaleStoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleSQL) {
 	t.Helper()
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	repo, err := OpenDatabase(config)
@@ -120,8 +120,8 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 		}
 	}
 	base := repo.db.DB
-	stats := &scaleP02SQL{}
-	repo.db.DB = sql.OpenDB(scaleP02Connector{driver: base.Driver(), dsn: dsn, stats: stats})
+	stats := &scaleSQL{}
+	repo.db.DB = sql.OpenDB(sessionTouchScaleConnector{driver: base.Driver(), dsn: dsn, stats: stats})
 	repo.db.SetMaxOpenConns(config.MaxOpenConns)
 	repo.db.SetMaxIdleConns(1)
 	t.Cleanup(func() {
@@ -143,7 +143,7 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 	return repo, stats
 }
 
-func scaleP02User(t *testing.T, repo *SQLiteStore) domain.User {
+func scaleUser(t *testing.T, repo *SQLiteStore) domain.User {
 	t.Helper()
 	user, verification, err := repo.Register(t.Context(), "P02 session user", idgen.New("scale-p02-store-")+"@example.test", "test-password")
 	if err != nil {
@@ -163,14 +163,14 @@ func scaleP02User(t *testing.T, repo *SQLiteStore) domain.User {
 	return user
 }
 
-func TestScaleP02SQLCounterPreservesPoolCapacity(t *testing.T) {
-	config := scaleP02Config(t)
+func TestScaleSQLCounterPreservesPoolCapacity(t *testing.T) {
+	config := scaleConfig(t)
 	if config.Driver == "sqlite" {
 		config.MaxOpenConns = 4
 	} else if config.MaxOpenConns < 2 {
 		t.Fatal("external fixture needs a connection outside an open audit transaction")
 	}
-	repo, _ := scaleP02StoreAt(t, config)
+	repo, _ := scaleStoreAt(t, config)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	tx, err := repo.db.BeginTx(ctx, nil)
@@ -184,11 +184,11 @@ func TestScaleP02SQLCounterPreservesPoolCapacity(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchMeasurement(t *testing.T) {
+func TestScaleSessionTouchMeasurement(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-	repo, stats := scaleP02Store(t)
+	repo, stats := sessionTouchScaleStore(t)
 	ctx := t.Context()
-	user := scaleP02User(t, repo)
+	user := scaleUser(t, repo)
 	_, token, err := repo.createSession(ctx, user)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func TestScaleP02SessionTouchMeasurement(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchInterval(t *testing.T) {
+func TestScaleSessionTouchInterval(t *testing.T) {
 	for _, item := range []struct {
 		value string
 		want  time.Duration
@@ -227,7 +227,7 @@ func TestScaleP02SessionTouchInterval(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchBoundaries(t *testing.T) {
+func TestScaleSessionTouchBoundaries(t *testing.T) {
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	for _, item := range []struct {
 		name, raw string
@@ -254,12 +254,12 @@ func TestScaleP02SessionTouchBoundaries(t *testing.T) {
 	}
 }
 
-func scaleP02Session(t *testing.T, repo *SQLiteStore) string {
+func scaleSession(t *testing.T, repo *SQLiteStore) string {
 	t.Helper()
-	return scaleP02SessionFor(t, repo, scaleP02User(t, repo))
+	return scaleSessionFor(t, repo, scaleUser(t, repo))
 }
 
-func scaleP02SessionFor(t *testing.T, repo *SQLiteStore, user domain.User) string {
+func scaleSessionFor(t *testing.T, repo *SQLiteStore, user domain.User) string {
 	t.Helper()
 	_, token, err := repo.createSession(t.Context(), user)
 	if err != nil {
@@ -269,7 +269,7 @@ func scaleP02SessionFor(t *testing.T, repo *SQLiteStore, user domain.User) strin
 	return token
 }
 
-func scaleP02Seen(t *testing.T, repo *SQLiteStore, token string) string {
+func scaleSeen(t *testing.T, repo *SQLiteStore, token string) string {
 	t.Helper()
 	var raw string
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT last_seen_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&raw); err != nil {
@@ -278,37 +278,37 @@ func scaleP02Seen(t *testing.T, repo *SQLiteStore, token string) string {
 	return raw
 }
 
-func scaleP02SetSeen(t *testing.T, repo *SQLiteStore, token, raw string) {
+func scaleSetSeen(t *testing.T, repo *SQLiteStore, token, raw string) {
 	t.Helper()
 	if _, err := repo.db.ExecContext(t.Context(), `UPDATE auth_sessions SET last_seen_at=? WHERE token_hash=?`, raw, tokenHash(token)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestScaleP02SessionTouchWritesAndFailures(t *testing.T) {
+func TestScaleSessionTouchWritesAndFailures(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-	repo, stats := scaleP02Store(t)
-	token := scaleP02Session(t, repo)
+	repo, stats := sessionTouchScaleStore(t)
+	token := scaleSession(t, repo)
 	user, err := repo.AuthenticateSession(t.Context(), token)
 	if err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
 	for _, raw := range []string{old, "invalid", ""} {
-		scaleP02SetSeen(t, repo, token, raw)
+		scaleSetSeen(t, repo, token, raw)
 		before := stats.updates.Load()
 		stats.failTouch.Store(true)
 		if got, err := repo.AuthenticateSession(t.Context(), token); err != nil || !reflect.DeepEqual(got, user) {
 			t.Fatalf("touch failure changed authentication: user=%s error=%v", got.ID, err)
 		}
-		if seen := scaleP02Seen(t, repo, token); seen != raw {
+		if seen := scaleSeen(t, repo, token); seen != raw {
 			t.Fatal("failed write changed the timestamp")
 		}
 		stats.failTouch.Store(false)
 		if _, err := repo.AuthenticateSession(t.Context(), token); err != nil {
 			t.Fatal(err)
 		}
-		seen := scaleP02Seen(t, repo, token)
+		seen := scaleSeen(t, repo, token)
 		parsed, err := time.Parse(time.RFC3339Nano, seen)
 		if err != nil || time.Since(parsed) > time.Second {
 			t.Fatalf("retry did not refresh activity: %q, %v", seen, err)
@@ -316,7 +316,7 @@ func TestScaleP02SessionTouchWritesAndFailures(t *testing.T) {
 		if _, err := repo.AuthenticateSession(t.Context(), token); err != nil {
 			t.Fatal(err)
 		}
-		if updates := stats.updates.Load() - before; updates != 2 || scaleP02Seen(t, repo, token) != seen {
+		if updates := stats.updates.Load() - before; updates != 2 || scaleSeen(t, repo, token) != seen {
 			t.Fatalf("write failure/retry/fresh request attempted %d UPDATEs, want 2", updates)
 		}
 	}
@@ -332,16 +332,16 @@ func TestScaleP02SessionTouchWritesAndFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
+func TestScaleSessionAuthenticationStaysLive(t *testing.T) {
 	for _, mode := range []string{"0", ""} {
 		t.Run("interval="+mode, func(t *testing.T) {
 			t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", mode)
-			repo, stats := scaleP02Store(t)
+			repo, stats := sessionTouchScaleStore(t)
 			ctx := t.Context()
-			user := scaleP02User(t, repo)
+			user := scaleUser(t, repo)
 			for _, action := range []string{"password-change", "logout", "revoke", "revoke-others", "reset-password", "expired", "malformed-expiry", "duration", "inactive", "profile-change", "missing", "session-read-error", "user-read-error"} {
 				t.Run(action, func(t *testing.T) {
-					token := scaleP02SessionFor(t, repo, user)
+					token := scaleSessionFor(t, repo, user)
 					if _, err := repo.AuthenticateSession(ctx, token); err != nil {
 						t.Fatal(err)
 					}
@@ -360,12 +360,12 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 							t.Fatal(err)
 						}
 					case "revoke":
-						current := scaleP02SessionFor(t, repo, user)
+						current := scaleSessionFor(t, repo, user)
 						if err := repo.RevokeSession(ctx, user.ID, tokenHash(token)[:12], current); err != nil {
 							t.Fatal(err)
 						}
 					case "revoke-others":
-						current := scaleP02SessionFor(t, repo, user)
+						current := scaleSessionFor(t, repo, user)
 						if err := repo.RevokeOtherSessions(ctx, user.ID, current); err != nil {
 							t.Fatal(err)
 						}
@@ -416,11 +416,11 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 						}
 						return
 					case "session-read-error":
-						want = errScaleP02AuthRead
+						want = errScaleAuthRead
 						stats.failSessionRead.Store(true)
 						t.Cleanup(func() { stats.failSessionRead.Store(false) })
 					case "user-read-error":
-						want = errScaleP02AuthRead
+						want = errScaleAuthRead
 						stats.failUserRead.Store(true)
 						t.Cleanup(func() { stats.failUserRead.Store(false) })
 					}
@@ -437,18 +437,18 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchReplicaCAS(t *testing.T) {
+func TestScaleSessionTouchReplicaCAS(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-	config := scaleP02Config(t)
-	first, firstSQL := scaleP02StoreAt(t, config)
-	second, secondSQL := scaleP02StoreAt(t, config)
-	token := scaleP02Session(t, first)
-	scaleP02SetSeen(t, first, token, time.Now().Add(-2*time.Minute).UTC().Format(time.RFC3339Nano))
+	config := scaleConfig(t)
+	first, firstSQL := scaleStoreAt(t, config)
+	second, secondSQL := scaleStoreAt(t, config)
+	token := scaleSession(t, first)
+	scaleSetSeen(t, first, token, time.Now().Add(-2*time.Minute).UTC().Format(time.RFC3339Nano))
 	ready, release := make(chan struct{}, 2), make(chan struct{})
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
 	defer unblock()
-	for _, stats := range []*scaleP02SQL{firstSQL, secondSQL} {
+	for _, stats := range []*scaleSQL{firstSQL, secondSQL} {
 		stats.updates.Store(0)
 		stats.affected.Store(0)
 		stats.beforeTouch = func() { ready <- struct{}{}; <-release }
@@ -475,21 +475,21 @@ func TestScaleP02SessionTouchReplicaCAS(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchLegacyReplicaAndDeletion(t *testing.T) {
+func TestScaleSessionTouchLegacyReplicaAndDeletion(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-	repo, stats := scaleP02Store(t)
-	token := scaleP02Session(t, repo)
+	repo, stats := sessionTouchScaleStore(t)
+	token := scaleSession(t, repo)
 	old := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
-	scaleP02SetSeen(t, repo, token, old)
+	scaleSetSeen(t, repo, token, old)
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "0")
 	if _, err := repo.AuthenticateSession(t.Context(), token); err != nil {
 		t.Fatal(err)
 	}
-	fresh := scaleP02Seen(t, repo, token)
+	fresh := scaleSeen(t, repo, token)
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
 	before := stats.affected.Load()
 	repo.touchSession(t.Context(), tokenHash(token), old, time.Now().UTC())
-	if stats.affected.Load() != before || scaleP02Seen(t, repo, token) != fresh {
+	if stats.affected.Load() != before || scaleSeen(t, repo, token) != fresh {
 		t.Fatal("CAS overwrote a legacy replica's newer touch")
 	}
 	if err := repo.Logout(t.Context(), token); err != nil {
@@ -504,11 +504,11 @@ func TestScaleP02SessionTouchLegacyReplicaAndDeletion(t *testing.T) {
 	}
 }
 
-func TestScaleP02SessionTouchSustainedWriteRate(t *testing.T) {
+func TestScaleSessionTouchSustainedWriteRate(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
-	repo, stats := scaleP02Store(t)
+	repo, stats := sessionTouchScaleStore(t)
 	ctx := t.Context()
-	user := scaleP02User(t, repo)
+	user := scaleUser(t, repo)
 	base := time.Now().UTC()
 	const sessions, seconds = 2000, 120
 	hashes := make([]string, sessions)

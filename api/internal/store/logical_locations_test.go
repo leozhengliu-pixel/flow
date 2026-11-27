@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW29LogicalJSONOffsetLocations(t *testing.T) {
+func TestLogicalJSONOffsetLocations(t *testing.T) {
 	ctx := t.Context()
 	var connections []domain.IntegrationConnection
 	if err := json.Unmarshal([]byte(`[{"id":"offset-a","createdAt":"2026-11-13T01:02:03.000000004+05:30","updatedAt":"2026-11-13T01:02:03.000000004+05:30"},{"id":"offset-b","createdAt":"2026-11-13T01:02:03.000000004-03:30","updatedAt":"2026-11-13T01:02:03.000000004+00:45"}]`), &connections); err != nil {
@@ -66,20 +66,20 @@ func TestScaleP21SW29LogicalJSONOffsetLocations(t *testing.T) {
 	}
 }
 
-type scaleP21SW29CustomTimestamp struct{ At time.Time }
+type customTimestamp struct{ At time.Time }
 
-func (value *scaleP21SW29CustomTimestamp) UnmarshalJSON([]byte) error {
+func (value *customTimestamp) UnmarshalJSON([]byte) error {
 	value.At = time.Date(2026, 11, 13, 1, 2, 3, 0, time.FixedZone("private producer", 19800))
 	return nil
 }
 
-func TestScaleP21SW29LogicalCustomDecoderNotAudited(t *testing.T) {
+func TestLogicalCustomDecoderNotAudited(t *testing.T) {
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer builder.Close()
-	var custom scaleP21SW29CustomTimestamp
+	var custom customTimestamp
 	if err := json.Unmarshal([]byte(`{}`), &custom); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestScaleP21SW29LogicalCustomDecoderNotAudited(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW29LogicalJSONLocationsUseProcessBudget(t *testing.T) {
+func TestLogicalJSONLocationsUseProcessBudget(t *testing.T) {
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	builder, err := newMetadataLogicalBuilder(t.Context())
 	if err != nil {

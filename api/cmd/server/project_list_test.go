@@ -17,23 +17,23 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW87ProjectListWriter struct {
+type projectListWriter struct {
 	*httptest.ResponseRecorder
 	source *store.SQLiteStore
 	held   int
 }
 
-func (w *scaleP21SW87ProjectListWriter) Write(raw []byte) (int, error) {
+func (w *projectListWriter) Write(raw []byte) (int, error) {
 	w.held = w.source.MetadataWorkUsedForTesting()
 	return w.ResponseRecorder.Write(raw)
 }
 
-func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
+func TestProjectListDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw87-list-")
 		project, customer, label := prefix+"project", prefix+"customer", prefix+"label"
 		at := time.Date(2026, 11, 1, 12, 0, 0, 123, time.FixedZone("list-source", 3600))
@@ -141,13 +141,13 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 			t.Helper()
 			for _, test := range cases {
 				t.Run(test.name, func(t *testing.T) {
-					var outputs []*scaleP21SW87ProjectListWriter
+					var outputs []*projectListWriter
 					for _, source := range []*store.SQLiteStore{repo, f.probe} {
 						service := &server{store: source}
 						r := f.literalRequest(user, key, nil)
 						r.Method, r.URL.Path, r.URL.RawQuery = http.MethodGet, "/api/projects", test.values.Encode()
-						output := &scaleP21SW87ProjectListWriter{ResponseRecorder: httptest.NewRecorder(), source: source}
-						scaleP21CallWithOutputOwner(service, output, r, func(s *server, w http.ResponseWriter, r *http.Request) {
+						output := &projectListWriter{ResponseRecorder: httptest.NewRecorder(), source: source}
+						scaleCallWithOutputOwner(service, output, r, func(s *server, w http.ResponseWriter, r *http.Request) {
 							s.listProjectRecords(w, r)
 						})
 						outputs = append(outputs, output)
@@ -160,7 +160,7 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 					}
 					want, got := outputs[0], outputs[1]
 					if want.Code != got.Code || want.Header().Get("Content-Type") != got.Header().Get("Content-Type") ||
-						!reflect.DeepEqual(scaleP21M2JSON(t, json.RawMessage(want.Body.Bytes()), false), scaleP21M2JSON(t, json.RawMessage(got.Body.Bytes()), false)) {
+						!reflect.DeepEqual(normalizePolicyJSON(t, json.RawMessage(want.Body.Bytes()), false), normalizePolicyJSON(t, json.RawMessage(got.Body.Bytes()), false)) {
 						t.Fatalf("project list changed: status=%d/%d\nold=%s\nbounded=%s", want.Code, got.Code, want.Body, got.Body)
 					}
 				})
@@ -200,7 +200,7 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 			{name: "development-default", key: application, develop: true},
 		} {
 			t.Run(edge.name, func(t *testing.T) {
-				var outputs []*scaleP21SW87ProjectListWriter
+				var outputs []*projectListWriter
 				for _, source := range []*store.SQLiteStore{repo, f.probe} {
 					service := &server{store: source, authDisabled: edge.develop}
 					r := f.literalRequest(f.data.Viewer, edge.key, nil)
@@ -226,8 +226,8 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 						cancel()
 						r = r.WithContext(ctx)
 					}
-					output := &scaleP21SW87ProjectListWriter{ResponseRecorder: httptest.NewRecorder(), source: source}
-					scaleP21CallWithOutputOwner(service, output, r, func(s *server, w http.ResponseWriter, r *http.Request) {
+					output := &projectListWriter{ResponseRecorder: httptest.NewRecorder(), source: source}
+					scaleCallWithOutputOwner(service, output, r, func(s *server, w http.ResponseWriter, r *http.Request) {
 						s.listProjectRecords(w, r)
 					})
 					outputs = append(outputs, output)
@@ -243,7 +243,7 @@ func TestScaleP21SW87ProjectListDifferential(t *testing.T) {
 				}
 				want, got := outputs[0], outputs[1]
 				if want.Code != got.Code || !reflect.DeepEqual(want.Header(), got.Header()) ||
-					!reflect.DeepEqual(scaleP21M2JSON(t, json.RawMessage(want.Body.Bytes()), false), scaleP21M2JSON(t, json.RawMessage(got.Body.Bytes()), false)) {
+					!reflect.DeepEqual(normalizePolicyJSON(t, json.RawMessage(want.Body.Bytes()), false), normalizePolicyJSON(t, json.RawMessage(got.Body.Bytes()), false)) {
 					t.Fatalf("project list edge changed: status=%d/%d\nold=%s\nbounded=%s", want.Code, got.Code, want.Body, got.Body)
 				}
 			})

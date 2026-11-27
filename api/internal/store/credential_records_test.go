@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func sw17LegacyCredential(t *testing.T, kind string, raw []byte) (reflect.Value, error) {
+func legacyCredential(t *testing.T, kind string, raw []byte) (reflect.Value, error) {
 	t.Helper()
-	recordType, err := sw17CredentialType(kind)
+	recordType, err := credentialType(kind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func sw17LegacyCredential(t *testing.T, kind string, raw []byte) (reflect.Value,
 	return value.Elem(), err
 }
 
-func TestScaleP21SW17CredentialTypedDifferential(t *testing.T) {
+func TestCredentialTypedDifferential(t *testing.T) {
 	for kind, fixtures := range map[string][]string{
 		"oauthApplications": {
 			`null`,
@@ -49,13 +49,13 @@ func TestScaleP21SW17CredentialTypedDifferential(t *testing.T) {
 		for index, fixture := range fixtures {
 			t.Run(fmt.Sprintf("%s/%d", kind, index), func(t *testing.T) {
 				raw := []byte(fixture)
-				want, oldErr := sw17LegacyCredential(t, kind, raw)
+				want, oldErr := legacyCredential(t, kind, raw)
 				recordType := want.Type()
-				cost, err := sw17CredentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+				cost, err := credentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 				if err != nil {
 					t.Fatal("preflight failed on small typed fixture", err)
 				}
-				got, newErr := sw17DecodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+				got, newErr := decodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 				if (oldErr == nil) != (newErr == nil) {
 					t.Fatal("typed error behavior changed", oldErr, newErr)
 				}
@@ -66,7 +66,7 @@ func TestScaleP21SW17CredentialTypedDifferential(t *testing.T) {
 						t.Fatalf("typed fields changed: old=%s new=%s", left, right)
 					}
 				}
-				if cost < sw17CredentialFixedWork {
+				if cost < credentialFixedWork {
 					t.Fatal("preflight lost fixed parser/encoder admission")
 				}
 			})
@@ -74,11 +74,11 @@ func TestScaleP21SW17CredentialTypedDifferential(t *testing.T) {
 	}
 	raw := []byte(`{"id":"short","future":{"ignored":"` + strings.Repeat("x", 3<<20) + `"}}`)
 	recordType := reflect.TypeFor[domain.OAuthApplication]()
-	cost, err := sw17CredentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+	cost, err := credentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 	if err != nil || cost >= 1<<20 {
 		t.Fatal("unknown future body entered typed admission", cost, err)
 	}
-	value, err := sw17DecodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+	value, err := decodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 	if err != nil || value.Interface().(domain.OAuthApplication).ID != "short" {
 		t.Fatal("unknown future body changed typed output", err)
 	}
@@ -94,18 +94,18 @@ func TestScaleP21SW17CredentialTypedDifferential(t *testing.T) {
 		{`{"id":"long-unrelated"}`, "", false},
 		{`{"ID":"final"}`, "final\x00", false},
 	} {
-		got, err := source.sw17CredentialIDMatches(t.Context(), bytes.NewReader([]byte(fixture.raw)), int64(len(fixture.raw)), fixture.ref)
+		got, err := source.credentialIDMatches(t.Context(), bytes.NewReader([]byte(fixture.raw)), int64(len(fixture.raw)), fixture.ref)
 		if err != nil || got != fixture.want {
 			t.Fatal("typed ID precedence/null/exact matching changed", fixture.raw, fixture.ref, got, err)
 		}
 	}
 }
 
-func TestScaleP21SW17CredentialInline(t *testing.T) {
+func TestCredentialInline(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -152,16 +152,16 @@ func TestScaleP21SW17CredentialInline(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CredentialEscapingAdmission(t *testing.T) {
+func TestCredentialEscapingAdmission(t *testing.T) {
 	// Raw stored JSON need not have come from json.Marshal: HTML bytes may
 	// expand sixfold when a callback encodes the typed value.
 	raw := []byte(`{"id":"escaped","description":"` + strings.Repeat("<>&", 1<<20) + "\u2028\u2029" + `","scopes":null}`)
 	recordType := reflect.TypeFor[domain.OAuthApplication]()
-	cost, err := sw17CredentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+	cost, err := credentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := sw17LegacyCredential(t, "oauthApplications", raw)
+	want, err := legacyCredential(t, "oauthApplications", raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestScaleP21SW17CredentialEscapingAdmission(t *testing.T) {
 	if cost < len(encoded)*3 || cost >= metadataWorkBytes() {
 		t.Fatal("preflight lost encoded growth/copy allowance", cost, len(encoded))
 	}
-	got, err := sw17DecodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+	got, err := decodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,17 +183,17 @@ func TestScaleP21SW17CredentialEscapingAdmission(t *testing.T) {
 	t.Logf("literal HTML encoded-input=%d encoded-output=%d admitted=%d", len(raw), len(encoded), cost)
 }
 
-func TestScaleP21SW17CredentialCanonicalVisitor(t *testing.T) {
+func TestCredentialCanonicalVisitor(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixtures := sw17CredentialFixtures(t)
+	fixtures := credentialFixtures(t)
 	var app domain.OAuthApplication
 	var key domain.APIKey
 	var connection domain.IntegrationConnection
@@ -227,7 +227,7 @@ func TestScaleP21SW17CredentialCanonicalVisitor(t *testing.T) {
 		var got []json.RawMessage
 		shape, err := probe.VisitCanonicalCredentialSettings(t.Context(), workspace, kind, nil, func(ctx context.Context, data domain.Bootstrap) error {
 			lease, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease)
-			if !ok || !lease.live || lease.bytes < sw17CredentialFixedWork {
+			if !ok || !lease.live || lease.bytes < credentialFixedWork {
 				t.Fatal("typed callback lost its work lease")
 			}
 			var value any
@@ -312,19 +312,19 @@ func TestScaleP21SW17CredentialCanonicalVisitor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17CredentialNativeMeasurement(t *testing.T) {
-	for kind, raw := range sw17CredentialFixtures(t) {
+func TestCredentialNativeMeasurement(t *testing.T) {
+	for kind, raw := range credentialFixtures(t) {
 		t.Run(kind, func(t *testing.T) {
-			recordType, err := sw17CredentialType(kind)
+			recordType, err := credentialType(kind)
 			if err != nil {
 				t.Fatal(err)
 			}
-			charged, err := sw17CredentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+			charged, err := credentialPreflight(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 			if err != nil {
 				t.Fatal(err)
 			}
 			run := func() {
-				value, err := sw17DecodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
+				value, err := decodeCredential(t.Context(), bytes.NewReader(raw), int64(len(raw)), recordType)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -345,7 +345,7 @@ func TestScaleP21SW17CredentialNativeMeasurement(t *testing.T) {
 	}
 }
 
-func sw17CredentialFixtures(t *testing.T) map[string][]byte {
+func credentialFixtures(t *testing.T) map[string][]byte {
 	t.Helper()
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	app := domain.OAuthApplication{
@@ -373,8 +373,8 @@ func sw17CredentialFixtures(t *testing.T) map[string][]byte {
 
 // Keep these family-specific fixtures unchanged for the native comparison.
 // This measures decode/encode allocations, not retained heap or capacity.
-func TestScaleP21SW17CredentialRecordBaseline(t *testing.T) {
-	for kind, raw := range sw17CredentialFixtures(t) {
+func TestCredentialRecordBaseline(t *testing.T) {
+	for kind, raw := range credentialFixtures(t) {
 		t.Run(kind, func(t *testing.T) {
 			run := func() {
 				var value any

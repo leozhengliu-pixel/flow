@@ -19,13 +19,13 @@ import (
 // These tests exercise migrated handler boundaries on a policy-only store.
 // The remaining HTTP authorization adapter stays separately registered as a
 // blocker; this fixture must not bypass the production activation guard.
-func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
+func TestScaleScopedAccessorWorkedExamples(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	enableConnectorSecrets(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		public, private, child := idgen.New("p21-public-"), idgen.New("p21-private-"), idgen.New("p21-child-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
@@ -51,7 +51,7 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 			{"admin", "admin", []string{private}}, {"member-private-outsider", "member", []string{public}},
 			{"guest-explicit", "guest", []string{public}}, {"sub-team-inheritance", "member", []string{private}},
 		} {
-			_, user := scaleP03Join(t, f, spec.name, idgen.New("p21-example-")+"@example.test", spec.role, spec.teams...)
+			_, user := resourceAccessScaleJoin(t, f, spec.name, idgen.New("p21-example-")+"@example.test", spec.role, spec.teams...)
 			principals = append(principals, struct {
 				name string
 				user domain.User
@@ -140,7 +140,7 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 						b := request(principal.user, credential.key, operation.method, operation.path, operation.body)
 						b.SetPathValue("id", "p21-missing")
 						after := call(bounded, b, operation.handler)
-						if before.Code != after.Code || !reflect.DeepEqual(scaleP21ExampleJSON(t, before.Body.Bytes()), scaleP21ExampleJSON(t, after.Body.Bytes())) {
+						if before.Code != after.Code || !reflect.DeepEqual(scaleExampleJSON(t, before.Body.Bytes()), scaleExampleJSON(t, after.Body.Bytes())) {
 							t.Fatalf("%s %s changed: status=%d/%d body=%s/%s", operation.method, operation.path, before.Code, after.Code, before.Body.Bytes(), after.Body.Bytes())
 						}
 					}
@@ -243,7 +243,7 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 	}
 }
 
-func scaleP21ExampleJSON(t *testing.T, raw []byte) any {
+func scaleExampleJSON(t *testing.T, raw []byte) any {
 	t.Helper()
 	if len(raw) == 0 {
 		return nil

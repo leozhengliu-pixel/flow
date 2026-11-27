@@ -22,7 +22,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW125Writer struct {
+type accountRoutesWriter struct {
 	*httptest.ResponseRecorder
 	t                         *testing.T
 	source                    *store.SQLiteStore
@@ -31,7 +31,7 @@ type scaleP21SW125Writer struct {
 	prepares, headers, writes int
 }
 
-func (w *scaleP21SW125Writer) sample() {
+func (w *accountRoutesWriter) sample() {
 	work := w.source.MetadataWorkUsedForTesting()
 	w.held = max(w.held, work)
 	if w.source.BoundedMetadataEnabled() && (work == 0 || w.scope == nil || w.scope.closed) {
@@ -39,33 +39,33 @@ func (w *scaleP21SW125Writer) sample() {
 	}
 }
 
-func (w *scaleP21SW125Writer) prepareJSONOutput(any) error {
+func (w *accountRoutesWriter) prepareJSONOutput(any) error {
 	w.sample()
 	w.prepares++
 	return nil
 }
 
-func (w *scaleP21SW125Writer) WriteHeader(code int) {
+func (w *accountRoutesWriter) WriteHeader(code int) {
 	w.sample()
 	w.headers++
 	w.ResponseRecorder.WriteHeader(code)
 }
 
-func (w *scaleP21SW125Writer) Write(body []byte) (int, error) {
+func (w *accountRoutesWriter) Write(body []byte) (int, error) {
 	w.sample()
 	w.writes++
 	return w.ResponseRecorder.Write(body)
 }
 
-func scaleP21SW125Fixture(t *testing.T) (*store.SQLiteStore, store.DatabaseConfig, []string) {
+func accountRoutesFixture(t *testing.T) (*store.SQLiteStore, store.DatabaseConfig, []string) {
 	t.Helper()
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	repo, err := store.OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	resources := scaleP03TrackResources(t, repo)
+	resources := platformDatabaseFixtureScaleTrackResources(t, repo)
 	owner, token, err := repo.Register(t.Context(), "SW125 isolated owner", idgen.New("sw125-person-")+"@example.test", "sw125-owned-password")
 	if err != nil {
 		t.Fatal(err)
@@ -116,13 +116,13 @@ func scaleP21SW125Fixture(t *testing.T) (*store.SQLiteStore, store.DatabaseConfi
 	return repo, config, keys
 }
 
-type scaleP21SW125Result struct {
+type accountRoutesResult struct {
 	Code   int
 	Header http.Header
 	Body   []byte
 }
 
-func scaleP21SW125Serve(t *testing.T, source *store.SQLiteStore, path string, configured *server, outer bool) scaleP21SW125Result {
+func accountRoutesServe(t *testing.T, source *store.SQLiteStore, path string, configured *server, outer bool) accountRoutesResult {
 	t.Helper()
 	service := &server{
 		store: source, authDisabled: true,
@@ -137,7 +137,7 @@ func scaleP21SW125Serve(t *testing.T, source *store.SQLiteStore, path string, co
 	}
 	defer release()
 	beforeWork, beforeDecodes := source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes()
-	writer := &scaleP21SW125Writer{ResponseRecorder: httptest.NewRecorder(), t: t, source: source}
+	writer := &accountRoutesWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source}
 	scopeReleased, registered := false, false
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/auth/session", service.authSession)
@@ -200,13 +200,13 @@ func scaleP21SW125Serve(t *testing.T, source *store.SQLiteStore, path string, co
 		}
 		body = bytes.Replace(body, field, []byte(`"expiresAt":"sw125-generated"`), 1)
 	}
-	return scaleP21SW125Result{Code: writer.Code, Header: writer.Header().Clone(), Body: body}
+	return accountRoutesResult{Code: writer.Code, Header: writer.Header().Clone(), Body: body}
 }
 
-func TestScaleP21SW125AccountRoutesDifferential(t *testing.T) {
+func TestAccountRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, config, keys := scaleP21SW125Fixture(t)
+	repo, config, keys := accountRoutesFixture(t)
 	pairs := 0
 	for _, phase := range []struct {
 		name, hydration string
@@ -245,8 +245,8 @@ func TestScaleP21SW125AccountRoutesDifferential(t *testing.T) {
 			for _, outer := range []bool{false, true} {
 				for _, path := range []string{"/api/auth/session", "/api/account/bootstrap"} {
 					t.Run(fmt.Sprintf("%s/%s/outer=%t%s", phase.name, settings.name, outer, path), func(t *testing.T) {
-						old := scaleP21SW125Serve(t, literal, path, service, outer)
-						bounded := scaleP21SW125Serve(t, view, path, service, outer)
+						old := accountRoutesServe(t, literal, path, service, outer)
+						bounded := accountRoutesServe(t, view, path, service, outer)
 						if old.Code != bounded.Code || !reflect.DeepEqual(old.Header, bounded.Header) || !bytes.Equal(old.Body, bounded.Body) {
 							t.Fatalf("development account output differs: status=%d/%d headers=%v/%v\nold=%s\nbounded=%s",
 								old.Code, bounded.Code, old.Header, bounded.Header, old.Body, bounded.Body)
@@ -287,10 +287,10 @@ func TestScaleP21SW125AccountRoutesDifferential(t *testing.T) {
 	t.Logf("driver=%s exact actual-handler account pairs=%d; complete installed catalog; normalized only generated AuthSession.ExpiresAt", config.Driver, pairs)
 }
 
-func TestScaleP21SW125AccountNativeIconProducerWitness(t *testing.T) {
+func TestAccountNativeIconProducerWitness(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, _, keys := scaleP21SW125Fixture(t)
+	repo, _, keys := accountRoutesFixture(t)
 	service := &server{store: repo, authDisabled: true}
 	request := httptest.NewRequest(http.MethodPatch, "/api/workspaces/"+keys[0], strings.NewReader(`{"icon":"native\u0000icon"}`))
 	request.SetPathValue("workspaceKey", keys[0])
@@ -330,20 +330,20 @@ func TestScaleP21SW125AccountNativeIconProducerWitness(t *testing.T) {
 	if got := find(view.Account()).Icon; got != nativeIcon {
 		t.Fatalf("warm all-workspace test view changed the internal producer's installed icon: literal=%q bounded-policy=%q", nativeIcon, got)
 	}
-	old := scaleP21SW125Serve(t, repo, "/api/account/bootstrap", service, false)
-	bounded := scaleP21SW125Serve(t, view, "/api/account/bootstrap", service, false)
+	old := accountRoutesServe(t, repo, "/api/account/bootstrap", service, false)
+	bounded := accountRoutesServe(t, view, "/api/account/bootstrap", service, false)
 	if !reflect.DeepEqual(old, bounded) {
 		t.Fatalf("native icon account route differs:\nold=%s\nbounded=%s", old.Body, bounded.Body)
 	}
 }
 
-type scaleP21SW125AccountCall struct {
+type accountCall struct {
 	function string
 	safe     bool
 	direct   bool
 }
 
-func scaleP21SW125Store(expr ast.Expr) string {
+func accountRoutesStore(expr ast.Expr) string {
 	if receiver, ok := expr.(*ast.Ident); ok && receiver.Name == "s" {
 		return "s"
 	}
@@ -358,22 +358,22 @@ func scaleP21SW125Store(expr ast.Expr) string {
 	return ""
 }
 
-func scaleP21SW125Flag(expr ast.Expr, receiver string) bool {
+func accountRoutesFlag(expr ast.Expr, receiver string) bool {
 	call, ok := expr.(*ast.CallExpr)
 	if !ok || len(call.Args) != 0 {
 		return false
 	}
 	selector, ok := call.Fun.(*ast.SelectorExpr)
-	return ok && selector.Sel.Name == "BoundedMetadataEnabled" && receiver != "" && scaleP21SW125Store(selector.X) == receiver
+	return ok && selector.Sel.Name == "BoundedMetadataEnabled" && receiver != "" && accountRoutesStore(selector.X) == receiver
 }
 
-func scaleP21SW125FlagOff(stack []ast.Node, receiver string) bool {
+func flagOff(stack []ast.Node, receiver string) bool {
 	for at, node := range stack {
 		branch, conditional := node.(*ast.IfStmt)
 		offArm := conditional && branch.Init == nil && at+1 < len(stack) &&
-			scaleP21SW125Flag(branch.Cond, receiver) && branch.Else == stack[at+1]
+			accountRoutesFlag(branch.Cond, receiver) && branch.Else == stack[at+1]
 		if conditional && branch.Init == nil && at+1 < len(stack) && branch.Body == stack[at+1] {
-			if negated, ok := branch.Cond.(*ast.UnaryExpr); ok && negated.Op == token.NOT && scaleP21SW125Flag(negated.X, receiver) {
+			if negated, ok := branch.Cond.(*ast.UnaryExpr); ok && negated.Op == token.NOT && accountRoutesFlag(negated.X, receiver) {
 				offArm = true
 			}
 		}
@@ -398,7 +398,7 @@ func scaleP21SW125FlagOff(stack []ast.Node, receiver string) bool {
 				continue
 			}
 			previous, ok := block.List[index-1].(*ast.IfStmt)
-			if !ok || previous.Init != nil || previous.Else != nil || !scaleP21SW125Flag(previous.Cond, receiver) || len(previous.Body.List) != 1 {
+			if !ok || previous.Init != nil || previous.Else != nil || !accountRoutesFlag(previous.Cond, receiver) || len(previous.Body.List) != 1 {
 				continue
 			}
 			if _, ok := previous.Body.List[0].(*ast.ReturnStmt); !ok {
@@ -418,9 +418,9 @@ func scaleP21SW125FlagOff(stack []ast.Node, receiver string) bool {
 	return false
 }
 
-func scaleP21SW125AccountCalls(file *ast.File) []scaleP21SW125AccountCall {
+func accountCalls(file *ast.File) []accountCall {
 	var stack []ast.Node
-	var calls []scaleP21SW125AccountCall
+	var calls []accountCall
 	ast.Inspect(file, func(node ast.Node) bool {
 		if node == nil {
 			stack = stack[:len(stack)-1]
@@ -433,7 +433,7 @@ func scaleP21SW125AccountCalls(file *ast.File) []scaleP21SW125AccountCall {
 		}
 		parent, direct := stack[len(stack)-2].(*ast.CallExpr)
 		direct = direct && parent.Fun == selector
-		receiver := scaleP21SW125Store(selector.X)
+		receiver := accountRoutesStore(selector.X)
 		if !direct && receiver == "" {
 			return true
 		}
@@ -443,16 +443,16 @@ func scaleP21SW125AccountCalls(file *ast.File) []scaleP21SW125AccountCall {
 				function = declaration.Name.Name
 			}
 		}
-		calls = append(calls, scaleP21SW125AccountCall{
+		calls = append(calls, accountCall{
 			function: function, direct: direct,
-			safe: direct && receiver != "" && scaleP21SW125FlagOff(stack, receiver),
+			safe: direct && receiver != "" && flagOff(stack, receiver),
 		})
 		return true
 	})
 	return calls
 }
 
-func TestScaleP21SW125AccountProductionCallset(t *testing.T) {
+func TestAccountProductionCallset(t *testing.T) {
 	expected := map[string]int{
 		"cmd/server/auth.go:authenticate":                 1,
 		"cmd/server/auth.go:authSession":                  1,
@@ -483,7 +483,7 @@ func TestScaleP21SW125AccountProductionCallset(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, call := range scaleP21SW125AccountCalls(file) {
+		for _, call := range accountCalls(file) {
 			key := filepath.ToSlash(relative) + ":" + call.function
 			actual[key]++
 			if !call.safe {
@@ -501,7 +501,7 @@ func TestScaleP21SW125AccountProductionCallset(t *testing.T) {
 	t.Log("all four server Account calls and the literal adapter fallback are flag-off only; this certifies their bypass, not Account's unrestricted count helper")
 }
 
-func TestScaleP21SW125AccountCallsetRejectsFalseProofs(t *testing.T) {
+func TestAccountCallsetRejectsFalseProofs(t *testing.T) {
 	for _, fixture := range []struct {
 		name, body string
 		safe       bool
@@ -524,7 +524,7 @@ func TestScaleP21SW125AccountCallsetRejectsFalseProofs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			calls := scaleP21SW125AccountCalls(file)
+			calls := accountCalls(file)
 			if len(calls) != 1 || calls[0].safe != fixture.safe {
 				t.Fatalf("Account dominance proof=%+v want safe=%t", calls, fixture.safe)
 			}

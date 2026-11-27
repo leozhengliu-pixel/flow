@@ -13,20 +13,20 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW168Aliases struct {
+type documentAliasHeaderAliases struct {
 	ID, Slug string
 	Previous []string
 }
 
-func scaleP21SW168AliasValue(document domain.Document) scaleP21SW168Aliases {
-	return scaleP21SW168Aliases{document.ID, document.SlugID, slices.Clone(document.PreviousSlugIDs)}
+func aliasValue(document domain.Document) documentAliasHeaderAliases {
+	return documentAliasHeaderAliases{document.ID, document.SlugID, slices.Clone(document.PreviousSlugIDs)}
 }
 
-func TestScaleP21SW168DocumentAliasHeaderDifferential(t *testing.T) {
+func TestDocumentAliasHeaderDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw168-")
 	public, private, child := prefix+"public", prefix+"private", prefix+"child"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw168_teams", "", nil, func(data *domain.Bootstrap) error {
@@ -38,10 +38,10 @@ func TestScaleP21SW168DocumentAliasHeaderDifferential(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	admin := scaleP21SW143Join(t, f, "admin", []string{private})
-	member := scaleP21SW143Join(t, f, "member", []string{public})
-	guest := scaleP21SW143Join(t, f, "guest", []string{public})
-	inherited := scaleP21SW143Join(t, f, "member", []string{private})
+	admin := bootstrapProjectionReadJoin(t, f, "admin", []string{private})
+	member := bootstrapProjectionReadJoin(t, f, "member", []string{public})
+	guest := bootstrapProjectionReadJoin(t, f, "guest", []string{public})
+	inherited := bootstrapProjectionReadJoin(t, f, "member", []string{private})
 	orderedAliases := []string{prefix + "second", prefix + "first", prefix + "second", " Old alias "}
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw168_documents", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = []domain.Document{
@@ -98,20 +98,20 @@ func TestScaleP21SW168DocumentAliasHeaderDifferential(t *testing.T) {
 					}
 					defer read.Close()
 					base := view.MetadataWorkUsedForTesting()
-					want, visited, loaded := []scaleP21SW168Aliases{}, []scaleP21SW168Aliases{}, []scaleP21SW168Aliases{}
+					want, visited, loaded := []documentAliasHeaderAliases{}, []documentAliasHeaderAliases{}, []documentAliasHeaderAliases{}
 					for _, document := range literal.Data.Documents {
 						if document.ID == prefix+"public-doc" && !reflect.DeepEqual(document.PreviousSlugIDs, orderedAliases) {
 							t.Fatal("legacy alias fixture lost duplicates or ordering")
 						}
-						want = append(want, scaleP21SW168AliasValue(document))
+						want = append(want, aliasValue(document))
 					}
 					err = read.Visit(t.Context(), func(header *ResourceDirectoryValue) error {
-						visited = append(visited, scaleP21SW168AliasValue(header.Document))
+						visited = append(visited, aliasValue(header.Document))
 						value, err := read.LoadHeader(t.Context(), header.Token)
 						if err != nil {
 							return err
 						}
-						loaded = append(loaded, scaleP21SW168AliasValue(value.Document))
+						loaded = append(loaded, aliasValue(value.Document))
 						if len(value.Document.PreviousSlugIDs) > 0 {
 							value.Document.PreviousSlugIDs[0] = "owned mutation"
 						}
@@ -141,11 +141,11 @@ func TestScaleP21SW168DocumentAliasHeaderDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW168DocumentAliasHeaderAdmissionAndRelease(t *testing.T) {
+func TestDocumentAliasHeaderAdmissionAndRelease(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("sw168-large-")
 	aliases := make([]string, 4096)
 	for i := range aliases {

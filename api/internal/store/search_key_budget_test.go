@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func sw17SearchBudgetFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *SQLiteStore) {
+func searchBudgetFixture(t *testing.T) (scaleFixture, *SQLiteStore, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.startupLock != nil {
 		backend, err := f.startupLock(t.Context())
 		if err != nil {
@@ -43,15 +43,15 @@ func sw17SearchBudgetFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, *SQLi
 	return f, legacy, probe
 }
 
-type sw17SearchSnapshot struct {
+type searchSnapshot struct {
 	Rows     [][]string
 	Last     string
 	Complete int
 }
 
-func sw17SearchBudgetSnapshot(t *testing.T, f scaleP09Fixture) sw17SearchSnapshot {
+func searchBudgetSnapshot(t *testing.T, f scaleFixture) searchSnapshot {
 	t.Helper()
-	result := sw17SearchSnapshot{Rows: [][]string{}}
+	result := searchSnapshot{Rows: [][]string{}}
 	rows, err := f.db.QueryContext(t.Context(), `SELECT record_key,content FROM metadata_search_documents WHERE workspace_key=? AND field='projects' ORDER BY record_key`, f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -75,8 +75,8 @@ func sw17SearchBudgetSnapshot(t *testing.T, f scaleP09Fixture) sw17SearchSnapsho
 	return result
 }
 
-func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
-	f, legacy, probe := sw17SearchBudgetFixture(t)
+func TestSearchKeyBoundDifferential(t *testing.T) {
+	f, legacy, probe := searchBudgetFixture(t)
 	workspace := f.data.Workspace.URLKey
 	prefix := strings.Repeat("界", 180)
 	if f.dialect == "mysql" {
@@ -127,7 +127,7 @@ func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
 	before := canonicalHash()
 	for _, phase := range []string{"fresh", "completed", "resume"} {
 		t.Run(phase, func(t *testing.T) {
-			var oracle sw17SearchSnapshot
+			var oracle searchSnapshot
 			for _, source := range []*SQLiteStore{legacy, probe} {
 				if _, err := f.db.ExecContext(t.Context(), `UPDATE metadata_search_documents SET content='stale' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
 					t.Fatal(err)
@@ -159,7 +159,7 @@ func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
 				if err := source.migrateMetadataSearchIndex(ctx); err != nil {
 					t.Fatal(err)
 				}
-				result := sw17SearchBudgetSnapshot(t, f)
+				result := searchBudgetSnapshot(t, f)
 				if len(result.Rows) != 270 || result.Last != keyFor(269) || result.Complete != 1 {
 					t.Fatal("UTF8 key repair lost rows or checkpoint state", len(result.Rows), result.Complete)
 				}
@@ -182,8 +182,8 @@ func TestScaleP21SW17SearchKeyBoundDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
-	f, legacy, probe := sw17SearchBudgetFixture(t)
+func TestSearchKeyBoundBudget(t *testing.T) {
+	f, legacy, probe := searchBudgetFixture(t)
 	if f.dialect != "sqlite" {
 		t.Skip("legacy SQLite accepts raw keys beyond the external VARCHAR character width")
 	}
@@ -206,7 +206,7 @@ func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
 			if _, err := f.db.ExecContext(t.Context(), `UPDATE metadata_search_documents SET content='stale' WHERE workspace_key=? AND field='projects'`, workspace); err != nil {
 				t.Fatal(err)
 			}
-			before := sw17SearchBudgetSnapshot(t, f)
+			before := searchBudgetSnapshot(t, f)
 			keyTransfers, checkpointTransfers := 0, 0
 			ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 				if strings.HasPrefix(query, "SELECT record_key FROM workspace_metadata_records") {
@@ -219,7 +219,7 @@ func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
 			if err := probe.migrateMetadataSearchIndex(ctx); !errors.Is(err, ErrMetadataWorkBudget) {
 				t.Fatal("long raw key/checkpoint did not fail explicit admission", err)
 			}
-			after := sw17SearchBudgetSnapshot(t, f)
+			after := searchBudgetSnapshot(t, f)
 			if !reflect.DeepEqual(before, after) || keyTransfers != 0 || checkpoint && checkpointTransfers != 0 || probe.metadataResidency.work.used != 0 {
 				t.Fatal("budget failure transferred oversized strings, published rows/checkpoint, or leaked work", keyTransfers, checkpointTransfers)
 			}
@@ -238,7 +238,7 @@ func TestScaleP21SW17SearchKeyBoundBudget(t *testing.T) {
 	if err := probe.migrateMetadataSearchIndex(context.Background()); err != nil {
 		t.Fatal("legal SQLite raw key did not recover with sufficient work budget", err)
 	}
-	result := sw17SearchBudgetSnapshot(t, f)
+	result := searchBudgetSnapshot(t, f)
 	if len(result.Rows) != 1 || result.Last != key || result.Complete != 1 || !strings.Contains(result.Rows[0][1], "Complete indexed body") || probe.metadataResidency.work.used != 0 {
 		t.Fatal("recovered large-key repair lost output/checkpoint or work allowance")
 	}

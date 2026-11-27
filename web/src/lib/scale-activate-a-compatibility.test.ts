@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fetchSurfaceBootstrap, syncClientFor } from '@/lib/sync-client'
 import { realtimeChannelName } from '@/lib/shared-realtime'
-import { APPLIED_CURSOR_SCHEMA } from '@/lib/scale-p08'
+import { APPLIED_CURSOR_SCHEMA } from '@/lib/realtime-cache-limits'
 import { makeBootstrap } from '@/test/fixtures'
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })

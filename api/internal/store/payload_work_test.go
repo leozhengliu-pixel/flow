@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW31DensePayload(count int) []byte {
+func densePayload(count int) []byte {
 	raw := make([]byte, 1, count*3+1)
 	raw[0] = '['
 	raw = append(raw, bytes.Repeat([]byte("{},"), count-1)...)
@@ -20,8 +20,8 @@ func scaleP21SW31DensePayload(count int) []byte {
 	return raw
 }
 
-func TestScaleP21SW31PayloadWorkDenseJSON(t *testing.T) {
-	raw := scaleP21SW31DensePayload(100000)
+func TestPayloadWorkDenseJSON(t *testing.T) {
+	raw := densePayload(100000)
 	work, err := metadataAggregatePayloadJSONWork(t.Context(), raw)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestScaleP21SW31PayloadWorkDenseJSON(t *testing.T) {
 	if err != nil || plan.RequiredBytes < int(work) {
 		t.Fatalf("payload plan work=%d plan=%+v err=%v", work, plan, err)
 	}
-	if _, err := metadataAggregatePayloadJSONWork(t.Context(), scaleP21SW31DensePayload(250000)); !errors.Is(err, ErrMetadataWorkBudget) {
+	if _, err := metadataAggregatePayloadJSONWork(t.Context(), densePayload(250000)); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatalf("process-sized decoded graph was admitted: %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -43,14 +43,14 @@ func TestScaleP21SW31PayloadWorkDenseJSON(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31PayloadWorkEncodingBounds(t *testing.T) {
+func TestPayloadWorkEncodingBounds(t *testing.T) {
 	var binaryArray [4096]byte
 	for i := range binaryArray {
 		binaryArray[i] = 0xff
 	}
 	for _, payload := range []any{
 		map[string]any{"escaped": strings.Repeat("\x00", 128000)},
-		json.RawMessage(scaleP21SW31DensePayload(10000)),
+		json.RawMessage(densePayload(10000)),
 		json.RawMessage(`"` + strings.Repeat("<", 128000) + `"`),
 		bytes.Repeat([]byte{0xff}, 1<<20),
 		binaryArray,
@@ -66,20 +66,20 @@ func TestScaleP21SW31PayloadWorkEncodingBounds(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW31PayloadWorkProducerDifferential(t *testing.T) {
+func TestPayloadWorkProducerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, payload := range []any{
 		map[string]any{"escaped": strings.Repeat("\x00", 128000)},
-		json.RawMessage(scaleP21SW31DensePayload(10000)),
+		json.RawMessage(densePayload(10000)),
 	} {
 		inputWork, err := metadataAggregatePayloadEncodingWork(t.Context(), reflect.ValueOf(payload), 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		inputWork = max(inputWork, 128<<10)
-		f := scaleP09Database(t)
+		f := journalScaleDatabase(t)
 		workspace := f.data.Workspace.URLKey
 		type outcome struct {
 			previous, snapshot, realtime json.RawMessage
@@ -136,27 +136,27 @@ func TestScaleP21SW31PayloadWorkProducerDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21SW31PayloadMarshalProbe struct {
+type payloadMarshalProbe struct {
 	Body  string
 	calls *int
 }
 
-func (p scaleP21SW31PayloadMarshalProbe) MarshalJSON() ([]byte, error) {
+func (p payloadMarshalProbe) MarshalJSON() ([]byte, error) {
 	*p.calls++
 	return []byte(`{"ok":true}`), nil
 }
 
-func TestScaleP21SW31PayloadWorkPreflight(t *testing.T) {
+func TestPayloadWorkPreflight(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	repo, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	calls := 0
-	payload := scaleP21SW31PayloadMarshalProbe{Body: strings.Repeat("<", 12<<20), calls: &calls}
+	payload := payloadMarshalProbe{Body: strings.Repeat("<", 12<<20), calls: &calls}
 	emitted := false
 	repo.SetWebhookSink(func(string, domain.DomainEvent) { emitted = true })
 	err = repo.MutateWorkspaceScoped(context.Background(), f.data.Workspace.URLKey, "application_policy.updated", "sw31-preflight", payload,

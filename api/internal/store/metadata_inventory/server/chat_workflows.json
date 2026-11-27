@@ -5,7 +5,7 @@
     "chatExecuteAction": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Tier B: existing create/state/assignee/comment route adapters now reach the proven bounded issue-record and discussion writers under the containing job output owner. Workflow-header inputs, binding/action validation, offered-option checks, stable creation/comment/mutation keys, receipts, error mapping and durable result enqueue remain literal. SW197's actual group-create/state/assignee/comment table passes normal, invalid-input and expired-consent cases with exact canonical rows, events, webhook/realtime and result/platform effects; work releases and full decodes remain zero. No new loading, cache or locking is introduced; flag-off routes and the primitives' existing permission proof are retained.",
+      "reason": "Tier B: existing create/state/assignee/comment route adapters now reach the proven bounded issue-record and discussion writers under the containing job output owner. Workflow-header inputs, binding/action validation, offered-option checks, stable creation/comment/mutation keys, receipts, error mapping and durable result enqueue remain literal. project progress stream's actual group-create/state/assignee/comment table passes normal, invalid-input and expired-consent cases with exact canonical rows, events, webhook/realtime and result/platform effects; work releases and full decodes remain zero. No new loading, cache or locking is introduced; flag-off routes and the primitives' existing permission proof are retained.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"
@@ -19,7 +19,7 @@
     "processChatInbound": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "The existing typed bootstrap site now calls proven chatAuthorizedWorkflowHeaders under the containing claimed-job owner. Language, team/state/assignee/template/project defaults and issue-role inputs retain their exact declared closure; original command dispatch, linkage, action validation, binding checks, form persistence and platform errors remain. SW175 is one nine-case actual legacy/bounded inbound table for create/state/assignee/comment forms, expired action/consent, disabled create/update and changed binding scope, comparing complete platform requests and stored actions with held output and zero work/full decodes afterward. The literal off typed-bootstrap path remains; downstream action/create/request writers retain their independent guards.",
+      "reason": "The existing typed bootstrap site now calls proven chatAuthorizedWorkflowHeaders under the containing claimed-job owner. Language, team/state/assignee/template/project defaults and issue-role inputs retain their exact declared closure; original command dispatch, linkage, action validation, binding checks, form persistence and platform errors remain. chat inbound headers is one nine-case actual legacy/bounded inbound table for create/state/assignee/comment forms, expired action/consent, disabled create/update and changed binding scope, comparing complete platform requests and stored actions with held output and zero work/full decodes afterward. The literal off typed-bootstrap path remains; downstream action/create/request writers retain their independent guards.",
       "accessors": [
         "Bootstrap",
         "chatAuthorizedMutation"

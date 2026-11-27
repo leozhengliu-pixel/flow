@@ -16,13 +16,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP10ManifestAndUnreadyRoutes(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleManifestAndUnreadyRoutes(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			read := func(path string) *httptest.ResponseRecorder {
-				return scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+				return resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 			}
 			t.Setenv("FLOW_SYNC_MANIFEST", "")
 			t.Setenv("FLOW_INDEXED_READS", "")
@@ -106,7 +106,7 @@ func TestScaleP10ManifestAndUnreadyRoutes(t *testing.T) {
 			if got := read("/api/sync/records?kind=projects"); got.Code != http.StatusServiceUnavailable {
 				t.Fatal("a complete shadow pass was treated as writer coverage")
 			}
-			request := scaleP03SmallReadRequest(f, "/api/sync/manifest")
+			request := scaleSmallReadRequest(f, "/api/sync/manifest")
 			statements := []string{}
 			request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(query string) { statements = append(statements, query) }))
 			w = httptest.NewRecorder()
@@ -124,12 +124,12 @@ func TestScaleP10ManifestAndUnreadyRoutes(t *testing.T) {
 	}
 }
 
-func TestScaleP10BatchReadScopeAndBounds(t *testing.T) {
+func TestScaleBatchReadScopeAndBounds(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "on")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
-			secret := scaleP03Key(t, f, []string{"read"}, nil)
+			f := resourceAccessScaleFixture(t, repo)
+			secret := scaleKey(t, f, []string{"read"}, nil)
 			for _, test := range []struct {
 				body string
 				code int
@@ -151,7 +151,7 @@ func TestScaleP10BatchReadScopeAndBounds(t *testing.T) {
 					if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "Sync access changed") {
 						break
 					}
-					// P03 binds epochs to the complete metadata revision. The
+					// resource access binds epochs to the complete metadata revision. The
 					// first credential-use telemetry write can invalidate this
 					// read too; clients retry the entire batch with fresh access.
 					time.Sleep(10 * time.Millisecond)
@@ -164,10 +164,10 @@ func TestScaleP10BatchReadScopeAndBounds(t *testing.T) {
 	}
 }
 
-func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
-	for driver, repo := range scaleP03ServerTestStores(t) {
+func TestScaleLegacyConnectionsAndTokens(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			if err := repo.MutateWorkspace(workspaceFixtureContext(t.Context()), workspace, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
 				for i := range 4 {
@@ -186,9 +186,9 @@ func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
 						path += "&projectId=p10-0"
 					}
 					t.Setenv("FLOW_INDEXED_READS", "off")
-					want := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+					want := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 					t.Setenv("FLOW_INDEXED_READS", "on")
-					got := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+					got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 					if want.Code != got.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 						t.Fatal("legacy connection changed", resource, order, want.Code, got.Code)
 					}
@@ -200,18 +200,18 @@ func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
 								continuation = strings.Replace(continuation, "first=1", "last=1", 1)
 							}
 							t.Setenv("FLOW_INDEXED_READS", "off")
-							want := scaleP03Read(t, f, f.admin, "", http.MethodGet, continuation, workspace)
+							want := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, continuation, workspace)
 							t.Setenv("FLOW_INDEXED_READS", "on")
-							got := scaleP03Read(t, f, f.admin, "", http.MethodGet, continuation, workspace)
+							got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, continuation, workspace)
 							if want.Code != got.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 								t.Fatal("legacy continuation changed", resource, order)
 							}
 						}
 						filterPath := path + "&filter=" + url.QueryEscape(`{"id":{"eq":"missing"}}`)
 						t.Setenv("FLOW_INDEXED_READS", "off")
-						want := scaleP03Read(t, f, f.admin, "", http.MethodGet, filterPath, workspace)
+						want := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, filterPath, workspace)
 						t.Setenv("FLOW_INDEXED_READS", "on")
-						got := scaleP03Read(t, f, f.admin, "", http.MethodGet, filterPath, workspace)
+						got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, filterPath, workspace)
 						if want.Code != got.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 							t.Fatal("legacy filter changed", resource)
 						}
@@ -220,9 +220,9 @@ func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
 			}
 			for _, path := range []string{"/api/projects?limit=1&includeTotal=true", "/api/projects/old-p10-0", "/api/bootstrap?projection=project-list"} {
 				t.Setenv("FLOW_INDEXED_READS", "off")
-				want := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+				want := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 				t.Setenv("FLOW_INDEXED_READS", "on")
-				got := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace)
+				got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace)
 				if want.Code != http.StatusOK || got.Code != want.Code || !bytes.Equal(want.Body.Bytes(), got.Body.Bytes()) {
 					t.Fatal("legacy directory/favorite/slug response changed", path, want.Code, got.Code)
 				}
@@ -231,7 +231,7 @@ func TestScaleP10LegacyConnectionsAndTokens(t *testing.T) {
 	}
 }
 
-func TestScaleP10SyncResponseBudget(t *testing.T) {
+func TestScaleSyncResponseBudget(t *testing.T) {
 	w := httptest.NewRecorder()
 	writeSyncJSON(w, map[string]string{"title": strings.Repeat("<>&", 50000)}, 256<<10)
 	if w.Code != http.StatusServiceUnavailable || w.Body.Len() > 256<<10 {
@@ -239,16 +239,16 @@ func TestScaleP10SyncResponseBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP10ManifestAllocationWithBodyGrowth(t *testing.T) {
+func TestScaleManifestAllocationWithBodyGrowth(t *testing.T) {
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	for _, scale := range []int{1, 10} {
-		for driver, repo := range scaleP03ServerTestStores(t) {
+		for driver, repo := range scaleServerTestStores(t) {
 			t.Run(fmt.Sprintf("%s/body%d", driver, scale), func(t *testing.T) {
-				f := scaleP03SmallReadFixture(t, repo, scale)
+				f := scaleSmallReadFixture(t, repo, scale)
 				result := testing.Benchmark(func(b *testing.B) {
 					for range b.N {
 						w := httptest.NewRecorder()
-						f.host.Config.Handler.ServeHTTP(w, scaleP03SmallReadRequest(f, "/api/sync/manifest"))
+						f.host.Config.Handler.ServeHTTP(w, scaleSmallReadRequest(f, "/api/sync/manifest"))
 						if w.Code != http.StatusOK || w.Body.Len() > 256<<10 {
 							b.Fatalf("manifest: status=%d bytes=%d", w.Code, w.Body.Len())
 						}

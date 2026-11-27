@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW329EscapedLabelAuthorization(t *testing.T) {
+func TestEscapedLabelAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -25,14 +25,14 @@ func TestScaleP21SW329EscapedLabelAuthorization(t *testing.T) {
 				"/api/issue-labels/%2Fid", "/api/issue-labels/id%2F",
 				"/api/issue-labels/%2F", "/api/issue-labels/id%252Fchildren",
 			} {
-				if !scaleP21SW256IssueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
+				if !issueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("registered escaped label shape not selected", method, path)
 				}
 			}
 		}
 		for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete, http.MethodOptions} {
 			for _, path := range []string{"/api/issue-labels/id", "/api/issue-labels/id%2Fchildren"} {
-				if scaleP21SW256IssueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
+				if issueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("label selector captured another method", method, path)
 				}
 			}
@@ -44,7 +44,7 @@ func TestScaleP21SW329EscapedLabelAuthorization(t *testing.T) {
 			"/api/issues/id", "/api/projects/id", "/api/issue-label-groups/id",
 		} {
 			for _, method := range []string{http.MethodGet, http.MethodHead} {
-				if scaleP21SW256IssueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
+				if issueLabelPointRequest(httptest.NewRequest(method, path, nil)) {
 					t.Fatal("label selector captured another route", method, path)
 				}
 			}
@@ -57,10 +57,10 @@ func TestScaleP21SW329EscapedLabelAuthorization(t *testing.T) {
 		Pattern string
 		Ref     string
 	}
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo := f.repository
 	t.Run(f.reader.config.Driver, func(t *testing.T) {
-		foreign := scaleP03Fixture(t, repo)
+		foreign := resourceAccessScaleFixture(t, repo)
 		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.data.Workspace.URLKey); err != nil {
 			t.Fatal(err)
 		}
@@ -144,7 +144,7 @@ func TestScaleP21SW329EscapedLabelAuthorization(t *testing.T) {
 											}
 										}
 										if phase == "reloaded" {
-											scaleP21SW201ReloadSource(t, f.reader, source)
+											metadataReloadSourceReloadSource(t, f.reader, source)
 										}
 										request := f.literalRequest(user, key, nil)
 										path := "/api/issue-labels/" + url.PathEscape(row.ref)

@@ -19,7 +19,7 @@ import (
 
 // Failed operations sort after every finite latency. JSON null means the
 // requested percentile is censored, not zero or a success-only percentile.
-func scaleP01Quantiles(values []time.Duration, failures int, unit time.Duration) map[string]any {
+func scaleQuantiles(values []time.Duration, failures int, unit time.Duration) map[string]any {
 	ordered := slices.Clone(values)
 	slices.Sort(ordered)
 	n := len(ordered) + failures
@@ -40,7 +40,7 @@ func scaleP01Quantiles(values []time.Duration, failures int, unit time.Duration)
 	return out
 }
 
-type scaleP01RouteStats struct {
+type scaleRouteStats struct {
 	mu       sync.Mutex
 	values   map[string][]time.Duration
 	success  map[string][]time.Duration
@@ -49,11 +49,11 @@ type scaleP01RouteStats struct {
 	timeouts map[string]int
 }
 
-func newScaleP01RouteStats() *scaleP01RouteStats {
-	return &scaleP01RouteStats{values: map[string][]time.Duration{}, success: map[string][]time.Duration{}, statuses: map[string]map[int]int{}, failed: map[string]int{}, timeouts: map[string]int{}}
+func newScaleRouteStats() *scaleRouteStats {
+	return &scaleRouteStats{values: map[string][]time.Duration{}, success: map[string][]time.Duration{}, statuses: map[string]map[int]int{}, failed: map[string]int{}, timeouts: map[string]int{}}
 }
 
-func (s *scaleP01RouteStats) add(name string, code int, elapsed time.Duration, err error, timeout bool) {
+func (s *scaleRouteStats) add(name string, code int, elapsed time.Duration, err error, timeout bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.values[name] = append(s.values[name], elapsed)
@@ -71,7 +71,7 @@ func (s *scaleP01RouteStats) add(name string, code int, elapsed time.Duration, e
 	}
 }
 
-func (s *scaleP01RouteStats) report() map[string]any {
+func (s *scaleRouteStats) report() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := map[string]any{}
@@ -79,48 +79,48 @@ func (s *scaleP01RouteStats) report() map[string]any {
 		out[name] = map[string]any{
 			"count": len(values), "statuses": s.statuses[name], "errors": s.failed[name], "timeouts": s.timeouts[name],
 			"p50ms": percentile(slices.Clone(values), .5).Milliseconds(), "p95ms": percentile(slices.Clone(values), .95).Milliseconds(), "maxms": percentile(slices.Clone(values), 1).Milliseconds(),
-			"sloLatencyMs": scaleP01Quantiles(s.success[name], s.failed[name], time.Millisecond),
+			"sloLatencyMs": scaleQuantiles(s.success[name], s.failed[name], time.Millisecond),
 		}
 	}
 	return out
 }
 
-type scaleP01Ack struct {
+type scaleAck struct {
 	EventID  string    `json:"eventId"`
 	ClientID int       `json:"clientId"`
 	Applied  time.Time `json:"appliedAt"`
 }
 
-type scaleP01Delivery struct {
-	commit   store.ScaleP01Commit
+type scaleDelivery struct {
+	commit   store.ScaleCommit
 	kind     string
 	expected []bool
 }
 
-type scaleP01Ledger struct {
+type scaleLedger struct {
 	mu                  sync.Mutex
-	changes             map[string]scaleP01Delivery
+	changes             map[string]scaleDelivery
 	received            map[string]map[int]time.Time
 	applied             map[string]map[int]time.Time
 	browser             map[string]map[int]time.Time
 	duplicates, invalid int
-	rollups             map[string]map[string]*scaleP01DeliverySummary
+	rollups             map[string]map[string]*scaleDeliverySummary
 	retired             map[string]bool
 }
 
-func newScaleP01Ledger() *scaleP01Ledger {
-	return &scaleP01Ledger{changes: map[string]scaleP01Delivery{}, received: map[string]map[int]time.Time{}, applied: map[string]map[int]time.Time{}, browser: map[string]map[int]time.Time{}, rollups: map[string]map[string]*scaleP01DeliverySummary{}, retired: map[string]bool{}}
+func newScaleLedger() *scaleLedger {
+	return &scaleLedger{changes: map[string]scaleDelivery{}, received: map[string]map[int]time.Time{}, applied: map[string]map[int]time.Time{}, browser: map[string]map[int]time.Time{}, rollups: map[string]map[string]*scaleDeliverySummary{}, retired: map[string]bool{}}
 }
 
-func (l *scaleP01Ledger) commit(event store.ScaleP01Commit, kind string, expected []bool) {
+func (l *scaleLedger) commit(event store.ScaleCommit, kind string, expected []bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if _, exists := l.changes[event.ID]; !exists {
-		l.changes[event.ID] = scaleP01Delivery{commit: event, kind: kind, expected: slices.Clone(expected)}
+		l.changes[event.ID] = scaleDelivery{commit: event, kind: kind, expected: slices.Clone(expected)}
 	}
 }
 
-func (l *scaleP01Ledger) ack(ack scaleP01Ack, phase string) {
+func (l *scaleLedger) ack(ack scaleAck, phase string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.retired[ack.EventID] {
@@ -148,11 +148,11 @@ func (l *scaleP01Ledger) ack(ack scaleP01Ack, phase string) {
 	target[ack.EventID][ack.ClientID] = ack.Applied
 }
 
-func (l *scaleP01Ledger) report(now time.Time, timeout time.Duration, phase string) map[string]any {
+func (l *scaleLedger) report(now time.Time, timeout time.Duration, phase string) map[string]any {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	target := l.target(phase)
-	buckets := map[string]*scaleP01DeliverySummary{}
+	buckets := map[string]*scaleDeliverySummary{}
 	for kind, value := range l.rollups[phase] {
 		copy := *value
 		buckets[kind] = &copy
@@ -160,12 +160,12 @@ func (l *scaleP01Ledger) report(now time.Time, timeout time.Duration, phase stri
 	for id, delivery := range l.changes {
 		b := buckets[delivery.kind]
 		if b == nil {
-			b = &scaleP01DeliverySummary{}
+			b = &scaleDeliverySummary{}
 			buckets[delivery.kind] = b
 		}
 		b.observe(delivery, target[id], l.received[id], now, timeout)
 	}
-	all := &scaleP01DeliverySummary{}
+	all := &scaleDeliverySummary{}
 	byKind := map[string]any{}
 	for kind, b := range buckets {
 		byKind[kind] = b.report()
@@ -176,24 +176,24 @@ func (l *scaleP01Ledger) report(now time.Time, timeout time.Duration, phase stri
 	return out
 }
 
-type scaleP01CPU struct {
+type scaleCPU struct {
 	UserSeconds, SystemSeconds float64
 }
 
-func scaleP01CPUTime() scaleP01CPU {
+func scaleCPUTime() scaleCPU {
 	var usage syscall.Rusage
 	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil {
-		return scaleP01CPU{}
+		return scaleCPU{}
 	}
-	return scaleP01CPU{UserSeconds: float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1e6, SystemSeconds: float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1e6}
+	return scaleCPU{UserSeconds: float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1e6, SystemSeconds: float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1e6}
 }
 
-func scaleP01CPUReport(before, after scaleP01CPU, elapsed time.Duration, users int) map[string]any {
+func scaleCPUReport(before, after scaleCPU, elapsed time.Duration, users int) map[string]any {
 	user, system := after.UserSeconds-before.UserSeconds, after.SystemSeconds-before.SystemSeconds
 	return map[string]any{"userSeconds": user, "systemSeconds": system, "percentOfFourCPUs": (user + system) / max(elapsed.Seconds()*4, 1e-9) * 100, "secondsPerUser": (user + system) / float64(max(users, 1)), "gomaxprocs": runtime.GOMAXPROCS(0)}
 }
 
-func scaleP01SQLDelta(before, after store.ScaleP01SQL, requests int) map[string]any {
+func scaleSQLDelta(before, after store.ScaleSQL, requests int) map[string]any {
 	n := after.Statements - before.Statements
 	var p95 any
 	remaining := int64(math.Ceil(float64(n) * .95))
@@ -209,7 +209,7 @@ func scaleP01SQLDelta(before, after store.ScaleP01SQL, requests int) map[string]
 	return map[string]any{"statements": n, "reads": after.Reads - before.Reads, "writes": after.Writes - before.Writes, "errors": after.Errors - before.Errors, "commits": after.Commits - before.Commits, "executeSeconds": after.ExecuteSeconds - before.ExecuteSeconds, "executeP95Bounds": p95, "statementsPerRequest": float64(n) / float64(max(requests, 1)), "scope": "driver executions including background work; excludes prepare/begin/commit; execution time excludes row iteration", "rowsExamined": nil, "databaseCPU": nil, "databaseTelemetry": "requires a database-side collector; driver execution timing is not database statement latency"}
 }
 
-func scaleP01SaveReport(t *testing.T, report any) {
+func scaleSaveReport(t *testing.T, report any) {
 	t.Helper()
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -223,8 +223,8 @@ func scaleP01SaveReport(t *testing.T, report any) {
 	}
 }
 
-func TestScaleP01FailureDenominators(t *testing.T) {
-	routes := newScaleP01RouteStats()
+func TestScaleFailureDenominators(t *testing.T) {
+	routes := newScaleRouteStats()
 	routes.add("read", http.StatusOK, 10*time.Millisecond, nil, false)
 	routes.add("read", http.StatusServiceUnavailable, time.Millisecond, nil, false)
 	routes.add("read", -1, time.Second, os.ErrDeadlineExceeded, true)
@@ -233,15 +233,15 @@ func TestScaleP01FailureDenominators(t *testing.T) {
 	if read["count"] != 3 || read["errors"] != 2 || read["timeouts"] != 1 || slo["denominator"] != 3 || slo["p95"] != nil {
 		t.Fatalf("503/timeout vanished: %+v", read)
 	}
-	ledger := newScaleP01Ledger()
+	ledger := newScaleLedger()
 	now := time.Now()
-	ledger.ack(scaleP01Ack{"early", 0, now.Add(time.Second)}, "applied")
-	ledger.ack(scaleP01Ack{"early", 0, now.Add(2 * time.Second)}, "applied")
-	ledger.commit(store.ScaleP01Commit{ID: "early", At: now}, "document", []bool{true, true, false})
-	ledger.commit(store.ScaleP01Commit{ID: "later", At: now.Add(time.Second)}, "document", []bool{true})
-	ledger.ack(scaleP01Ack{"later", 0, now.Add(3 * time.Second)}, "received")
-	ledger.ack(scaleP01Ack{"later", 0, now.Add(500 * time.Millisecond)}, "applied")
-	ledger.ack(scaleP01Ack{"early", 0, now.Add(4 * time.Second)}, "browser")
+	ledger.ack(scaleAck{"early", 0, now.Add(time.Second)}, "applied")
+	ledger.ack(scaleAck{"early", 0, now.Add(2 * time.Second)}, "applied")
+	ledger.commit(store.ScaleCommit{ID: "early", At: now}, "document", []bool{true, true, false})
+	ledger.commit(store.ScaleCommit{ID: "later", At: now.Add(time.Second)}, "document", []bool{true})
+	ledger.ack(scaleAck{"later", 0, now.Add(3 * time.Second)}, "received")
+	ledger.ack(scaleAck{"later", 0, now.Add(500 * time.Millisecond)}, "applied")
+	ledger.ack(scaleAck{"early", 0, now.Add(4 * time.Second)}, "browser")
 	result := ledger.report(now.Add(30*time.Second), 10*time.Second, "applied")
 	if result["expected"] != 3 || result["deliveries"] != 1 || result["unappliedOrLate"] != 2 || result["invalidAcks"] != 1 || result["sloLatencySeconds"].(map[string]any)["p95"] != nil || result["p95s"].(float64) < 10 {
 		t.Fatalf("incorrect delivery accounting: %+v", result)

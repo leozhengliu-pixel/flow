@@ -16,9 +16,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-// scaleP21SW464Text draws words from a small vocabulary so that issues share
+// triageScanText draws words from a small vocabulary so that issues share
 // some tokens, most share none, and equal texts tie.
-func scaleP21SW464Text(r *rand.Rand, words int) string {
+func triageScanText(r *rand.Rand, words int) string {
 	vocabulary := []string{"widget", "crash", "login", "export", "panel", "sync", "queue", "render", "token", "cache", "Δelta", "数据", "a", "x1", "2fa", "UPPER", "upper"}
 	var parts []string
 	for range words {
@@ -32,16 +32,16 @@ func scaleP21SW464Text(r *rand.Rand, words int) string {
 	return strings.Join(parts, separators[r.IntN(len(separators))])
 }
 
-func scaleP21SW464Issue(r *rand.Rand, id string, at time.Time) domain.Issue {
+func triageScanIssue(r *rand.Rand, id string, at time.Time) domain.Issue {
 	teams := []string{"team-a", "team-b", "team-c"}
 	issue := domain.Issue{
-		ID: id, Identifier: fmt.Sprintf("SW-%d", r.IntN(50)), Title: scaleP21SW464Text(r, 1+r.IntN(8)),
-		Description: scaleP21SW464Text(r, r.IntN(30)), Team: domain.Team{ID: teams[r.IntN(len(teams))]},
+		ID: id, Identifier: fmt.Sprintf("SW-%d", r.IntN(50)), Title: triageScanText(r, 1+r.IntN(8)),
+		Description: triageScanText(r, r.IntN(30)), Team: domain.Team{ID: teams[r.IntN(len(teams))]},
 		State:     domain.WorkflowState{Type: []string{"backlog", "unstarted", "started", "completed", "canceled"}[r.IntN(5)]},
 		UpdatedAt: at.Add(time.Duration(r.IntN(4)) * time.Minute),
 	}
 	if r.IntN(4) == 0 {
-		issue.Description = strings.Repeat(scaleP21SW464Text(r, 3)+" ", 1+r.IntN(2000))
+		issue.Description = strings.Repeat(triageScanText(r, 3)+" ", 1+r.IntN(2000))
 	}
 	if r.IntN(8) == 0 {
 		archived := at
@@ -65,18 +65,18 @@ func scaleP21SW464Issue(r *rand.Rand, id string, at time.Time) domain.Issue {
 // between queries, appended positions and more qualifying candidates than
 // the 2000 cut-off. The generation token cache leaves the suggestions of
 // generateIssueSuggestionsWithCandidates unchanged.
-func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
+func TestTriageCandidateIndexMatchesScan(t *testing.T) {
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	for seed := range 60 {
 		r := rand.New(rand.NewPCG(uint64(seed), 464))
 		data := &domain.Bootstrap{WorkspaceSettings: domain.WorkspaceSettings{}}
 		for index := range 3 {
-			data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p%d", index), Name: scaleP21SW464Text(r, 3),
-				Summary: scaleP21SW464Text(r, 4), Description: scaleP21SW464Text(r, 200)})
+			data.Projects = append(data.Projects, domain.Project{ID: fmt.Sprintf("p%d", index), Name: triageScanText(r, 3),
+				Summary: triageScanText(r, 4), Description: triageScanText(r, 200)})
 		}
 		data.Projects[0].Lead = &domain.User{ID: "user-0"}
 		for index := range 4 {
-			data.Labels = append(data.Labels, domain.IssueLabel{ID: fmt.Sprintf("l%d", index), Name: scaleP21SW464Text(r, 2), Description: scaleP21SW464Text(r, 5)})
+			data.Labels = append(data.Labels, domain.IssueLabel{ID: fmt.Sprintf("l%d", index), Name: triageScanText(r, 2), Description: triageScanText(r, 5)})
 		}
 		size := 20 + r.IntN(200)
 		if seed%15 == 0 {
@@ -84,7 +84,7 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 			size = 2600
 		}
 		for index := range size {
-			issue := scaleP21SW464Issue(r, fmt.Sprintf("i%d", r.IntN(size/2+1)), at)
+			issue := triageScanIssue(r, fmt.Sprintf("i%d", r.IntN(size/2+1)), at)
 			if seed%15 == 0 {
 				issue.Title, issue.ArchivedAt, issue.State.Type = "widget crash login", nil, "backlog"
 			}
@@ -101,7 +101,7 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 				// Positions appended between queries, and fields that
 				// suggestion actions edit (never titles or descriptions).
 				for range r.IntN(40) {
-					data.Issues = append(data.Issues, scaleP21SW464Issue(r, fmt.Sprintf("i%d", r.IntN(size)), at))
+					data.Issues = append(data.Issues, triageScanIssue(r, fmt.Sprintf("i%d", r.IntN(size)), at))
 				}
 				for range 10 {
 					edited := &data.Issues[r.IntN(len(data.Issues))]
@@ -112,7 +112,7 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 			}
 			issue := data.Issues[r.IntN(len(data.Issues))]
 			if r.IntN(3) == 0 {
-				issue = scaleP21SW464Issue(r, "probe", at)
+				issue = triageScanIssue(r, "probe", at)
 			}
 			if seed%15 == 0 {
 				issue.Title = "widget crash login"
@@ -140,16 +140,16 @@ func TestScaleP21SW464TriageCandidateIndexMatchesScan(t *testing.T) {
 			}
 			if query == 12 {
 				// A project or label text edited mid-generation.
-				data.Projects[1].Description = scaleP21SW464Text(r, 50)
-				data.Labels[2].Name = scaleP21SW464Text(r, 2)
+				data.Projects[1].Description = triageScanText(r, 50)
+				data.Labels[2].Name = triageScanText(r, 2)
 			}
 		}
 	}
 }
 
-// scaleP21SW465Size is the batch of the SW465 low-score fixture; a
+// triageScanSize is the batch of the low-score search low-score fixture; a
 // measurement run sets FLOW_SW465_SIZE (350, 1000).
-func scaleP21SW465Size(t *testing.T) int {
+func triageScanSize(t *testing.T) int {
 	if raw := os.Getenv("FLOW_SW465_SIZE"); raw != "" {
 		size, err := strconv.Atoi(raw)
 		if err != nil || size < 100 {
@@ -160,12 +160,12 @@ func scaleP21SW465Size(t *testing.T) int {
 	return 150
 }
 
-// scaleP21SW465Titles makes the bulk issues search candidates of each other
+// titles makes the bulk issues search candidates of each other
 // (every title has "widget") that almost all score below the 0.14 cut-off:
 // one shared token among eight. Every 25th issue also shares "alpha beta",
 // with the tied candidate-only issues too, every 7th issue's description
 // shares "notice", and every 11th issue has a long description.
-func scaleP21SW465Titles(t *testing.T, f scaleP21IssueUpdateFixture) {
+func triageScanTitles(t *testing.T, f scaleIssueUpdateFixture) {
 	t.Helper()
 	at := time.Date(2026, 1, 6, 7, 8, 9, 0, time.UTC)
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw465_titles", "", nil, func(data *domain.Bootstrap) error {
@@ -214,13 +214,13 @@ func scaleP21SW465Titles(t *testing.T, f scaleP21IssueUpdateFixture) {
 // and the literal scans (index off) byte for byte, response, every row,
 // event, publication and installed image. Each run logs its generation time.
 // FLOW_SW465_SIZE sets the batch; FLOW_SW465_SCAN=0 skips the literal scans.
-func TestScaleP21SW465LowScoreTriageGenerationDifferential(t *testing.T) {
+func TestLowScoreTriageGenerationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21IssueUpdateSetup(t)
-	ids := scaleP21SW400Bulk(t, f, scaleP21SW465Size(t))
-	scaleP21SW465Titles(t, f)
+	f := scaleIssueUpdateSetup(t)
+	ids := triageBatchBulk(t, f, triageScanSize(t))
+	triageScanTitles(t, f)
 	full, ok := f.repository.BootstrapFor(f.data.Workspace.URLKey)
 	if !ok {
 		t.Fatal("workspace missing")
@@ -229,12 +229,12 @@ func TestScaleP21SW465LowScoreTriageGenerationDifferential(t *testing.T) {
 	if f.baseline, err = json.Marshal(full); err != nil {
 		t.Fatal(err)
 	}
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21IssueUpdateCase{issue: f.triage.ID, setup: scaleP21SW400Actions(f, func(settings *domain.TriageIntelligenceSettings) {
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleIssueUpdateCase{issue: f.triage.ID, setup: triageBatchActions(f, func(settings *domain.TriageIntelligenceSettings) {
 		settings.RelatedAction, settings.LabelAction = "auto", "auto"
 	})})
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	defer func() { triageCandidateIndexOff = false }()
-	generate := f.sw440Generate(t, ids)
+	generate := f.triageWriterBudgetGenerate(t, ids)
 	type run struct {
 		source string
 		scan   bool
@@ -246,11 +246,11 @@ func TestScaleP21SW465LowScoreTriageGenerationDifferential(t *testing.T) {
 		runs = []run{{"legacy", true}, {"legacy", false}, {"warm", true}, {"warm", false}, {"reloaded", false}}
 	}
 	outcomes := map[run]string{}
-	var legacy scaleP21IssueUpdateOutcome
+	var legacy scaleIssueUpdateOutcome
 	for _, item := range runs {
 		var took time.Duration
 		triageCandidateIndexOff = item.scan
-		got, started := f.sw460Run(t, item.source, func(*testing.T) {}, func(service *server) *httptest.ResponseRecorder {
+		got, started := f.triageLeftoversRun(t, item.source, func(*testing.T) {}, func(service *server) *httptest.ResponseRecorder {
 			begin := time.Now()
 			w := generate(service)
 			took = time.Since(begin)
@@ -262,7 +262,7 @@ func TestScaleP21SW465LowScoreTriageGenerationDifferential(t *testing.T) {
 			mode = "scan"
 		}
 		t.Logf("%d issues, %s %s: generation %.2fs", len(ids), item.source, mode, took.Seconds())
-		normalized := scaleP21IssueUpdateNormalize(t, got, started)
+		normalized := scaleIssueUpdateNormalize(t, got, started)
 		if dir := os.Getenv("FLOW_SW465_DUMP"); dir != "" {
 			_ = os.WriteFile(dir+"/"+item.source+"-"+mode+".json", []byte(normalized), 0o600)
 		}
@@ -273,10 +273,10 @@ func TestScaleP21SW465LowScoreTriageGenerationDifferential(t *testing.T) {
 			legacy = got
 		}
 		if want, found := outcomes[run{item.source, true}]; found && normalized != want {
-			t.Fatalf("%s: the index changed the literal scan: %s", item.source, scaleP21M2Diff(want, normalized))
+			t.Fatalf("%s: the index changed the literal scan: %s", item.source, policyFirstDifference(want, normalized))
 		}
 		if want, found := outcomes[run{"legacy", false}]; found && !item.scan && normalized != want {
-			t.Fatalf("%s changed: %s", item.source, scaleP21M2Diff(want, normalized))
+			t.Fatalf("%s changed: %s", item.source, policyFirstDifference(want, normalized))
 		}
 	}
 	if legacy.Code != http.StatusOK || len(legacy.State.Events) != 1 {

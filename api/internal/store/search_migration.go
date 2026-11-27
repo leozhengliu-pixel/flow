@@ -5,14 +5,14 @@ import (
 	"database/sql"
 )
 
-func (s *SQLiteStore) sw17SearchByteLength(column string) string {
+func (s *SQLiteStore) searchMigrationByteLength(column string) string {
 	if s.dialect == "sqlite" {
 		return "LENGTH(CAST(" + column + " AS BLOB))"
 	}
 	return "OCTET_LENGTH(" + column + ")"
 }
 
-func (s *SQLiteStore) sw17SearchCheckpoint(ctx context.Context, workspace, field string) (string, int, func(), error) {
+func (s *SQLiteStore) searchMigrationCheckpoint(ctx context.Context, workspace, field string) (string, int, func(), error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return "", 0, nil, err
@@ -20,7 +20,7 @@ func (s *SQLiteStore) sw17SearchCheckpoint(ctx context.Context, workspace, field
 	defer tx.Rollback()
 	var size int64
 	var complete int
-	if err := tx.QueryRowContext(ctx, `SELECT `+s.sw17SearchByteLength("last_record_key")+`,completed FROM metadata_search_migration_checkpoints WHERE workspace_key=? AND field=?`, workspace, field).Scan(&size, &complete); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT `+s.searchMigrationByteLength("last_record_key")+`,completed FROM metadata_search_migration_checkpoints WHERE workspace_key=? AND field=?`, workspace, field).Scan(&size, &complete); err != nil {
 		return "", 0, nil, err
 	}
 	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
@@ -38,7 +38,7 @@ func (s *SQLiteStore) sw17SearchCheckpoint(ctx context.Context, workspace, field
 	return last, complete, release, nil
 }
 
-func (s *SQLiteStore) sw17SearchKeyPage(ctx context.Context, workspace, field, last string) ([]string, func(), error) {
+func (s *SQLiteStore) searchMigrationKeyPage(ctx context.Context, workspace, field, last string) ([]string, func(), error) {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return nil, nil, err
@@ -47,7 +47,7 @@ func (s *SQLiteStore) sw17SearchKeyPage(ctx context.Context, workspace, field, l
 	page := ` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key>? ORDER BY record_key LIMIT 128`
 	args := []any{workspace, field, last}
 	var count, bytes int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(key_bytes),0) FROM (SELECT `+s.sw17SearchByteLength("record_key")+` key_bytes`+page+`) sw17_search_keys`, args...).Scan(&count, &bytes); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(key_bytes),0) FROM (SELECT `+s.searchMigrationByteLength("record_key")+` key_bytes`+page+`) sw17_search_keys`, args...).Scan(&count, &bytes); err != nil {
 		return nil, nil, err
 	}
 	if count < 0 || count > 128 || bytes < 0 || bytes > int64(metadataWorkBytes())/4 {
@@ -90,7 +90,7 @@ func (s *SQLiteStore) sw17SearchKeyPage(ctx context.Context, workspace, field, l
 	return keys, release, nil
 }
 
-func (s *SQLiteStore) sw17MigrateMetadataSearchIndexBounded(ctx context.Context) error {
+func (s *SQLiteStore) migrateMetadataSearchIndexBounded(ctx context.Context) error {
 	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return err
@@ -98,7 +98,7 @@ func (s *SQLiteStore) sw17MigrateMetadataSearchIndexBounded(ctx context.Context)
 	defer release()
 	for workspace := range s.workspaces {
 		for _, kind := range searchMetadataKinds {
-			if err := s.sw17SearchFieldBounded(ctx, workspace, kind.field); err != nil {
+			if err := s.migrateSearchFieldBounded(ctx, workspace, kind.field); err != nil {
 				return err
 			}
 		}
@@ -106,8 +106,8 @@ func (s *SQLiteStore) sw17MigrateMetadataSearchIndexBounded(ctx context.Context)
 	return nil
 }
 
-func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, field string) error {
-	last, complete, releaseCheckpoint, err := s.sw17SearchCheckpoint(ctx, workspace, field)
+func (s *SQLiteStore) migrateSearchFieldBounded(ctx context.Context, workspace, field string) error {
+	last, complete, releaseCheckpoint, err := s.searchMigrationCheckpoint(ctx, workspace, field)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return err
@@ -131,7 +131,7 @@ func (s *SQLiteStore) sw17SearchFieldBounded(ctx context.Context, workspace, fie
 		last, releaseCheckpoint = "", func() {}
 	}
 	for {
-		keys, releasePage, err := s.sw17SearchKeyPage(ctx, workspace, field, last)
+		keys, releasePage, err := s.searchMigrationKeyPage(ctx, workspace, field, last)
 		if err != nil {
 			return err
 		}

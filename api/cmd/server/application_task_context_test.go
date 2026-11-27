@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21ApplicationTaskContextDifferential(t *testing.T) {
+func TestScaleApplicationTaskContextDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-task-context-")
 		at := time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.task_context_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -170,10 +170,10 @@ func TestScaleP21ApplicationTaskContextDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationTaskContextOutputOwner(t *testing.T) {
+func TestScaleApplicationTaskContextOutputOwner(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		r := f.literalRequest(f.data.Viewer, nil, nil)
 		r.Method, r.URL.Path = http.MethodGet, "/api/agent-tasks/task"
 		_, err := (&server{store: f.probe}).applicationTaskContext(r, domain.AgentTask{ResourceType: codingEnvironmentAnchorResource}, false)

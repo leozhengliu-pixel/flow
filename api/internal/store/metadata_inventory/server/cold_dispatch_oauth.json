@@ -5,7 +5,7 @@
     "listAuthorizedApplicationsWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal remainder of listAuthorizedApplications after its access/admin checks with the repository explicit. Bounded it refreshes the borrowed facade (authorization may have pinned it earlier), then reads the facade's complete installed workspace exactly as legacy. TestScaleP21SW430OAuthColdRoutes (see listAuthorizedApplications).",
+      "reason": "Literal remainder of listAuthorizedApplications after its access/admin checks with the repository explicit. Bounded it refreshes the borrowed facade (authorization may have pinned it earlier), then reads the facade's complete installed workspace exactly as legacy. TestOAuthColdRoutes (see listAuthorizedApplications).",
       "coldDispatch": "server/oauth_authorized_applications.go:listAuthorizedApplications",
       "accessors": [
         "WorkspaceMetadata"
@@ -19,7 +19,7 @@
     "updateOAuthApplicationWithStore": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal remainder of updateOAuthApplication after its decode/validation with the repository explicit; the oauth_application.updated writer runs on the cold facade, the identity sync and webhook reconcile on the server's store. TestScaleP21SW430OAuthColdRoutes (see updateOAuthApplication).",
+      "reason": "Literal remainder of updateOAuthApplication after its decode/validation with the repository explicit; the oauth_application.updated writer runs on the cold facade, the identity sync and webhook reconcile on the server's store. TestOAuthColdRoutes (see updateOAuthApplication).",
       "coldDispatch": "server/settings_features.go:updateOAuthApplication",
       "accessors": [
         "MutateWorkspace"

@@ -11,15 +11,15 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotOAuthLogoAccessDifferential(t *testing.T) {
+func TestScaleHotOAuthLogoAccessDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	key := f.data.Workspace.URLKey
 	name := "oauth_app_icon_" + idgen.Stamp() + ".png"
 	url := "/uploads/" + name
@@ -79,15 +79,15 @@ func TestScaleP21HotOAuthLogoAccessDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotOAuthLogoOwnedImageBoundary(t *testing.T) {
+func TestScaleHotOAuthLogoOwnedImageBoundary(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	name := "oauth_app_icon_" + idgen.Stamp() + ".svg"
 	app := domain.OAuthApplication{ID: idgen.New("hot-logo-"), ClientID: idgen.New("hot-logo-client-"), LogoURL: "/uploads/" + name, PublicEnabled: true}
 	if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "oauthApplications"), f.data.Workspace.URLKey, "scale_p21.hot_logo_seed", "", nil, func(data *domain.Bootstrap) error {

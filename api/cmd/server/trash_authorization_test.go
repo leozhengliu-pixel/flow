@@ -17,15 +17,15 @@ import (
 
 // This certifies the production authorizer, not restore/purge publication.
 // The separate actual-handler test remains strict until that writer is ready.
-func TestScaleP21SW319TrashAuthorizationDifferential(t *testing.T) {
+func TestTrashAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
 	t.Setenv("FLOW_TRASH_RECORDS", "off")
-	for driver, repository := range scaleP03ServerTestStores(t) {
+	for driver, repository := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21SW215AuthMatrixSeed(t, repository)
+			f := authMatrixSeed(t, repository)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw319-")
 			data, ok := repository.WorkspaceMetadata(workspace)
 			if !ok {
@@ -154,12 +154,12 @@ func TestScaleP21SW319TrashAuthorizationDifferential(t *testing.T) {
 									}
 									request := httptest.NewRequest(method, path, nil)
 									request.Header.Set("X-Workspace-Key", workspace)
-									scaleP21SW319Credential(request, credential)
+									trashAuthorizationCredential(request, credential)
 									request, release := beginRequestResourceReads(request)
 									scope := request.Context().Value(requestResourceReadsKey{}).(*requestResourceReads)
 									recorder := httptest.NewRecorder()
 									outputChecks := 0
-									writer := &scaleP21SW215ColdOutputWriter{ResponseRecorder: recorder, check: func() {
+									writer := &coldOutputWriter{ResponseRecorder: recorder, check: func() {
 										outputChecks++
 										if source.BoundedMetadataEnabled() && (scope.closed || len(scope.closers) == 0) {
 											t.Error("trash authorization released its cold graph before encoding")
@@ -224,7 +224,7 @@ func TestScaleP21SW319TrashAuthorizationDifferential(t *testing.T) {
 						})
 						request := httptest.NewRequest(http.MethodPost, "/api/trash/"+entryID+"/restore", nil)
 						request.Header.Set("X-Workspace-Key", f.foreign)
-						scaleP21SW319Credential(request, credential)
+						trashAuthorizationCredential(request, credential)
 						recorder := httptest.NewRecorder()
 						service.withColdMetadataRouteMux(mux, service.authenticate(mux)).ServeHTTP(recorder, request)
 						if source == repository {
@@ -246,7 +246,7 @@ func TestScaleP21SW319TrashAuthorizationDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW319Credential(request *http.Request, credential scaleP21SW215RealCredential) {
+func trashAuthorizationCredential(request *http.Request, credential realCredential) {
 	if credential.session != "" {
 		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: credential.session})
 	} else {

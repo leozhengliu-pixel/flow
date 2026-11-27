@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW16ProjectTemplateWriteAggregateHold(t *testing.T) {
+func TestProjectTemplateWriteAggregateHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		id := idgen.New("sw16-template-collision-")
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		seed := func(deleting bool) {

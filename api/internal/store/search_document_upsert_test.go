@@ -14,16 +14,16 @@ import (
 // MySQL 8.4 drops the rows that a multi-row INSERT ... ON DUPLICATE KEY
 // UPDATE changes from an InnoDB FULLTEXT index: MATCH no longer finds them.
 // Triage moves renumber issues, so their search documents change in one
-// multi-row write, and later candidate searches missed them (SW440/441/442/
+// multi-row write, and later candidate searches missed them (triage writer budget/441/442/
 // 463 on MySQL: a later generation scored fewer candidates than an earlier
 // one). Every dialect must still find each issue after its document is
 // rewritten by the issue index sync (several documents in one write, next to
 // unchanged and new ones) and by the bounded search-index migration.
-func TestScaleP21SW466SearchDocumentsStayFindableAfterRewrites(t *testing.T) {
+func TestSearchDocumentsStayFindableAfterRewrites(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	prefix, workspace := idgen.New("sw466-"), f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 18, 1, 2, 3, 0, time.UTC)
 	var issues []domain.Issue
@@ -88,7 +88,7 @@ func TestScaleP21SW466SearchDocumentsStayFindableAfterRewrites(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE issue_search_migrations SET last_id='',complete=0 WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.scaleP21SW18MigrateIssueSearchIndex(t.Context()); err != nil {
+	if err := f.migrateIssueSearchIndexBounded(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	for _, index := range []int{1, 4, 7, 10} {

@@ -10,7 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-func TestScaleP21SW94CacheBytes(t *testing.T) {
+func TestCacheBytes(t *testing.T) {
 	server := miniredis.RunT(t)
 	cache := openTestRedis(t, server.Addr())
 	t.Cleanup(func() { _ = cache.Close() })

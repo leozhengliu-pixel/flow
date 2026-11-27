@@ -9,14 +9,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW554: a COLD legacy write that panics does not deadlock later requests.
+// A COLD legacy write that panics does not deadlock later requests.
 // The panic is raised inside the write's install, while the writer holds the
 // facade's lock and the live store's write lock: the write lock is returned
 // on unwinding, the facade is dropped without waiting for its lock, the COLD
 // slot is released, the live write lock is free, and the next COLD write and a legacy read
 // complete. A panic in the callback itself is covered the same way.
-func TestScaleP21SW554PanickingColdWriteReleasesItsLocks(t *testing.T) {
-	_, view, workspace := scaleP21ColdReadFixture(t)
+func TestPanickingColdWriteReleasesItsLocks(t *testing.T) {
+	_, view, workspace := scaleColdReadFixture(t)
 	view.metadataResidency.work.limit = metadataWorkBytes()
 	ctx := WithColdWork(t.Context(), "sw554")
 	write := func(id string) error {

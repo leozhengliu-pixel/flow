@@ -127,7 +127,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 			return nil, fmt.Errorf("%w: unsplittable discussion metadata %s", ErrMetadataRecordQuery, name)
 		}
 	}
-	changes, _, err := scaleP16RecordChanges(nativeBefore, nativeNext)
+	changes, _, err := scaleRecordChanges(nativeBefore, nativeNext)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 	if len(appendOrders) != 0 {
 		writeCtx = context.WithValue(ctx, metadataAppendOrdersKey{}, appendOrders)
 	}
-	if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(nativeNext), changes); err != nil {
+	if err := scaleWriteChanges(writeCtx, tx, workspace, newIssueReferences(nativeNext), changes); err != nil {
 		return nil, err
 	}
 	exact = exact && source.Stamp().revision >= 0 && source.Stamp() == baseStamp

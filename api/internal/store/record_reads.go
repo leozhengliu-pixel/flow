@@ -75,7 +75,7 @@ func (s *SQLiteStore) recordReadStatus(ctx context.Context, access AccessContext
 }
 
 // ReadRecordPage serves only a catalog certified by its transactional writer.
-// A completed P05 shadow pass alone is never sufficient coverage.
+// A completed metadata catalog shadow pass alone is never sufficient coverage.
 func (s *SQLiteStore) ReadRecordPage(ctx context.Context, access AccessContext, q PageRequest) (RecordPage, error) {
 	if s.metadataResidency != nil {
 		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)

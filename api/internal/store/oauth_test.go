@@ -15,10 +15,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW17OAuthClientSkipsUnloadedWorkspace(t *testing.T) {
+func TestOAuthClientSkipsUnloadedWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	ctx := ContextWithActor(t.Context(), f.data.Viewer)
 	prefix := idgen.New("sw17-client-")
 	clientID := prefix + "-duplicate"
@@ -98,10 +98,10 @@ func TestScaleP21SW17OAuthClientSkipsUnloadedWorkspace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17NativeOAuthDifferential(t *testing.T) {
+func TestNativeOAuthDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	same := func(left, right any) bool {
 		leftJSON, leftErr := json.Marshal(left)
 		rightJSON, rightErr := json.Marshal(right)

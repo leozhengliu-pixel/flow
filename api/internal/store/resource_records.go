@@ -116,7 +116,7 @@ func (s *SQLiteStore) resourceReadRecords(ctx context.Context, p *resourceAccess
 			return data, nil
 		}
 	}
-	// Slug lookup reads identities only; P05's catalog can replace this scan
+	// Slug lookup reads identities only; metadata catalog's catalog can replace this scan
 	// without changing matching precedence or the ownership of the result.
 	rows, err := s.db.QueryContext(ctx, "SELECT record_key,"+s.jsonText("data", "id")+","+s.jsonText("data", "slugId")+","+s.jsonText("data", "previousSlugIds")+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? ORDER BY collection_order,record_key`, p.workspace, kind)
 	if err != nil {

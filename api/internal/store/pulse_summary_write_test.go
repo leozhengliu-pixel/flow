@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21PulseSummaryCandidates(prefix string, count int, notification bool) []PulseSummaryCandidate {
+func scalePulseSummaryCandidates(prefix string, count int, notification bool) []PulseSummaryCandidate {
 	end := time.Date(2026, 11, 16, 6, 0, 0, 0, time.UTC)
 	result := make([]PulseSummaryCandidate, count)
 	for index := range result {
@@ -34,7 +34,7 @@ func scaleP21PulseSummaryCandidates(prefix string, count int, notification bool)
 	return result
 }
 
-func scaleP21PulseSummaryPrepare(input PulseSummaryDispatchInput) (PulseSummaryDispatch, error) {
+func scalePulseSummaryPrepare(input PulseSummaryDispatchInput) (PulseSummaryDispatch, error) {
 	prefs := input.Preferences
 	if !input.HasPreferences {
 		prefs.Inbox.Enabled, prefs.Email.Enabled, prefs.Desktop.Enabled = true, true, true
@@ -78,7 +78,7 @@ func scaleP21PulseSummaryPrepare(input PulseSummaryDispatchInput) (PulseSummaryD
 	return result, nil
 }
 
-func scaleP21PulseSummarySeed(t *testing.T, f scaleP09Fixture, candidates []PulseSummaryCandidate, cursorCount int) {
+func scalePulseSummarySeed(t *testing.T, f scaleFixture, candidates []PulseSummaryCandidate, cursorCount int) {
 	t.Helper()
 	err := f.MutateWorkspace(WithMetadataFields(t.Context(), "workspaceSettings", "settings", "userSettings", "notificationPreferences", "pushSubscriptions", "projects"),
 		f.data.Workspace.URLKey, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
@@ -114,7 +114,7 @@ func scaleP21PulseSummarySeed(t *testing.T, f scaleP09Fixture, candidates []Puls
 	}
 }
 
-func scaleP21PulseSummaryLegacy(ctx context.Context, f *SQLiteStore, workspace string, candidates []PulseSummaryCandidate, prepare func(PulseSummaryDispatchInput) (PulseSummaryDispatch, error)) error {
+func scalePulseSummaryLegacy(ctx context.Context, f *SQLiteStore, workspace string, candidates []PulseSummaryCandidate, prepare func(PulseSummaryDispatchInput) (PulseSummaryDispatch, error)) error {
 	ctx = WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
 	return f.MutateWorkspace(ctx, workspace, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
 		if enabled, configured := data.WorkspaceSettings.FeatureFlags["pulse"]; configured && !enabled {
@@ -167,7 +167,7 @@ func scaleP21PulseSummaryLegacy(ctx context.Context, f *SQLiteStore, workspace s
 	})
 }
 
-func scaleP21PulseSummaryRows(t *testing.T, f scaleP09Fixture) []string {
+func scalePulseSummaryRows(t *testing.T, f scaleFixture) []string {
 	t.Helper()
 	rows, err := f.db.QueryContext(t.Context(), `SELECT kind,id,data,owner_id,parent_id,status,next_attempt_at FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,id`, f.data.Workspace.URLKey)
 	if err != nil {
@@ -190,7 +190,7 @@ func scaleP21PulseSummaryRows(t *testing.T, f scaleP09Fixture) []string {
 	return result
 }
 
-func scaleP21PulseSummaryCursor(t *testing.T, repo *SQLiteStore, workspace string) []byte {
+func scalePulseSummaryCursor(t *testing.T, repo *SQLiteStore, workspace string) []byte {
 	t.Helper()
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='pulseDeliveryCursors'`, workspace).Scan(&raw); err != nil {
@@ -200,7 +200,7 @@ func scaleP21PulseSummaryCursor(t *testing.T, repo *SQLiteStore, workspace strin
 }
 
 func TestWritePulseSummaryRowsAcrossBatches(t *testing.T) {
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestWritePulseSummaryRowsAcrossBatches(t *testing.T) {
 	const count = contentRecordWriteBatchSize/2 + 1
 	notifications := make([]domain.Notification, 0, count)
 	deliveries := make([]domain.NotificationDelivery, 0, count)
-	for _, candidate := range scaleP21PulseSummaryCandidates("batch", count, true) {
+	for _, candidate := range scalePulseSummaryCandidates("batch", count, true) {
 		notifications = append(notifications, *candidate.Notification)
 		deliveries = append(deliveries, domain.NotificationDelivery{
 			ID: "delivery_" + candidate.Notification.ID, NotificationID: candidate.Notification.ID,
@@ -233,17 +233,17 @@ func TestWritePulseSummaryRowsAcrossBatches(t *testing.T) {
 	}
 }
 
-func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
+func TestScalePulseSummaryWriterDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	candidates := scaleP21PulseSummaryCandidates(idgen.New("summary-differential-"), 4, true)
+	candidates := scalePulseSummaryCandidates(idgen.New("summary-differential-"), 4, true)
 	candidates[3].Notification = nil
 	var outcomes []any
 	for _, mode := range []string{"legacy", "warm", "reloaded"} {
 		bounded := mode != "legacy"
-		f := scaleP09Database(t)
-		scaleP21PulseSummarySeed(t, f, candidates, 2)
+		f := journalScaleDatabase(t)
+		scalePulseSummarySeed(t, f, candidates, 2)
 		workspace := f.data.Workspace.URLKey
 		repo := f.SQLiteStore
 		if bounded {
@@ -274,18 +274,18 @@ func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
 		repo.SetRealtimeSink(captureRealtime)
 		var err error
 		if bounded {
-			err = repo.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare)
+			err = repo.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare)
 		} else {
-			err = scaleP21PulseSummaryLegacy(t.Context(), repo, workspace, candidates, scaleP21PulseSummaryPrepare)
+			err = scalePulseSummaryLegacy(t.Context(), repo, workspace, candidates, scalePulseSummaryPrepare)
 		}
 		if err != nil {
 			t.Fatal("summary write failed", bounded, err)
 		}
 		firstEffects := len(effects)
 		if bounded {
-			err = repo.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare)
+			err = repo.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare)
 		} else {
-			err = scaleP21PulseSummaryLegacy(t.Context(), repo, workspace, candidates, scaleP21PulseSummaryPrepare)
+			err = scalePulseSummaryLegacy(t.Context(), repo, workspace, candidates, scalePulseSummaryPrepare)
 		}
 		if err != nil || len(effects) != firstEffects || firstEffects != 5 {
 			t.Fatal("repeat tick published or failed", bounded, err, firstEffects, len(effects))
@@ -302,7 +302,7 @@ func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
 		if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM audit_events WHERE workspace_id=?`, f.data.Workspace.ID).Scan(&audit); err != nil {
 			t.Fatal(err)
 		}
-		outcomes = append(outcomes, []any{scaleP21PulseSummaryRows(t, f), string(scaleP21PulseSummaryCursor(t, repo, workspace)), effects, states, audit})
+		outcomes = append(outcomes, []any{scalePulseSummaryRows(t, f), string(scalePulseSummaryCursor(t, repo, workspace)), effects, states, audit})
 		if bounded {
 			if repo.metadataResidency.work.used != 0 || repo.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("bounded writer leaked work or hydrated workspace")
@@ -315,7 +315,7 @@ func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			actual, _ := json.Marshal(read.Snapshot.Settings["pulseDeliveryCursors"])
-			if !bytes.Equal(actual, scaleP21PulseSummaryCursor(t, repo, workspace)) {
+			if !bytes.Equal(actual, scalePulseSummaryCursor(t, repo, workspace)) {
 				t.Fatal("committed cursor source is stale")
 			}
 			read.Close()
@@ -328,20 +328,20 @@ func TestScaleP21PulseSummaryWriterDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21PulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
+func TestScalePulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	candidates := scaleP21PulseSummaryCandidates(idgen.New("summary-rollback-"), 2, true)
-	scaleP21PulseSummarySeed(t, f, candidates, 2)
+	f := journalScaleDatabase(t)
+	candidates := scalePulseSummaryCandidates(idgen.New("summary-rollback-"), 2, true)
+	scalePulseSummarySeed(t, f, candidates, 2)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
-	rows, cursor := scaleP21PulseSummaryRows(t, f), scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)
+	rows, cursor := scalePulseSummaryRows(t, f), scalePulseSummaryCursor(t, f.SQLiteStore, workspace)
 	installed := view.metadataResidency.logical[workspace]
 	published := 0
 	view.SetWebhookSink(func(string, domain.DomainEvent) { published++ })
@@ -349,10 +349,10 @@ func TestScaleP21PulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
 	previous := f.db.commitHooks.Load()
 	defer f.db.commitHooks.Store(previous)
 	f.db.commitHooks.Store(&commitHooks{beforeCommit: func(tx *sqlTx) { tx.writeErr = failure }})
-	if err := view.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); !errors.Is(err, failure) {
+	if err := view.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); !errors.Is(err, failure) {
 		t.Fatal("commit injection was not returned", err)
 	}
-	if !reflect.DeepEqual(rows, scaleP21PulseSummaryRows(t, f)) || !bytes.Equal(cursor, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) ||
+	if !reflect.DeepEqual(rows, scalePulseSummaryRows(t, f)) || !bytes.Equal(cursor, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) ||
 		view.metadataResidency.logical[workspace] != installed || published != 0 || view.metadataResidency.work.used != 0 {
 		t.Fatal("failed atomic write changed rows/source, published or leaked work")
 	}
@@ -364,7 +364,7 @@ func TestScaleP21PulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := view.CommitPulseSummaries(ctx, workspace, candidates, scaleP21PulseSummaryPrepare); !errors.Is(err, context.Canceled) {
+	if err := view.CommitPulseSummaries(ctx, workspace, candidates, scalePulseSummaryPrepare); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation was not returned", err)
 	}
 	commits := 0
@@ -390,11 +390,11 @@ func TestScaleP21PulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
 			return
 		}
 		raw, _ := json.Marshal(read.Snapshot.Settings["pulseDeliveryCursors"])
-		if !bytes.Equal(raw, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) {
+		if !bytes.Equal(raw, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) {
 			t.Error("publication observed stale source")
 		}
 	})
-	if err := view.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); err != nil || commits != 2 || published != 1 {
+	if err := view.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); err != nil || commits != 2 || published != 1 {
 		t.Fatal("retry did not publish one atomic batch", err, commits, published)
 	}
 	if view.metadataResidency.work.used != 0 {
@@ -402,15 +402,15 @@ func TestScaleP21PulseSummaryWriterRollbackRetryAndPublication(t *testing.T) {
 	}
 }
 
-func TestScaleP21PulseSummaryWriterLargeCursorAndPeerNoop(t *testing.T) {
+func TestScalePulseSummaryWriterLargeCursorAndPeerNoop(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	candidates := scaleP21PulseSummaryCandidates(idgen.New("summary-large-"), PulseSummaryBatchMaxCandidates, false)
-	scaleP21PulseSummarySeed(t, f, candidates, 9000)
+	f := journalScaleDatabase(t)
+	candidates := scalePulseSummaryCandidates(idgen.New("summary-large-"), PulseSummaryBatchMaxCandidates, false)
+	scalePulseSummarySeed(t, f, candidates, 9000)
 	workspace := f.data.Workspace.URLKey
-	before := scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)
+	before := scalePulseSummaryCursor(t, f.SQLiteStore, workspace)
 	if len(before) <= MetadataRecordPageMaxBytes {
 		t.Fatal("large cursor fixture does not exceed generic page cap", len(before))
 	}
@@ -430,33 +430,33 @@ func TestScaleP21PulseSummaryWriterLargeCursorAndPeerNoop(t *testing.T) {
 	}
 	limit := first.metadataResidency.work.limit
 	first.metadataResidency.work.limit = 64 << 20
-	if err := first.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
+	if err := first.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("native cursor preimage was not independently admitted", err)
 	}
 	first.metadataResidency.work.limit = limit
-	if published != 0 || !bytes.Equal(before, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) || first.metadataResidency.work.used != 0 {
+	if published != 0 || !bytes.Equal(before, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) || first.metadataResidency.work.used != 0 {
 		t.Fatal("native cursor quota failure changed state or leaked work")
 	}
-	if err := first.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); err != nil {
+	if err := first.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); err != nil {
 		t.Fatal("1000-recipient large cursor transaction failed", err)
 	}
-	after := scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)
+	after := scalePulseSummaryCursor(t, f.SQLiteStore, workspace)
 	if len(after) <= len(before) || published != 1 {
 		t.Fatal("large cursor did not advance as one batch", len(before), len(after), published)
 	}
 	limit = peer.metadataResidency.work.limit
 	peer.metadataResidency.work.limit = 100 << 20
-	if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
+	if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("canonical cursor preimage was not independently admitted", err)
 	}
 	peer.metadataResidency.work.limit = limit
-	if published != 1 || !bytes.Equal(after, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) || peer.metadataResidency.work.used != 0 {
+	if published != 1 || !bytes.Equal(after, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) || peer.metadataResidency.work.used != 0 {
 		t.Fatal("canonical cursor quota failure changed state or leaked work")
 	}
-	if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scaleP21PulseSummaryPrepare); err != nil || published != 1 {
+	if err := peer.CommitPulseSummaries(t.Context(), workspace, candidates, scalePulseSummaryPrepare); err != nil || published != 1 {
 		t.Fatal("stale peer duplicated cursor batch instead of refreshing and skipping", err, published)
 	}
-	if !bytes.Equal(after, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) {
+	if !bytes.Equal(after, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) {
 		t.Fatal("peer no-op changed cursor bytes")
 	}
 	for _, view := range []*SQLiteStore{first, peer} {
@@ -467,33 +467,33 @@ func TestScaleP21PulseSummaryWriterLargeCursorAndPeerNoop(t *testing.T) {
 	t.Logf("complete_cursor_bytes=%d -> %d recipients=%d publications=%d", len(before), len(after), len(candidates), published)
 }
 
-func TestScaleP21PulseSummaryWriterInputAndCancellationBounds(t *testing.T) {
+func TestScalePulseSummaryWriterInputAndCancellationBounds(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	candidates := scaleP21PulseSummaryCandidates(idgen.New("summary-bounds-"), 2, true)
-	scaleP21PulseSummarySeed(t, f, candidates, 2)
+	f := journalScaleDatabase(t)
+	candidates := scalePulseSummaryCandidates(idgen.New("summary-bounds-"), 2, true)
+	scalePulseSummarySeed(t, f, candidates, 2)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer view.releaseMetadataLogicalSources()
-	beforeRows, beforeCursor := scaleP21PulseSummaryRows(t, f), scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)
+	beforeRows, beforeCursor := scalePulseSummaryRows(t, f), scalePulseSummaryCursor(t, f.SQLiteStore, workspace)
 	ctx, cancel := context.WithCancel(t.Context())
 	if err := view.CommitPulseSummaries(ctx, workspace, candidates, func(input PulseSummaryDispatchInput) (PulseSummaryDispatch, error) {
 		cancel()
-		return scaleP21PulseSummaryPrepare(input)
+		return scalePulseSummaryPrepare(input)
 	}); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled delivery preparation reached commit", err)
 	}
 	invalid := []PulseSummaryCandidate{candidates[0], candidates[0]}
-	if err := view.CommitPulseSummaries(t.Context(), workspace, invalid, scaleP21PulseSummaryPrepare); !errors.Is(err, ErrMetadataRecordQuery) {
+	if err := view.CommitPulseSummaries(t.Context(), workspace, invalid, scalePulseSummaryPrepare); !errors.Is(err, ErrMetadataRecordQuery) {
 		t.Fatal("duplicate recipient accepted", err)
 	}
 	overflow := make([]PulseSummaryCandidate, PulseSummaryBatchMaxCandidates+1)
-	if err := view.CommitPulseSummaries(t.Context(), workspace, overflow, scaleP21PulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
+	if err := view.CommitPulseSummaries(t.Context(), workspace, overflow, scalePulseSummaryPrepare); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("tick bound exceeded", err)
 	}
 	if err := view.CommitPulseSummaries(t.Context(), workspace, candidates, func(input PulseSummaryDispatchInput) (PulseSummaryDispatch, error) {
@@ -501,8 +501,8 @@ func TestScaleP21PulseSummaryWriterInputAndCancellationBounds(t *testing.T) {
 	}); !errors.Is(err, ErrMetadataRecordQuery) {
 		t.Fatal("unbound delivery row accepted", err)
 	}
-	if view.metadataResidency.work.used != 0 || !reflect.DeepEqual(beforeRows, scaleP21PulseSummaryRows(t, f)) ||
-		!bytes.Equal(beforeCursor, scaleP21PulseSummaryCursor(t, f.SQLiteStore, workspace)) {
+	if view.metadataResidency.work.used != 0 || !reflect.DeepEqual(beforeRows, scalePulseSummaryRows(t, f)) ||
+		!bytes.Equal(beforeCursor, scalePulseSummaryCursor(t, f.SQLiteStore, workspace)) {
 		t.Fatal("input/cancellation failure leaked work or changed state")
 	}
 }

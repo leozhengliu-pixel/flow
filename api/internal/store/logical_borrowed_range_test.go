@@ -13,7 +13,7 @@ import (
 // across borrowed and own bytes, buffered and flushed, and past the end. A
 // patch of a borrowed range is refused, the lender limit makes the caller
 // copy, and every lender stays open until its last borrower is discarded.
-func TestScaleP21LogicalBorrowedRangesMatchCopies(t *testing.T) {
+func TestScaleLogicalBorrowedRangesMatchCopies(t *testing.T) {
 	for _, seed := range []uint64{3, 41} {
 		random := rand.New(rand.NewPCG(seed, 5))
 		directory := t.TempDir()
@@ -117,7 +117,7 @@ func TestScaleP21LogicalBorrowedRangesMatchCopies(t *testing.T) {
 
 // A storage never borrows from more than metadataLogicalLenderLimit
 // storages: the next borrow is refused and the caller copies.
-func TestScaleP21LogicalBorrowedRangesLenderLimit(t *testing.T) {
+func TestScaleLogicalBorrowedRangesLenderLimit(t *testing.T) {
 	directory := t.TempDir()
 	borrower := &metadataLogicalStorage{directory: directory, refs: 1}
 	defer borrower.Release()

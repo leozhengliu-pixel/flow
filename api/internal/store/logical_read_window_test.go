@@ -10,12 +10,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW592: materializing a node reads it once into a window and decodes it and
+// Materializing a node reads it once into a window and decodes it and
 // its nested nodes from that copy; the decoded values equal the captured
 // ones whether the node fits a window (a label, a project), exceeds one (a
 // large settings map, the whole projects collection) or nests one inside
 // another.
-func TestScaleP21SW592LogicalReadWindow(t *testing.T) {
+func TestLogicalReadWindow(t *testing.T) {
 	large := strings.Repeat("window-", metadataLogicalWindowBytes/7+100)
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "sw592", URLKey: "sw592", Name: "SW592"},
@@ -103,7 +103,7 @@ func TestScaleP21SW592LogicalReadWindow(t *testing.T) {
 // A node too large for one window (a large collection) is traversed in
 // chunks: its child headers and small children come from the cursor's
 // sliding window, not one spool read each, and decode as before.
-func TestScaleP21LogicalReadSlidingWindow(t *testing.T) {
+func TestScaleLogicalReadSlidingWindow(t *testing.T) {
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: "slide", URLKey: "slide", Name: "Slide"}}
 	for i := range 3000 {
 		data.Labels = append(data.Labels, domain.IssueLabel{ID: fmt.Sprintf("label-%04d", i), Name: strings.Repeat("n", 40+i%90), Description: strings.Repeat("d", i%7*60)})

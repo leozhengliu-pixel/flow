@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21InlinePostimageUnicodeBytes(t *testing.T) {
+func TestScaleInlinePostimageUnicodeBytes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	target, duplicate := idgen.New("unicode-hook-"), idgen.New("unicode-duplicate-")
@@ -21,7 +21,7 @@ func TestScaleP21InlinePostimageUnicodeBytes(t *testing.T) {
 	}
 	var expected []byte
 	for _, bounded := range []bool{false, true} {
-		f := scaleP09Database(t)
+		f := journalScaleDatabase(t)
 		workspace := f.data.Workspace.URLKey
 		if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "webhooks", "webhookFailureEvents"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 			data.Webhooks = []domain.Webhook{{ID: target, URL: "https://example.test/hook", Enabled: true}}
@@ -42,7 +42,7 @@ func TestScaleP21InlinePostimageUnicodeBytes(t *testing.T) {
 		}
 		var actual []domain.WebhookFailureEvent
 		if !bounded {
-			if err := scaleP21WebhookFailureLiteral(t.Context(), f.SQLiteStore, workspace, failure, 502); err != nil {
+			if err := scaleWebhookFailureLiteral(t.Context(), f.SQLiteStore, workspace, failure, 502); err != nil {
 				t.Fatal(err)
 			}
 			data, _ := f.WorkspaceMetadata(workspace)
@@ -55,7 +55,7 @@ func TestScaleP21InlinePostimageUnicodeBytes(t *testing.T) {
 			if err := view.RecordWebhookDeliveryFailure(t.Context(), workspace, failure, 502); err != nil {
 				t.Fatal("Unicode root byte preflight rejected the legacy write", err)
 			}
-			actual = scaleP21WebhookFailureSource(t, view, workspace)
+			actual = scaleWebhookFailureSource(t, view, workspace)
 			if view.metadataResidency.work.used != 0 {
 				t.Fatal("Unicode inline write leaked work admission")
 			}

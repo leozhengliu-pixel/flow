@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func (s *server) scaleP19Manifest(w http.ResponseWriter, r *http.Request) {
+func (s *server) manifestScaleManifest(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("surface") != "projects-page" && r.URL.Query().Get("surface") != "initiatives-page" {
 		writeSyncError(w, store.ErrMetadataRecordQuery)
 		return
@@ -33,11 +33,11 @@ func (s *server) scaleP19Manifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "Query windows are not ready")
 		return
 	}
-	if _, err := s.store.OpenScaleP19Cursor(r.Context(), access, "projects", "manifest", ""); err != nil {
+	if _, err := s.store.OpenScaleCursor(r.Context(), access, "projects", "manifest", ""); err != nil {
 		writeError(w, http.StatusNotImplemented, "Query windows are not ready")
 		return
 	}
-	snapshot, ok := s.scaleP19Metadata(w, r)
+	snapshot, ok := s.queryWindowMetadataScaleMetadata(w, r)
 	if !ok {
 		return
 	}
@@ -92,7 +92,7 @@ func (s *server) scaleP19Manifest(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
-	result := map[string]any{"schema": 2, "workspaceId": access.WorkspaceID, "viewerId": access.PrincipalID, "authzEpoch": access.AuthzEpoch, "head": journalHead, "capabilities": []string{"sync-v2", scaleP19Capability}, "core": core, "collections": collections}
+	result := map[string]any{"schema": 2, "workspaceId": access.WorkspaceID, "viewerId": access.PrincipalID, "authzEpoch": access.AuthzEpoch, "head": journalHead, "capabilities": []string{"sync-v2", scaleCapability}, "core": core, "collections": collections}
 	encoded, _ := json.Marshal(result)
 	if len(encoded)+1 > store.MetadataRecordPageMaxBytes {
 		writeError(w, http.StatusNotImplemented, "Query window core exceeds its budget")

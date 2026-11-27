@@ -11,11 +11,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21HotReviewReferenceInstalled(t *testing.T) {
+func TestScaleHotReviewReferenceInstalled(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, issueID := f.data.Workspace.URLKey, idgen.New("issue_review_reference_")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestScaleP21HotReviewReferenceInstalled(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotReviewReferenceRegistryAndAdmission(t *testing.T) {
+func TestScaleHotReviewReferenceRegistryAndAdmission(t *testing.T) {
 	source := &SQLiteStore{
 		metadataResidency: newMetadataResidency(), lastWorkspaceKey: "physical\x00default",
 		workspaces: map[string]domain.Bootstrap{

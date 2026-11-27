@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
+func TestTeamHandlerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		prefix := idgen.New("team_sw22_")
 		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -74,7 +74,7 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 		if err := repo.SetTeamMembership(t.Context(), f.data.Workspace.ID, teams[9].ID, f.principals[2].user.ID, "member", true); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "teams")
+		before := pointRecordFingerprint(t, repo, workspace, "teams")
 		refs := []string{
 			privateID, f.public, prefix + "-exact", prefix + "-key-before-id", "ex22", "DUP22",
 			"k", "S", prefix + "-retired", prefix + "-archived", prefix + "-external",
@@ -87,11 +87,11 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 					r, w := f.request(user, key, nil), httptest.NewRecorder()
 					r.Method = http.MethodGet
 					r.SetPathValue("id", ref)
-					scaleP21M3Call(&server{store: source}, w, r, (*server).getTeamRecord)
-					results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).getTeamRecord)
+					results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("team reference %q differs: %s", ref, scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("team reference %q differs: %s", ref, policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
@@ -102,10 +102,10 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 					r, w := f.request(f.data.Viewer, &domain.APIKey{TeamRestriction: "selected", TeamIDs: []string{}}, nil), httptest.NewRecorder()
 					r.SetPathValue("id", ref)
 					(&server{store: source, authDisabled: true}).getTeamRecord(w, r)
-					results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("auth-disabled reference %q differs: %s", ref, scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("auth-disabled reference %q differs: %s", ref, policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
@@ -117,10 +117,10 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 					r, w := f.request(f.data.Viewer, key, nil), httptest.NewRecorder()
 					r.SetPathValue("id", ref)
 					(&server{store: source}).getTeamRecord(w, r)
-					results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatal("legacy selected-key inference changed", scaleP21M2Diff(results[0], results[1]))
+					t.Fatal("legacy selected-key inference changed", policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
@@ -156,10 +156,10 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 					if w.Code == http.StatusServiceUnavailable {
 						t.Fatal("hidden team body disclosed its budget")
 					}
-					results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatal("hidden exact-ID/visible-key precedence changed", scaleP21M2Diff(results[0], results[1]))
+					t.Fatal("hidden exact-ID/visible-key precedence changed", policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
@@ -208,24 +208,24 @@ func TestScaleP21SW22TeamHandlerDifferential(t *testing.T) {
 			}
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				w := httptest.NewRecorder()
-				scaleP21M3Call(&server{store: source}, w, queued, (*server).getTeamRecord)
+				callPointSettingsHandler(&server{store: source}, w, queued, (*server).getTeamRecord)
 				if w.Code != http.StatusForbidden {
 					t.Fatal("queued or replayed team request survived revocation")
 				}
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "teams") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "teams") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("team read changed canonical teams or decoded full metadata")
 		}
 	}
 }
 
-func TestScaleP21SW22TeamLargeBodyAndCurrentKey(t *testing.T) {
+func TestTeamLargeBodyAndCurrentKey(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		id := f.public
 		for _, icon := range []string{strings.Repeat("legal icon ", 10000), "recovered-icon"} {
@@ -239,7 +239,7 @@ func TestScaleP21SW22TeamLargeBodyAndCurrentKey(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			before := scaleP21M3Fingerprint(t, repo, workspace, "teams")
+			before := pointRecordFingerprint(t, repo, workspace, "teams")
 			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", "cur22")
 			(&server{store: f.probe}).getTeamRecord(w, r)
@@ -250,7 +250,7 @@ func TestScaleP21SW22TeamLargeBodyAndCurrentKey(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || got.Icon != icon || got.ID != id {
 				t.Fatal("team detail body changed", err)
 			}
-			if before != scaleP21M3Fingerprint(t, repo, workspace, "teams") {
+			if before != pointRecordFingerprint(t, repo, workspace, "teams") {
 				t.Fatal("team budget path changed canonical rows")
 			}
 		}

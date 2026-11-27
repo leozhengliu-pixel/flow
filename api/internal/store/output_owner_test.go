@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestScaleP21MetadataOutputOwner(t *testing.T) {
+func TestScaleMetadataOutputOwner(t *testing.T) {
 	var closes []func()
 	ctx, cancel := context.WithCancel(t.Context())
 	ctx = WithMetadataOutputOwner(ctx, func(close func()) bool {
@@ -52,7 +52,7 @@ func TestScaleP21MetadataOutputOwner(t *testing.T) {
 	}
 }
 
-func TestScaleP21MetadataOutputOwnerConcurrentClose(t *testing.T) {
+func TestScaleMetadataOutputOwnerConcurrentClose(t *testing.T) {
 	read := &ResourceRead{}
 	ctx := read.metadataOutputContext(t.Context())
 	var released atomic.Int32

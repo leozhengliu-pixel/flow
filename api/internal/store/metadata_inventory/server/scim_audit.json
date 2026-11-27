@@ -20,7 +20,7 @@
     "recordSCIMAudit": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The empty scope also omits the ordinary users/subjectID winner for member audit entries. Previous review: Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleP21M2SCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The empty scope also omits the ordinary users/subjectID winner for member audit entries. Previous review: Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleSCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

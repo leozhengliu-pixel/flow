@@ -12,23 +12,23 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21NotificationWriter struct {
+type scaleNotificationWriter struct {
 	*httptest.ResponseRecorder
 	write func()
 }
 
-func (w *scaleP21NotificationWriter) Write(data []byte) (int, error) {
+func (w *scaleNotificationWriter) Write(data []byte) (int, error) {
 	if w.write != nil {
 		w.write()
 	}
 	return w.ResponseRecorder.Write(data)
 }
 
-func TestScaleP21HotNotificationHandler(t *testing.T) {
+func TestScaleHotNotificationHandler(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestScaleP21HotNotificationHandler(t *testing.T) {
 			old := httptest.NewRecorder()
 			fixture.service.listNotifications(old, request.Clone(ctx))
 			writes := 0
-			current := &scaleP21NotificationWriter{ResponseRecorder: httptest.NewRecorder(), write: func() {
+			current := &scaleNotificationWriter{ResponseRecorder: httptest.NewRecorder(), write: func() {
 				writes++
 				if restriction == "selected" && view.MetadataWorkUsedForTesting() == 0 {
 					t.Error("notification response lost its admission before encoding")

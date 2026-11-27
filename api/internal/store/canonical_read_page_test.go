@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-func TestScaleP21SW337CanonicalReadPages(t *testing.T) {
+func TestCanonicalReadPages(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -12,16 +12,16 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotTeamMaintenanceIdleAndAutomation(t *testing.T) {
+func TestScaleHotTeamMaintenanceIdleAndAutomation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	repo, err := store.OpenDatabase(scaleP03DatabaseConfig(t))
+	repo, err := store.OpenDatabase(platformDatabaseFixtureScaleDatabaseConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace := f.data.Workspace.URLKey
 	probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

@@ -19,12 +19,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW24ClassicHTTPConfiguration(t *testing.T) {
+func TestClassicHTTPConfiguration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("sw24-classic-")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "integrationConnections"), workspace, "scale_p21_sw24.seed", "", nil, func(data *domain.Bootstrap) error {
 			data.IntegrationConnections = []domain.IntegrationConnection{{ID: id, Provider: "github", Status: "configured", Config: map[string]string{}}}
@@ -84,12 +84,12 @@ func TestScaleP21SW24ClassicHTTPConfiguration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
+func TestOwnedExportsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw24-export-")
 		stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		targetFor := func(user domain.User, index int) string { return fmt.Sprintf("%s-%s-%03d", prefix, user.ID, index) }
@@ -110,7 +110,7 @@ func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "exportJobs")
+		before := pointRecordFingerprint(t, repo, workspace, "exportJobs")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			other := f.data.Viewer
 			if other.ID == user.ID {
@@ -146,11 +146,11 @@ func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
 						} else {
 							r.URL.Path += "/" + spec.id
 						}
-						scaleP21M3Call(&server{store: source}, w, r, handler)
+						callPointSettingsHandler(&server{store: source}, w, r, handler)
 						if w.Code != spec.want {
 							t.Fatalf("export status=%d want=%d body=%s", w.Code, spec.want, w.Body.String())
 						}
-						body := scaleP21M3JSON(t, w.Body.Bytes())
+						body := normalizeSettingsPointJSON(t, w.Body.Bytes())
 						if spec.list && w.Header().Get("X-Total-Count") != "123" {
 							t.Fatal("owned total changed", w.Header())
 						}
@@ -160,7 +160,7 @@ func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
 						outcomes = append(outcomes, []any{w.Code, body, w.Header().Get("X-Total-Count"), w.Header().Get("X-Next-Cursor")})
 					}
 					if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-						t.Fatalf("export differential: %s", scaleP21M2Diff(outcomes[0], outcomes[1]))
+						t.Fatalf("export differential: %s", policyFirstDifference(outcomes[0], outcomes[1]))
 					}
 				})
 			}
@@ -194,14 +194,14 @@ func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				for _, handler := range []func(*server, http.ResponseWriter, *http.Request){(*server).getExport, (*server).listExports} {
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, queued, handler)
+					callPointSettingsHandler(&server{store: source}, w, queued, handler)
 					if w.Code != http.StatusForbidden {
 						t.Fatalf("%s export reused revoked membership", phase)
 					}
 				}
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "exportJobs") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "exportJobs") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("export reader changed canonical rows or decoded complete metadata")
 		}
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW24 export foreign", idgen.New("sw24-export-foreign-"), "us")
@@ -225,7 +225,7 @@ func TestScaleP21SW24OwnedExportsDifferential(t *testing.T) {
 				if list {
 					handler, want = (*server).listExports, http.StatusOK
 				}
-				scaleP21M3Call(&server{store: source}, w, r, handler)
+				callPointSettingsHandler(&server{store: source}, w, r, handler)
 				if w.Code != want || list && (w.Header().Get("X-Total-Count") != "0" || w.Body.String() != "[]\n") {
 					t.Fatal("export metadata escaped its workspace", w.Code, w.Body.String())
 				}

@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW6RecordHash(t *testing.T, repo *store.SQLiteStore, workspace, kind, id string) [32]byte {
+func recordHash(t *testing.T, repo *store.SQLiteStore, workspace, kind, id string) [32]byte {
 	t.Helper()
 	hash := sha256.New()
 	found := false
@@ -34,12 +34,12 @@ func scaleP21SW6RecordHash(t *testing.T, repo *store.SQLiteStore, workspace, kin
 	return [32]byte(hash.Sum(nil))
 }
 
-func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
+func TestAgentActivityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		targetID, otherID, foreignID := idgen.New("sw6-activity-"), idgen.New("sw6-other-"), idgen.New("sw6-foreign-")
 		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -74,8 +74,8 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 			}
 		}
 		reset()
-		otherHash := scaleP21SW6RecordHash(t, repo, workspace, "agentActivities", otherID)
-		projectHash := scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated")
+		otherHash := recordHash(t, repo, workspace, "agentActivities", otherID)
+		projectHash := recordHash(t, repo, workspace, "projects", "m2-unrelated")
 
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW6 other workspace", idgen.New("sw6-workspace-"), "us")
 		if err != nil {
@@ -88,7 +88,7 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		foreignHash := scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "agentActivities", foreignID)
+		foreignHash := recordHash(t, repo, foreign.Workspace.URLKey, "agentActivities", foreignID)
 
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
@@ -113,7 +113,7 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 					var results []result
 					for _, source := range []*store.SQLiteStore{repo, f.probe} {
 						reset()
-						before := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
+						before := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
 						var events []domain.DomainEvent
 						var realtime []domain.RealtimeEvent
 						source.SetWebhookSink(func(_ string, event domain.DomainEvent) { events = append(events, event) })
@@ -131,11 +131,11 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 						if w.Code != spec.status || len(events) != spec.events || len(realtime) != spec.events {
 							t.Fatalf("status=%d events=%d/%d; want=%d events=%d body=%s", w.Code, len(events), len(realtime), spec.status, spec.events, w.Body.String())
 						}
-						rows := scaleP21M2Canonical(t, repo, workspace,
+						rows := policyCanonicalRecords(t, repo, workspace,
 							store.RecordKey{Kind: "agentActivities", ID: targetID},
 							store.RecordKey{Kind: "users", ID: user.ID})
 						if spec.events == 0 {
-							after := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
+							after := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
 							if !reflect.DeepEqual(before, after) {
 								t.Fatal("failed or no-op update changed canonical activity")
 							}
@@ -148,25 +148,25 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 							effects = append(effects, []any{event.Type, event.AggregateID, event.ActorID, event.ClientID, event.Payload})
 						}
 						results = append(results, result{
-							Response: []any{w.Code, scaleP21M2Response(t, w, false)},
+							Response: []any{w.Code, policyDifferentialResponse(t, w, false)},
 							Rows:     rows,
-							Events:   scaleP21M2JSON(t, effects, false),
+							Events:   normalizePolicyJSON(t, effects, false),
 						})
-						if scaleP21SW6RecordHash(t, repo, workspace, "agentActivities", otherID) != otherHash ||
-							scaleP21SW6RecordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
-							scaleP21SW6RecordHash(t, repo, foreign.Workspace.URLKey, "agentActivities", foreignID) != foreignHash {
+						if recordHash(t, repo, workspace, "agentActivities", otherID) != otherHash ||
+							recordHash(t, repo, workspace, "projects", "m2-unrelated") != projectHash ||
+							recordHash(t, repo, foreign.Workspace.URLKey, "agentActivities", foreignID) != foreignHash {
 							t.Fatal("activity update changed unrelated or foreign canonical bytes")
 						}
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatalf("activity differential: %s", scaleP21M2Diff(results[0], results[1]))
+						t.Fatalf("activity differential: %s", policyFirstDifference(results[0], results[1]))
 					}
 				})
 			}
 		})
 
 		reset()
-		before := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
+		before := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
 		var events, realtime int
 		f.probe.SetWebhookSink(func(string, domain.DomainEvent) { events++ })
 		f.probe.SetRealtimeSink(func(string, domain.RealtimeEvent) { realtime++ })
@@ -177,7 +177,7 @@ func TestScaleP21SW6AgentActivityDifferential(t *testing.T) {
 		if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), store.ErrMetadataPageBudget.Error()) || events != 0 || realtime != 0 {
 			t.Fatalf("oversized output was not an explicit atomic budget failure: status=%d events=%d/%d body=%s", w.Code, events, realtime, w.Body.String())
 		}
-		after := scaleP21M2Canonical(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
+		after := policyCanonicalRecords(t, repo, workspace, store.RecordKey{Kind: "agentActivities", ID: targetID})
 		if !reflect.DeepEqual(before, after) {
 			t.Fatal("oversized output escaped transaction rollback")
 		}

@@ -16,18 +16,18 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW500Env is one owned workspace shared by the workflow close-out
+// env is one owned workspace shared by the workflow close-out
 // differentials: legacy MutateWorkspace against the bounded MutateWorkflowRun
 // writer on warm and SQL-reloaded sources, with a peer replica for conflicts.
-type scaleP21SW500Env struct {
-	database                       *scaleP04Database
+type workflowCloseEnv struct {
+	database                       *scaleDatabase
 	repo, peer, probe              *store.SQLiteStore
 	workspace, prefix, workflowID  string
 	issue                          domain.Issue
 	baseline                       domain.Bootstrap
 	saved                          []byte
 	viewer, other                  domain.User
-	sql                            scaleP21SW10Fixture
+	sql                            notificationsFixture
 	plain, grouped, archived       string
 	archivedGroup, missingGroup    string
 	projectLabel, activeGroup      string
@@ -35,14 +35,14 @@ type scaleP21SW500Env struct {
 	fixtureClock, past, futureTime time.Time
 }
 
-func scaleP21SW500Setup(t *testing.T) *scaleP21SW500Env {
+func workflowCloseSetup(t *testing.T) *workflowCloseEnv {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	_, database, issue := scaleP21SW44ChatFixture(t)
-	env := &scaleP21SW500Env{database: database, repo: database.repo, workspace: database.key, issue: issue}
+	_, database, issue := chatFixture(t)
+	env := &workflowCloseEnv{database: database, repo: database.repo, workspace: database.key, issue: issue}
 	baseline, found := env.repo.BootstrapFor(env.workspace)
 	if !found {
 		t.Fatal("owned workflow fixture missing")
@@ -81,7 +81,7 @@ func scaleP21SW500Setup(t *testing.T) *scaleP21SW500Env {
 	env.fixtureClock = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	env.past = env.fixtureClock
 	env.futureTime = time.Now().UTC().Add(24 * time.Hour)
-	env.sql = scaleP21SW10Fixture{reader: database}
+	env.sql = notificationsFixture{reader: database}
 	env.sql.data.Workspace.URLKey = env.workspace
 	peer, err := store.OpenDatabase(database.config)
 	if err != nil {
@@ -99,9 +99,9 @@ func scaleP21SW500Setup(t *testing.T) *scaleP21SW500Env {
 	return env
 }
 
-var scaleP21SW500Modes = []string{"legacy-warm", "bounded-warm", "legacy-reloaded", "bounded-reloaded"}
+var workflowCloseModes = []string{"legacy-warm", "bounded-warm", "legacy-reloaded", "bounded-reloaded"}
 
-type scaleP21SW500Case struct {
+type workflowCloseCase struct {
 	name                     string
 	trigger                  string
 	dueOnly                  bool
@@ -110,10 +110,10 @@ type scaleP21SW500Case struct {
 	defTrigger, schedule     string
 	disabled                 bool
 	maxAttempts              int
-	actions                  func(env *scaleP21SW500Env) []domain.WorkflowAction
-	seed                     func(env *scaleP21SW500Env, data *domain.Bootstrap)
-	peer                     func(env *scaleP21SW500Env, data *domain.Bootstrap)
-	former                   func(env *scaleP21SW500Env) string
+	actions                  func(env *workflowCloseEnv) []domain.WorkflowAction
+	seed                     func(env *workflowCloseEnv, data *domain.Bootstrap)
+	peer                     func(env *workflowCloseEnv, data *domain.Bootstrap)
+	former                   func(env *workflowCloseEnv) string
 	want                     string
 	// pinned: the bounded writer refuses atomically where the literal writer
 	// succeeds (shared aggregate-envelope admission); not certified behavior.
@@ -123,7 +123,7 @@ type scaleP21SW500Case struct {
 	full bool
 }
 
-type scaleP21SW500Result struct {
+type workflowCloseResult struct {
 	normalized, state any
 	run               domain.WorkflowRun
 	err               error
@@ -132,13 +132,13 @@ type scaleP21SW500Result struct {
 	unchanged         bool
 	published         int
 	newRuns           []domain.WorkflowRun
-	// tables: every row of the issue side tables (SW580); full: the
+	// tables: every row of the issue side tables; full: the
 	// full-image attempts the call made.
 	tables map[string][]string
 	full   int64
 }
 
-type scaleP21SW500Call struct {
+type workflowCloseCall struct {
 	aggregates []string
 	schedules  []string
 	// unowned runs the call without an outer metadata output owner, as the
@@ -148,14 +148,14 @@ type scaleP21SW500Call struct {
 	// The literal writer keeps its stale copy at an unknown revision (the
 	// next check reloads it), while the bounded writer reloads its image
 	// from SQL after the commit: the installed fields are compared with the
-	// SQL reload (scaleP21SW580Installed) instead of with the literal copy.
+	// SQL reload (workflowPointInstalled) instead of with the literal copy.
 	peer    bool
 	wrap    func(context.Context) context.Context
 	observe func()
 	run     func(context.Context) (domain.WorkflowRun, error)
 }
 
-func scaleP21SW500ErrorClass(err error) string {
+func errorClass(err error) string {
 	switch {
 	case err == nil:
 		return "succeeded"
@@ -171,7 +171,7 @@ func scaleP21SW500ErrorClass(err error) string {
 	return "error: " + err.Error()
 }
 
-func (env *scaleP21SW500Env) labels(data *domain.Bootstrap) {
+func (env *workflowCloseEnv) labels(data *domain.Bootstrap) {
 	label := func(id, group, resource string, archived bool) domain.IssueLabel {
 		item := domain.IssueLabel{ID: id, Name: id, Color: "#123456", GroupID: group, ResourceType: resource, CreatorID: env.viewer.ID, CreatedAt: env.fixtureClock}
 		if archived {
@@ -192,7 +192,7 @@ func (env *scaleP21SW500Env) labels(data *domain.Bootstrap) {
 
 // reset installs the literal fixture plus the case's definition through an
 // ordinary full write, so every mode starts from identical SQL rows.
-func (env *scaleP21SW500Env) reset(t *testing.T, test scaleP21SW500Case, seed func(*domain.Bootstrap)) {
+func (env *workflowCloseEnv) reset(t *testing.T, test workflowCloseCase, seed func(*domain.Bootstrap)) {
 	t.Helper()
 	env.repo.SetWebhookSink(nil)
 	env.repo.SetRealtimeSink(nil)
@@ -244,7 +244,7 @@ func (env *scaleP21SW500Env) reset(t *testing.T, test scaleP21SW500Case, seed fu
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP21SW201Exec(t, env.database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, env.baseline.NextIssueNumber-1, env.workspace)
+	metadataReloadSourceExec(t, env.database, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, env.baseline.NextIssueNumber-1, env.workspace)
 	// A server's copy is exact at its stored revision once loaded, and a
 	// peer's commit then provably moves the stored revision past it. A
 	// fixture write on a copy left at an unknown revision (a previous peer
@@ -260,11 +260,11 @@ func (env *scaleP21SW500Env) reset(t *testing.T, test scaleP21SW500Case, seed fu
 // source returns the mode's writer. Reloaded modes advance the metadata
 // revision so the writer installs its image through its actual SQL loader;
 // each bounded result is compared with the literal writer in the same state.
-func (env *scaleP21SW500Env) source(t *testing.T, mode string) *store.SQLiteStore {
+func (env *workflowCloseEnv) source(t *testing.T, mode string) *store.SQLiteStore {
 	t.Helper()
 	reloaded := strings.HasSuffix(mode, "reloaded")
 	if reloaded {
-		scaleP21SW201ReloadSource(t, env.database, env.repo)
+		metadataReloadSourceReloadSource(t, env.database, env.repo)
 	}
 	if strings.HasPrefix(mode, "legacy") {
 		return env.repo
@@ -273,14 +273,14 @@ func (env *scaleP21SW500Env) source(t *testing.T, mode string) *store.SQLiteStor
 		t.Fatal(err)
 	}
 	if reloaded {
-		scaleP21SW201ReloadSource(t, env.database, env.probe)
+		metadataReloadSourceReloadSource(t, env.database, env.probe)
 	}
 	return env.probe
 }
 
 // peerWrite is another server's ordinary write after both sources installed
 // their images: the stale writer must merge or refresh and retry.
-func (env *scaleP21SW500Env) peerWrite(t *testing.T, edit func(*scaleP21SW500Env, *domain.Bootstrap)) {
+func (env *workflowCloseEnv) peerWrite(t *testing.T, edit func(*workflowCloseEnv, *domain.Bootstrap)) {
 	t.Helper()
 	if err := env.peer.ForgetInstalledMetadataRevisionForTesting(env.workspace); err != nil {
 		t.Fatal(err)
@@ -296,14 +296,14 @@ func (env *scaleP21SW500Env) peerWrite(t *testing.T, edit func(*scaleP21SW500Env
 	}
 }
 
-func (env *scaleP21SW500Env) setMembership(t *testing.T, user, status string) {
+func (env *workflowCloseEnv) setMembership(t *testing.T, user, status string) {
 	t.Helper()
-	scaleP21SW201Exec(t, env.database, `UPDATE workspace_memberships SET status=? WHERE workspace_id=? AND user_id=?`, status, env.database.workspaceID, user)
+	metadataReloadSourceExec(t, env.database, `UPDATE workspace_memberships SET status=? WHERE workspace_id=? AND user_id=?`, status, env.database.workspaceID, user)
 }
 
-// scaleP21SW500NextRuns maps a recomputed schedule to its rule: the writer
+// nextRuns maps a recomputed schedule to its rule: the writer
 // computes it from its own completion clock inside [started, finished].
-func scaleP21SW500NextRuns(value any, schedules []string, started, finished time.Time) any {
+func nextRuns(value any, schedules []string, started, finished time.Time) any {
 	switch item := value.(type) {
 	case map[string]any:
 		for key, child := range item {
@@ -320,17 +320,17 @@ func scaleP21SW500NextRuns(value any, schedules []string, started, finished time
 				}
 				continue
 			}
-			item[key] = scaleP21SW500NextRuns(child, schedules, started, finished)
+			item[key] = nextRuns(child, schedules, started, finished)
 		}
 	case []any:
 		for index, child := range item {
-			item[index] = scaleP21SW500NextRuns(child, schedules, started, finished)
+			item[index] = nextRuns(child, schedules, started, finished)
 		}
 	}
 	return value
 }
 
-func scaleP21SW500Replace(value any, ids map[string]string) any {
+func workflowCloseReplace(value any, ids map[string]string) any {
 	switch item := value.(type) {
 	case string:
 		if replacement, ok := ids[item]; ok {
@@ -338,17 +338,17 @@ func scaleP21SW500Replace(value any, ids map[string]string) any {
 		}
 	case map[string]any:
 		for key, child := range item {
-			item[key] = scaleP21SW500Replace(child, ids)
+			item[key] = workflowCloseReplace(child, ids)
 		}
 	case []any:
 		for index, child := range item {
-			item[index] = scaleP21SW500Replace(child, ids)
+			item[index] = workflowCloseReplace(child, ids)
 		}
 	}
 	return value
 }
 
-func (env *scaleP21SW500Env) workflowRuns(t *testing.T) []domain.WorkflowRun {
+func (env *workflowCloseEnv) workflowRuns(t *testing.T) []domain.WorkflowRun {
 	t.Helper()
 	rows := env.database.query(t, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='workflowRuns' ORDER BY collection_order,record_key`, env.workspace)
 	defer rows.Close()
@@ -367,10 +367,10 @@ func (env *scaleP21SW500Env) workflowRuns(t *testing.T) []domain.WorkflowRun {
 	return runs
 }
 
-func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, call scaleP21SW500Call) scaleP21SW500Result {
+func (env *workflowCloseEnv) outcome(t *testing.T, source *store.SQLiteStore, call workflowCloseCall) workflowCloseResult {
 	t.Helper()
-	before := scaleP21SW59SQL(t, env.sql)
-	beforeMetadata, err := json.Marshal(scaleP21SW201Metadata(t, env.database))
+	before := discussionWriteSql(t, env.sql)
+	beforeMetadata, err := json.Marshal(workflowWriteMetadata(t, env.database))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,18 +388,18 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 			priorIDs[event.ID] = true
 		}
 	}
-	got := scaleP21SW59Outcome{Header: make(http.Header)}
+	got := discussionWriteOutcome{Header: make(http.Header)}
 	source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 	})
 	captureRealtime := func(_ string, event domain.RealtimeEvent) {
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 	}
 	source.SetRealtimeSink(captureRealtime)
 	if source != env.repo {
 		env.repo.SetRealtimeSink(captureRealtime)
 	}
-	result := scaleP21SW500Result{}
+	result := workflowCloseResult{}
 	fallbacks := store.WorkflowRunFullImageAttemptsForTesting()
 	started := time.Now().UTC()
 	func() {
@@ -422,14 +422,14 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 	}()
 	finished := time.Now().UTC()
 	result.full = store.WorkflowRunFullImageAttemptsForTesting() - fallbacks
-	result.tables = scaleP21SW580Rows(t, env.database, started, finished)
+	result.tables = workflowPointRows(t, env.database, started, finished)
 	source.SetWebhookSink(nil)
 	source.SetRealtimeSink(nil)
 	env.repo.SetRealtimeSink(nil)
 	if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 		t.Fatal("workflow writer leaked work or hydrated full metadata", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 	}
-	got.Rows = scaleP21SW59SQL(t, env.sql)
+	got.Rows = discussionWriteSql(t, env.sql)
 	for _, aggregate := range call.aggregates {
 		events, err := env.repo.Events(t.Context(), aggregate)
 		if err != nil {
@@ -443,7 +443,7 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 	}
 	result.events = len(got.Events)
 	result.published = len(got.Webhooks) + len(got.Realtime)
-	metadata := scaleP21SW201Metadata(t, env.database)
+	metadata := workflowWriteMetadata(t, env.database)
 	afterMetadata, err := json.Marshal(metadata)
 	if err != nil {
 		t.Fatal(err)
@@ -457,32 +457,32 @@ func (env *scaleP21SW500Env) outcome(t *testing.T, source *store.SQLiteStore, ca
 			result.newRuns = append(result.newRuns, run)
 		}
 	}
-	normalize := func(value scaleP21SW59Outcome, response any) any {
+	normalize := func(value discussionWriteOutcome, response any) any {
 		value.Response, err = json.Marshal(response)
 		if err != nil {
 			t.Fatal(err)
 		}
-		normalized := scaleP21SW201Normalize(t, scaleP21SW59Normalized(t, value, before, started, finished), result.run.ID, started, finished)
-		return scaleP21SW500Replace(scaleP21SW500NextRuns(normalized, call.schedules, started, finished), ids)
+		normalized := workflowWriteNormalize(t, discussionWriteNormalized(t, value, before, started, finished), result.run.ID, started, finished)
+		return workflowCloseReplace(nextRuns(normalized, call.schedules, started, finished), ids)
 	}
 	// The installed workflow fields: the literal writer's snapshot, the
 	// bounded writer's installed image.
 	var installed any
 	if !call.peer {
-		if err := json.Unmarshal(scaleP21WriterInstalled(t, env.workspace, source, []string{"workflowDefinitions", "workflowRuns"}), &installed); err != nil {
+		if err := json.Unmarshal(scaleWriterInstalled(t, env.workspace, source, []string{"workflowDefinitions", "workflowRuns"}), &installed); err != nil {
 			t.Fatal(err)
 		}
 	}
-	result.normalized = normalize(got, map[string]any{"run": result.run, "error": scaleP21SW500ErrorClass(result.err), "metadata": metadata, "installed": installed})
-	result.state = normalize(scaleP21SW59Outcome{Header: make(http.Header), Rows: got.Rows, Events: got.Events}, metadata)
+	result.normalized = normalize(got, map[string]any{"run": result.run, "error": errorClass(result.err), "metadata": metadata, "installed": installed})
+	result.state = normalize(discussionWriteOutcome{Header: make(http.Header), Rows: got.Rows, Events: got.Events}, metadata)
 	return result
 }
 
-func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
+func (env *workflowCloseEnv) runCase(t *testing.T, test workflowCloseCase) {
 	t.Helper()
 	expected := map[string]any{}
 	tables := map[string]map[string][]string{}
-	for _, mode := range scaleP21SW500Modes {
+	for _, mode := range workflowCloseModes {
 		t.Run(mode, func(t *testing.T) {
 			env.reset(t, test, nil)
 			if test.former != nil {
@@ -499,11 +499,11 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				resourceType, resourceID = "issue", env.issue.ID
 			}
 			service := &server{store: source}
-			result := env.outcome(t, source, scaleP21SW500Call{aggregates: []string{env.workflowID}, schedules: []string{test.schedule}, peer: test.peer != nil,
+			result := env.outcome(t, source, workflowCloseCall{aggregates: []string{env.workflowID}, schedules: []string{test.schedule}, peer: test.peer != nil,
 				run: func(ctx context.Context) (domain.WorkflowRun, error) {
 					return service.runWorkflow(ctx, env.workspace, env.workflowID, firstNonEmpty(test.trigger, "manual"), resourceType, resourceID, test.dueOnly)
 				}})
-			class := scaleP21SW500ErrorClass(result.err)
+			class := errorClass(result.err)
 			if class == "succeeded" && result.run.Status != "succeeded" {
 				class = result.run.Status
 			}
@@ -528,9 +528,9 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				if !reflect.DeepEqual(expected[state], result.normalized) {
 					want, _ := json.Marshal(expected[state])
 					got, _ := json.Marshal(result.normalized)
-					t.Fatalf("workflow response/rows/events/publication differ from literal (%s/%s)\nlegacy:  %.4000s\nbounded: %.4000s", test.name, mode, scaleP21SW500FirstDifference(want, got), scaleP21SW500FirstDifference(got, want))
+					t.Fatalf("workflow response/rows/events/publication differ from literal (%s/%s)\nlegacy:  %.4000s\nbounded: %.4000s", test.name, mode, workflowCloseFirstDifference(want, got), workflowCloseFirstDifference(got, want))
 				}
-				if difference := scaleP21SW580Equal(tables[state], result.tables); difference != "" {
+				if difference := workflowPointEqual(tables[state], result.tables); difference != "" {
 					t.Fatalf("workflow issue side tables differ from literal (%s/%s): %s", test.name, mode, difference)
 				}
 				wantFull := test.full
@@ -542,7 +542,7 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 				// its conflict refresh (not due) installs only that refresh,
 				// which these peers' edits are confined to.
 				if result.err == nil || test.peer != nil {
-					scaleP21SW580Installed(t, env, source)
+					workflowPointInstalled(t, env, source)
 				}
 			}
 			t.Logf("workflow case=%s mode=%s result=%s SQL=%d full=%d", test.name, mode, class, result.statements, result.full)
@@ -550,9 +550,9 @@ func (env *scaleP21SW500Env) runCase(t *testing.T, test scaleP21SW500Case) {
 	}
 }
 
-// scaleP21SW500FirstDifference returns a's tail from shortly before its first
+// workflowCloseFirstDifference returns a's tail from shortly before its first
 // byte that differs from b, to keep failure messages readable.
-func scaleP21SW500FirstDifference(a, b []byte) []byte {
+func workflowCloseFirstDifference(a, b []byte) []byte {
 	index := 0
 	for index < len(a) && index < len(b) && a[index] == b[index] {
 		index++
@@ -560,11 +560,11 @@ func scaleP21SW500FirstDifference(a, b []byte) []byte {
 	return a[max(0, index-600):]
 }
 
-func scaleP21SW500Actions(actions ...domain.WorkflowAction) func(*scaleP21SW500Env) []domain.WorkflowAction {
-	return func(*scaleP21SW500Env) []domain.WorkflowAction { return actions }
+func workflowCloseActions(actions ...domain.WorkflowAction) func(*workflowCloseEnv) []domain.WorkflowAction {
+	return func(*workflowCloseEnv) []domain.WorkflowAction { return actions }
 }
 
-func scaleP21SW500Action(kind string, config ...string) domain.WorkflowAction {
+func workflowCloseAction(kind string, config ...string) domain.WorkflowAction {
 	values := map[string]string{}
 	for index := 0; index+1 < len(config); index += 2 {
 		values[config[index]] = config[index+1]
@@ -572,14 +572,14 @@ func scaleP21SW500Action(kind string, config ...string) domain.WorkflowAction {
 	return domain.WorkflowAction{Type: kind, Config: values}
 }
 
-func (env *scaleP21SW500Env) priorRun(id, workflow, status string, attempt int, retry *time.Time) domain.WorkflowRun {
+func (env *workflowCloseEnv) priorRun(id, workflow, status string, attempt int, retry *time.Time) domain.WorkflowRun {
 	return domain.WorkflowRun{
 		ID: env.prefix + id, WorkflowID: workflow, Trigger: "manual", ResourceType: "issue", ResourceID: env.issue.ID,
 		Status: status, Attempt: attempt, Output: map[string]string{}, ScheduledAt: env.fixtureClock, StartedAt: env.fixtureClock, NextRetryAt: retry,
 	}
 }
 
-func (env *scaleP21SW500Env) definition(data *domain.Bootstrap) *domain.WorkflowDefinition {
+func (env *workflowCloseEnv) definition(data *domain.Bootstrap) *domain.WorkflowDefinition {
 	for index := range data.WorkflowDefinitions {
 		if data.WorkflowDefinitions[index].ID == env.workflowID {
 			return &data.WorkflowDefinitions[index]
@@ -588,7 +588,7 @@ func (env *scaleP21SW500Env) definition(data *domain.Bootstrap) *domain.Workflow
 	return nil
 }
 
-func (env *scaleP21SW500Env) target(data *domain.Bootstrap) *domain.Issue {
+func (env *workflowCloseEnv) target(data *domain.Bootstrap) *domain.Issue {
 	for index := range data.Issues {
 		if data.Issues[index].ID == env.issue.ID {
 			return &data.Issues[index]
@@ -597,22 +597,22 @@ func (env *scaleP21SW500Env) target(data *domain.Bootstrap) *domain.Issue {
 	return nil
 }
 
-func scaleP21SW500AllActions(env *scaleP21SW500Env) []domain.WorkflowAction {
+func allActions(env *workflowCloseEnv) []domain.WorkflowAction {
 	return []domain.WorkflowAction{
-		scaleP21SW500Action("setIssuePriority", "priority", "2"),
-		scaleP21SW500Action("assignIssue", "userId", env.other.ID),
-		scaleP21SW500Action("addIssueLabel", "labelId", env.grouped),
-		scaleP21SW500Action("addIssueLabel", "labelId", env.plain),
-		scaleP21SW500Action("notify", "recipientId", env.other.ID),
-		scaleP21SW500Action("notify"),
-		scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "  SW500 created  "),
+		workflowCloseAction("setIssuePriority", "priority", "2"),
+		workflowCloseAction("assignIssue", "userId", env.other.ID),
+		workflowCloseAction("addIssueLabel", "labelId", env.grouped),
+		workflowCloseAction("addIssueLabel", "labelId", env.plain),
+		workflowCloseAction("notify", "recipientId", env.other.ID),
+		workflowCloseAction("notify"),
+		workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "  SW500 created  "),
 	}
 }
 
-// scaleP21SW500ProjectDrift adds projects whose stored IssueCount has drifted
+// projectDrift adds projects whose stored IssueCount has drifted
 // (too high, too low, and for an unused project), an active and an archived
 // issue naming one of them.
-func scaleP21SW500ProjectDrift(env *scaleP21SW500Env, data *domain.Bootstrap) {
+func projectDrift(env *workflowCloseEnv, data *domain.Bootstrap) {
 	project := func(suffix string, count int) domain.Project {
 		return domain.Project{ID: env.prefix + "project-" + suffix, Name: "SW500 " + suffix, SlugID: "sw500-" + suffix, Color: "#123456",
 			IssueCount: count, CreatedAt: env.fixtureClock, UpdatedAt: env.fixtureClock}
@@ -640,57 +640,57 @@ func scaleP21SW500ProjectDrift(env *scaleP21SW500Env, data *domain.Bootstrap) {
 	}
 }
 
-func scaleP21SW500Cases() []scaleP21SW500Case {
-	notify := scaleP21SW500Actions(scaleP21SW500Action("notify"))
+func workflowCloseCases() []workflowCloseCase {
+	notify := workflowCloseActions(workflowCloseAction("notify"))
 	large := strings.Repeat("x", 4<<20)
-	cases := []scaleP21SW500Case{
+	cases := []workflowCloseCase{
 		// Every action type, success postimages.
 		{name: "notify-default-creator", actions: notify, want: "succeeded"},
-		{name: "notify-explicit-recipient", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("notify", "recipientId", env.other.ID)}
+		{name: "notify-explicit-recipient", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("notify", "recipientId", env.other.ID)}
 		}, want: "succeeded"},
-		{name: "assign-issue", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
+		{name: "assign-issue", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("assignIssue", "userId", env.other.ID)}
 		}, want: "succeeded"},
-		{name: "assign-issue-same-assignee", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "assign-issue-same-assignee", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("assignIssue", "userId", env.other.ID)}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			user := env.other
 			env.target(data).Assignee = &user
 		}, want: "succeeded"},
-		{name: "priority-none", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "0")), want: "succeeded"},
-		{name: "priority-unchanged", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "4")), want: "succeeded"},
-		{name: "label-plain", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.plain)}
+		{name: "priority-none", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "0")), want: "succeeded"},
+		{name: "priority-unchanged", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "4")), want: "succeeded"},
+		{name: "label-plain", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.plain)}
 		}, want: "succeeded"},
-		{name: "label-already-present", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.plain)}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "label-already-present", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.plain)}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			target := env.target(data)
 			target.Labels = append(target.Labels, data.Labels[len(data.Labels)-6])
 		}, want: "succeeded"},
-		{name: "label-active-group", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.grouped)}
+		{name: "label-active-group", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.grouped)}
 		}, want: "succeeded"},
-		{name: "create-issue", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "  SW500 created  ")}
+		{name: "create-issue", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "  SW500 created  ")}
 		}, want: "succeeded"},
-		{name: "create-then-assign-detached", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
+		{name: "create-then-assign-detached", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
 			return []domain.WorkflowAction{
-				scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created"),
-				scaleP21SW500Action("assignIssue", "userId", env.other.ID),
-				scaleP21SW500Action("addIssueLabel", "labelId", env.plain),
+				workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created"),
+				workflowCloseAction("assignIssue", "userId", env.other.ID),
+				workflowCloseAction("addIssueLabel", "labelId", env.plain),
 			}
 		}, want: "succeeded"},
-		{name: "all-actions", issue: true, actions: scaleP21SW500AllActions, want: "succeeded"},
+		{name: "all-actions", issue: true, actions: allActions, want: "succeeded"},
 		// Projects' derived IssueCount: a run recounts every project from the
 		// active issues naming it, rewriting only the rows that drifted.
-		{name: "project-count-drift", issue: true, actions: scaleP21SW500AllActions, seed: scaleP21SW500ProjectDrift, want: "succeeded"},
-		{name: "project-count-drift-create", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created")}
-		}, seed: scaleP21SW500ProjectDrift, want: "succeeded"},
-		{name: "project-count-exact", actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
-			scaleP21SW500ProjectDrift(env, data)
+		{name: "project-count-drift", issue: true, actions: allActions, seed: projectDrift, want: "succeeded"},
+		{name: "project-count-drift-create", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created")}
+		}, seed: projectDrift, want: "succeeded"},
+		{name: "project-count-exact", actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
+			projectDrift(env, data)
 			for index := range data.Projects {
 				data.Projects[index].IssueCount = 0
 				for _, issue := range data.Issues {
@@ -700,113 +700,113 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 				}
 			}
 		}, want: "succeeded"},
-		{name: "unknown-action-ignored", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("webhook", "url", "https://example.test"), scaleP21SW500Action("notify")), want: "succeeded"},
-		{name: "no-actions", issue: true, actions: scaleP21SW500Actions(), want: "succeeded"},
+		{name: "unknown-action-ignored", issue: true, actions: workflowCloseActions(workflowCloseAction("webhook", "url", "https://example.test"), workflowCloseAction("notify")), want: "succeeded"},
+		{name: "no-actions", issue: true, actions: workflowCloseActions(), want: "succeeded"},
 
 		// Every action's failure postimage: earlier actions persist.
-		{name: "notify-missing-recipient", issue: true, actions: scaleP21SW500Actions(
-			scaleP21SW500Action("setIssuePriority", "priority", "1"), scaleP21SW500Action("notify", "recipientId", "missing-user")), want: "failed"},
-		{name: "notify-former-member", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("setIssuePriority", "priority", "1"), scaleP21SW500Action("notify", "recipientId", env.other.ID)}
-		}, former: func(env *scaleP21SW500Env) string { return env.other.ID }, want: "failed"},
-		{name: "notify-former-creator", issue: true, actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "notify-missing-recipient", issue: true, actions: workflowCloseActions(
+			workflowCloseAction("setIssuePriority", "priority", "1"), workflowCloseAction("notify", "recipientId", "missing-user")), want: "failed"},
+		{name: "notify-former-member", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("setIssuePriority", "priority", "1"), workflowCloseAction("notify", "recipientId", env.other.ID)}
+		}, former: func(env *workflowCloseEnv) string { return env.other.ID }, want: "failed"},
+		{name: "notify-former-creator", issue: true, actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.definition(data).CreatorID = env.other.ID
-		}, former: func(env *scaleP21SW500Env) string { return env.other.ID }, want: "failed"},
-		{name: "assign-missing-user", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("assignIssue", "userId", "missing-user")), want: "failed"},
-		{name: "assign-former-member", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("notify"), scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
-		}, former: func(env *scaleP21SW500Env) string { return env.other.ID }, want: "failed"},
-		{name: "assign-without-issue", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("notify"), scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
+		}, former: func(env *workflowCloseEnv) string { return env.other.ID }, want: "failed"},
+		{name: "assign-missing-user", issue: true, actions: workflowCloseActions(workflowCloseAction("assignIssue", "userId", "missing-user")), want: "failed"},
+		{name: "assign-former-member", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("notify"), workflowCloseAction("assignIssue", "userId", env.other.ID)}
+		}, former: func(env *workflowCloseEnv) string { return env.other.ID }, want: "failed"},
+		{name: "assign-without-issue", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("notify"), workflowCloseAction("assignIssue", "userId", env.other.ID)}
 		}, want: "failed"},
-		{name: "assign-missing-issue", resourceType: "issue", resourceID: "missing-issue", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
+		{name: "assign-missing-issue", resourceType: "issue", resourceID: "missing-issue", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("assignIssue", "userId", env.other.ID)}
 		}, want: "failed"},
-		{name: "assign-project-resource", resourceType: "project", resourceID: "any", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("assignIssue", "userId", env.other.ID)}
+		{name: "assign-project-resource", resourceType: "project", resourceID: "any", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("assignIssue", "userId", env.other.ID)}
 		}, want: "failed"},
-		{name: "priority-out-of-range", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("notify"), scaleP21SW500Action("setIssuePriority", "priority", "5")), want: "failed"},
-		{name: "priority-not-number", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "high")), want: "failed"},
-		{name: "priority-without-issue", actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")), want: "failed"},
-		{name: "label-missing", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("addIssueLabel", "labelId", "missing-label")), want: "failed"},
-		{name: "label-archived", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("setIssuePriority", "priority", "3"), scaleP21SW500Action("addIssueLabel", "labelId", env.archived)}
+		{name: "priority-out-of-range", issue: true, actions: workflowCloseActions(workflowCloseAction("notify"), workflowCloseAction("setIssuePriority", "priority", "5")), want: "failed"},
+		{name: "priority-not-number", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "high")), want: "failed"},
+		{name: "priority-without-issue", actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "1")), want: "failed"},
+		{name: "label-missing", issue: true, actions: workflowCloseActions(workflowCloseAction("addIssueLabel", "labelId", "missing-label")), want: "failed"},
+		{name: "label-archived", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("setIssuePriority", "priority", "3"), workflowCloseAction("addIssueLabel", "labelId", env.archived)}
 		}, want: "failed"},
-		{name: "label-archived-group", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.archivedGroup)}
+		{name: "label-archived-group", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.archivedGroup)}
 		}, want: "failed"},
-		{name: "label-missing-group", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.missingGroup)}
+		{name: "label-missing-group", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.missingGroup)}
 		}, want: "failed"},
-		{name: "label-project-resource", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.projectLabel)}
+		{name: "label-project-resource", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.projectLabel)}
 		}, want: "failed"},
-		{name: "label-without-issue", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.plain)}
+		{name: "label-without-issue", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.plain)}
 		}, want: "failed"},
-		{name: "create-missing-team", actions: scaleP21SW500Actions(scaleP21SW500Action("notify"), scaleP21SW500Action("createIssue", "teamId", "missing-team", "title", "x")), want: "failed"},
-		{name: "create-blank-title", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "   ")}
+		{name: "create-missing-team", actions: workflowCloseActions(workflowCloseAction("notify"), workflowCloseAction("createIssue", "teamId", "missing-team", "title", "x")), want: "failed"},
+		{name: "create-blank-title", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "   ")}
 		}, want: "failed"},
-		{name: "create-no-default-state", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "x")}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "create-no-default-state", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "x")}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			settings := teamSettings(data, env.issue.Team.ID)
 			settings.DefaultStateID = "missing-state"
 			data.TeamSettings[env.issue.Team.ID] = settings
 		}, want: "failed"},
 
 		// Retry history and failure bookkeeping.
-		{name: "failure-schedules-backoff", trigger: "retry", dueOnly: true, issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("assignIssue", "userId", "missing-user")),
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "failure-schedules-backoff", trigger: "retry", dueOnly: true, issue: true, actions: workflowCloseActions(workflowCloseAction("assignIssue", "userId", "missing-user")),
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{
 					env.priorRun("old", env.workflowID, "failed", 1, nil), env.priorRun("other", "other-workflow", "failed", 9, &env.past),
 					env.priorRun("due", env.workflowID, "failed", 5, &env.past), env.priorRun("later-other", "other-workflow", "succeeded", 1, nil),
 				}
 			}, want: "failed"},
-		{name: "failure-at-max-attempts", trigger: "retry", dueOnly: true, issue: true, maxAttempts: 3, actions: scaleP21SW500Actions(scaleP21SW500Action("assignIssue", "userId", "missing-user")),
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "failure-at-max-attempts", trigger: "retry", dueOnly: true, issue: true, maxAttempts: 3, actions: workflowCloseActions(workflowCloseAction("assignIssue", "userId", "missing-user")),
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 2, &env.past)}
 			}, want: "failed"},
-		{name: "failure-zero-max-attempts", maxAttempts: -1, issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("assignIssue", "userId", "missing-user")), want: "failed"},
-		{name: "failure-capped-backoff", trigger: "retry", issue: true, maxAttempts: 20, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "9")),
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "failure-zero-max-attempts", maxAttempts: -1, issue: true, actions: workflowCloseActions(workflowCloseAction("assignIssue", "userId", "missing-user")), want: "failed"},
+		{name: "failure-capped-backoff", trigger: "retry", issue: true, maxAttempts: 20, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "9")),
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 9, &env.futureTime)}
 			}, want: "failed"},
 		{name: "manual-retry-not-yet-due", trigger: "retry", issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("future", env.workflowID, "failed", 3, &env.futureTime)}
 			}, want: "succeeded"},
 		{name: "retry-after-success", trigger: "retry", issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("done", env.workflowID, "succeeded", 2, &env.past)}
 			}, want: "succeeded"},
 		{name: "due-retry-latest-succeeded", trigger: "retry", dueOnly: true, issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past), env.priorRun("done", env.workflowID, "succeeded", 2, nil)}
 			}, want: "not-due"},
 		{name: "duplicate-run-ids", trigger: "retry", dueOnly: true, issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("dup", env.workflowID, "failed", 1, &env.past), env.priorRun("dup", env.workflowID, "failed", 2, &env.past)}
 			}, want: "succeeded"},
 		{name: "tail-500-predecessor-dropped", trigger: "retry", dueOnly: true, issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 7, &env.past)}
 				for index := range 499 {
 					data.WorkflowRuns = append(data.WorkflowRuns, env.priorRun(fmt.Sprintf("tail-%03d", index), "other-workflow", "succeeded", 1, nil))
 				}
 			}, want: "succeeded"},
 		{name: "tail-499-kept", issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				for index := range 499 {
 					data.WorkflowRuns = append(data.WorkflowRuns, env.priorRun(fmt.Sprintf("tail-%03d", index), "other-workflow", "succeeded", 1, nil))
 				}
 			}, want: "succeeded"},
-		{name: "consecutive-errors-reset", issue: true, actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "consecutive-errors-reset", issue: true, actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			definition := env.definition(data)
 			definition.ConsecutiveErr, definition.LastRunStatus, definition.LastRunAt = 3, "failed", &env.past
 		}, want: "succeeded"},
-		{name: "consecutive-errors-increment", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "-1")), seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "consecutive-errors-increment", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "-1")), seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			definition := env.definition(data)
 			definition.ConsecutiveErr, definition.LastRunStatus = 3, "failed"
 		}, want: "failed"},
@@ -815,49 +815,49 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 		{name: "manual-runs-disabled", disabled: true, issue: true, actions: notify, want: "succeeded"},
 		{name: "retry-disabled-refused", trigger: "retry", disabled: true, issue: true, actions: notify, want: "invalid"},
 		{name: "schedule-trigger-disabled-refused", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@hourly", disabled: true, actions: notify, want: "invalid"},
-		{name: "missing-definition", trigger: "schedule", dueOnly: true, actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "missing-definition", trigger: "schedule", dueOnly: true, actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			data.WorkflowDefinitions = nil
 		}, want: "not-found"},
-		{name: "issue-created-definition-run-manually", defTrigger: "issueCreated", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")),
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "issue-created-definition-run-manually", defTrigger: "issueCreated", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "1")),
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				definition := env.definition(data)
 				definition.TeamID, definition.Conditions = env.issue.Team.ID, map[string]string{"priority": "2", "titleContains": "never"}
 			}, want: "succeeded"},
-		{name: "schedule-definition-run-manually", defTrigger: "schedule", schedule: "0 10 * * 1-5", actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "schedule-definition-run-manually", defTrigger: "schedule", schedule: "0 10 * * 1-5", actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.definition(data).NextRunAt = &env.futureTime
 		}, want: "succeeded"},
-		{name: "schedule-future-not-due", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@daily", actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "schedule-future-not-due", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@daily", actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.definition(data).NextRunAt = &env.futureTime
 		}, want: "not-due"},
-		{name: "schedule-nil-next-not-due", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@daily", actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "schedule-nil-next-not-due", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@daily", actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.definition(data).NextRunAt = nil
 		}, want: "not-due"},
 		{name: "schedule-failure-retry-and-next", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "0 10 * * 0", issue: true,
-			actions: scaleP21SW500Actions(scaleP21SW500Action("notify"), scaleP21SW500Action("createIssue", "teamId", "missing-team", "title", "x")), want: "failed"},
+			actions: workflowCloseActions(workflowCloseAction("notify"), workflowCloseAction("createIssue", "teamId", "missing-team", "title", "x")), want: "failed"},
 
 		// Large legal rows.
-		{name: "large-issue-all-actions", issue: true, actions: scaleP21SW500AllActions, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "large-issue-all-actions", issue: true, actions: allActions, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.target(data).Description = large
 		}, want: "succeeded"},
-		{name: "large-unrelated-issue-create", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created"), scaleP21SW500Action("notify")}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "large-unrelated-issue-create", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "SW500 created"), workflowCloseAction("notify")}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			for index := range data.Issues {
 				if data.Issues[index].ID == env.otherIssueID {
 					data.Issues[index].Description = large
 				}
 			}
 		}, want: "succeeded"},
-		{name: "large-definition-row", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("notify", "note", strings.Repeat("d", 3<<20)), scaleP21SW500Action("setIssuePriority", "priority", "1")}
+		{name: "large-definition-row", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("notify", "note", strings.Repeat("d", 3<<20)), workflowCloseAction("setIssuePriority", "priority", "1")}
 		}, want: "succeeded"},
 		// The workflow event's aggregate is the definition. The shared
 		// aggregate plan charges sixteen copies of both definition images, so
 		// a definition over about 4 MiB exceeds the 256 MiB work ceiling.
-		{name: "definition-over-aggregate-envelope", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("notify", "note", large), scaleP21SW500Action("setIssuePriority", "priority", "1")}
+		{name: "definition-over-aggregate-envelope", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("notify", "note", large), workflowCloseAction("setIssuePriority", "priority", "1")}
 		}, want: "succeeded", pinned: true},
-		{name: "large-predecessor-cleared", trigger: "retry", dueOnly: true, issue: true, actions: notify, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "large-predecessor-cleared", trigger: "retry", dueOnly: true, issue: true, actions: notify, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			run := env.priorRun("large", env.workflowID, "failed", 2, &env.past)
 			run.Error, run.Output = large, map[string]string{"body": large}
 			data.WorkflowRuns = []domain.WorkflowRun{run}
@@ -865,76 +865,76 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 
 		// A peer replica writes after both sources installed their images.
 		{name: "peer-reschedules-retry", trigger: "retry", dueOnly: true, issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 2, &env.past)}
-			}, peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			}, peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns[0].NextRetryAt = &env.futureTime
 			}},
 		{name: "peer-claims-retry", trigger: "retry", dueOnly: true, issue: true, actions: notify,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 2, &env.past)}
-			}, peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			}, peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns[0].NextRetryAt = nil
 				data.WorkflowRuns = append(data.WorkflowRuns, env.priorRun("peer-ran", env.workflowID, "succeeded", 3, nil))
 			}},
 		{name: "peer-claims-schedule", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "@hourly", actions: notify,
-			peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+			peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				definition := env.definition(data)
 				definition.NextRunAt, definition.LastRunAt, definition.LastRunStatus = &env.futureTime, &env.past, "succeeded"
 			}},
-		{name: "peer-renames-definition", issue: true, actions: notify, peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "peer-renames-definition", issue: true, actions: notify, peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			definition := env.definition(data)
 			definition.Name, definition.Description, definition.Enabled = "Peer renamed", "peer description", false
 		}},
-		{name: "peer-deletes-definition", issue: true, actions: notify, peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "peer-deletes-definition", issue: true, actions: notify, peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			data.WorkflowDefinitions = nil
 		}},
-		{name: "peer-edits-issue-title", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")),
-			peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "peer-edits-issue-title", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "1")),
+			peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				env.target(data).Title = "Peer title"
 			}},
-		{name: "peer-sets-same-issue-field", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")),
-			peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "peer-sets-same-issue-field", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "1")),
+			peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				target := env.target(data)
 				target.Priority, target.PriorityLabel = 2, priorityLabel(2)
 			}},
-		{name: "peer-appends-other-run", issue: true, actions: notify, peer: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		{name: "peer-appends-other-run", issue: true, actions: notify, peer: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			data.WorkflowRuns = append(data.WorkflowRuns, env.priorRun("peer-other", "other-workflow", "succeeded", 1, nil))
 		}},
 	}
 	cases = append(cases,
 		// Event-triggered definitions retried by the scheduler on their issue.
-		scaleP21SW500Case{name: "event-retry-multi-action", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true, actions: scaleP21SW500AllActions,
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		workflowCloseCase{name: "event-retry-multi-action", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true, actions: allActions,
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				env.definition(data).TeamID = env.issue.Team.ID
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
 			}, want: "succeeded"},
-		scaleP21SW500Case{name: "event-retry-label-fails-after-priority", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true,
-			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-				return []domain.WorkflowAction{scaleP21SW500Action("setIssuePriority", "priority", "2"), scaleP21SW500Action("notify"), scaleP21SW500Action("addIssueLabel", "labelId", env.archived)}
-			}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		workflowCloseCase{name: "event-retry-label-fails-after-priority", trigger: "retry", dueOnly: true, defTrigger: "issueCreated", issue: true,
+			actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+				return []domain.WorkflowAction{workflowCloseAction("setIssuePriority", "priority", "2"), workflowCloseAction("notify"), workflowCloseAction("addIssueLabel", "labelId", env.archived)}
+			}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.WorkflowRuns = []domain.WorkflowRun{env.priorRun("due", env.workflowID, "failed", 1, &env.past)}
 			}, want: "failed"},
 		// Scheduled multi-action runs.
-		scaleP21SW500Case{name: "schedule-due-multi-action", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "*/5 * * * *",
-			actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-				return []domain.WorkflowAction{scaleP21SW500Action("notify"), scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled one"),
-					scaleP21SW500Action("notify", "recipientId", env.other.ID), scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled two")}
+		workflowCloseCase{name: "schedule-due-multi-action", trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: "*/5 * * * *",
+			actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+				return []domain.WorkflowAction{workflowCloseAction("notify"), workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled one"),
+					workflowCloseAction("notify", "recipientId", env.other.ID), workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "Scheduled two")}
 			}, want: "succeeded"},
-		scaleP21SW500Case{name: "label-on-archived-issue", issue: true, actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("addIssueLabel", "labelId", env.plain), scaleP21SW500Action("addIssueLabel", "labelId", env.grouped)}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		workflowCloseCase{name: "label-on-archived-issue", issue: true, actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("addIssueLabel", "labelId", env.plain), workflowCloseAction("addIssueLabel", "labelId", env.grouped)}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			env.target(data).ArchivedAt = &env.past
 		}, want: "succeeded"},
 		// The point writer hands these to the full-image writer.
-		scaleP21SW500Case{name: "full-workflow-id-is-notification-id", issue: true, actions: scaleP21SW500Actions(scaleP21SW500Action("setIssuePriority", "priority", "1")),
-			seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		workflowCloseCase{name: "full-workflow-id-is-notification-id", issue: true, actions: workflowCloseActions(workflowCloseAction("setIssuePriority", "priority", "1")),
+			seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 				data.Notifications = append(data.Notifications, domain.Notification{ID: env.workflowID, RecipientID: env.viewer.ID, Type: "comment",
 					IssueID: env.issue.ID, Actor: env.viewer, Category: "comments", LatestActorIDs: []string{}, CreatedAt: env.fixtureClock})
 			}, want: "succeeded", full: true},
-		scaleP21SW500Case{name: "full-created-id-stored", actions: func(env *scaleP21SW500Env) []domain.WorkflowAction {
-			return []domain.WorkflowAction{scaleP21SW500Action("createIssue", "teamId", env.issue.Team.ID, "title", "Collides")}
-		}, seed: func(env *scaleP21SW500Env, data *domain.Bootstrap) {
+		workflowCloseCase{name: "full-created-id-stored", actions: func(env *workflowCloseEnv) []domain.WorkflowAction {
+			return []domain.WorkflowAction{workflowCloseAction("createIssue", "teamId", env.issue.Team.ID, "title", "Collides")}
+		}, seed: func(env *workflowCloseEnv, data *domain.Bootstrap) {
 			number := 0
 			for _, issue := range data.Issues {
 				number = max(number, issue.Number)
@@ -948,7 +948,7 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 		}, want: "succeeded", full: true},
 	)
 	for _, schedule := range []string{"@hourly", "@daily", "@weekly", "0 10 * * 1-5", "0 10 * * 0", "*/5 * * * *", "30 9-17 * 1,6,12 1-5", "bad schedule", "@every 30s"} {
-		cases = append(cases, scaleP21SW500Case{
+		cases = append(cases, workflowCloseCase{
 			name: "schedule-due/" + schedule, trigger: "schedule", dueOnly: true, defTrigger: "schedule", schedule: schedule,
 			actions: notify, want: "succeeded",
 		})
@@ -956,9 +956,9 @@ func scaleP21SW500Cases() []scaleP21SW500Case {
 	return cases
 }
 
-func TestScaleP21SW500WorkflowActionTriggerDifferential(t *testing.T) {
-	env := scaleP21SW500Setup(t)
-	for _, test := range scaleP21SW500Cases() {
+func TestWorkflowActionTriggerDifferential(t *testing.T) {
+	env := workflowCloseSetup(t)
+	for _, test := range workflowCloseCases() {
 		t.Run(test.name, func(t *testing.T) { env.runCase(t, test) })
 	}
 }

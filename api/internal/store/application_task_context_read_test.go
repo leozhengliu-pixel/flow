@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21ApplicationTaskContextReadNative(t *testing.T) {
+func TestScaleApplicationTaskContextReadNative(t *testing.T) {
 	at := time.Date(2025, 1, 2, 3, 4, 5, 6, time.UTC)
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "workspace", URLKey: "native\x00workspace", Name: "Native workspace"},
@@ -39,7 +39,7 @@ func TestScaleP21ApplicationTaskContextReadNative(t *testing.T) {
 			{ID: "archived", Team: domain.Team{ID: "team"}, Project: &domain.ProjectSummary{ID: "project"}, ArchivedAt: &at},
 		},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical\x00": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical\x00": data})
 	view.lastWorkspaceKey = "physical\x00"
 	for _, metadata := range []bool{false, true} {
 		for _, kind := range []string{"project", "document", "codingEnvironment"} {
@@ -97,13 +97,13 @@ func TestScaleP21ApplicationTaskContextReadNative(t *testing.T) {
 	view.metadataResidency.work.limit = limit
 }
 
-func TestScaleP21ApplicationTaskContextReadPinned(t *testing.T) {
+func TestScaleApplicationTaskContextReadPinned(t *testing.T) {
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "workspace", URLKey: "physical"},
 		Projects:  []domain.Project{{ID: "project", Name: "Before"}},
 		Issues:    []domain.Issue{},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -160,11 +160,11 @@ func TestScaleP21ApplicationTaskContextReadPinned(t *testing.T) {
 	}
 }
 
-func TestScaleP21ApplicationTaskContextReadDatabase(t *testing.T) {
+func TestScaleApplicationTaskContextReadDatabase(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-task-reader-")
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {

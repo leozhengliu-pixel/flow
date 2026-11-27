@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP04Store(t *testing.T) *SQLiteStore {
+func mutationInputsScaleStore(t *testing.T) *SQLiteStore {
 	t.Helper()
-	repo, _ := scaleP04OwnedStore(t)
+	repo, _ := scaleOwnedStore(t)
 	return repo
 }
 
-func scaleP04Hash(t *testing.T, data domain.Bootstrap) [32]byte {
+func scaleHash(t *testing.T, data domain.Bootstrap) [32]byte {
 	t.Helper()
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -27,8 +27,8 @@ func scaleP04Hash(t *testing.T, data domain.Bootstrap) [32]byte {
 	return sha256.Sum256(raw)
 }
 
-func TestScaleP04MetadataFieldsDifferential(t *testing.T) {
-	repo := scaleP04Store(t)
+func TestScaleMetadataFieldsDifferential(t *testing.T) {
+	repo := mutationInputsScaleStore(t)
 	data := repo.Bootstrap()
 	data.NextIssueNumber = 567
 	data.Settings = map[string]any{"nested": map[string]any{"list": []any{"value"}}}
@@ -49,7 +49,7 @@ func TestScaleP04MetadataFieldsDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP04ActorAttributionIsOwned(t *testing.T) {
+func TestScaleActorAttributionIsOwned(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	actor := domain.User{ID: "actor", AppScopes: []string{"write"}, Via: &domain.ActorBot{}}
 	owned := mutationInputActor(actor)
@@ -62,7 +62,7 @@ func TestScaleP04ActorAttributionIsOwned(t *testing.T) {
 	}
 }
 
-func TestScaleP04TeamsRetainLegacyInputs(t *testing.T) {
+func TestScaleTeamsRetainLegacyInputs(t *testing.T) {
 	data := bulkBootstrap(3)
 	for _, mode := range []string{"off", "on"} {
 		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
@@ -75,18 +75,18 @@ func TestScaleP04TeamsRetainLegacyInputs(t *testing.T) {
 	}
 }
 
-func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
+func TestScaleCallbacksOwnSnapshots(t *testing.T) {
 	// These callbacks compare against the installed legacy snapshot.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	repo := scaleP04Store(t)
+	repo := mutationInputsScaleStore(t)
 	fixture := repo.Bootstrap()
 	key, issue := fixture.Workspace.URLKey, fixture.Issues[0]
 	abort := errors.New("callback abort")
 	for _, kind := range []string{"issue", "issueFallback", "comment", "scoped"} {
 		t.Run(kind, func(t *testing.T) {
 			stored, _ := repo.storedWorkspace(key)
-			hash := scaleP04Hash(t, stored)
+			hash := scaleHash(t, stored)
 			check := func(data *domain.Bootstrap) error {
 				source, input := reflect.ValueOf(stored), reflect.ValueOf(*data)
 				for _, field := range persistedMetadataFields() {
@@ -104,14 +104,14 @@ func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
 				// A concurrent reader retains the committed copy while the callback
 				// mutates its own nested containers. The race run checks both sides.
 				read := make(chan [32]byte, 1)
-				go func() { read <- scaleP04Hash(t, stored) }()
+				go func() { read <- scaleHash(t, stored) }()
 				data.Teams[0].Name = "uncommitted"
 				data.TeamSettings[data.Teams[0].ID] = domain.TeamSettings{TeamID: "uncommitted"}
 				data.Users[0].Name = "uncommitted"
 				if len(data.Projects) > 0 {
 					data.Projects[0].Name = "uncommitted"
 				}
-				if got := <-read; got != hash || scaleP04Hash(t, stored) != hash {
+				if got := <-read; got != hash || scaleHash(t, stored) != hash {
 					t.Fatal("callback changed the committed snapshot")
 				}
 				return abort
@@ -133,15 +133,15 @@ func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
 				t.Fatalf("error = %v, want callback abort", err)
 			}
 			committed, _ := repo.storedWorkspace(key)
-			if scaleP04Hash(t, committed) != hash {
+			if scaleHash(t, committed) != hash {
 				t.Fatal("failed callback changed metadata")
 			}
 		})
 	}
 }
 
-func TestScaleP04MixedReplicaWrites(t *testing.T) {
-	first, config := scaleP04OwnedStore(t)
+func TestScaleMixedReplicaWrites(t *testing.T) {
+	first, config := scaleOwnedStore(t)
 	second, err := OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestScaleP04MixedReplicaWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP04FlagDefaultsOnWithLegacyRollback(t *testing.T) {
+func TestScaleFlagDefaultsOnWithLegacyRollback(t *testing.T) {
 	data := domain.Bootstrap{Projects: []domain.Project{{ID: "project"}}, Trash: []domain.TrashEntry{{ID: "trash"}}}
 	for _, mode := range []string{"off", "false", "0", "shadow", "invalid"} {
 		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
@@ -195,15 +195,15 @@ func TestScaleP04FlagDefaultsOnWithLegacyRollback(t *testing.T) {
 	}
 }
 
-func TestScaleP04CommittedWritesKeepSnapshots(t *testing.T) {
+func TestScaleCommittedWritesKeepSnapshots(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	repo := scaleP04Store(t)
+	repo := mutationInputsScaleStore(t)
 	fixture := repo.Bootstrap()
 	key, issueID := fixture.Workspace.URLKey, fixture.Issues[0].ID
 	for _, kind := range []string{"issue", "comment", "scoped"} {
 		t.Run(kind, func(t *testing.T) {
 			stored, _ := repo.storedWorkspace(key)
-			hash := scaleP04Hash(t, stored)
+			hash := scaleHash(t, stored)
 			var err error
 			comment := func(data *domain.Bootstrap) (string, error) {
 				data.Comments[issueID] = append(data.Comments[issueID], domain.Comment{ID: "scale-p04-" + kind, Body: kind, User: data.Viewer})
@@ -222,7 +222,7 @@ func TestScaleP04CommittedWritesKeepSnapshots(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if scaleP04Hash(t, stored) != hash {
+			if scaleHash(t, stored) != hash {
 				t.Fatal("committed write changed the prior snapshot")
 			}
 		})

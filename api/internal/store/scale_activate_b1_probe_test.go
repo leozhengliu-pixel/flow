@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func BenchmarkScaleP09ActivateB1PairedTimezone(b *testing.B) {
+func BenchmarkScaleActivateB1PairedTimezone(b *testing.B) {
 	if os.Getenv("SCALE_ACTIVATE_B1_PAIRED") != "1" || os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "" {
 		b.Skip("opt-in private SQLite timing probe")
 	}

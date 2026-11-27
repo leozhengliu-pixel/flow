@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW353CollectionOwnership(t *testing.T) {
+func TestCollectionOwnership(t *testing.T) {
 	body := strings.Repeat("Complete native body <>&\x00 ", 16384)
 	at := time.Date(2026, 11, 17, 1, 2, 3, 456, time.UTC)
 	notices := []domain.Notification{
@@ -42,7 +42,7 @@ func TestScaleP21SW353CollectionOwnership(t *testing.T) {
 		reflect.ValueOf(&data).Elem().Field(index).Set(reflect.ValueOf(row.value))
 		values[row.name] = data
 	}
-	repo := scaleP21HotLogoStore(t, values)
+	repo := scaleHotLogoStore(t, values)
 	for _, row := range cases {
 		t.Run(row.name, func(t *testing.T) {
 			source, err := repo.retainMetadataLogicalSource(t.Context(), row.name)

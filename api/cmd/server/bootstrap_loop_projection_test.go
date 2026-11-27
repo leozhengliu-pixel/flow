@@ -17,7 +17,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW139RawStrings(width int) func(context.Context, string, func([]byte) error) error {
+func rawStrings(width int) func(context.Context, string, func([]byte) error) error {
 	return func(ctx context.Context, value string, visit func([]byte) error) error {
 		var buffer [1024]byte
 		if err := visit(nil); err != nil {
@@ -40,7 +40,7 @@ func scaleP21SW139RawStrings(width int) func(context.Context, string, func([]byt
 	}
 }
 
-func scaleP21SW139Loop(variant, contractKind, suggestionKind int) domain.Loop {
+func bootstrapLoopProjectionLoop(variant, contractKind, suggestionKind int) domain.Loop {
 	texts := []string{
 		"", " \t\r\n\u0085\u00a0\u3000", "plain",
 		" # Heading:\n0123. **Do work**. Next sentence.",
@@ -122,7 +122,7 @@ func scaleP21SW139Loop(variant, contractKind, suggestionKind int) domain.Loop {
 	return loop
 }
 
-func scaleP21SW139Equal(t *testing.T, expected, actual any) {
+func bootstrapLoopProjectionEqual(t *testing.T, expected, actual any) {
 	t.Helper()
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("literal function values differ\nexpected=%#v\nactual=%#v", expected, actual)
@@ -140,26 +140,26 @@ func scaleP21SW139Equal(t *testing.T, expected, actual any) {
 	}
 }
 
-func TestScaleP21SW139PresentLoopDifferential(t *testing.T) {
+func TestPresentLoopDifferential(t *testing.T) {
 	pairs := 0
 	for variant := range 140 {
 		for contractKind := range 5 {
 			for suggestionKind := range 4 {
 				for _, width := range []int{1, 7, 1024} {
-					input := scaleP21SW139Loop(variant, contractKind, suggestionKind)
+					input := bootstrapLoopProjectionLoop(variant, contractKind, suggestionKind)
 					var counts map[string]int
 					if variant%2 != 0 {
 						counts = map[string]int{input.ID: -7, "other": 31}
 					}
-					hash, description, err := scaleP21LoopText(t.Context(), input.Name, func(visit func([]byte) error) error {
-						return scaleP21SW139RawStrings(width)(t.Context(), input.Instructions, visit)
+					hash, description, err := scaleLoopText(t.Context(), input.Name, func(visit func([]byte) error) error {
+						return rawStrings(width)(t.Context(), input.Instructions, visit)
 					})
 					if err != nil {
 						t.Fatal(variant, contractKind, suggestionKind, width, err)
 					}
-					expected := presentLoop(counts, scaleP21SW139Loop(variant, contractKind, suggestionKind))
-					actual := scaleP21PresentLoop(counts, input, hash, description)
-					scaleP21SW139Equal(t, expected, actual)
+					expected := presentLoop(counts, bootstrapLoopProjectionLoop(variant, contractKind, suggestionKind))
+					actual := scalePresentLoop(counts, input, hash, description)
+					bootstrapLoopProjectionEqual(t, expected, actual)
 					if actual.Instructions != input.Instructions || input.OutputContract != nil && actual.OutputContract == input.OutputContract {
 						t.Fatal("presenter changed instruction bytes or reused the mutable contract shell")
 					}
@@ -171,7 +171,7 @@ func TestScaleP21SW139PresentLoopDifferential(t *testing.T) {
 	t.Logf("exact_present_loop_pairs=%d", pairs)
 }
 
-func scaleP21SW139Bootstrap(role, shape string) domain.Bootstrap {
+func bootstrapLoopProjectionBootstrap(role, shape string) domain.Bootstrap {
 	at := time.Date(2026, 11, 15, 7, 8, 9, 123, time.UTC)
 	viewer := domain.User{ID: "viewer", Name: "Viewer", Email: "viewer@example.test", Active: true}
 	other := domain.User{ID: "other", Name: "Other", Email: "other@example.test", Active: true}
@@ -213,7 +213,7 @@ func scaleP21SW139Bootstrap(role, shape string) domain.Bootstrap {
 		data.Loops = []domain.Loop{}
 	case "duplicates":
 		for index := range 12 {
-			loop := scaleP21SW139Loop(index, index%5, index%4)
+			loop := bootstrapLoopProjectionLoop(index, index%5, index%4)
 			loop.ID = "duplicate-loop"
 			data.Loops = append(data.Loops, loop)
 		}
@@ -221,29 +221,29 @@ func scaleP21SW139Bootstrap(role, shape string) domain.Bootstrap {
 	return data
 }
 
-func TestScaleP21SW139SanitizeBootstrapDifferential(t *testing.T) {
+func TestSanitizeBootstrapDifferential(t *testing.T) {
 	pairs := 0
 	for _, role := range []string{"owner", "ADMIN", "member", "guest", "unknown"} {
 		for _, shape := range []string{"nil", "empty", "duplicates"} {
 			for _, width := range []int{1, 7, 1024} {
-				expected, actual := scaleP21SW139Bootstrap(role, shape), scaleP21SW139Bootstrap(role, shape)
+				expected, actual := bootstrapLoopProjectionBootstrap(role, shape), bootstrapLoopProjectionBootstrap(role, shape)
 				sanitizeBootstrap(&expected)
 				calls := 0
 				var markers []string
 				for _, loop := range actual.Loops {
 					markers = append(markers, loop.Instructions)
 				}
-				err := scaleP21SanitizeBootstrap(t.Context(), &actual, func(ctx context.Context, marker string, visit func([]byte) error) error {
+				err := scaleSanitizeBootstrap(t.Context(), &actual, func(ctx context.Context, marker string, visit func([]byte) error) error {
 					if calls >= len(markers) || marker != markers[calls] {
 						t.Fatal("duplicate loop text resolved by identity instead of source occurrence")
 					}
 					calls++
-					return scaleP21SW139RawStrings(width)(ctx, marker, visit)
+					return rawStrings(width)(ctx, marker, visit)
 				})
 				if err != nil || calls != len(markers) {
 					t.Fatal(role, shape, width, calls, err)
 				}
-				scaleP21SW139Equal(t, expected, actual)
+				bootstrapLoopProjectionEqual(t, expected, actual)
 				pairs++
 			}
 		}
@@ -251,18 +251,18 @@ func TestScaleP21SW139SanitizeBootstrapDifferential(t *testing.T) {
 	t.Logf("exact_whole_sanitizer_pairs=%d", pairs)
 }
 
-func TestScaleP21SW139LoopInstructionTokens(t *testing.T) {
+func TestLoopInstructionTokens(t *testing.T) {
 	const marker = "\x00sw139:instruction-token\xff"
 	const raw = " # Heading:\n**Do the actual work**. Another sentence."
 	loop := domain.Loop{ID: "token", Name: "Token loop", Instructions: marker, OutputContract: &domain.LoopOutputContract{InstructionsHash: "older"}, SuggestedOutputContract: &domain.LoopOutputContract{InstructionsHash: loopContractHash("Token loop", raw)}}
 	data := domain.Bootstrap{Loops: []domain.Loop{loop}}
 	calls := 0
-	err := scaleP21SanitizeBootstrap(t.Context(), &data, func(ctx context.Context, value string, visit func([]byte) error) error {
+	err := scaleSanitizeBootstrap(t.Context(), &data, func(ctx context.Context, value string, visit func([]byte) error) error {
 		if value != marker {
 			t.Fatal("instruction marker changed before reading")
 		}
 		calls++
-		return scaleP21SW139RawStrings(1)(ctx, raw, visit)
+		return rawStrings(1)(ctx, raw, visit)
 	})
 	if err != nil || calls != 1 || len(data.Loops) != 1 {
 		t.Fatal(calls, err)
@@ -273,36 +273,36 @@ func TestScaleP21SW139LoopInstructionTokens(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
+func TestBootstrapLoopFailures(t *testing.T) {
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	data := scaleP21SW139Bootstrap("owner", "duplicates")
-	err := scaleP21SanitizeBootstrap(canceled, &data, func(context.Context, string, func([]byte) error) error {
+	data := bootstrapLoopProjectionBootstrap("owner", "duplicates")
+	err := scaleSanitizeBootstrap(canceled, &data, func(context.Context, string, func([]byte) error) error {
 		t.Fatal("initially canceled sanitizer read instructions")
 		return nil
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	scaleP21SW139Equal(t, scaleP21SW139Bootstrap("owner", "duplicates"), data)
-	if err := scaleP21SanitizeBootstrap(t.Context(), &data, nil); err == nil {
+	bootstrapLoopProjectionEqual(t, bootstrapLoopProjectionBootstrap("owner", "duplicates"), data)
+	if err := scaleSanitizeBootstrap(t.Context(), &data, nil); err == nil {
 		t.Fatal("nonempty loop input accepted a nil reader")
 	}
-	scaleP21SW139Equal(t, scaleP21SW139Bootstrap("owner", "duplicates"), data)
+	bootstrapLoopProjectionEqual(t, bootstrapLoopProjectionBootstrap("owner", "duplicates"), data)
 	for _, shape := range []string{"nil", "empty"} {
-		expected, actual := scaleP21SW139Bootstrap("owner", shape), scaleP21SW139Bootstrap("owner", shape)
+		expected, actual := bootstrapLoopProjectionBootstrap("owner", shape), bootstrapLoopProjectionBootstrap("owner", shape)
 		sanitizeBootstrap(&expected)
-		if err := scaleP21SanitizeBootstrap(t.Context(), &actual, nil); err != nil {
+		if err := scaleSanitizeBootstrap(t.Context(), &actual, nil); err != nil {
 			t.Fatal(err)
 		}
-		scaleP21SW139Equal(t, expected, actual)
+		bootstrapLoopProjectionEqual(t, expected, actual)
 	}
 	failure := errors.New("loop instruction source failed")
 	for _, stop := range []int{1, 2} {
-		data := scaleP21SW139Bootstrap("member", "duplicates")
+		data := bootstrapLoopProjectionBootstrap("member", "duplicates")
 		originalLoops := data.Loops
 		calls := 0
-		err := scaleP21SanitizeBootstrap(t.Context(), &data, func(ctx context.Context, marker string, visit func([]byte) error) error {
+		err := scaleSanitizeBootstrap(t.Context(), &data, func(ctx context.Context, marker string, visit func([]byte) error) error {
 			calls++
 			if calls == stop {
 				if err := visit([]byte("partial")); err != nil {
@@ -310,7 +310,7 @@ func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
 				}
 				return failure
 			}
-			return scaleP21SW139RawStrings(7)(ctx, marker, visit)
+			return rawStrings(7)(ctx, marker, visit)
 		})
 		if !errors.Is(err, failure) || calls != stop || &data.Loops[0] != &originalLoops[0] || !reflect.DeepEqual(data.Loops, originalLoops) {
 			t.Fatal("reader failure exposed a partially presented prefix", stop, calls, err)
@@ -318,9 +318,9 @@ func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
 	}
 	active, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	data = scaleP21SW139Bootstrap("member", "duplicates")
+	data = bootstrapLoopProjectionBootstrap("member", "duplicates")
 	originalLoops := data.Loops
-	err = scaleP21SanitizeBootstrap(active, &data, func(_ context.Context, _ string, visit func([]byte) error) error {
+	err = scaleSanitizeBootstrap(active, &data, func(_ context.Context, _ string, visit func([]byte) error) error {
 		_ = visit([]byte("partial"))
 		cancel()
 		_ = visit([]byte("producer ignores callback cancellation"))
@@ -331,7 +331,7 @@ func TestScaleP21SW139BootstrapLoopFailures(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
+func TestBootstrapLoopTextScratchBound(t *testing.T) {
 	spaced, unspaced := []byte(strings.Repeat("Alpha ", 128)), []byte(strings.Repeat("Alpha_", 128))
 	measure := func(block []byte, repeats int) uint64 {
 		reader := func(ctx context.Context, marker string, visit func([]byte) error) error {
@@ -345,7 +345,7 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 			}
 			return ctx.Err()
 		}
-		// As in SW136, unrelated goroutines can only add to TotalAlloc.
+		// As in loop text, unrelated goroutines can only add to TotalAlloc.
 		// Input-sized scratch appears in every sample.
 		least := uint64(math.MaxUint64)
 		for range 3 {
@@ -353,7 +353,7 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			err := scaleP21SanitizeBootstrap(t.Context(), &data, reader)
+			err := scaleSanitizeBootstrap(t.Context(), &data, reader)
 			runtime.ReadMemStats(&after)
 			if err != nil || data.Loops[0].Instructions != "marker" || data.Loops[0].Description == "" || utf8.RuneCountInString(data.Loops[0].Description) > 140 {
 				t.Fatal("bounded stream failed", err)
@@ -362,7 +362,7 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 		}
 		return least
 	}
-	// See TestScaleP21SW136LoopTextScratchBound: under -race the standard
+	// See TestLoopTextScratchBound: under -race the standard
 	// library's SHA-256 checkpoint (Digest.AppendBinary) allocates a short-lived
 	// pad per whitespace run because the compiler disables its append-of-make
 	// optimisation when instrumenting. The spaced bound is asserted only in

@@ -5,18 +5,18 @@ import (
 	"net/http"
 )
 
-func scaleP21SW256IssueLabelPointRequest(r *http.Request) bool {
+func issueLabelPointRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	_, matched := scaleP21EscapedRouteParts(r, "/api/issue-labels/{id}")
+	_, matched := scaleEscapedRouteParts(r, "/api/issue-labels/{id}")
 	return matched
 }
 
 // The literal wrapper has no issue-label predicate. The handler's existing
 // directory reader separately decides label existence and visibility.
 func (s *server) boundedIssueLabelPointAuthorization(r *http.Request, workspace, userID string) (allowed, handled bool) {
-	if !s.store.BoundedMetadataEnabled() || !scaleP21SW256IssueLabelPointRequest(r) {
+	if !s.store.BoundedMetadataEnabled() || !issueLabelPointRequest(r) {
 		return false, false
 	}
 	request := r

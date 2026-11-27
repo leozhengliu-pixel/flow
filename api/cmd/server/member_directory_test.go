@@ -14,21 +14,21 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW43DirectoryCacheKey(repo *store.SQLiteStore, workspaceID string) string {
+func directoryCacheKey(repo *store.SQLiteStore, workspaceID string) string {
 	return fmt.Sprintf("%p:%s", repo, workspaceID)
 }
 
-func TestScaleP21SW43MemberDirectoryDifferential(t *testing.T) {
+func TestMemberDirectoryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 		old, bounded := &server{store: repo}, &server{store: f.probe}
 		keys := []string{
-			scaleP21SW43DirectoryCacheKey(repo, workspaceID),
-			scaleP21SW43DirectoryCacheKey(f.probe, workspaceID),
+			directoryCacheKey(repo, workspaceID),
+			directoryCacheKey(f.probe, workspaceID),
 		}
 		clear := func() {
 			for _, key := range keys {
@@ -129,8 +129,8 @@ func TestScaleP21SW43MemberDirectoryDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		foreignKeys := []string{
-			scaleP21SW43DirectoryCacheKey(repo, foreign.Workspace.ID),
-			scaleP21SW43DirectoryCacheKey(f.probe, foreign.Workspace.ID),
+			directoryCacheKey(repo, foreign.Workspace.ID),
+			directoryCacheKey(f.probe, foreign.Workspace.ID),
 		}
 		t.Cleanup(func() {
 			for _, key := range foreignKeys {
@@ -152,17 +152,17 @@ func TestScaleP21SW43MemberDirectoryDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW43MemberDirectoryAllocationSample(t *testing.T) {
+func TestMemberDirectoryAllocationSample(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, source := range []*store.SQLiteStore{repo, view} {
-			key := scaleP21SW43DirectoryCacheKey(source, f.data.Workspace.ID)
+			key := directoryCacheKey(source, f.data.Workspace.ID)
 			t.Cleanup(func() { memberDirectories.Delete(key) })
 			service := &server{store: source}
 			service.workspaceMemberDirectory(t.Context(), f.data.Workspace.URLKey)

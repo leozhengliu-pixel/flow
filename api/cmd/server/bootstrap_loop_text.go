@@ -12,11 +12,11 @@ import (
 	"unicode/utf8"
 )
 
-const scaleP21LoopTextRunes = 141
+const scaleLoopTextRunes = 141
 
-type scaleP21LoopDescription struct {
-	output       [scaleP21LoopTextRunes * utf8.UTFMax]byte
-	spaces       [scaleP21LoopTextRunes * utf8.UTFMax]byte
+type scaleLoopDescription struct {
+	output       [scaleLoopTextRunes * utf8.UTFMax]byte
+	spaces       [scaleLoopTextRunes * utf8.UTFMax]byte
 	outputBytes  int
 	outputRunes  int
 	spaceBytes   int
@@ -27,19 +27,19 @@ type scaleP21LoopDescription struct {
 	sentenceDone bool
 }
 
-func (d *scaleP21LoopDescription) reset() {
+func (d *scaleLoopDescription) reset() {
 	d.outputBytes, d.outputRunes, d.spaceBytes, d.spaceRunes = 0, 0, 0, 0
 	d.started, d.star, d.punctuation, d.sentenceDone = false, false, false, false
 }
 
-func (d *scaleP21LoopDescription) emit(raw []byte) {
-	if d.outputRunes < scaleP21LoopTextRunes {
+func (d *scaleLoopDescription) emit(raw []byte) {
+	if d.outputRunes < scaleLoopTextRunes {
 		d.outputBytes += copy(d.output[d.outputBytes:], raw)
 		d.outputRunes++
 	}
 }
 
-func (d *scaleP21LoopDescription) replaceStars(r rune, raw []byte) {
+func (d *scaleLoopDescription) replaceStars(r rune, raw []byte) {
 	if r == '*' {
 		d.star = !d.star
 		return
@@ -51,8 +51,8 @@ func (d *scaleP21LoopDescription) replaceStars(r rune, raw []byte) {
 	d.emit(raw)
 }
 
-func (d *scaleP21LoopDescription) feed(r rune, raw []byte) {
-	if d.sentenceDone || d.outputRunes == scaleP21LoopTextRunes {
+func (d *scaleLoopDescription) feed(r rune, raw []byte) {
+	if d.sentenceDone || d.outputRunes == scaleLoopTextRunes {
 		return
 	}
 	if !d.started {
@@ -69,7 +69,7 @@ func (d *scaleP21LoopDescription) feed(r rune, raw []byte) {
 	}
 	d.punctuation = r == '.' || r == '!' || r == '?'
 	if unicode.IsSpace(r) {
-		if d.spaceRunes < scaleP21LoopTextRunes {
+		if d.spaceRunes < scaleLoopTextRunes {
 			d.spaceBytes += copy(d.spaces[d.spaceBytes:], raw)
 			d.spaceRunes++
 		}
@@ -84,7 +84,7 @@ func (d *scaleP21LoopDescription) feed(r rune, raw []byte) {
 	d.replaceStars(r, raw)
 }
 
-func (d *scaleP21LoopDescription) text() string {
+func (d *scaleLoopDescription) text() string {
 	if !d.sentenceDone && d.star {
 		d.emit([]byte{'*'})
 		d.star = false
@@ -104,8 +104,8 @@ func (d *scaleP21LoopDescription) text() string {
 	return strings.TrimSpace(string(encoded[:size])) + "…"
 }
 
-type scaleP21LoopTextLine struct {
-	description scaleP21LoopDescription
+type scaleLoopTextLine struct {
+	description scaleLoopDescription
 	prefix      bool
 	started     bool
 	bytes       int
@@ -113,13 +113,13 @@ type scaleP21LoopTextLine struct {
 	colon       bool
 }
 
-func (l *scaleP21LoopTextLine) reset() {
+func (l *scaleLoopTextLine) reset() {
 	l.description.reset()
 	l.prefix, l.started, l.colon = true, false, false
 	l.bytes, l.spaces = 0, 0
 }
 
-func (l *scaleP21LoopTextLine) feed(r rune, raw []byte) {
+func (l *scaleLoopTextLine) feed(r rune, raw []byte) {
 	if l.prefix {
 		if strings.ContainsRune("#-*> \t0123456789.", r) {
 			return
@@ -139,7 +139,7 @@ func (l *scaleP21LoopTextLine) feed(r rune, raw []byte) {
 	l.description.feed(r, raw)
 }
 
-type scaleP21LoopTextState struct {
+type scaleLoopTextState struct {
 	ctx           context.Context
 	hash          hash.Hash
 	appendState   encoding.BinaryAppender
@@ -153,18 +153,18 @@ type scaleP21LoopTextState struct {
 	tail          [utf8.UTFMax]byte
 	tailBytes     int
 	checked       int
-	fallback      scaleP21LoopDescription
-	line          scaleP21LoopTextLine
+	fallback      scaleLoopDescription
+	line          scaleLoopTextLine
 	selected      bool
 	description   string
 }
 
-func (s *scaleP21LoopTextState) flush() {
+func (s *scaleLoopTextState) flush() {
 	_, _ = s.hash.Write(s.buffer[:s.buffered])
 	s.buffered = 0
 }
 
-func (s *scaleP21LoopTextState) write(raw []byte) {
+func (s *scaleLoopTextState) write(raw []byte) {
 	for len(raw) > 0 {
 		n := copy(s.buffer[s.buffered:], raw)
 		s.buffered += n
@@ -175,14 +175,14 @@ func (s *scaleP21LoopTextState) write(raw []byte) {
 	}
 }
 
-func (s *scaleP21LoopTextState) finishLine() {
+func (s *scaleLoopTextState) finishLine() {
 	if !s.selected && s.line.started && !(s.line.colon && s.line.bytes < 40) {
 		s.description, s.selected = s.line.description.text(), true
 	}
 	s.line.reset()
 }
 
-func (s *scaleP21LoopTextState) rune(r rune, raw []byte) error {
+func (s *scaleLoopTextState) rune(r rune, raw []byte) error {
 	s.checked += len(raw)
 	if s.checked >= 4096 {
 		s.checked = 0
@@ -224,7 +224,7 @@ func (s *scaleP21LoopTextState) rune(r rune, raw []byte) error {
 	return nil
 }
 
-func (s *scaleP21LoopTextState) chunk(raw []byte) error {
+func (s *scaleLoopTextState) chunk(raw []byte) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
@@ -252,9 +252,9 @@ func (s *scaleP21LoopTextState) chunk(raw []byte) error {
 	return nil
 }
 
-// scaleP21LoopText reproduces the literal contract hash and fallback description
+// scaleLoopText reproduces the literal contract hash and fallback description
 // while retaining only fixed prefixes, a UTF-8 carry and a SHA-256 checkpoint.
-func scaleP21LoopText(ctx context.Context, name string, chunks func(func([]byte) error) error) (string, string, error) {
+func scaleLoopText(ctx context.Context, name string, chunks func(func([]byte) error) error) (string, string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", "", err
 	}
@@ -267,7 +267,7 @@ func scaleP21LoopText(ctx context.Context, name string, chunks func(func([]byte)
 	if !appendOK || !restoreOK {
 		return "", "", errors.New("loop text hash does not support bounded checkpoints")
 	}
-	s := scaleP21LoopTextState{ctx: ctx, hash: h, appendState: appender, restoreState: restorer}
+	s := scaleLoopTextState{ctx: ctx, hash: h, appendState: appender, restoreState: restorer}
 	s.line.reset()
 	s.write([]byte(loopContractPromptVersion))
 	s.write([]byte{0})

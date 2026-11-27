@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW18RootCollection(t *testing.T, repo *SQLiteStore, workspace, field string, value json.RawMessage) {
+func rootCollection(t *testing.T, repo *SQLiteStore, workspace, field string, value json.RawMessage) {
 	t.Helper()
 	var raw []byte
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
@@ -42,11 +42,11 @@ func scaleP21SW18RootCollection(t *testing.T, repo *SQLiteStore, workspace, fiel
 	}
 }
 
-func TestScaleP21SW18WebhookCredentials(t *testing.T) {
+func TestWebhookCredentials(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	target := domain.IntegrationConnection{
 		ID: idgen.New("sw18-hook-"), Provider: "github", Status: "connected",
@@ -133,13 +133,13 @@ func TestScaleP21SW18WebhookCredentials(t *testing.T) {
 	if err != nil || !found || view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("credential read did not recover or decoded complete metadata", err)
 	}
-	scaleP21SW18RootCollection(t, f.SQLiteStore, workspace, "integrationConnections", json.RawMessage(`null`))
+	rootCollection(t, f.SQLiteStore, workspace, "integrationConnections", json.RawMessage(`null`))
 	_, found, release, err = view.BeginIntegrationWebhookCredentials(t.Context(), workspace, "github")
 	release()
 	if err != nil || found {
 		t.Fatal("inactive root collection exposed stale connection rows", err)
 	}
-	scaleP21SW18RootCollection(t, f.SQLiteStore, workspace, "integrationConnections", json.RawMessage(`[{"id":"unsplit","provider":"github","status":"connected"}]`))
+	rootCollection(t, f.SQLiteStore, workspace, "integrationConnections", json.RawMessage(`[{"id":"unsplit","provider":"github","status":"connected"}]`))
 	_, _, release, err = view.BeginIntegrationWebhookCredentials(t.Context(), workspace, "github")
 	release()
 	if !errors.Is(err, ErrBoundedMetadataCoverage) {
@@ -147,11 +147,11 @@ func TestScaleP21SW18WebhookCredentials(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW18TeamResourceVisitors(t *testing.T) {
+func TestTeamResourceVisitors(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, teamID := f.data.Workspace.URLKey, idgen.New("team_sw18_")
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	sections := []domain.TeamResourceSection{}
@@ -311,8 +311,8 @@ func TestScaleP21SW18TeamResourceVisitors(t *testing.T) {
 	if view.metadataResidency.work.used != 0 || view.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("team resource visitors leaked work or decoded complete metadata")
 	}
-	scaleP21SW18RootCollection(t, f.SQLiteStore, workspace, "teamResourceSections", json.RawMessage(`[]`))
-	scaleP21SW18RootCollection(t, f.SQLiteStore, workspace, "teamPinnedResources", json.RawMessage(`null`))
+	rootCollection(t, f.SQLiteStore, workspace, "teamResourceSections", json.RawMessage(`[]`))
+	rootCollection(t, f.SQLiteStore, workspace, "teamPinnedResources", json.RawMessage(`null`))
 	read, _, _, err = view.BeginTeamResourceRead(t.Context(), workspace, teamID)
 	if err != nil {
 		t.Fatal(err)
@@ -328,18 +328,18 @@ func TestScaleP21SW18TeamResourceVisitors(t *testing.T) {
 	if stale != 0 {
 		t.Fatal("inactive root collections exposed stale resource rows")
 	}
-	scaleP21SW18RootCollection(t, f.SQLiteStore, workspace, "teamResourceSections", json.RawMessage(`[{"id":"unsplit"}]`))
+	rootCollection(t, f.SQLiteStore, workspace, "teamResourceSections", json.RawMessage(`[{"id":"unsplit"}]`))
 	read, _, _, err = view.BeginTeamResourceRead(t.Context(), workspace, teamID)
 	if read != nil || !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("unsplit nonempty resource collection became empty state", err)
 	}
 }
 
-func TestScaleP21SW18TeamResourceTypedDefaults(t *testing.T) {
+func TestTeamResourceTypedDefaults(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, teamID, sectionID := f.data.Workspace.URLKey, idgen.New("team_sw18_"), idgen.New("sw18-schema-section-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "teams", "teamResourceSections"), workspace, "team.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: teamID, Key: "SW18"})

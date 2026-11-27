@@ -19,7 +19,7 @@
         "server/reference_authorization.go:boundedSelectedPipeline",
         "server/reference_authorization.go:boundedSelectedRelease"
       ],
-      "reason": "Reads only the authorization header fields of the records of one kind whose id (or slug) equals the reference. The installed map is read only to choose the current logical source (native, normalized values, collection order); a newer policy snapshot streams the stored collection through the reviewed BeginMetadataArrayRead, which also covers inline arrays with duplicate, empty or overlong IDs. The epoch/stamp of the access policy is revalidated after the read (ErrResourceAccessChanged retries). Slug-referenced project/initiative headers (projectRefs/initiativeRefs) serve a selected credential's favorite/subscription projection. It never hydrates the workspace. SW491-SW496 compare actual middleware, leaf and bare decisions literal vs bounded warm vs SQL-reloaded for every principal and credential, including duplicate IDs, slugs, trashed/archived/missing records and escaped paths."
+      "reason": "Reads only the authorization header fields of the records of one kind whose id (or slug) equals the reference. The installed map is read only to choose the current logical source (native, normalized values, collection order); a newer policy snapshot streams the stored collection through the reviewed BeginMetadataArrayRead, which also covers inline arrays with duplicate, empty or overlong IDs. The epoch/stamp of the access policy is revalidated after the read (ErrResourceAccessChanged retries). Slug-referenced project/initiative headers (projectRefs/initiativeRefs) serve a selected credential's favorite/subscription projection. It never hydrates the workspace. fallback authorization-body authorization compare actual middleware, leaf and bare decisions literal vs bounded warm vs SQL-reloaded for every principal and credential, including duplicate IDs, slugs, trashed/archived/missing records and escaped paths."
     },
     "canonical": {
       "owner": "P21",
@@ -32,7 +32,7 @@
       "callers": [
         "store/record_authorization_read.go:BeginRecordAuthorizationRead"
       ],
-      "reason": "Streams one stored collection in collection order (split rows or the inline root array) and decodes each element with encoding/json, as loading does; a repeated root field (RequiresTypedMerge) fails closed. Admission is reserved per element; the decoded value is a header copy. SW492 exercises this path (warm phase) including an inline collection with duplicate IDs."
+      "reason": "Streams one stored collection in collection order (split rows or the inline root array) and decodes each element with encoding/json, as loading does; a repeated root field (RequiresTypedMerge) fails closed. Admission is reserved per element; the decoded value is a header copy. record fallback authorization exercises this path (warm phase) including an inline collection with duplicate IDs."
     },
     "BeginSettingAuthorizationRead": {
       "owner": "P21",
@@ -45,7 +45,7 @@
       "callers": [
         "server/view_dashboard_authorization.go:boundedDashboards"
       ],
-      "reason": "Reads one settings value (dashboards.v1) from the current installed logical source or, for a newer snapshot, by replaying the stored settings map occurrences; revalidates the access epoch/stamp. The caller applies the store's own filterSettingsByVisibility and the literal settingCollection decode. SW493 and SW495 cover private/team/workspace/duplicate dashboards across every principal and credential."
+      "reason": "Reads one settings value (dashboards.v1) from the current installed logical source or, for a newer snapshot, by replaying the stored settings map occurrences; revalidates the access epoch/stamp. The caller applies the store's own filterSettingsByVisibility and the literal settingCollection decode. view dashboard authorization and reference authorization cover private/team/workspace/duplicate dashboards across every principal and credential."
     },
     "setting": {
       "owner": "P21",

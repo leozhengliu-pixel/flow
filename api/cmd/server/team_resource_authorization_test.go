@@ -16,14 +16,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW307TeamResourceRouteDifferential(t *testing.T) {
+func TestTeamResourceRouteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21SW215AuthMatrixSeed(t, repo)
+			f := authMatrixSeed(t, repo)
 			workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw307-")
 			data, found := repo.WorkspaceMetadata(workspace)
 			if !found {
@@ -157,7 +157,7 @@ func TestScaleP21SW307TeamResourceRouteDifferential(t *testing.T) {
 										}))
 										recorder := httptest.NewRecorder()
 										outputChecks := 0
-										writer := &scaleP21SW215ColdOutputWriter{ResponseRecorder: recorder, check: func() {
+										writer := &coldOutputWriter{ResponseRecorder: recorder, check: func() {
 											outputChecks++
 											if source.BoundedMetadataEnabled() && handoff.TeamID != "" &&
 												(scope == nil || scope.closed || source.MetadataWorkUsedForTesting() == 0) {
@@ -222,12 +222,12 @@ func TestScaleP21SW307TeamResourceRouteDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW307AuthorizationCancellationAndBoundaries(t *testing.T) {
+func TestAuthorizationCancellationAndBoundaries(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		cancelled, cancel := context.WithCancel(t.Context())
 		cancel()
 		request := httptest.NewRequest(http.MethodGet, "/api/teams/"+f.public+"/resources", nil).WithContext(cancelled)
@@ -244,12 +244,12 @@ func TestScaleP21SW307AuthorizationCancellationAndBoundaries(t *testing.T) {
 			t.Fatal("cancelled team authorization retained a partial output")
 		}
 		for _, path := range []string{"/api/teams", "/api/teams/x/members", "/api/teams/x/resource-sections", "/api/teams/x/resources/y"} {
-			if _, selected := scaleP21SW307TeamResourceAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)); selected {
+			if _, selected := teamResourceAuthorizationRequest(httptest.NewRequest(http.MethodGet, path, nil)); selected {
 				t.Fatal("team resource helper captured another authorization predicate", path)
 			}
 		}
 		for _, method := range []string{http.MethodPatch, http.MethodDelete, http.MethodOptions} {
-			if _, selected := scaleP21SW307TeamResourceAuthorizationRequest(httptest.NewRequest(method, "/api/teams/x/resources", nil)); selected {
+			if _, selected := teamResourceAuthorizationRequest(httptest.NewRequest(method, "/api/teams/x/resources", nil)); selected {
 				t.Fatal("team resource helper captured an unregistered method", method)
 			}
 		}

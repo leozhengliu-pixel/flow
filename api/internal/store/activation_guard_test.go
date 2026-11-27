@@ -8,7 +8,7 @@ import (
 // Activation accepts the reviewed inventory once no HOT consumer is left:
 // unmigrated COLD consumers run on the COLD facade. The other activation
 // requirements still refuse.
-func TestScaleP21ActivationGuardAcceptsColdConsumers(t *testing.T) {
+func TestScaleActivationGuardAcceptsColdConsumers(t *testing.T) {
 	if hot := registeredHotMetadataConsumers(); len(hot) != 0 {
 		t.Fatalf("HOT consumers left: %v", hot)
 	}
@@ -33,7 +33,7 @@ func TestScaleP21ActivationGuardAcceptsColdConsumers(t *testing.T) {
 }
 
 // An unmigrated consumer without a COLD review is HOT and refuses activation.
-func TestScaleP21ActivationGuardRefusesUnreviewedCold(t *testing.T) {
+func TestScaleActivationGuardRefusesUnreviewedCold(t *testing.T) {
 	inventory := metadataConsumerInventory{Consumers: map[string]metadataConsumerReview{
 		"a.go:hot":          {Owner: "P21", Status: "unmigrated"},
 		"a.go:cold-no-why":  {Owner: "P21", Status: "unmigrated", Temperature: "cold"},

@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW202OrdinalKernelValidatesBeforeWork(t *testing.T) {
+func TestOrdinalKernelValidatesBeforeWork(t *testing.T) {
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	owner := &ResourceRead{store: repo}
 	defer owner.Close()
@@ -49,27 +49,27 @@ func TestScaleP21SW202OrdinalKernelValidatesBeforeWork(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW202OrdinalKernelCapturesErrorsAndRestoresServices(t *testing.T) {
+func TestOrdinalKernelCapturesErrorsAndRestoresServices(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, mode := range []string{"success", "callback-error", "actor-error", "cancel", "merge-error", "output-error"} {
 		t.Run(mode, func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			id, connection := "sw202-kernel-"+mode, "sw202-kernel-connection-"+mode
 			at := time.Date(2026, 11, 16, 3, 4, 5, 6, time.UTC)
 			if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw202_kernel_seed", "", nil, func(data *domain.Bootstrap) error {
-				*data = scaleP21SW202Data(*data, id, connection, at)
+				*data = integrationDeliveryData(*data, id, connection, at)
 				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
-			repo := scaleP21IssuePersistenceView(t, f, true, false)
-			before := scaleP21SW193Field(t, repo, workspace, "integrationDeliveries")
-			prior := scaleP21SW63EventIDs(t, repo, workspace)
+			repo := scaleIssuePersistenceView(t, f, true, false)
+			before := inlineWriterField(t, repo, workspace, "integrationDeliveries")
+			prior := eventIDs(t, repo, workspace)
 			sentinel := errors.New("sw202 ordinal callback/merge error")
-			var profile *scaleP21SW202CheckedOrdinalProfile
+			var profile *checkedOrdinalProfile
 			var outputCloses []func()
 			work, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -99,7 +99,7 @@ func TestScaleP21SW202OrdinalKernelCapturesErrorsAndRestoresServices(t *testing.
 				if err != nil {
 					return nil, err
 				}
-				profile = &scaleP21SW202CheckedOrdinalProfile{metadataOrdinalProfile: value, nativeRole: value.Input().ViewerRole}
+				profile = &checkedOrdinalProfile{metadataOrdinalProfile: value, nativeRole: value.Input().ViewerRole}
 				if mode == "merge-error" {
 					profile.mergeErr = sentinel
 				}
@@ -120,7 +120,7 @@ func TestScaleP21SW202OrdinalKernelCapturesErrorsAndRestoresServices(t *testing.
 					cancel()
 					return context.Canceled
 				}
-				return scaleP21SW202Mutation(id, "integration_delivery.claimed", at.Add(time.Hour))(data)
+				return integrationDeliveryMutation(id, "integration_delivery.claimed", at.Add(time.Hour))(data)
 			})
 			repo.SetRealtimeSink(nil)
 			if mode == "success" {
@@ -147,8 +147,8 @@ func TestScaleP21SW202OrdinalKernelCapturesErrorsAndRestoresServices(t *testing.
 					repo.MetadataWorkUsedForTesting() == 0 {
 					t.Fatal("callback/actor failure lost captured output ownership or transient restoration")
 				}
-				after := scaleP21SW193Field(t, repo, workspace, "integrationDeliveries")
-				if !reflect.DeepEqual(before, after) || len(scaleP21SW63NewEvents(t, repo, workspace, prior)) != 0 {
+				after := inlineWriterField(t, repo, workspace, "integrationDeliveries")
+				if !reflect.DeepEqual(before, after) || len(newEvents(t, repo, workspace, prior)) != 0 {
 					t.Fatal("failed attempt persisted its callback or event")
 				}
 			}
@@ -163,20 +163,20 @@ func TestScaleP21SW202OrdinalKernelCapturesErrorsAndRestoresServices(t *testing.
 	}
 }
 
-func TestScaleP21SW202OrdinalKernelDisplayBeforeActorAndCompleteFactory(t *testing.T) {
+func TestOrdinalKernelDisplayBeforeActorAndCompleteFactory(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, reload := range []bool{false, true} {
 		t.Run(fmt.Sprintf("reload=%t", reload), func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace, id, connection := f.data.Workspace.URLKey, "sw202-kernel-display", "sw202-kernel-display-connection"
 			at := time.Date(2026, 11, 16, 3, 4, 5, 6, time.UTC)
 			actor := f.data.Viewer
 			storedActor := actor
 			storedActor.Name = "Stored directory name"
 			if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw202_kernel_display_seed", "", nil, func(data *domain.Bootstrap) error {
-				*data = scaleP21SW202Data(*data, id, connection, at)
+				*data = integrationDeliveryData(*data, id, connection, at)
 				index := slices.IndexFunc(data.Users, func(user domain.User) bool { return user.ID == actor.ID })
 				if index < 0 {
 					data.Users = append(data.Users, storedActor)
@@ -191,7 +191,7 @@ func TestScaleP21SW202OrdinalKernelDisplayBeforeActorAndCompleteFactory(t *testi
 			}); err != nil {
 				t.Fatal(err)
 			}
-			repo := scaleP21IssuePersistenceView(t, f, true, reload)
+			repo := scaleIssuePersistenceView(t, f, true, reload)
 			owner := &ResourceRead{store: repo}
 			defer owner.Close()
 			actor.Name = "Request actor name"
@@ -214,7 +214,7 @@ func TestScaleP21SW202OrdinalKernelDisplayBeforeActorAndCompleteFactory(t *testi
 			var snapshot json.RawMessage
 			repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { snapshot = append(json.RawMessage(nil), event.Payload...) })
 			if err := repo.mutateMetadataOrdinalProfile(ctx, workspace, "integration_delivery.claimed", id, nil, factory,
-				scaleP21SW202Mutation(id, "integration_delivery.claimed", at.Add(time.Hour))); err != nil {
+				integrationDeliveryMutation(id, "integration_delivery.claimed", at.Add(time.Hour))); err != nil {
 				t.Fatal(err)
 			}
 			repo.SetRealtimeSink(nil)
@@ -232,11 +232,11 @@ func TestScaleP21SW202OrdinalKernelDisplayBeforeActorAndCompleteFactory(t *testi
 	}
 }
 
-func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) {
+func TestOrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	id, connection := "sw202-kernel-retry-"+f.data.Workspace.ID, "sw202-kernel-retry-connection"
 	at := time.Date(2026, 11, 16, 4, 5, 6, 7, time.UTC)
@@ -259,14 +259,14 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 			t.Fatal(err)
 		}
 		if err := f.MutateWorkspace(t.Context(), workspace, "integration.adapter_configured", "", nil, func(data *domain.Bootstrap) error {
-			*data = scaleP21SW202Data(*data, id, connection, at)
+			*data = integrationDeliveryData(*data, id, connection, at)
 			data.IntegrationDeliveries = data.IntegrationDeliveries[:2]
 			data.IntegrationDeliveries[1].Status = "delivering"
 			data.IntegrationDeliveries[1].Payload = payload
 			data.IntegrationConnections = data.IntegrationConnections[:2]
 			data.IntegrationConnections[1].Config = map[string]string{"deliveryURL": "https://example.invalid/retry"}
 			// This supported warm value differs from SQL's NUL-stripped
-			// row, producing the same real scalar conflict as SW36.
+			// row, producing the same real scalar conflict as retry.
 			data.IntegrationConnections[1].LastError = "warm\x00before"
 			data.Documents = []domain.Document{{ID: "document_sw202_retry", ContentData: map[string]any{"id": id, "marker": "earlier retry aggregate"}}}
 			data.Webhooks = []domain.Webhook{{ID: "hook_sw202_retry", Enabled: true, URL: "https://example.invalid/hook"}}
@@ -291,15 +291,15 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 		if err := json.Unmarshal(raw, &stored); err != nil || stored.LastError != "warmbefore" {
 			t.Fatal("canonical row did not exercise the NUL boundary", stored.LastError, err)
 		}
-		repo := scaleP21IssuePersistenceView(t, f, bounded, false)
+		repo := scaleIssuePersistenceView(t, f, bounded, false)
 		t.Cleanup(func() {
 			repo.SetWorkspaceCoordinator(nil)
 			repo.SetWebhookSink(nil)
 			repo.SetRealtimeSink(nil)
 		})
-		prior := scaleP21SW63EventIDs(t, repo, workspace)
+		prior := eventIDs(t, repo, workspace)
 		got := outcome{}
-		var profiles []*scaleP21SW202CheckedOrdinalProfile
+		var profiles []*checkedOrdinalProfile
 		var outputCloses []func()
 		releaseConcurrent := func() {}
 		defer func() { releaseConcurrent() }()
@@ -335,7 +335,7 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 			diagnosticMu.Unlock()
 		})
 		if bounded {
-			ctx = scaleP21HotWebhookContext{Context: ctx, check: func() {
+			ctx = scaleHotWebhookContext{Context: ctx, check: func() {
 				var callers [48]uintptr
 				count := runtime.Callers(2, callers[:])
 				admission := false
@@ -369,7 +369,7 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 			}}
 		}
 		locks, callbacks, webhooks, realtime := 0, 0, 0, 0
-		repo.SetWorkspaceCoordinator(scaleP21ColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
+		repo.SetWorkspaceCoordinator(scaleColdWriteCoordinator(func(_ context.Context, key string, apply func() error) error {
 			locks++
 			markPhase(fmt.Sprintf("coordinator-%d-before-apply", locks))
 			if key != workspace {
@@ -412,12 +412,12 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 			if err != nil {
 				return nil, err
 			}
-			profile := &scaleP21SW202CheckedOrdinalProfile{metadataOrdinalProfile: value, nativeRole: value.Input().ViewerRole}
+			profile := &checkedOrdinalProfile{metadataOrdinalProfile: value, nativeRole: value.Input().ViewerRole}
 			profiles = append(profiles, profile)
 			markPhase(fmt.Sprintf("factory-%d-ready", len(profiles)))
 			return profile, nil
 		}
-		mutate := scaleP21SW202Mutation(id, "integration_delivery.retry", at.Add(time.Hour))
+		mutate := integrationDeliveryMutation(id, "integration_delivery.retry", at.Add(time.Hour))
 		callback := func(data *domain.Bootstrap) error {
 			callbacks++
 			markPhase(fmt.Sprintf("callback-%d", callbacks))
@@ -474,15 +474,15 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 			t.Fatal("real conflict did not refresh canonical inputs", got.Inputs)
 		}
 		got.State = []json.RawMessage{
-			scaleP21SW193Field(t, repo, workspace, "integrationDeliveries"),
-			scaleP21SW193Field(t, repo, workspace, "integrationConnections"),
+			inlineWriterField(t, repo, workspace, "integrationDeliveries"),
+			inlineWriterField(t, repo, workspace, "integrationConnections"),
 		}
-		got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+		got.Events = newEvents(t, repo, workspace, prior)
 		if len(got.Events) != 1 || len(got.Captured) != 2 ||
 			!bytes.Equal(got.Captured[0].Payload, payload) || !bytes.Equal(got.Captured[1].Payload, payload) {
 			t.Fatal("failed attempt committed an event or lost native output")
 		}
-		outcomes = append(outcomes, scaleP21SW63JSON(t, got))
+		outcomes = append(outcomes, discussionWriterJSON(t, got))
 		for _, close := range outputCloses {
 			close()
 			close()
@@ -503,7 +503,7 @@ func TestScaleP21SW202OrdinalKernelRetriesWithCapturedLargeOutput(t *testing.T) 
 	}
 }
 
-type scaleP21SW202CheckedOrdinalProfile struct {
+type checkedOrdinalProfile struct {
 	metadataOrdinalProfile
 	nativeRole string
 	mergeErr   error
@@ -512,7 +512,7 @@ type scaleP21SW202CheckedOrdinalProfile struct {
 	once       sync.Once
 }
 
-func (p *scaleP21SW202CheckedOrdinalProfile) Merge(ctx context.Context) (*metadataLogicalSource, error) {
+func (p *checkedOrdinalProfile) Merge(ctx context.Context) (*metadataLogicalSource, error) {
 	p.merges.Add(1)
 	data := p.Input()
 	if data.ViewerRole != p.nativeRole || data.ViewerTeamIDs != nil || data.FormerMembers != nil || data.CollaborationUpdates != nil {
@@ -524,7 +524,7 @@ func (p *scaleP21SW202CheckedOrdinalProfile) Merge(ctx context.Context) (*metada
 	return p.metadataOrdinalProfile.Merge(ctx)
 }
 
-func (p *scaleP21SW202CheckedOrdinalProfile) Close() {
+func (p *checkedOrdinalProfile) Close() {
 	p.once.Do(func() {
 		p.closed.Add(1)
 		p.metadataOrdinalProfile.Close()

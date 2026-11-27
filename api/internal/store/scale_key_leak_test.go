@@ -7,11 +7,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP03CredentialReadDetectsMetadataDrift(t *testing.T) {
+func TestScaleCredentialReadDetectsMetadataDrift(t *testing.T) {
 	// Without a journal, the legacy metadata stamp is the authority.
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	for name, repo := range scaleP03Stores(t) {
+	for name, repo := range resourceAccessScaleStores(t) {
 		t.Run(name, func(t *testing.T) {
 			workspace, principal := repo.data.Workspace.URLKey, repo.data.Viewer.ID
 			if err := repo.MutateWorkspace(t.Context(), workspace, "test.scope_fixture", "", nil, func(data *domain.Bootstrap) error {

@@ -13,13 +13,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW340IntegrationCatalogPages(t *testing.T) {
+func TestIntegrationCatalogPages(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	f := scaleP09Database(t)
-	foreign := scaleP09Database(t)
-	view := scaleP21ResidentProbe(f.SQLiteStore)
+	f := journalScaleDatabase(t)
+	foreign := journalScaleDatabase(t)
+	view := scaleResidentProbe(f.SQLiteStore)
 	workspace := f.data.Workspace.URLKey
 	key := RecordKey{Kind: "integrationDeliveries", ID: "sw340-" + f.data.Workspace.ID}
 	tx, err := f.db.BeginTx(t.Context(), nil)

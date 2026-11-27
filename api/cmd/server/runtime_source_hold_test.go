@@ -11,13 +11,13 @@ import (
 
 // These ordinary typed producer states are accepted by the legacy store.
 // Keep the consumer pending until its bounded predicate preserves them.
-func TestScaleP21SW16RuntimeTypedSourceHold(t *testing.T) {
+func TestRuntimeTypedSourceHold(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_INTERNAL_CONVERSATION_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("sw16-runtime-source-")
 		owner := f.data.Viewer.ID
 		principal, _ := json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: owner})

@@ -28,7 +28,7 @@ func (b *legacyIssueFrameWriteBatch) close() {
 	b.releases = nil
 }
 
-// SQL arguments already have SW238 owners. Keep the literal statement shape,
+// SQL arguments already have issue frame arguments owners. Keep the literal statement shape,
 // four-MiB detail split and one index pass over this physical flush's records.
 func (b *legacyIssueFrameWriteBatch) write(ctx context.Context, tx *sqlTx, workspace string) error {
 	insert := strings.TrimSuffix(issueRecordInsert, ") VALUES ") + ",collection_order) VALUES "

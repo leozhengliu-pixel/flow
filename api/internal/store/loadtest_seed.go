@@ -49,7 +49,7 @@ var (
 // batch through seedSyntheticBatchBounded instead of the full mutation.
 func (s *SQLiteStore) SeedSyntheticMetadata(ctx context.Context, workspace string, spec SyntheticMetadata) error {
 	var err error
-	spec, err = scaleP01SyntheticSpec(spec)
+	spec, err = scaleSyntheticSpec(spec)
 	if err != nil {
 		return err
 	}
@@ -60,13 +60,13 @@ func (s *SQLiteStore) SeedSyntheticMetadata(ctx context.Context, workspace strin
 		add         func(data *domain.Bootstrap, index int, now time.Time)
 	}{
 		{"projects", spec.Projects, spec.ProjectBytes, func(data *domain.Bootstrap, i int, now time.Time) {
-			data.Projects = append(data.Projects, scaleP01SyntheticProject(data.Viewer, spec, i, now))
+			data.Projects = append(data.Projects, scaleSyntheticProject(data.Viewer, spec, i, now))
 		}},
 		{"trash", spec.Trash, spec.TrashBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.Trash = append(data.Trash, syntheticTrash(data.Viewer, spec, i, now))
 		}},
 		{"documents", spec.Documents, spec.DocumentBytes, func(data *domain.Bootstrap, i int, now time.Time) {
-			data.Documents = append(data.Documents, scaleP01SyntheticDocument(data.Viewer, spec, i, now))
+			data.Documents = append(data.Documents, scaleSyntheticDocument(data.Viewer, spec, i, now))
 		}},
 		{"aiConversations", spec.Conversations, spec.ConversationBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.AIConversations = append(data.AIConversations, syntheticConversation(data.Viewer, i, spec.ConversationBytes, now))

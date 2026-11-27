@@ -23,7 +23,7 @@ func (s *server) startDeliveryScheduler() {
 		interval = defaultDeliverySchedulerInterval
 	}
 	// Delivery ticks reach COLD consumers (chat integration ticks, DM reply
-	// jobs): with bounded metadata on they run COLD per operation (SW550).
+	// jobs): with bounded metadata on they run COLD per operation.
 	ctx, cancel := context.WithCancel(store.WithColdWork(s.backgroundWork().serving, "delivery-scheduler"))
 	done := make(chan struct{})
 	s.deliverySchedulerMu.Lock()

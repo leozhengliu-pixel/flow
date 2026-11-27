@@ -39,8 +39,8 @@ func holdLoadErrorsWork(t *testing.T, repo *store.SQLiteStore, free int) func() 
 	return release
 }
 
-func TestScaleP21ActivationViewCreateAuthorizationBudget(t *testing.T) {
-	peers, f, _, project := scaleP21ActivationHTTPPeers(t, "current")
+func TestScaleActivationViewCreateAuthorizationBudget(t *testing.T) {
+	peers, f, _, project := scaleActivationHTTPPeers(t, "current")
 	peer := peers[0]
 	s := peer.service
 	repo, workspace := s.store, f.data.Workspace.URLKey
@@ -122,8 +122,8 @@ func TestScaleP21ActivationViewCreateAuthorizationBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21ActivationMetadataMutationBudget(t *testing.T) {
-	peers, f, _, project := scaleP21ActivationHTTPPeers(t, "current")
+func TestScaleActivationMetadataMutationBudget(t *testing.T) {
+	peers, f, _, project := scaleActivationHTTPPeers(t, "current")
 	s := peers[0].service
 	repo, workspace := s.store, f.data.Workspace.URLKey
 	request := func(method, path, id string, input any, handler http.HandlerFunc) *httptest.ResponseRecorder {
@@ -178,8 +178,8 @@ func TestScaleP21ActivationMetadataMutationBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP21ActivationMutationScratchBudget(t *testing.T) {
-	peers, f, issue, project := scaleP21ActivationHTTPPeers(t, "current")
+func TestScaleActivationMutationScratchBudget(t *testing.T) {
+	peers, f, issue, project := scaleActivationHTTPPeers(t, "current")
 	peer := peers[0]
 	repo, workspace := peer.service.store, f.data.Workspace.URLKey
 	// The configured process budget exceeds the old 1 GiB spool guard.

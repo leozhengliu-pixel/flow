@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW481DocumentProfileNativeMerge(t *testing.T) {
+func TestDocumentProfileNativeMerge(t *testing.T) {
 	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: "physical", URLKey: "physical"},
@@ -42,7 +42,7 @@ func TestScaleP21SW481DocumentProfileNativeMerge(t *testing.T) {
 		PushSubscriptions: []domain.PushSubscription{{ID: "push", UserID: "recipient", Enabled: true}},
 		Favorites:         nil,
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	source, err := view.retainMetadataLogicalSource(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -121,11 +121,11 @@ func TestScaleP21SW481DocumentProfileNativeMerge(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW481DocumentCapturedConflictOwnership(t *testing.T) {
+func TestDocumentCapturedConflictOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, documentID := f.data.Workspace.URLKey, "sw481-"+f.data.Workspace.ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.sw481_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Documents = []domain.Document{{ID: documentID, Title: "Current", Version: 4, ContentData: map[string]any{"native": int64(1<<53 + 1)}}}

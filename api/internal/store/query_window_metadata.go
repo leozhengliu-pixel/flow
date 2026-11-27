@@ -9,64 +9,64 @@ import (
 	"flow/api/internal/domain"
 )
 
-type ScaleP19Snapshot struct {
+type ScaleSnapshot struct {
 	Data     domain.Bootstrap
 	Revision string
 	Versions map[string]map[string]string
 }
 
-// ReadScaleP19Snapshot pairs the installed summary inputs and committed record
+// ReadScaleSnapshot pairs the installed summary inputs and committed record
 // versions at one SQL revision. An uncertified copy takes the existing reload
 // recovery, a bounded number of times (accessChangedReread); it cannot acquire
 // newer versions for older row values.
-func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, principal string, unfiltered bool) (ScaleP19Snapshot, error) {
+func (s *SQLiteStore) ReadScaleSnapshot(ctx context.Context, workspace, principal string, unfiltered bool) (ScaleSnapshot, error) {
 	if s.BoundedMetadataEnabled() {
 		if !metadataOutputOwnerPresent(ctx) {
-			return ScaleP19Snapshot{}, ErrBoundedMetadataCoverage
+			return ScaleSnapshot{}, ErrBoundedMetadataCoverage
 		}
-		read, err := s.BeginP19SnapshotRead(ctx, workspace, principal, unfiltered)
+		read, err := s.BeginSnapshotRead(ctx, workspace, principal, unfiltered)
 		if err != nil {
-			return ScaleP19Snapshot{}, err
+			return ScaleSnapshot{}, err
 		}
 		if !registerMetadataOutputClose(ctx, read.Close) {
 			read.Close()
-			return ScaleP19Snapshot{}, ErrBoundedMetadataCoverage
+			return ScaleSnapshot{}, ErrBoundedMetadataCoverage
 		}
 		return read.Snapshot, nil
 	}
 	for attempt := 1; ; attempt++ {
 		tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 		if err != nil {
-			return ScaleP19Snapshot{}, err
+			return ScaleSnapshot{}, err
 		}
 		stamp, err := readMetadataStamp(ctx, tx, workspace)
 		if err != nil {
 			_ = tx.Rollback()
-			return ScaleP19Snapshot{}, err
+			return ScaleSnapshot{}, err
 		}
 		accessChangedReadHook(ctx, attempt)
-		data, err := s.scaleP19MetadataAt(ctx, workspace, principal, unfiltered, tx, stamp)
+		data, err := s.scaleMetadataAt(ctx, workspace, principal, unfiltered, tx, stamp)
 		if errors.Is(err, ErrResourceAccessChanged) {
 			_ = tx.Rollback()
 			if err := s.accessChangedReread(ctx, workspace, attempt); err != nil {
-				return ScaleP19Snapshot{}, err
+				return ScaleSnapshot{}, err
 			}
 			continue
 		}
 		if err != nil {
 			_ = tx.Rollback()
-			return ScaleP19Snapshot{}, err
+			return ScaleSnapshot{}, err
 		}
-		result := ScaleP19Snapshot{Data: data, Revision: strconv.FormatInt(stamp.revision, 10), Versions: map[string]map[string]string{"projects": {}, "initiatives": {}}}
+		result := ScaleSnapshot{Data: data, Revision: strconv.FormatInt(stamp.revision, 10), Versions: map[string]map[string]string{"projects": {}, "initiatives": {}}}
 		if s.db.journalReady.Load() {
 			if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
 				_ = tx.Rollback()
-				return ScaleP19Snapshot{}, err
+				return ScaleSnapshot{}, err
 			}
 			rows, err := tx.QueryContext(ctx, `SELECT field,record_key,version FROM record_versions WHERE workspace_key=? AND deleted=0 AND field IN ('projects','initiatives')`, workspace)
 			if err != nil {
 				_ = tx.Rollback()
-				return ScaleP19Snapshot{}, err
+				return ScaleSnapshot{}, err
 			}
 			for rows.Next() {
 				var kind, id string
@@ -82,7 +82,7 @@ func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, princ
 			_ = rows.Close()
 			if err != nil {
 				_ = tx.Rollback()
-				return ScaleP19Snapshot{}, err
+				return ScaleSnapshot{}, err
 			}
 		}
 		_ = tx.Rollback()
@@ -90,15 +90,15 @@ func (s *SQLiteStore) ReadScaleP19Snapshot(ctx context.Context, workspace, princ
 	}
 }
 
-// ScaleP19Metadata preserves the established viewer projection while copying
+// ScaleMetadata preserves the established viewer projection while copying
 // list inputs before bodies. Global ordering and hierarchy aggregates still
 // scan summaries; they never copy unrelated descriptions or update histories.
-func (s *SQLiteStore) ScaleP19Metadata(ctx context.Context, workspace, principal string, unfiltered bool) (domain.Bootstrap, error) {
-	snapshot, err := s.ReadScaleP19Snapshot(ctx, workspace, principal, unfiltered)
+func (s *SQLiteStore) ScaleMetadata(ctx context.Context, workspace, principal string, unfiltered bool) (domain.Bootstrap, error) {
+	snapshot, err := s.ReadScaleSnapshot(ctx, workspace, principal, unfiltered)
 	return snapshot.Data, err
 }
 
-func (s *SQLiteStore) scaleP19MetadataAt(ctx context.Context, workspace, principal string, unfiltered bool, tx *sqlTx, stamp copyStamp) (domain.Bootstrap, error) {
+func (s *SQLiteStore) scaleMetadataAt(ctx context.Context, workspace, principal string, unfiltered bool, tx *sqlTx, stamp copyStamp) (domain.Bootstrap, error) {
 	s.mu.RLock()
 	source, ok := s.workspaces[workspace]
 	known, exact := s.copyRevisionLocked(workspace)

@@ -19,7 +19,7 @@ type legacyRecordBaseKey struct{}
 // state on the existing bounded migration stage. It borrows SQL transactions.
 type legacyRecordBase struct {
 	store           *SQLiteStore
-	stage           *sw26MigrationStage
+	stage           *migrationStage
 	owner           *ResourceRead
 	loaded          map[string]bool
 	lockedTx        *sqlTx
@@ -51,7 +51,7 @@ func (s *SQLiteStore) newLegacyRecordBase(ctx context.Context, installed *metada
 	if err = base.owner.reserve(ctx, 256<<10); err != nil {
 		return nil, err
 	}
-	base.stage, err = sw26NewMigrationStage(ctx)
+	base.stage, err = newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}

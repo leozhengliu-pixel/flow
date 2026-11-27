@@ -22,7 +22,7 @@ type metadataLogicalExternal struct {
 	ctx       context.Context
 	tx        *sqlTx
 	workspace string
-	stage     *sw26MigrationStage
+	stage     *migrationStage
 	builder   *metadataLogicalBuilder
 }
 
@@ -53,7 +53,7 @@ func (s *SQLiteStore) hydrateMetadataLogicalSource(ctx context.Context, tx *sqlT
 		return nil, err
 	}
 	defer source.Release()
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -84,5 +84,5 @@ backup or a build with compatible timestamp formatting.
   cache timestamp, and webhook deduplication times keep their existing inputs.
   The shared metadata search result cache uses a new version so a fill from
   the prior comparator cannot supply an old order.
-- The SW318 source pins were recalculated for the edited files. The guard's
-  source and carrier inventory stays in `borrowed_source_origin_guard_test.go`.
+- The borrowed source origin guard's pins were recalculated for the edited files.
+  Its source and carrier inventory stays in `borrowed_source_origin_guard_test.go`.

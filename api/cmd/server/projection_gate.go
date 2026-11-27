@@ -194,7 +194,7 @@ func registeredColdRoute(r *http.Request) bool {
 	if !store.InColdScope(r.Context()) {
 		return false
 	}
-	_, selected := scaleP21ColdAuthorizationRoute(r)
+	_, selected := scaleColdAuthorizationRoute(r)
 	return selected
 }
 

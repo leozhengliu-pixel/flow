@@ -18,12 +18,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW19SCIMNativeDirectoryDifferential(t *testing.T) {
+func TestSCIMNativeDirectoryDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		first, second, mapped, unicode := idgen.New("team_sw19_first_"), idgen.New("team_sw19_second_"), idgen.New("team_sw19_mapped_"), idgen.New("team_sw19_unicode_")
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "teams", "workspaceSettings"), workspace, "team.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -80,7 +80,7 @@ func TestScaleP21SW19SCIMNativeDirectoryDifferential(t *testing.T) {
 				}
 			}
 		})
-		before := scaleP21SW19Hash(t, repo, workspace, "teams", "")
+		before := automationHash(t, repo, workspace, "teams", "")
 		direct := []store.SCIMGroup{
 			{DisplayName: "CUSTOM-LINKED", ExternalID: "SHARED"},
 			{ExternalID: "SHARED"}, {ExternalID: strings.ToUpper(second)}, {ExternalID: "Scope"},
@@ -128,10 +128,10 @@ func TestScaleP21SW19SCIMNativeDirectoryDifferential(t *testing.T) {
 					if w.Code != http.StatusOK {
 						t.Fatalf("SCIM directory=%d %s", w.Code, w.Body.String())
 					}
-					outputs = append(outputs, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					outputs = append(outputs, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatalf("SCIM HTTP directory differential: %s", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatalf("SCIM HTTP directory differential: %s", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			}
 		})
@@ -197,7 +197,7 @@ func TestScaleP21SW19SCIMNativeDirectoryDifferential(t *testing.T) {
 		original := got[0].Name
 		got[0].Name = "caller-owned"
 		again := (&server{store: f.probe}).unlinkedSCIMTeams(workspace, nil)
-		if again[0].Name != original || scaleP21SW19Hash(t, repo, workspace, "teams", "") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if again[0].Name != original || automationHash(t, repo, workspace, "teams", "") != before || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("native directory changed canonical state, aliases results or decoded full metadata")
 		}
 		raw, _ := json.Marshal(again)

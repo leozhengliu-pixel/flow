@@ -1,5 +1,5 @@
 import type { BootstrapData } from '@/types/flow'
-import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
+import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/realtime-cache-limits'
 import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 
 /**

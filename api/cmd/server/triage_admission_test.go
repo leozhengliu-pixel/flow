@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW185TriageAccumulatedCandidateOrder(t *testing.T) {
+func TestTriageAccumulatedCandidateOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	var seed domain.Bootstrap
 	if err := json.Unmarshal(f.baseline, &seed); err != nil {
 		t.Fatal(err)
@@ -80,18 +80,18 @@ func TestScaleP21SW185TriageAccumulatedCandidateOrder(t *testing.T) {
 		if !generated || len(results) != 2 || results[1].ID != ghost.ID {
 			t.Fatalf("bounded=%t lost an issue supplied by an earlier candidate snapshot", bounded)
 		}
-		normalized = append(normalized, scaleP21TriageNormalize(t, []any{data, updated, results}, started))
+		normalized = append(normalized, scaleTriageNormalize(t, []any{data, updated, results}, started))
 	}
 	if normalized[0] != normalized[1] {
-		t.Fatal("streamed candidate encounter order changed legacy results", scaleP21M2Diff(normalized[0], normalized[1]))
+		t.Fatal("streamed candidate encounter order changed legacy results", policyFirstDifference(normalized[0], normalized[1]))
 	}
 }
 
-func TestScaleP21SW185TriageScoringProjection(t *testing.T) {
+func TestTriageScoringProjection(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	var data domain.Bootstrap
 	if err := json.Unmarshal(f.baseline, &data); err != nil {
 		t.Fatal(err)
@@ -132,9 +132,9 @@ func TestScaleP21SW185TriageScoringProjection(t *testing.T) {
 	started := time.Now().UTC()
 	before := generateIssueSuggestionsWithCandidates(&data, &target, clock, full)
 	after := generateIssueSuggestionsWithCandidates(&data, &target, clock, projected)
-	a, b := scaleP21TriageNormalize(t, before, started), scaleP21TriageNormalize(t, after, started)
+	a, b := scaleTriageNormalize(t, before, started), scaleTriageNormalize(t, after, started)
 	if a != b {
-		t.Fatal("scoring projection changed downstream suggestions", scaleP21M2Diff(a, b))
+		t.Fatal("scoring projection changed downstream suggestions", policyFirstDifference(a, b))
 	}
 }
 
@@ -146,26 +146,26 @@ func TestScaleP21SW185TriageScoringProjection(t *testing.T) {
 // run keeps one dense size that still crosses the first-2000 qualification
 // cutoff: 119 other scoped issues plus 119 accumulated candidates per
 // encountered issue pass 2000 from the 16th issue on.
-func TestScaleP21SW185TriageLargeGenerationDifferential(t *testing.T) {
+func TestTriageLargeGenerationDifferential(t *testing.T) {
 	size := 350
 	if raceDetector {
 		size = 120
 	}
-	scaleP21SW185LargeGeneration(t, size)
+	largeGeneration(t, size)
 }
 
-func TestScaleP21SW185TriageThousandGenerationDifferential(t *testing.T) {
+func TestTriageThousandGenerationDifferential(t *testing.T) {
 	if raceDetector {
-		t.Skip("the 1000-issue batch runs without the race detector (see TestScaleP21SW185TriageLargeGenerationDifferential)")
+		t.Skip("the 1000-issue batch runs without the race detector (see TestTriageLargeGenerationDifferential)")
 	}
-	scaleP21SW185LargeGeneration(t, 1000)
+	largeGeneration(t, 1000)
 }
 
-func scaleP21SW185LargeGeneration(t *testing.T, sizes ...int) {
+func largeGeneration(t *testing.T, sizes ...int) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TriageWriterSetup(t)
+	f := scaleTriageWriterSetup(t)
 	workspace := f.data.Workspace.URLKey
 	for _, count := range sizes {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {

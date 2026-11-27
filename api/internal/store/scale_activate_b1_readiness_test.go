@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestScaleP12ActivateB1UnreadyEpochsFallBack(t *testing.T) {
+func TestScaleActivateB1UnreadyEpochsFallBack(t *testing.T) {
 	for _, mode := range []string{"off", "shadow", "on"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_JOURNAL", mode)

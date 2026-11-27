@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW234IssueCanonicalSupportedContentDataDepth(t *testing.T) {
+func TestIssueCanonicalSupportedContentDataDepth(t *testing.T) {
 	// IssueUpdateInput accepts this HTTP descriptionData without a schema or
 	// nesting restriction. applyUpdate assigns that map to ContentData.
 	const blocks = 256
@@ -39,7 +39,7 @@ func TestScaleP21SW234IssueCanonicalSupportedContentDataDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal("supported producer's stored Issue must marshal", err)
 	}
-	oracle, expected := scaleP21SW234ExpectWire(t, raw)
+	oracle, expected := expectWire(t, raw)
 	repo := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	disk, descriptors, spools := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load(), recordSpoolBytes.Load()
 	frames, err := newMetadataLogicalBuilder(t.Context())
@@ -62,5 +62,5 @@ func TestScaleP21SW234IssueCanonicalSupportedContentDataDepth(t *testing.T) {
 	if repo.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("completed deep ContentData frame retained a temporary native owner")
 	}
-	scaleP21SW234CompareFrame(t, repo, node, oracle, expected, true)
+	compareFrame(t, repo, node, oracle, expected, true)
 }

@@ -15,9 +15,9 @@ import (
 // Installed metadata, record spools and migration stages keep their spool
 // files under one directory per process:
 //
-//	$TMPDIR/flow-p21-<pid>-<random>/
+//	$TMPDIR/flow-bounded metadata-<pid>-<random>/
 //	    .lock                      held with flock(2) for the process's life
-//	    flow-p21-logical-*, flow-p21-root-*, flow-p21-triage-*, ...
+//	    flow-bounded metadata-logical-*, flow-bounded metadata-root-*, flow-bounded metadata-triage-*, ...
 //
 // A process that stops through Close removes its files one by one and then its
 // directory (RemoveMetadataSpoolDirectory). A process that is killed leaves
@@ -126,8 +126,8 @@ func removeStaleMetadataSpoolDirectories(parent string) {
 	}
 }
 
-// isMetadataSpoolDirectoryName matches flow-p21-<pid>-<random> and nothing
-// else: legacy flow-p21-* spool files are not directories, and a directory of
+// isMetadataSpoolDirectoryName matches flow-bounded metadata-<pid>-<random> and nothing
+// else: legacy flow-bounded metadata-* spool files are not directories, and a directory of
 // another name is never touched.
 func isMetadataSpoolDirectoryName(name string) bool {
 	rest, ok := strings.CutPrefix(name, metadataSpoolDirectoryPrefix)

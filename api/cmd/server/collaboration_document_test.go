@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW178SocketOutcome struct {
+type socketOutcome struct {
 	Role, RoleError, JoinError string
 	Conflict, Joined, CanEdit  bool
 	AccessDocument             string
@@ -25,7 +25,7 @@ type scaleP21SW178SocketOutcome struct {
 	RecheckMessages            []string
 }
 
-type scaleP21SW178SocketCase struct {
+type socketCase struct {
 	name, workspace, ref string
 	user                 domain.User
 	key                  *domain.APIKey
@@ -34,7 +34,7 @@ type scaleP21SW178SocketCase struct {
 	writerFailure        bool
 }
 
-func scaleP21SW178SocketRun(t *testing.T, selected *store.SQLiteStore, f scaleP21M2Fixture, test scaleP21SW178SocketCase) scaleP21SW178SocketOutcome {
+func socketRun(t *testing.T, selected *store.SQLiteStore, f policyDifferentialFixture, test socketCase) socketOutcome {
 	t.Helper()
 	service := &server{store: selected, realtime: newRealtimeHub(), authDisabled: test.development}
 	request := f.literalRequest(test.user, test.key, nil)
@@ -42,7 +42,7 @@ func scaleP21SW178SocketRun(t *testing.T, selected *store.SQLiteStore, f scaleP2
 	request.Header.Set("X-Workspace-Key", test.workspace)
 	request.SetPathValue("workspaceKey", test.workspace)
 	request.SetPathValue("workspace", test.workspace)
-	var result scaleP21SW178SocketOutcome
+	var result socketOutcome
 	role, conflict, err := service.socketDocumentRole(request, test.workspace, test.ref)
 	result.Role, result.Conflict = role, conflict
 	if err != nil {
@@ -150,12 +150,12 @@ func scaleP21SW178SocketRun(t *testing.T, selected *store.SQLiteStore, f scaleP2
 	return result
 }
 
-func TestScaleP21SW178CollaborationDocumentDifferential(t *testing.T) {
+func TestCollaborationDocumentDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw178-")
 		plain, generation := prefix+"plain", prefix+"generation"
 		current, duplicate, collision := prefix+"current", prefix+"duplicate-current", prefix+"collision"
@@ -219,7 +219,7 @@ func TestScaleP21SW178CollaborationDocumentDifferential(t *testing.T) {
 		emptyKey := &domain.APIKey{Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{}}
 		publicKey := &domain.APIKey{Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 		member, guest := f.principals[2].user, f.principals[3].user
-		cases := []scaleP21SW178SocketCase{
+		cases := []socketCase{
 			{name: "owner-paged-recovery", workspace: workspace, ref: plain, user: f.data.Viewer},
 			{name: "read-key-downgrade", workspace: workspace, ref: plain, user: f.data.Viewer, key: readKey},
 			{name: "member-editor-write-key", workspace: workspace, ref: plain, user: member, key: writeKey},
@@ -244,10 +244,10 @@ func TestScaleP21SW178CollaborationDocumentDifferential(t *testing.T) {
 			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 				t.Fatal(err)
 			}
-			old := scaleP21SW178SocketRun(t, repo, f, fixture)
-			fresh := scaleP21SW178SocketRun(t, f.probe, f, fixture)
+			old := socketRun(t, repo, f, fixture)
+			fresh := socketRun(t, f.probe, f, fixture)
 			if !reflect.DeepEqual(old, fresh) {
-				t.Fatalf("socket document %s changed:\n%s", fixture.name, scaleP21M2Diff(old, fresh))
+				t.Fatalf("socket document %s changed:\n%s", fixture.name, policyFirstDifference(old, fresh))
 			}
 			switch fixture.name {
 			case "read-key-downgrade":

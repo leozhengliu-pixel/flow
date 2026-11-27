@@ -16,7 +16,7 @@ import (
 
 type notificationStateRetryKey struct{}
 
-// P10 registers GET /api/notifications/state inside the authenticated
+// sync authorization registers GET /api/notifications/state inside the authenticated
 // workspace middleware and adds it to the internal route inventory.
 func (s *server) notificationState(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
@@ -64,7 +64,7 @@ func (s *server) notificationState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, state)
 }
 
-// P12 calls this before its generic notification entity projection. A source
+// recipient delivery calls this before its generic notification entity projection. A source
 // envelope uses AggregateID=recipient; its payload is exactly NotificationState.
 // Access must be resolved per sending batch, not retained from SSE connect.
 // Non-recipients are rejected before authorization or unread SQL is performed.

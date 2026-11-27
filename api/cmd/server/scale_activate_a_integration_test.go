@@ -51,7 +51,7 @@ func scaleActivateADifferentFields(left, right []byte) []string {
 func TestScaleActivateALegacyReadRollback(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			f := apiKeyScopeFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
@@ -76,7 +76,7 @@ func TestScaleActivateALegacyReadRollback(t *testing.T) {
 			// Drain first-use telemetry before fixing the comparison timestamps.
 			for _, credential := range credentials {
 				if credential.token != "" {
-					scaleP11WarmCredential(t, repo, workspace, credential.token)
+					scaleWarmCredential(t, repo, workspace, credential.token)
 				}
 			}
 			// The shared credential fixture includes a pre-migration document and
@@ -100,11 +100,11 @@ func TestScaleActivateALegacyReadRollback(t *testing.T) {
 					for _, path := range paths {
 						t.Setenv("FLOW_SYNC_MANIFEST", "off")
 						t.Setenv("FLOW_INDEXED_READS", "off")
-						want := scaleP03Read(t, f, f.admin, credential.token, http.MethodGet, path, workspace)
+						want := resourceAccessScaleRead(t, f, f.admin, credential.token, http.MethodGet, path, workspace)
 						for _, mode := range []string{"on", "off"} {
 							t.Setenv("FLOW_SYNC_MANIFEST", mode)
 							t.Setenv("FLOW_INDEXED_READS", mode)
-							got := scaleP03Read(t, f, f.admin, credential.token, http.MethodGet, path, workspace)
+							got := resourceAccessScaleRead(t, f, f.admin, credential.token, http.MethodGet, path, workspace)
 							if got.Code != want.Code || !bytes.Equal(got.Body.Bytes(), want.Body.Bytes()) {
 								t.Fatalf("%s mode=%s status=%d/%d changed legacy response fields=%v", path, mode, got.Code, want.Code, scaleActivateADifferentFields(want.Body.Bytes(), got.Body.Bytes()))
 							}
@@ -121,11 +121,11 @@ func TestScaleActivateAManifestKeepsIncompleteProtocolDisabled(t *testing.T) {
 	t.Setenv("FLOW_INDEXED_READS", "on")
 	t.Setenv("FLOW_SYNC_V2", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
-			response := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest", workspace)
+			response := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/sync/manifest", workspace)
 			var manifest syncManifestResponse
 			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &manifest) != nil {
 				t.Fatalf("manifest status=%d", response.Code)
@@ -138,7 +138,7 @@ func TestScaleActivateAManifestKeepsIncompleteProtocolDisabled(t *testing.T) {
 				"/api/sync/records?kind=projects":  http.StatusServiceUnavailable,
 				"/api/sync/records?kind=documents": http.StatusBadRequest,
 			} {
-				if got := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace); got.Code != want {
+				if got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace); got.Code != want {
 					t.Fatalf("%s status=%d, want %d", path, got.Code, want)
 				}
 			}
@@ -148,7 +148,7 @@ func TestScaleActivateAManifestKeepsIncompleteProtocolDisabled(t *testing.T) {
 				if flag == "FLOW_INDEXED_READS" {
 					path = "/api/sync/records?kind=projects"
 				}
-				if got := scaleP03Read(t, f, f.admin, "", http.MethodGet, path, workspace); got.Code != http.StatusNotFound {
+				if got := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, path, workspace); got.Code != http.StatusNotFound {
 					t.Fatalf("%s rollback status=%d", flag, got.Code)
 				}
 				t.Setenv(flag, "on")

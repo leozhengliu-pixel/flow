@@ -130,7 +130,7 @@ func webhookDisableDeliveryCollection(e *metadataLogicalExternal) error {
 // Imported bodies and unrelated issue/content records never enter this image.
 func (s *SQLiteStore) webhookDisableScopedSource(ctx context.Context, tx *sqlTx, source *metadataLogicalSource, workspace, resource string, work *webhookFailureWriteWork) (_ *metadataLogicalSource, err error) {
 	ctx = metadataLogicalSourceScratchContext(ctx, source)
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -722,12 +722,12 @@ func (s *SQLiteStore) MutateFailingWebhookDisable(ctx context.Context, workspace
 			return err
 		}
 		scope := MetadataRecordScope{Write: []RecordKey{{Kind: "webhooks", ID: webhookID}}}
-		changes, _, err := scaleP16RecordChanges(domain.Bootstrap{Webhooks: []domain.Webhook{hook}}, domain.Bootstrap{Webhooks: input.Webhooks})
+		changes, _, err := scaleRecordChanges(domain.Bootstrap{Webhooks: []domain.Webhook{hook}}, domain.Bootstrap{Webhooks: input.Webhooks})
 		if err != nil {
 			return err
 		}
 		if shapes["webhooks"] == "array" {
-			if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
+			if err := scaleWriteChanges(ctx, tx, workspace, newIssueReferences(domain.Bootstrap{}), changes); err != nil {
 				return err
 			}
 			post, err := metadataLogicalMergedPostimage(ctx, candidate, changes)

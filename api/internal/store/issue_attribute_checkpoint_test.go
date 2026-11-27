@@ -13,9 +13,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW17AttributeMigrationLongUTF8Checkpoint(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
+func TestAttributeMigrationLongUTF8Checkpoint(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
 	workspace := f.data.Workspace.URLKey
 	prefix := strings.Repeat("界", 180)
 	issueID := func(index int) string { return fmt.Sprintf("%s-%04d", prefix, index) }
@@ -45,14 +45,14 @@ func TestScaleP21SW17AttributeMigrationLongUTF8Checkpoint(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	before := sw17AttributeSourceHash(t, f)
+	before := attributeMigrationSourceHash(t, f)
 	type faultKey struct{}
 	injected := errors.New("sw17 interrupted long-checkpoint migration")
 	t.Cleanup(func() { f.db.commitHooks.Store(nil) })
-	var oracle []sw17AttributeOutcome
+	var oracle []attributeMigrationOutcome
 	for _, source := range []*SQLiteStore{legacy, probe} {
-		sw17ResetAttributeMigration(t, f)
-		var outcomes []sw17AttributeOutcome
+		resetAttributeMigration(t, f)
+		var outcomes []attributeMigrationOutcome
 		for phase, failAt := range []int{2, 1, 0} {
 			commits, statements := 0, 0
 			f.db.commitHooks.Store(&commitHooks{beforeCommit: func(tx *sqlTx) {
@@ -73,7 +73,7 @@ func TestScaleP21SW17AttributeMigrationLongUTF8Checkpoint(t *testing.T) {
 			if failAt == 0 && err != nil {
 				t.Fatal("long checkpoint continuation failed", source == probe, err)
 			}
-			outcome := sw17AttributeOutcomeFor(t, f)
+			outcome := attributeMigrationOutcomeFor(t, f)
 			outcomes = append(outcomes, outcome)
 			wantLast, wantComplete, wantRows := issueID(249), 0, 250
 			if failAt == 0 {
@@ -102,7 +102,7 @@ func TestScaleP21SW17AttributeMigrationLongUTF8Checkpoint(t *testing.T) {
 			t.Fatal("long UTF8 checkpoint interruptions/continuation differ from legacy")
 		}
 	}
-	if sw17AttributeSourceHash(t, f) != before || probe.WorkspaceMetadataDecodes() != 0 {
+	if attributeMigrationSourceHash(t, f) != before || probe.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("long checkpoint migration changed canonical source or decoded full metadata")
 	}
 }

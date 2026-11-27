@@ -18,7 +18,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW318EmptyLegacyIssueAuthorization(t *testing.T) {
+func TestEmptyLegacyIssueAuthorization(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -28,13 +28,13 @@ func TestScaleP21SW318EmptyLegacyIssueAuthorization(t *testing.T) {
 		Status  int
 		Body    string
 	}
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			// Scoped BeginWorkspaceRead has a canonical root-page budget. Keep
 			// that constructor's real matching workspace below the budget,
 			// rather than shrinking M2's unrelated large-data witnesses.
-			small := scaleP03Fixture(t, repo)
-			f := scaleP21M2Setup(t, repo)
+			small := resourceAccessScaleFixture(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			workspace := f.data.Workspace.URLKey
 			public := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records",
 				map[string]any{"title": "SW318 public issue", "teamId": f.public}, workspace, http.StatusCreated)
@@ -269,14 +269,14 @@ func TestScaleP21SW318EmptyLegacyIssueAuthorization(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW318LegacyIssueBoundary(t *testing.T) {
+func TestLegacyIssueBoundary(t *testing.T) {
 	type request struct{ method, path string }
 	for _, row := range []request{
 		{http.MethodGet, "/api/issues/id/permissions"}, {http.MethodHead, "/api/issues/id/permissions"},
 		{http.MethodGet, "/api/issues/id/suggestions"}, {http.MethodHead, "/api/issues/id/suggestions"},
 		{http.MethodHead, "/api/issues/id/comment-actions"},
 	} {
-		if !scaleP21SW318EmptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
+		if !emptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
 			t.Fatal("exact five-shape boundary lost", row)
 		}
 	}
@@ -287,7 +287,7 @@ func TestScaleP21SW318LegacyIssueBoundary(t *testing.T) {
 		{http.MethodGet, "/api/issues/id/permissions/child"}, {http.MethodGet, "/api/issues/id"},
 		{http.MethodGet, "/api/realtime/events"}, {http.MethodGet, "/api/issue-suggestions/id"},
 	} {
-		if scaleP21SW318EmptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
+		if emptyLegacyIssueRequest(httptest.NewRequest(row.method, row.path, nil)) {
 			t.Fatal("helper captured another authorization contract", row)
 		}
 	}
@@ -313,7 +313,7 @@ func TestScaleP21SW318LegacyIssueBoundary(t *testing.T) {
 	}
 	helper := function("legacy_issue_denial.go", "boundedEmptyLegacyIssueDenial")
 	if len(helper.Body.List) != 3 ||
-		text(helper.Body.List[0]) != "if !s.store.BoundedMetadataEnabled() || !scaleP21SW318EmptyLegacyIssueRequest(r) || isIssueRecordsRequest(r) {\n\treturn false, false\n}" ||
+		text(helper.Body.List[0]) != "if !s.store.BoundedMetadataEnabled() || !emptyLegacyIssueRequest(r) || isIssueRecordsRequest(r) {\n\treturn false, false\n}" ||
 		text(helper.Body.List[1]) != "if s.store.BorrowedWorkspaceReadHasIssues(r.Context(), workspace) {\n\treturn false, false\n}" ||
 		text(helper.Body.List[2]) != "return false, true" {
 		t.Fatal("helper must decline every matching nonempty source and native request before exact empty-source denial")

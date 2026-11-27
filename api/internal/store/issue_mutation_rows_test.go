@@ -17,11 +17,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW57IssueMutationRows(t *testing.T) {
+func TestIssueMutationRows(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw57-rows-")
 	at := time.Date(2026, 11, 14, 1, 2, 3, 400, time.FixedZone("stored", 5400))
 	base := domain.Issue{Title: "Complete <title>\x00\u51c6", Description: "Original body", Version: 7,

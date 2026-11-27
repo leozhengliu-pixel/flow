@@ -13,10 +13,10 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW23TeamPolicyNativeTypedFallback(t *testing.T) {
+func TestTeamPolicyNativeTypedFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
@@ -69,10 +69,10 @@ func TestScaleP21SW23TeamPolicyNativeTypedFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23TeamPolicyNativeOwnedEncoding(t *testing.T) {
+func TestTeamPolicyNativeOwnedEncoding(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
 	view.metadataResidency.requireCoverage = false
@@ -90,7 +90,7 @@ func TestScaleP21SW23TeamPolicyNativeOwnedEncoding(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+		read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 		releaseParent()
 		if read != nil || !errors.Is(err, ErrMetadataPageBudget) || view.metadataResidency.work.used != 0 {
 			t.Fatal("encoded expansion exceeded page budget without complete cleanup", key, err)
@@ -103,7 +103,7 @@ func TestScaleP21SW23TeamPolicyNativeOwnedEncoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, err := view.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+	read, err := view.readTeamPolicyRows(ctx, tx, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,10 +118,10 @@ func TestScaleP21SW23TeamPolicyNativeOwnedEncoding(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23TeamPolicyNativePreservesInstalledRecovery(t *testing.T) {
+func TestTeamPolicyNativePreservesInstalledRecovery(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21_sw23.installed_recovery_control", "", nil, func(data *domain.Bootstrap) error {
 		data.Teams = append(data.Teams, domain.Team{ID: "installed-control", Name: "must stay installed", Key: "key", Color: "red", Icon: "circle", ArchivedByID: "actor"})
@@ -174,10 +174,10 @@ func TestScaleP21SW23TeamPolicyNativePreservesInstalledRecovery(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW23TeamPolicyNativeSingleConnectionSnapshot(t *testing.T) {
+func TestTeamPolicyNativeSingleConnectionSnapshot(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	f.db.SetMaxOpenConns(1)
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}

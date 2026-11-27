@@ -47,7 +47,7 @@ func (r *ColdMetadataRead) Close() {
 		graphCleared := facade == nil
 		// A writer that panicked while holding the facade's lock (its
 		// install) never returns it: the facade is private to this flow, so
-		// its graph is dropped by reference instead of waiting (SW554).
+		// its graph is dropped by reference instead of waiting.
 		if facade != nil && facade.mu.TryLock() {
 			facade.workspaces, facade.viewer = nil, domain.User{}
 			facade.lastWorkspaceKey = ""

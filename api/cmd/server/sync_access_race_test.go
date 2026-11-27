@@ -100,7 +100,7 @@ func syncAccessRaceStores(t *testing.T, run func(t *testing.T, repo *store.SQLit
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
 			t.Setenv("FLOW_SYNC_V2", "on")
-			for driver, repo := range scaleP03ServerTestStores(t) {
+			for driver, repo := range scaleServerTestStores(t) {
 				t.Run(driver, func(t *testing.T) {
 					if driver == "mysql" {
 						t.Logf("record journal capture: %s", repo.RecordJournalCapture())
@@ -115,7 +115,7 @@ func syncAccessRaceStores(t *testing.T, run func(t *testing.T, repo *store.SQLit
 	}
 }
 
-func syncAccessRaceCursor(t *testing.T, f scaleP03PlatformFixture) string {
+func syncAccessRaceCursor(t *testing.T, f scalePlatformFixture) string {
 	t.Helper()
 	cursor, err := f.repository.RecordJournalHead(t.Context(), f.data.Workspace.ID)
 	if err != nil {
@@ -124,7 +124,7 @@ func syncAccessRaceCursor(t *testing.T, f scaleP03PlatformFixture) string {
 	return cursor
 }
 
-func syncAccessRaceKeys(t *testing.T, f scaleP03PlatformFixture, count int) []syncAccessRaceKey {
+func syncAccessRaceKeys(t *testing.T, f scalePlatformFixture, count int) []syncAccessRaceKey {
 	t.Helper()
 	keys := make([]syncAccessRaceKey, 0, count)
 	for index := range count {
@@ -140,7 +140,7 @@ func syncAccessRaceKeys(t *testing.T, f scaleP03PlatformFixture, count int) []sy
 // current authority and answers 200 with the pending changes.
 func TestSyncChangesAccessRaceWithAPIKeyUse(t *testing.T) {
 	syncAccessRaceStores(t, func(t *testing.T, repo *store.SQLiteStore) {
-		f := scaleP03Fixture(t, repo)
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		key := syncAccessRaceKeys(t, f, 1)[0]
 		// A first successful read, as a client polling Sync V2 would have.
@@ -204,7 +204,7 @@ func syncAccessRaceShape(page syncV2ChangesResponse) []string {
 // with Retry-After, never 403.
 func TestSyncChangesAccessRaceExhaustedIsRetryable(t *testing.T) {
 	syncAccessRaceStores(t, func(t *testing.T, repo *store.SQLiteStore) {
-		f := scaleP03Fixture(t, repo)
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		keys := syncAccessRaceKeys(t, f, syncAccessAttempts)
 		cursor := syncAccessRaceCursor(t, f)
@@ -214,7 +214,7 @@ func TestSyncChangesAccessRaceExhaustedIsRetryable(t *testing.T) {
 			}
 			return recordUnrelatedKeyUse(ctx, repo, workspace, keys[attempt-1].Key)
 		})
-		w := scaleP03Read(t, f, f.admin, "", http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
+		w := resourceAccessScaleRead(t, f, f.admin, "", http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
 		if err := failure(); err != nil {
 			t.Fatal(err)
 		}
@@ -232,12 +232,12 @@ func TestSyncChangesAccessRaceExhaustedIsRetryable(t *testing.T) {
 // resolution.
 func TestSyncChangesAccessRaceKeepsGenuineDenials(t *testing.T) {
 	syncAccessRaceStores(t, func(t *testing.T, repo *store.SQLiteStore) {
-		f := scaleP03Fixture(t, repo)
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		cursor := syncAccessRaceCursor(t, f)
 
 		t.Run("removed-member", func(t *testing.T) {
-			client, member := scaleP03Join(t, f, "Sync race member", "sync-race-"+strconv.FormatInt(time.Now().UnixNano(), 10)+"@example.test", "member", f.data.Teams[0].ID)
+			client, member := resourceAccessScaleJoin(t, f, "Sync race member", "sync-race-"+strconv.FormatInt(time.Now().UnixNano(), 10)+"@example.test", "member", f.data.Teams[0].ID)
 			authRequest[syncV2ChangesResponse](t, client, http.MethodGet, f.host.URL+"/api/sync/changes?after="+cursor, nil, workspace, http.StatusOK)
 			resetSyncAccessCache(f.service)
 			var fired atomic.Bool
@@ -247,7 +247,7 @@ func TestSyncChangesAccessRaceKeepsGenuineDenials(t *testing.T) {
 				}
 				return repo.RemoveMember(context.WithoutCancel(ctx), f.data.Workspace.ID, member.ID)
 			})
-			w := scaleP03Read(t, f, client, "", http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
+			w := resourceAccessScaleRead(t, f, client, "", http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
 			if err := failure(); err != nil {
 				t.Fatal(err)
 			}
@@ -258,7 +258,7 @@ func TestSyncChangesAccessRaceKeepsGenuineDenials(t *testing.T) {
 
 		t.Run("revoked-key", func(t *testing.T) {
 			key := syncAccessRaceKeys(t, f, 1)[0]
-			if w := scaleP03Read(t, f, nil, key.Secret, http.MethodGet, "/api/sync/changes?after="+cursor, workspace); w.Code != http.StatusOK {
+			if w := resourceAccessScaleRead(t, f, nil, key.Secret, http.MethodGet, "/api/sync/changes?after="+cursor, workspace); w.Code != http.StatusOK {
 				t.Fatalf("key read before revocation: %d %s", w.Code, w.Body)
 			}
 			resetSyncAccessCache(f.service)
@@ -272,7 +272,7 @@ func TestSyncChangesAccessRaceKeepsGenuineDenials(t *testing.T) {
 				}
 				return nil
 			})
-			w := scaleP03Read(t, f, nil, key.Secret, http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
+			w := resourceAccessScaleRead(t, f, nil, key.Secret, http.MethodGet, "/api/sync/changes?after="+cursor, workspace)
 			if err := failure(); err != nil {
 				t.Fatal(err)
 			}

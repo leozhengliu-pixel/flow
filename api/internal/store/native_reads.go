@@ -65,7 +65,7 @@ func (s *SQLiteStore) readResidentResourcePolicy(ctx context.Context, workspace,
 	}
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: workspaceID, URLKey: workspace}}
 	budget := newMetadataHydrationBudget()
-	teamRows, err := s.scaleP21SW23ReadTeamPolicyRows(ctx, tx, workspace)
+	teamRows, err := s.readTeamPolicyRows(ctx, tx, workspace)
 	if err != nil {
 		return domain.Bootstrap{}, fmt.Errorf("resident policy teams: %w", err)
 	}

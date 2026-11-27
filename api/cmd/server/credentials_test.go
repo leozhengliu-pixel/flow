@@ -7,14 +7,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M3CredentialRevocationDifferential(t *testing.T) {
-	var operations []scaleP21M3PointOperation
+func TestScaleCredentialRevocationDifferential(t *testing.T) {
+	var operations []pointDifferentialOperation
 	for _, owned := range []bool{true, false} {
 		name := "other-key"
 		if owned {
 			name = "own-key"
 		}
-		operations = append(operations, scaleP21M3PointOperation{
+		operations = append(operations, pointDifferentialOperation{
 			name: name, kind: "apiKeys", id: "m3-target-key", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				owner := "m3-other-owner"
@@ -29,11 +29,11 @@ func TestScaleP21M3CredentialRevocationDifferential(t *testing.T) {
 			handler: (*server).revokeAPIKey,
 		})
 	}
-	scaleP21M3PointDifferential(t, operations)
+	checkPointOperationDifferential(t, operations)
 }
 
-func TestScaleP21M3NotificationPreferencesDifferential(t *testing.T) {
-	scaleP21M3PointDifferential(t, []scaleP21M3PointOperation{
+func TestScaleNotificationPreferencesDifferential(t *testing.T) {
+	checkPointOperationDifferential(t, []pointDifferentialOperation{
 		{
 			name: "notification-preferences", kind: "notificationPreferences", id: "m3-preferences", body: `{"emailFormat":"immediate","inbox":{"enabled":true,"categories":{"pulse":false}}}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
@@ -52,14 +52,14 @@ func TestScaleP21M3NotificationPreferencesDifferential(t *testing.T) {
 	})
 }
 
-func TestScaleP21M3PushSubscriptionDifferential(t *testing.T) {
-	var operations []scaleP21M3PointOperation
+func TestScalePushSubscriptionDifferential(t *testing.T) {
+	var operations []pointDifferentialOperation
 	for _, owned := range []bool{true, false} {
 		name := "other-push-subscription"
 		if owned {
 			name = "own-push-subscription"
 		}
-		operations = append(operations, scaleP21M3PointOperation{
+		operations = append(operations, pointDifferentialOperation{
 			name: name, kind: "pushSubscriptions", id: "m3-push", body: `{}`,
 			seed: func(data *domain.Bootstrap, actor domain.User) {
 				owner := "m3-other-owner"
@@ -75,5 +75,5 @@ func TestScaleP21M3PushSubscriptionDifferential(t *testing.T) {
 			otherKeys: []store.RecordKey{{Kind: "pushSubscriptions", ID: "m3-other-push"}},
 		})
 	}
-	scaleP21M3PointDifferential(t, operations)
+	checkPointOperationDifferential(t, operations)
 }

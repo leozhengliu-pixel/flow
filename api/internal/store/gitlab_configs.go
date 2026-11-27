@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW19GitLabConfigsMaxWork = 64 << 20
+const gitLabConfigsMaxWork = 64 << 20
 
 // GitLabConnectionConfigsRead owns only the installed workspace URLKey and
 // connection ID/provider/config. These partial connections are not wire
@@ -52,7 +52,7 @@ func (s *SQLiteStore) BeginGitLabConnectionConfigsRead(ctx context.Context, work
 			selected = s.lastWorkspaceKey
 		}
 		source, found := s.workspaces[selected]
-		cost, err := scaleP21SW19GitLabConfigsCost(ctx, source)
+		cost, err := gitLabConfigsCost(ctx, source)
 		s.mu.RUnlock()
 		if !found || err != nil {
 			return nil, found, err
@@ -71,7 +71,7 @@ func (s *SQLiteStore) BeginGitLabConnectionConfigsRead(ctx context.Context, work
 			release()
 			return nil, false, nil
 		}
-		current, err := scaleP21SW19GitLabConfigsCost(ctx, source)
+		current, err := gitLabConfigsCost(ctx, source)
 		if err != nil || current > cost {
 			s.mu.RUnlock()
 			release()
@@ -80,7 +80,7 @@ func (s *SQLiteStore) BeginGitLabConnectionConfigsRead(ctx context.Context, work
 			}
 			continue
 		}
-		read := scaleP21SW19GitLabConfigsProject(source, release)
+		read := gitLabConfigsProject(source, release)
 		s.mu.RUnlock()
 		if err := ctx.Err(); err != nil {
 			read.Close()
@@ -90,9 +90,9 @@ func (s *SQLiteStore) BeginGitLabConnectionConfigsRead(ctx context.Context, work
 	}
 }
 
-// scaleP21SW19GitLabConfigsProject detaches the workspace URLKey and every
+// gitLabConfigsProject detaches the workspace URLKey and every
 // GitLab connection's ID/provider/config of source, in source order.
-func scaleP21SW19GitLabConfigsProject(source domain.Bootstrap, release func()) *GitLabConnectionConfigsRead {
+func gitLabConfigsProject(source domain.Bootstrap, release func()) *GitLabConnectionConfigsRead {
 	read := &GitLabConnectionConfigsRead{
 		WorkspaceURLKey: strings.Clone(source.Workspace.URLKey),
 		release:         release,
@@ -115,7 +115,7 @@ func scaleP21SW19GitLabConfigsProject(source domain.Bootstrap, release func()) *
 
 // installedGitLabConnectionConfigs is the read on a bounded store. Its image
 // holds no integration connections (a record field), so the rotation sweep
-// found none and never renewed a token (SW559). It decodes the workspace and
+// found none and never renewed a token. It decodes the workspace and
 // integrationConnections fields of the workspace's installed logical source
 // (the legacy image's values) and projects them as the resident read does.
 // handled is false flag off and on a store without an installed source of
@@ -176,7 +176,7 @@ func (s *SQLiteStore) installedGitLabConnectionConfigs(ctx context.Context, work
 	if err != nil {
 		return nil, true, true, err
 	}
-	cost, err := scaleP21SW19GitLabConfigsCost(ctx, source)
+	cost, err := gitLabConfigsCost(ctx, source)
 	if err != nil {
 		return nil, true, true, err
 	}
@@ -184,7 +184,7 @@ func (s *SQLiteStore) installedGitLabConnectionConfigs(ctx context.Context, work
 	if err != nil {
 		return nil, true, true, err
 	}
-	read := scaleP21SW19GitLabConfigsProject(source, release)
+	read := gitLabConfigsProject(source, release)
 	if err := ctx.Err(); err != nil {
 		read.Close()
 		return nil, true, true, err
@@ -192,7 +192,7 @@ func (s *SQLiteStore) installedGitLabConnectionConfigs(ctx context.Context, work
 	return read, true, true, nil
 }
 
-func scaleP21SW19GitLabConfigsCost(ctx context.Context, source domain.Bootstrap) (int, error) {
+func gitLabConfigsCost(ctx context.Context, source domain.Bootstrap) (int, error) {
 	cost := int64(128<<10) + 8*int64(len(source.Workspace.URLKey))
 	for _, item := range source.IntegrationConnections {
 		if err := ctx.Err(); err != nil {
@@ -207,15 +207,15 @@ func scaleP21SW19GitLabConfigsCost(ctx context.Context, source domain.Bootstrap)
 		cost += 256 * int64(len(item.Config))
 		for key, value := range item.Config {
 			cost += 33 * int64(len(key)+len(value))
-			if cost > scaleP21SW19GitLabConfigsMaxWork {
+			if cost > gitLabConfigsMaxWork {
 				return 0, ErrMetadataWorkBudget
 			}
 		}
-		if cost > scaleP21SW19GitLabConfigsMaxWork {
+		if cost > gitLabConfigsMaxWork {
 			return 0, ErrMetadataWorkBudget
 		}
 	}
-	if cost > scaleP21SW19GitLabConfigsMaxWork {
+	if cost > gitLabConfigsMaxWork {
 		return 0, ErrMetadataWorkBudget
 	}
 	return int(cost), nil

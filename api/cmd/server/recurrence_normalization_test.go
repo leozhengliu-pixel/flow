@@ -17,9 +17,9 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW156Rows(t *testing.T, reader *scaleP04Database, workspace string) scaleP21SW59Rows {
+func recurrenceNormalizationRows(t *testing.T, reader *scaleDatabase, workspace string) discussionWriteRows {
 	t.Helper()
-	result := scaleP21SW59Rows{}
+	result := discussionWriteRows{}
 	rows := reader.query(t, `SELECT id,version,collection_order,data FROM issue_records WHERE workspace_key=? ORDER BY collection_order,id`, workspace)
 	defer rows.Close()
 	for rows.Next() {
@@ -37,7 +37,7 @@ func scaleP21SW156Rows(t *testing.T, reader *scaleP04Database, workspace string)
 	return result
 }
 
-func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
+func TestRecurringNormalizationTickerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -53,7 +53,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := &scaleP04Database{config: store.DatabaseConfig{Driver: "sqlite", Path: f.path}}
+	reader := &scaleDatabase{config: store.DatabaseConfig{Driver: "sqlite", Path: f.path}}
 	t.Cleanup(func() {
 		if reader.reader != nil {
 			_ = reader.reader.Close()
@@ -169,11 +169,11 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 				})
 				service := &server{store: source}
 				if test.changeZone {
-					beforeWarm := scaleP21SW156Rows(t, reader, workspace)
+					beforeWarm := recurrenceNormalizationRows(t, reader, workspace)
 					if err := service.normalizeLegacyRecurringIssues(t.Context(), workspace, tick.Add(-time.Minute)); err != nil {
 						t.Fatal(err)
 					}
-					if !reflect.DeepEqual(beforeWarm, scaleP21SW156Rows(t, reader, workspace)) {
+					if !reflect.DeepEqual(beforeWarm, recurrenceNormalizationRows(t, reader, workspace)) {
 						t.Fatal("UTC schedule was not a no-op before timezone change")
 					}
 					mutate(t, func(data *domain.Bootstrap) {
@@ -182,7 +182,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 						data.TeamSettings[data.Issues[0].Team.ID] = settings
 					})
 				}
-				before := scaleP21SW156Rows(t, reader, workspace)
+				before := recurrenceNormalizationRows(t, reader, workspace)
 				preimage := f.issues()
 				priorIDs := map[string]bool{}
 				for _, issue := range preimage {
@@ -194,7 +194,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 						priorIDs[event.ID] = true
 					}
 				}
-				got := scaleP21SW59Outcome{}
+				got := discussionWriteOutcome{}
 				checkPublication := func() {
 					if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
 						t.Error("recurrence publication lost mutation output ownership")
@@ -202,11 +202,11 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 				}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 					checkPublication()
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 				})
 				source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 					checkPublication()
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 				})
 				var output bytes.Buffer
 				started := time.Now().UTC()
@@ -242,7 +242,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 				if test.cancel && !errors.Is(callErr, context.Canceled) || !test.cancel && callErr != nil {
 					t.Fatal("recurrence ticker error changed", callErr)
 				}
-				got.Rows = scaleP21SW156Rows(t, reader, workspace)
+				got.Rows = recurrenceNormalizationRows(t, reader, workspace)
 				updatedCount := 0
 				for index, previous := range preimage {
 					current := f.issue(previous.ID)
@@ -268,7 +268,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 						}
 					}
 					if !reflect.DeepEqual(current, expected) {
-						t.Fatal("normalization changed fields beyond exact due/next/version/captured tick", scaleP21M2Diff(expected, current))
+						t.Fatal("normalization changed fields beyond exact due/next/version/captured tick", policyFirstDifference(expected, current))
 					}
 					events, err := repo.Events(t.Context(), previous.ID)
 					if err != nil {
@@ -277,7 +277,7 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 					for _, event := range events {
 						if !priorIDs[event.ID] {
 							if event.Type != "issue.updated" || event.AggregateID != previous.ID ||
-								!reflect.DeepEqual(scaleP21SW10JSON(t, event.Payload), scaleP21SW10JSON(t, map[string]string{"automation": "recurring"})) {
+								!reflect.DeepEqual(notificationsJSON(t, event.Payload), notificationsJSON(t, map[string]string{"automation": "recurring"})) {
 								t.Fatal("normalization changed original event type/aggregate/payload", event)
 							}
 							got.Events = append(got.Events, event)
@@ -306,10 +306,10 @@ func TestScaleP21SW156RecurringNormalizationTickerDifferential(t *testing.T) {
 						recurrenceLog.WriteString(line)
 					}
 				}
-				outcomes = append(outcomes, map[string]any{"effects": scaleP21SW59Normalized(t, got, before, started, finished), "log": recurrenceLog.String()})
+				outcomes = append(outcomes, map[string]any{"effects": discussionWriteNormalized(t, got, before, started, finished), "log": recurrenceLog.String()})
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("actual normalization ticker SQL/event/publication/log differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("actual normalization ticker SQL/event/publication/log differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 			pairs++
 		})

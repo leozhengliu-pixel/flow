@@ -18,18 +18,18 @@ import (
 
 // Workflow administration is intentionally admin-only. The actual route gates
 // all M principals; only authorized admins enter the issue-retry primitive.
-// Due-only scheduler claiming already has SW201's separate exact proof.
-func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
+// Due-only scheduler claiming already has large workflow actions's separate exact proof.
+func TestWorkflowPermissionAndOutputMatrix(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	foreign := scaleP03Fixture(t, repo)
+	foreign := resourceAccessScaleFixture(t, repo)
 	if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.data.Workspace.URLKey); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 				for _, mode := range []string{"legacy-warm", "bounded-warm", "legacy-reloaded", "bounded-reloaded"} {
 					reset(t, cell, workflowID)
 					if strings.HasSuffix(mode, "reloaded") {
-						scaleP21SW201ReloadSource(t, f.reader, repo)
+						metadataReloadSourceReloadSource(t, f.reader, repo)
 					}
 					source := repo
 					if strings.HasPrefix(mode, "bounded") {
@@ -170,16 +170,16 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 						}
 						source = f.probe
 						if strings.HasSuffix(mode, "reloaded") {
-							scaleP21SW201ReloadSource(t, f.reader, source)
+							metadataReloadSourceReloadSource(t, f.reader, source)
 						}
 					}
 					service := &server{store: source, realtime: newRealtimeHub()}
-					before := scaleP21SW59SQL(t, f)
-					beforeMetadata := scaleP21SW201Metadata(t, f.reader)
-					foreignReader := &scaleP04Database{config: f.reader.config, key: foreign.data.Workspace.URLKey, reader: f.reader.reader}
+					before := discussionWriteSql(t, f)
+					beforeMetadata := workflowWriteMetadata(t, f.reader)
+					foreignReader := &scaleDatabase{config: f.reader.config, key: foreign.data.Workspace.URLKey, reader: f.reader.reader}
 					var beforeForeign any
 					if cell.foreign {
-						beforeForeign = scaleP21SW201Metadata(t, foreignReader)
+						beforeForeign = workflowWriteMetadata(t, foreignReader)
 					}
 					prior, err := repo.Events(t.Context(), workflowID)
 					if err != nil {
@@ -189,7 +189,7 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 					for _, event := range prior {
 						priorIDs[event.ID] = true
 					}
-					got := scaleP21SW59Outcome{}
+					got := discussionWriteOutcome{}
 					var run domain.WorkflowRun
 					allowed := false
 					statements, peakWork := 0, 0
@@ -210,10 +210,10 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 							peakWork = max(peakWork, source.MetadataWorkUsedForTesting())
 						}))
 						source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-							got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, event))
+							got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, event))
 						})
 						captureRealtime := func(_ string, event domain.RealtimeEvent) {
-							got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, event))
+							got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, event))
 						}
 						source.SetRealtimeSink(captureRealtime)
 						repo.SetRealtimeSink(captureRealtime)
@@ -221,7 +221,7 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 						defer source.SetRealtimeSink(nil)
 						defer repo.SetRealtimeSink(nil)
 						recorder := httptest.NewRecorder()
-						writer := &scaleP21SW59ResponseWriter{ResponseRecorder: recorder, t: t, source: source, requireHeld: admin && !cell.foreign}
+						writer := &responseWriter{ResponseRecorder: recorder, t: t, source: source, requireHeld: admin && !cell.foreign}
 						allowed = service.authorizeWorkspaceRequest(writer, request, user)
 						if allowed {
 							if cell.issueID == "" {
@@ -246,8 +246,8 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 					if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
 						t.Fatal("workflow output leaked work or hydrated full metadata", source.MetadataWorkUsedForTesting(), source.WorkspaceMetadataDecodes())
 					}
-					got.Rows = scaleP21SW59SQL(t, f)
-					afterMetadata := scaleP21SW201Metadata(t, f.reader)
+					got.Rows = discussionWriteSql(t, f)
+					afterMetadata := workflowWriteMetadata(t, f.reader)
 					events, err := repo.Events(t.Context(), workflowID)
 					if err != nil {
 						t.Fatal(err)
@@ -293,14 +293,14 @@ func TestScaleP21SW322WorkflowPermissionAndOutputMatrix(t *testing.T) {
 						len(got.Events) != 0 || len(got.Webhooks) != 0 || len(got.Realtime) != 0 {
 						t.Fatal("forbidden workflow changed business rows or publication effects")
 					}
-					if cell.foreign && !reflect.DeepEqual(beforeForeign, scaleP21SW201Metadata(t, foreignReader)) {
+					if cell.foreign && !reflect.DeepEqual(beforeForeign, workflowWriteMetadata(t, foreignReader)) {
 						t.Fatal("cross-workspace refusal changed the foreign tenant")
 					}
 					got.Response, err = json.Marshal(map[string]any{"response": json.RawMessage(got.Response), "metadata": afterMetadata})
 					if err != nil {
 						t.Fatal(err)
 					}
-					normalized := scaleP21SW201Normalize(t, scaleP21SW59Normalized(t, got, before, started, finished), run.ID, started, finished)
+					normalized := workflowWriteNormalize(t, discussionWriteNormalized(t, got, before, started, finished), run.ID, started, finished)
 					if strings.HasPrefix(mode, "legacy") {
 						expected, legacySQL = normalized, statements
 					} else {

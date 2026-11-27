@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
+func TestManifestExportDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, targetID := f.data.Workspace.URLKey, idgen.New("oauth_app_sw24_")
 		now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		target := domain.OAuthApplication{
@@ -51,7 +51,7 @@ func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
 			}
 		}
 		reset(false)
-		before := scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications")
+		before := pointRecordFingerprint(t, repo, workspace, "oauthApplications")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, id := range []string{targetID, targetID + "-missing", "Manifest export", strings.Repeat("x", 192), targetID + "\x00"} {
 				var results []any
@@ -60,7 +60,7 @@ func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
 					r.Method = http.MethodGet
 					r.URL.Path = "/api/oauth-applications/" + id + "/manifest"
 					r.SetPathValue("id", id)
-					scaleP21M3Call(&server{store: source}, w, r, (*server).exportOAuthApplicationManifest)
+					callPointSettingsHandler(&server{store: source}, w, r, (*server).exportOAuthApplicationManifest)
 					want := http.StatusNotFound
 					if id == targetID {
 						want = http.StatusOK
@@ -73,14 +73,14 @@ func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
 					}
 					if id == targetID {
 						expected := exportOAuthAppManifest(r, target)
-						if !reflect.DeepEqual(scaleP21SW10JSON(t, expected), scaleP21M3JSON(t, w.Body.Bytes())) {
+						if !reflect.DeepEqual(notificationsJSON(t, expected), normalizeSettingsPointJSON(t, w.Body.Bytes())) {
 							t.Fatal("manifest lost optional fields, references, or nil/empty rules")
 						}
 					}
-					results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+					results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 				}
 				if !reflect.DeepEqual(results[0], results[1]) {
-					t.Fatalf("manifest differential: %s", scaleP21M2Diff(results[0], results[1]))
+					t.Fatalf("manifest differential: %s", policyFirstDifference(results[0], results[1]))
 				}
 			}
 		})
@@ -102,13 +102,13 @@ func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
 		for _, phase := range []string{"queued", "replayed"} {
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				w := httptest.NewRecorder()
-				scaleP21M3Call(&server{store: source}, w, queued, (*server).exportOAuthApplicationManifest)
+				callPointSettingsHandler(&server{store: source}, w, queued, (*server).exportOAuthApplicationManifest)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("%s export retained revoked authority", phase)
 				}
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "oauthApplications") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "oauthApplications") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("manifest export changed canonical application state or decoded full metadata")
 		}
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW24 manifest foreign", idgen.New("sw24-manifest-foreign-"), "us")
@@ -125,7 +125,7 @@ func TestScaleP21SW24ManifestExportDifferential(t *testing.T) {
 			r.Header.Set("X-Workspace-Key", foreign.Workspace.URLKey)
 			r.SetPathValue("workspaceKey", foreign.Workspace.URLKey)
 			r.SetPathValue("id", targetID)
-			scaleP21M3Call(&server{store: source}, w, r, (*server).exportOAuthApplicationManifest)
+			callPointSettingsHandler(&server{store: source}, w, r, (*server).exportOAuthApplicationManifest)
 			if w.Code != http.StatusNotFound {
 				t.Fatal("manifest escaped its workspace")
 			}

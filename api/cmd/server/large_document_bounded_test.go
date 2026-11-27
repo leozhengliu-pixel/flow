@@ -63,7 +63,7 @@ func TestBoundedLargeDocumentRoutes(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_METADATA_CATALOG", "on")
 	t.Setenv("FLOW_SYNC_V2", "on")
-	config := scaleP03DatabaseConfig(t)
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	config.MaxTransactionBytes, config.MaxStateBytes = 512<<20, 512<<20
 	if config.Driver == "mysql" {
 		config.RecordJournalCapture = store.RecordJournalCaptureApplication

@@ -23,7 +23,7 @@ import (
 // team suggestions of batch generation and of runs, permission refusals,
 // concurrent moves into one team and the image reloaded from SQL.
 
-type scaleP21TeamMoveOptions struct {
+type scaleTeamMoveOptions struct {
 	project      string
 	triageTarget bool
 	triageIssue  bool
@@ -31,44 +31,44 @@ type scaleP21TeamMoveOptions struct {
 	mergeAt      time.Time
 }
 
-type scaleP21TeamMoveState struct {
-	scaleP21TriageState
+type scaleTeamMoveState struct {
+	scaleTriageState
 	Records, Documents, Sequence, Aliases, IssueLabels [][]any
 }
 
-type scaleP21TeamMoveOutcome struct {
+type scaleTeamMoveOutcome struct {
 	Code               int
 	Body               json.RawMessage
-	State              scaleP21TeamMoveState
+	State              scaleTeamMoveState
 	Webhooks, Realtime []json.RawMessage
 	// Installed is the source's installed documents and suggestions after
 	// the call; Reloaded is the same read from a view loaded from SQL.
 	Installed, Reloaded json.RawMessage
 }
 
-type scaleP21TeamMoveFixture struct {
-	*scaleP21TriageWriterFixture
+type scaleTeamMoveFixture struct {
+	*scaleTriageWriterFixture
 	sequence int64
 }
 
-func scaleP21TeamMoveSetup(t *testing.T) scaleP21TeamMoveFixture {
+func scaleTeamMoveSetup(t *testing.T) scaleTeamMoveFixture {
 	t.Helper()
-	triage := scaleP21TriageWriterSetup(t)
-	f := scaleP21TeamMoveFixture{scaleP21TriageWriterFixture: &triage}
+	triage := scaleTriageWriterSetup(t)
+	f := scaleTeamMoveFixture{scaleTriageWriterFixture: &triage}
 	f.sequence = f.currentSequence(t)
 	return f
 }
 
-func (f scaleP21TeamMoveFixture) currentSequence(t *testing.T) int64 {
+func (f scaleTeamMoveFixture) currentSequence(t *testing.T) int64 {
 	t.Helper()
 	rows := f.rows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
 	if len(rows) != 1 {
 		t.Fatal("issue sequence missing")
 	}
-	return scaleP21TeamMoveInt(t, rows[0][0])
+	return scaleTeamMoveInt(t, rows[0][0])
 }
 
-func scaleP21TeamMoveInt(t *testing.T, value any) int64 {
+func scaleTeamMoveInt(t *testing.T, value any) int64 {
 	t.Helper()
 	switch number := value.(type) {
 	case int64:
@@ -88,7 +88,7 @@ func scaleP21TeamMoveInt(t *testing.T, value any) int64 {
 	return 0
 }
 
-func (f scaleP21TeamMoveFixture) exec(t *testing.T, query string, args ...any) {
+func (f scaleTeamMoveFixture) exec(t *testing.T, query string, args ...any) {
 	t.Helper()
 	f.reader.query(t, `SELECT 1 FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey).Close()
 	if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
@@ -101,7 +101,7 @@ func (f scaleP21TeamMoveFixture) exec(t *testing.T, query string, args ...any) {
 	}
 }
 
-func (f scaleP21TeamMoveFixture) resetSequenceAndAliases(t *testing.T) {
+func (f scaleTeamMoveFixture) resetSequenceAndAliases(t *testing.T) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	f.exec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, f.sequence, workspace)
@@ -114,7 +114,7 @@ func (f scaleP21TeamMoveFixture) resetSequenceAndAliases(t *testing.T) {
 // archived, project-only and archived-group variants, attached documents,
 // the scoped issues' move-relevant fields and team suggestions. The issue
 // sequence and aliases return to the fixture values.
-func (f scaleP21TeamMoveFixture) prepare(opts scaleP21TeamMoveOptions) func(*testing.T) {
+func (f scaleTeamMoveFixture) prepare(opts scaleTeamMoveOptions) func(*testing.T) {
 	return func(t *testing.T) {
 		repo, workspace := f.repository, f.data.Workspace.URLKey
 		f.resetSequenceAndAliases(t)
@@ -231,22 +231,22 @@ func (f scaleP21TeamMoveFixture) prepare(opts scaleP21TeamMoveOptions) func(*tes
 	}
 }
 
-func (f scaleP21TeamMoveFixture) state(t *testing.T) scaleP21TeamMoveState {
+func (f scaleTeamMoveFixture) state(t *testing.T) scaleTeamMoveState {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	return scaleP21TeamMoveState{
-		scaleP21TriageState: f.scaleP21TriageWriterFixture.state(t),
-		Records:             f.rows(t, `SELECT id,identifier,team_id,state_id,state_type,project_id,cycle_id,parent_id,version FROM issue_records WHERE workspace_key=? ORDER BY id`, workspace),
-		Documents:           f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' ORDER BY collection_order,record_key`, workspace),
-		Sequence:            f.rows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, workspace),
-		Aliases:             f.rows(t, `SELECT issue_id,identifier FROM issue_identifier_aliases WHERE workspace_key=? ORDER BY issue_id,identifier`, workspace),
-		IssueLabels:         f.rows(t, `SELECT issue_id,label_id FROM issue_label_records WHERE workspace_key=? ORDER BY issue_id,label_id`, workspace),
+	return scaleTeamMoveState{
+		scaleTriageState: f.scaleTriageWriterFixture.state(t),
+		Records:          f.rows(t, `SELECT id,identifier,team_id,state_id,state_type,project_id,cycle_id,parent_id,version FROM issue_records WHERE workspace_key=? ORDER BY id`, workspace),
+		Documents:        f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='documents' ORDER BY collection_order,record_key`, workspace),
+		Sequence:         f.rows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, workspace),
+		Aliases:          f.rows(t, `SELECT issue_id,identifier FROM issue_identifier_aliases WHERE workspace_key=? ORDER BY issue_id,identifier`, workspace),
+		IssueLabels:      f.rows(t, `SELECT issue_id,label_id FROM issue_label_records WHERE workspace_key=? ORDER BY issue_id,label_id`, workspace),
 	}
 }
 
 // installed reads the installed documents and suggestions of repo: the
 // legacy snapshot, or a bounded view's installed image.
-func (f scaleP21TeamMoveFixture) installed(t *testing.T, repo *store.SQLiteStore) json.RawMessage {
+func (f scaleTeamMoveFixture) installed(t *testing.T, repo *store.SQLiteStore) json.RawMessage {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	var documents []domain.Document
@@ -283,16 +283,16 @@ func (f scaleP21TeamMoveFixture) installed(t *testing.T, repo *store.SQLiteStore
 	return raw
 }
 
-func (f scaleP21TeamMoveFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleP21TeamMoveOutcome, time.Time) {
+func (f scaleTeamMoveFixture) run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleTeamMoveOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	service := f.reset(t, source)
-	got := scaleP21TeamMoveOutcome{}
+	got := scaleTeamMoveOutcome{}
 	var mu sync.Mutex
 	service.store.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -300,7 +300,7 @@ func (f scaleP21TeamMoveFixture) run(t *testing.T, source string, call func(*ser
 	service.store.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 		mu.Lock()
 		defer mu.Unlock()
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"clientId": event.ClientID, "payload": event.Payload,
 		}))
@@ -343,33 +343,33 @@ func (f scaleP21TeamMoveFixture) run(t *testing.T, source string, call func(*ser
 			_ = os.WriteFile(dir+"/installed.json", []byte(installed), 0o600)
 			_ = os.WriteFile(dir+"/reloaded.json", []byte(reloaded), 0o600)
 		}
-		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, scaleP21M2Diff(installed, reloaded))
+		t.Fatalf("%s: installed image differs from the SQL reload: %s", source, policyFirstDifference(installed, reloaded))
 	}
 	return got, started
 }
 
-func (f scaleP21TeamMoveFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21TeamMoveOutcome {
+func (f scaleTeamMoveFixture) differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleTeamMoveOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21TeamMoveOutcome
+	var outcomes []scaleTeamMoveOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		got, started := f.run(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-// scaleP21TeamMoveSorted orders concurrent publications by their normalized
+// scaleTeamMoveSorted orders concurrent publications by their normalized
 // envelope; each envelope is still compared byte for byte.
-func scaleP21TeamMoveSorted(t *testing.T, items []json.RawMessage, started time.Time) []json.RawMessage {
+func scaleTeamMoveSorted(t *testing.T, items []json.RawMessage, started time.Time) []json.RawMessage {
 	t.Helper()
 	var normalized []string
 	for _, item := range items {
-		normalized = append(normalized, scaleP21TriageNormalize(t, item, started))
+		normalized = append(normalized, scaleTriageNormalize(t, item, started))
 	}
 	slices.Sort(normalized)
 	result := []json.RawMessage{}
@@ -379,7 +379,7 @@ func scaleP21TeamMoveSorted(t *testing.T, items []json.RawMessage, started time.
 	return result
 }
 
-func scaleP21TeamMoveIssue(t *testing.T, outcome scaleP21TeamMoveOutcome, id string) domain.Issue {
+func scaleTeamMoveIssue(t *testing.T, outcome scaleTeamMoveOutcome, id string) domain.Issue {
 	t.Helper()
 	for _, row := range outcome.State.Issues {
 		if row[0] == id {
@@ -394,7 +394,7 @@ func scaleP21TeamMoveIssue(t *testing.T, outcome scaleP21TeamMoveOutcome, id str
 	return domain.Issue{}
 }
 
-func scaleP21TeamMoveLabelIDs(issue domain.Issue) []string {
+func scaleTeamMoveLabelIDs(issue domain.Issue) []string {
 	ids := []string{}
 	for _, label := range issue.Labels {
 		ids = append(ids, label.ID)
@@ -402,11 +402,11 @@ func scaleP21TeamMoveLabelIDs(issue domain.Issue) []string {
 	return ids
 }
 
-func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
+func TestScaleTeamMoveAcceptDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamMoveSetup(t)
+	f := scaleTeamMoveSetup(t)
 	owner, admin, member, guest := f.data.Viewer, f.principals[1].user, f.principals[2].user, f.principals[3].user
 	selected := &domain.APIKey{ID: "m2-key", Scopes: []string{"read", "write", "admin"}, TeamRestriction: "selected", TeamIDs: []string{f.public}}
 	merge := time.Now().UTC()
@@ -417,7 +417,7 @@ func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
 	}
 	cases := []struct {
 		name       string
-		opts       scaleP21TeamMoveOptions
+		opts       scaleTeamMoveOptions
 		user       domain.User
 		key        *domain.APIKey
 		suggestion string
@@ -425,33 +425,33 @@ func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
 		code       int
 		want       *expectation
 	}{
-		{"parent-team-incompatible-project", scaleP21TeamMoveOptions{project: "triage-p-public"}, owner, nil, "tm-s-parent", false, http.StatusOK,
+		{"parent-team-incompatible-project", scaleTeamMoveOptions{project: "triage-p-public"}, owner, nil, "tm-s-parent", false, http.StatusOK,
 			&expectation{"tm-parent", "tmp-todo", []string{"tm-l-parent-bug", "tm-l-shared"}, false}},
-		{"sub-team-inherited-workflow-compatible-project", scaleP21TeamMoveOptions{project: "tm-p-cross"}, owner, nil, "tm-s-sub", false, http.StatusOK,
+		{"sub-team-inherited-workflow-compatible-project", scaleTeamMoveOptions{project: "tm-p-cross"}, owner, nil, "tm-s-sub", false, http.StatusOK,
 			&expectation{"tm-sub", "tmp-backlog", []string{"tm-l-parent-bug", "tm-l-shared"}, true}},
-		{"team-without-settings-or-matching-labels", scaleP21TeamMoveOptions{}, owner, nil, "tm-s-bare", false, http.StatusOK,
+		{"team-without-settings-or-matching-labels", scaleTeamMoveOptions{}, owner, nil, "tm-s-bare", false, http.StatusOK,
 			&expectation{"tm-bare", "tmb-a", []string{"tm-l-shared"}, false}},
-		{"triage-target-on", scaleP21TeamMoveOptions{triageTarget: true, project: "tm-p-cross"}, owner, nil, "tm-s-triage", false, http.StatusOK,
+		{"triage-target-on", scaleTeamMoveOptions{triageTarget: true, project: "tm-p-cross"}, owner, nil, "tm-s-triage", false, http.StatusOK,
 			&expectation{"tm-triage", "tmt-triage", []string{"tm-l-triage-bug", "tm-l-shared"}, false}},
-		{"triage-target-off", scaleP21TeamMoveOptions{}, owner, nil, "tm-s-triage", false, http.StatusOK,
+		{"triage-target-off", scaleTeamMoveOptions{}, owner, nil, "tm-s-triage", false, http.StatusOK,
 			&expectation{"tm-triage", "tmt-triage", []string{"tm-l-triage-bug", "tm-l-shared"}, false}},
-		{"merged-update-activity", scaleP21TeamMoveOptions{mergeAt: merge, project: "triage-p-public"}, owner, nil, "tm-s-parent", false, http.StatusOK,
+		{"merged-update-activity", scaleTeamMoveOptions{mergeAt: merge, project: "triage-p-public"}, owner, nil, "tm-s-parent", false, http.StatusOK,
 			&expectation{"tm-parent", "tmp-todo", []string{"tm-l-parent-bug", "tm-l-shared"}, false}},
-		{"member-moves", scaleP21TeamMoveOptions{}, member, nil, "tm-s-parent", false, http.StatusOK,
+		{"member-moves", scaleTeamMoveOptions{}, member, nil, "tm-s-parent", false, http.StatusOK,
 			&expectation{"tm-parent", "tmp-todo", []string{"tm-l-parent-bug", "tm-l-shared"}, false}},
-		{"same-team", scaleP21TeamMoveOptions{}, owner, nil, "triage-s-team-" + f.public, false, http.StatusOK, nil},
-		{"private-team-admin-outsider", scaleP21TeamMoveOptions{}, owner, nil, "triage-s-team-" + f.private, false, http.StatusForbidden, nil},
-		{"private-team-admin-member", scaleP21TeamMoveOptions{}, admin, nil, "triage-s-team-" + f.private, false, 0, nil},
-		{"sub-team-of-private", scaleP21TeamMoveOptions{}, owner, nil, "triage-s-team-" + f.child, false, 0, nil},
-		{"guest", scaleP21TeamMoveOptions{}, guest, nil, "triage-s-team-" + f.public, false, http.StatusForbidden, nil},
-		{"ghost-team", scaleP21TeamMoveOptions{}, owner, nil, "triage-s-team-triage-team-ghost", false, http.StatusForbidden, nil},
-		{"selected-key", scaleP21TeamMoveOptions{}, owner, selected, "tm-s-parent", false, http.StatusForbidden, nil},
-		{"cancelled", scaleP21TeamMoveOptions{}, owner, nil, "tm-s-parent", true, 0, nil},
+		{"same-team", scaleTeamMoveOptions{}, owner, nil, "triage-s-team-" + f.public, false, http.StatusOK, nil},
+		{"private-team-admin-outsider", scaleTeamMoveOptions{}, owner, nil, "triage-s-team-" + f.private, false, http.StatusForbidden, nil},
+		{"private-team-admin-member", scaleTeamMoveOptions{}, admin, nil, "triage-s-team-" + f.private, false, 0, nil},
+		{"sub-team-of-private", scaleTeamMoveOptions{}, owner, nil, "triage-s-team-" + f.child, false, 0, nil},
+		{"guest", scaleTeamMoveOptions{}, guest, nil, "triage-s-team-" + f.public, false, http.StatusForbidden, nil},
+		{"ghost-team", scaleTeamMoveOptions{}, owner, nil, "triage-s-team-triage-team-ghost", false, http.StatusForbidden, nil},
+		{"selected-key", scaleTeamMoveOptions{}, owner, selected, "tm-s-parent", false, http.StatusForbidden, nil},
+		{"cancelled", scaleTeamMoveOptions{}, owner, nil, "tm-s-parent", true, 0, nil},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test.opts)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test.opts)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 				return f.stateRequest(service, test.user, test.key, f.triage.ID, test.suggestion, true, test.stop)
 			})
@@ -463,15 +463,15 @@ func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
 			if test.want == nil {
 				return
 			}
-			issue := scaleP21TeamMoveIssue(t, legacy, f.triage.ID)
+			issue := scaleTeamMoveIssue(t, legacy, f.triage.ID)
 			wantNumber := f.sequence + 1
 			if issue.Team.ID != test.want.team || issue.State.ID != test.want.state || int64(issue.Number) != wantNumber ||
 				issue.Identifier != fmt.Sprintf("%s-%d", issue.Team.Key, wantNumber) || len(issue.PreviousIdentifiers) != 1 ||
-				!reflect.DeepEqual(scaleP21TeamMoveLabelIDs(issue), test.want.labels) || (issue.Project != nil) != test.want.project || issue.CycleID != nil {
+				!reflect.DeepEqual(scaleTeamMoveLabelIDs(issue), test.want.labels) || (issue.Project != nil) != test.want.project || issue.CycleID != nil {
 				t.Fatalf("legacy move: team %s state %s number %d identifier %s previous %v labels %v project %v",
-					issue.Team.ID, issue.State.ID, issue.Number, issue.Identifier, issue.PreviousIdentifiers, scaleP21TeamMoveLabelIDs(issue), issue.Project)
+					issue.Team.ID, issue.State.ID, issue.Number, issue.Identifier, issue.PreviousIdentifiers, scaleTeamMoveLabelIDs(issue), issue.Project)
 			}
-			if len(legacy.State.Aliases) != 1 || len(legacy.State.Sequence) != 1 || scaleP21TeamMoveInt(t, legacy.State.Sequence[0][0]) != wantNumber {
+			if len(legacy.State.Aliases) != 1 || len(legacy.State.Sequence) != 1 || scaleTeamMoveInt(t, legacy.State.Sequence[0][0]) != wantNumber {
 				t.Fatalf("legacy aliases %v sequence %v", legacy.State.Aliases, legacy.State.Sequence)
 			}
 			scoped := 0
@@ -505,12 +505,12 @@ func TestScaleP21TeamMoveAcceptDifferential(t *testing.T) {
 
 // Concurrent acceptances moving two issues into one team serialize: each
 // bounded result equals one legacy order, with distinct numbers.
-func TestScaleP21TeamMoveConcurrentSameTeam(t *testing.T) {
+func TestScaleTeamMoveConcurrentSameTeam(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamMoveSetup(t)
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21TeamMoveOptions{project: "tm-p-cross"})
+	f := scaleTeamMoveSetup(t)
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleTeamMoveOptions{project: "tm-p-cross"})
 	owner := f.data.Viewer
 	first := func(service *server) *httptest.ResponseRecorder {
 		return f.stateRequest(service, owner, nil, f.triage.ID, "tm-s-parent", true, false)
@@ -530,13 +530,13 @@ func TestScaleP21TeamMoveConcurrentSameTeam(t *testing.T) {
 		})
 		numbers := map[int]bool{}
 		for _, id := range []string{f.triage.ID, f.visible.ID} {
-			numbers[scaleP21TeamMoveIssue(t, got, id).Number] = true
+			numbers[scaleTeamMoveIssue(t, got, id).Number] = true
 		}
 		if !numbers[int(f.sequence)+1] || !numbers[int(f.sequence)+2] {
 			t.Fatalf("legacy numbers %v", numbers)
 		}
-		got.Webhooks, got.Realtime = scaleP21TeamMoveSorted(t, got.Webhooks, started), scaleP21TeamMoveSorted(t, got.Realtime, started)
-		expected[scaleP21TriageNormalize(t, got, started)] = true
+		got.Webhooks, got.Realtime = scaleTeamMoveSorted(t, got.Webhooks, started), scaleTeamMoveSorted(t, got.Realtime, started)
+		expected[scaleTriageNormalize(t, got, started)] = true
 	}
 	for _, source := range []string{"warm", "reloaded"} {
 		for attempt := range 3 {
@@ -559,8 +559,8 @@ func TestScaleP21TeamMoveConcurrentSameTeam(t *testing.T) {
 			if len(got.Webhooks) != 2 || len(got.Realtime) != 2 {
 				t.Fatalf("%s: publications %d/%d", source, len(got.Webhooks), len(got.Realtime))
 			}
-			got.Webhooks, got.Realtime = scaleP21TeamMoveSorted(t, got.Webhooks, started), scaleP21TeamMoveSorted(t, got.Realtime, started)
-			if state := scaleP21TriageNormalize(t, got, started); !expected[state] {
+			got.Webhooks, got.Realtime = scaleTeamMoveSorted(t, got.Webhooks, started), scaleTeamMoveSorted(t, got.Realtime, started)
+			if state := scaleTriageNormalize(t, got, started); !expected[state] {
 				t.Fatalf("%s attempt %d: concurrent moves match no sequential legacy order", source, attempt)
 			}
 		}
@@ -569,11 +569,11 @@ func TestScaleP21TeamMoveConcurrentSameTeam(t *testing.T) {
 
 // Auto-applied team suggestions: batch generation and runs move the issue
 // through the same closure, the candidates' teams declared.
-func TestScaleP21TeamMoveAutoApplyDifferential(t *testing.T) {
+func TestScaleTeamMoveAutoApplyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamMoveSetup(t)
+	f := scaleTeamMoveSetup(t)
 	workspace := f.data.Workspace.URLKey
 	generate := func(ids ...string) func(*server) *httptest.ResponseRecorder {
 		return func(service *server) *httptest.ResponseRecorder {
@@ -603,27 +603,27 @@ func TestScaleP21TeamMoveAutoApplyDifferential(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name  string
-		opts  scaleP21TeamMoveOptions
+		opts  scaleTeamMoveOptions
 		call  func(*server) *httptest.ResponseRecorder
 		moved bool
 	}{
-		{"generate-auto-move", scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, generate(f.triage.ID), true},
-		{"generate-batch-auto-move", scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, generate(f.visible.ID, f.triage.ID, f.gone.ID), true},
-		{"generate-auto-without-team", scaleP21TeamMoveOptions{auto: true, triageIssue: true}, generate(f.triage.ID), false},
-		{"generate-suggest-only", scaleP21TeamMoveOptions{triageIssue: true, project: "tm-p-cross"}, generate(f.triage.ID), false},
-		{"run-auto-move", scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, refresh, true},
-		{"run-auto-move-merged-activity", scaleP21TeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross", mergeAt: time.Now().UTC()}, refresh, true},
-		{"run-auto-without-team", scaleP21TeamMoveOptions{auto: true, triageIssue: true}, refresh, false},
+		{"generate-auto-move", scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, generate(f.triage.ID), true},
+		{"generate-batch-auto-move", scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, generate(f.visible.ID, f.triage.ID, f.gone.ID), true},
+		{"generate-auto-without-team", scaleTeamMoveOptions{auto: true, triageIssue: true}, generate(f.triage.ID), false},
+		{"generate-suggest-only", scaleTeamMoveOptions{triageIssue: true, project: "tm-p-cross"}, generate(f.triage.ID), false},
+		{"run-auto-move", scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross"}, refresh, true},
+		{"run-auto-move-merged-activity", scaleTeamMoveOptions{auto: true, triageIssue: true, project: "tm-p-cross", mergeAt: time.Now().UTC()}, refresh, true},
+		{"run-auto-without-team", scaleTeamMoveOptions{auto: true, triageIssue: true}, refresh, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			f.scaleP21TriageWriterFixture.prepare = f.prepare(test.opts)
-			defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+			f.scaleTriageWriterFixture.prepare = f.prepare(test.opts)
+			defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 			outcomes := f.differential(t, test.name, test.call)
 			legacy := outcomes[0]
 			if legacy.Code != http.StatusOK {
 				t.Fatalf("legacy status %d: %s", legacy.Code, legacy.Body)
 			}
-			if issue := scaleP21TeamMoveIssue(t, legacy, f.triage.ID); (issue.Team.ID == "tm-parent") != test.moved {
+			if issue := scaleTeamMoveIssue(t, legacy, f.triage.ID); (issue.Team.ID == "tm-parent") != test.moved {
 				t.Fatalf("legacy team %s, moved want %t", issue.Team.ID, test.moved)
 			}
 			// Ties go to the target scored first.
@@ -639,12 +639,12 @@ func TestScaleP21TeamMoveAutoApplyDifferential(t *testing.T) {
 }
 
 // The kernel refuses a callback that leaves its closure before any write.
-func TestScaleP21TeamMoveKernelRefusals(t *testing.T) {
+func TestScaleTeamMoveKernelRefusals(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamMoveSetup(t)
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(scaleP21TeamMoveOptions{})
+	f := scaleTeamMoveSetup(t)
+	f.scaleTriageWriterFixture.prepare = f.prepare(scaleTeamMoveOptions{})
 	for _, test := range []struct {
 		name   string
 		mutate func(*domain.Bootstrap, *domain.Issue)
@@ -692,7 +692,7 @@ func TestScaleP21TeamMoveKernelRefusals(t *testing.T) {
 					t.Fatalf("%s: not a typed refusal: ran=%t %v", source, ran, err)
 				}
 				if after := f.state(t); !reflect.DeepEqual(before, after) {
-					t.Fatalf("%s: refused move wrote: %s", source, scaleP21M2Diff(fmt.Sprint(before), fmt.Sprint(after)))
+					t.Fatalf("%s: refused move wrote: %s", source, policyFirstDifference(fmt.Sprint(before), fmt.Sprint(after)))
 				}
 				if service.store.MetadataWorkUsedForTesting() != 0 {
 					t.Fatalf("%s: refused move retained work", source)

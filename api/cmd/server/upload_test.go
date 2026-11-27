@@ -9,13 +9,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW0UploadSettingsBudgetDifferential(t *testing.T) {
+func TestUploadSettingsBudgetDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
-		settings := scaleP21SW3PopulatedSettings(t, f.data.WorkspaceSettings)
+		settings := populatedSettings(t, f.data.WorkspaceSettings)
 		settings.AllowedFileExtensions = []string{".txt"}
 		for _, restricted := range []bool{false, true} {
 			settings.RestrictFileUploads = restricted

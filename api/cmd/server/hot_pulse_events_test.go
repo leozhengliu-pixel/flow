@@ -13,12 +13,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotPulseEventsDifferential(t *testing.T) {
+func TestScaleHotPulseEventsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		project, hidden := idgen.New("pulse-event-project-"), idgen.New("pulse-event-hidden-")
 		initiative, parent := idgen.New("pulse-event-initiative-"), idgen.New("pulse-event-parent-")
@@ -92,8 +92,8 @@ func TestScaleP21HotPulseEventsDifferential(t *testing.T) {
 					if wantErr != nil || err != nil || visible != wantVisible || decided != wantDecided {
 						t.Fatalf("reload=%v event=%s visibility=%v/%v decided=%v/%v errors=%v/%v", reload, event.Type, wantVisible, visible, wantDecided, decided, wantErr, err)
 					}
-					if !reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
-						t.Fatalf("legacy realtime changed: %s", scaleP21M2Diff(want, got))
+					if !reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
+						t.Fatalf("legacy realtime changed: %s", policyFirstDifference(want, got))
 					}
 					a, b := &EventSource{event: event}, &EventSource{event: event}
 					errA := old.buildPulseEventSource(r.Context(), workspace, a)
@@ -106,8 +106,8 @@ func TestScaleP21HotPulseEventsDifferential(t *testing.T) {
 					}
 					want, wantVisible = a.pulseProjection(data, query)
 					got, visible = b.pulseProjection(data, query)
-					if visible != wantVisible || !reflect.DeepEqual(scaleP21M2JSON(t, want, false), scaleP21M2JSON(t, got, false)) {
-						t.Fatalf("owned source projection changed: %s", scaleP21M2Diff(want, got))
+					if visible != wantVisible || !reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
+						t.Fatalf("owned source projection changed: %s", policyFirstDifference(want, got))
 					}
 					if f.probe.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("event source retained temporary read admission")

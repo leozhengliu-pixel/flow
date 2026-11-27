@@ -23,12 +23,12 @@ import (
 
 // captureMySQLFixture runs on MySQL with whichever capture the account gets
 // (application without trigger authority), so both modes are compared.
-func captureMySQLFixture(t *testing.T) scaleP09Fixture {
+func captureMySQLFixture(t *testing.T) scaleFixture {
 	t.Helper()
 	if os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "mysql" {
 		t.Skip("compares MySQL journal capture")
 	}
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	t.Logf("capture=%s", f.RecordJournalCapture())
 	return f
 }
@@ -62,10 +62,10 @@ func TestRecordCaptureConcurrentWritersInCursorOrder(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "on")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	t.Logf("dialect=%s capture=%s", f.dialect, f.RecordJournalCapture())
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
-	start := scaleP09Head(t, f)
+	start := scaleHead(t, f)
 	const writers, perWriter = 6, 20
 	var committed sync.Map
 	var deadlocks atomic.Int64
@@ -217,7 +217,7 @@ func TestRecordCaptureRollbackLeavesNoJournal(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := captureMySQLFixture(t)
 	workspace, workspaceID, user := f.data.Workspace.URLKey, f.data.Workspace.ID, f.data.Viewer.ID
-	head := scaleP09Head(t, f)
+	head := scaleHead(t, f)
 	epoch, err := f.AuthzEpoch(t.Context(), workspaceID)
 	if err != nil {
 		t.Fatal(err)
@@ -226,11 +226,11 @@ func TestRecordCaptureRollbackLeavesNoJournal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP09Put(t, tx, workspace, "projects", "capture-rollback", domain.Project{ID: "capture-rollback", Name: "Must vanish"})
+	journalScalePut(t, tx, workspace, "projects", "capture-rollback", domain.Project{ID: "capture-rollback", Name: "Must vanish"})
 	if _, err := tx.ExecContext(t.Context(), `UPDATE workspace_memberships SET role='admin' WHERE workspace_id=? AND user_id=?`, workspaceID, user); err != nil {
 		t.Fatal(err)
 	}
-	event := scaleP09Event(t, f, tx, []byte(`{}`))
+	event := scaleEvent(t, f, tx, []byte(`{}`))
 	token := tx.journalToken
 	var dirty int
 	if err := tx.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM record_journal_dirty WHERE tx_id=?`, token).Scan(&dirty); err != nil || dirty < 2 {
@@ -250,7 +250,7 @@ func TestRecordCaptureRollbackLeavesNoJournal(t *testing.T) {
 	if versions != 0 || keys != 0 || pending != 0 {
 		t.Fatalf("rolled-back capture survived: versions=%d keys=%d pending=%d", versions, keys, pending)
 	}
-	if got, err := f.AuthzEpoch(t.Context(), workspaceID); err != nil || got != epoch || scaleP09Head(t, f) != head {
+	if got, err := f.AuthzEpoch(t.Context(), workspaceID); err != nil || got != epoch || scaleHead(t, f) != head {
 		t.Fatalf("epoch or head moved: %s -> %s %v", epoch, got, err)
 	}
 	changes, _ := readAllChanges(t, f.SQLiteStore, workspaceID, head)
@@ -428,7 +428,7 @@ func TestRecordCaptureRestrictedStartup(t *testing.T) {
 				}
 				ws := createCaptureWorkspace(t, repo)
 				repairCaptureWorkspace(t, repo, ws.id)
-				head := scaleP09HeadOf(t, repo, ws.id)
+				head := scaleHeadOf(t, repo, ws.id)
 				putCaptureRecord(t, repo, ws.key, "restricted-project", "created")
 				changes, _ := readAllChanges(t, repo, ws.id, head)
 				if !slices.Equal(recordsOf(changes), []string{"restricted-project"}) {
@@ -455,7 +455,7 @@ func TestRecordCaptureRestrictedStartup(t *testing.T) {
 	})
 }
 
-func scaleP09HeadOf(t *testing.T, repo *SQLiteStore, workspaceID string) string {
+func scaleHeadOf(t *testing.T, repo *SQLiteStore, workspaceID string) string {
 	t.Helper()
 	head, err := repo.RecordJournalHead(t.Context(), workspaceID)
 	if err != nil {
@@ -481,7 +481,7 @@ func TestRecordCaptureTriggerMigrationAndRollback(t *testing.T) {
 	}
 	ws := createCaptureWorkspace(t, triggerStore)
 	repairCaptureWorkspace(t, triggerStore, ws.id)
-	head := scaleP09HeadOf(t, triggerStore, ws.id)
+	head := scaleHeadOf(t, triggerStore, ws.id)
 
 	// 2. A write in flight on a trigger replica while the first application
 	// replica starts (restricted account: application capture, triggers
@@ -490,7 +490,7 @@ func TestRecordCaptureTriggerMigrationAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scaleP09Put(t, inFlight, ws.key, "projects", "in-flight", domain.Project{ID: "in-flight", Name: "trigger replica"})
+	journalScalePut(t, inFlight, ws.key, "projects", "in-flight", domain.Project{ID: "in-flight", Name: "trigger replica"})
 	type opened struct {
 		repo *SQLiteStore
 		err  error

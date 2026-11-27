@@ -20,7 +20,7 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW150Case struct {
+type issueAttachmentRoutesCase struct {
 	name, kind, method, suffix, pattern string
 	actor                               domain.User
 	key                                 *domain.APIKey
@@ -33,9 +33,9 @@ type scaleP21SW150Case struct {
 	status, events                      int
 }
 
-func scaleP21SW150Normalize(t *testing.T, outcome scaleP21SW59Outcome, before scaleP21SW59Rows, attachment domain.Attachment, generated bool, documentID string, started, finished time.Time) any {
+func issueAttachmentRoutesNormalize(t *testing.T, outcome discussionWriteOutcome, before discussionWriteRows, attachment domain.Attachment, generated bool, documentID string, started, finished time.Time) any {
 	t.Helper()
-	result := scaleP21SW59Normalized(t, outcome, before, started, finished)
+	result := discussionWriteNormalized(t, outcome, before, started, finished)
 	if generated && attachment.ID == "" {
 		t.Fatal("created attachment has no generated ID")
 	}
@@ -76,7 +76,7 @@ func scaleP21SW150Normalize(t *testing.T, outcome scaleP21SW59Outcome, before sc
 	return visit(result)
 }
 
-func scaleP21SW150Multipart(t *testing.T, request *http.Request, noEmbed bool) {
+func issueAttachmentRoutesMultipart(t *testing.T, request *http.Request, noEmbed bool) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -103,7 +103,7 @@ func scaleP21SW150Multipart(t *testing.T, request *http.Request, noEmbed bool) {
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 }
 
-func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
+func TestIssueAttachmentRoutesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -125,7 +125,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 	attachmentFetchClient = func() *http.Client { return local.Client() }
 	defer func() { attachmentFetchClient = previousFetch }()
 
-	f := scaleP21SW10Setup(t)
+	f := notificationsSetup(t)
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 	patchedLink := map[string]any{"title": " Patched ", "metadata": map[string]any{"changed": true}}
 	noopLink := map[string]any{"title": "Stored link"}
 	currentCycleID := prefix + "affected-current-cycle"
-	cases := []scaleP21SW150Case{
+	cases := []issueAttachmentRoutesCase{
 		{name: "file-default-embed", kind: "file", actor: owner, suffix: "/attachments", pattern: "/attachments", method: http.MethodPost, created: true, status: http.StatusCreated, events: 1, payload: map[string]string{"name": "shot.png"}},
 		{name: "file-embed-affected-team-current-cycle", kind: "file", cycleAutomation: true, actor: owner, suffix: "/attachments", pattern: "/attachments", method: http.MethodPost, created: true, status: http.StatusCreated, events: 1, payload: map[string]string{"name": "shot.png"}},
 		{name: "file-disabled-embed", kind: "file", actor: member, noEmbed: true, suffix: "/attachments", pattern: "/attachments", method: http.MethodPost, created: true, status: http.StatusCreated, events: 1, payload: map[string]string{"name": "shot.png"}},
@@ -335,9 +335,9 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 						peerAttachments(originalIssue.Attachments)
 					}
 				}
-				before := scaleP21SW59SQL(t, f)
-				documents := scaleP21M3Fingerprint(t, repo, workspace, "documents")
-				cycles := scaleP21M3Fingerprint(t, repo, workspace, "cycles")
+				before := discussionWriteSql(t, f)
+				documents := pointRecordFingerprint(t, repo, workspace, "documents")
+				cycles := pointRecordFingerprint(t, repo, workspace, "cycles")
 				prior, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -346,7 +346,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 				for _, event := range prior {
 					priorIDs[event.ID] = true
 				}
-				got := scaleP21SW59Outcome{}
+				got := discussionWriteOutcome{}
 				checkPublication := func() {
 					if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
 						t.Error("attachment publication lost owned mutation output")
@@ -354,14 +354,14 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 				}
 				source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 					checkPublication()
-					got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+					got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 						"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 						"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot, "createdAt": event.CreatedAt,
 					}))
 				})
 				source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 					checkPublication()
-					got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+					got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 						"id": event.ID, "type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 						"seq": event.Seq, "clientId": event.ClientID, "payload": event.Payload, "createdAt": event.CreatedAt,
 					}))
@@ -376,7 +376,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 				request.Method, request.URL.Path = test.method, "/api/"+family+"/"+issue.ID+test.suffix
 				request.Header.Set("Content-Type", "application/json")
 				if test.kind == "file" {
-					scaleP21SW150Multipart(t, request, test.noEmbed)
+					issueAttachmentRoutesMultipart(t, request, test.noEmbed)
 				}
 				service := &server{store: source, uploadPath: t.TempDir()}
 				started := time.Now().UTC()
@@ -438,7 +438,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 					}
 					mux := http.NewServeMux()
 					mux.Handle(test.method+" /api/"+family+"/{id}"+test.pattern, call)
-					response := &scaleP21SW59ResponseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.status > 0 && test.status < 400}
+					response := &responseWriter{ResponseRecorder: httptest.NewRecorder(), t: t, source: source, requireHeld: test.status > 0 && test.status < 400}
 					if !test.gate && !alias || service.authorizeWorkspaceRequest(response, request, test.actor) {
 						mux.ServeHTTP(response, request)
 					}
@@ -447,7 +447,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 				finished := time.Now().UTC()
 				source.SetWebhookSink(nil)
 				source.SetRealtimeSink(nil)
-				got.Rows = scaleP21SW59SQL(t, f)
+				got.Rows = discussionWriteSql(t, f)
 				after, err := repo.Events(t.Context(), issue.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -493,7 +493,7 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 						expectedType = test.eventType
 					}
 					if got.Events[0].Type != expectedType || got.Events[0].AggregateID != issue.ID ||
-						!reflect.DeepEqual(scaleP21SW10JSON(t, got.Events[0].Payload), scaleP21SW10JSON(t, test.payload)) {
+						!reflect.DeepEqual(notificationsJSON(t, got.Events[0].Payload), notificationsJSON(t, test.payload)) {
 						t.Fatal("attachment mutation changed its original event type/aggregate/payload", got.Events[0])
 					}
 				}
@@ -571,10 +571,10 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 						t.Fatal("stored attachment bytes or size changed", readErr, attachment.Size)
 					}
 				}
-				if scaleP21M3Fingerprint(t, repo, workspace, "documents") != documents {
+				if pointRecordFingerprint(t, repo, workspace, "documents") != documents {
 					t.Fatal("attachment route changed the unrelated earlier aggregate witness")
 				}
-				if scaleP21M3Fingerprint(t, repo, workspace, "cycles") != cycles {
+				if pointRecordFingerprint(t, repo, workspace, "cycles") != cycles {
 					t.Fatal("attachment route changed cycle metadata while applying issue cycle automation")
 				}
 				if source.BoundedMetadataEnabled() && (source.MetadataWorkUsedForTesting() != 0 || source.WorkspaceMetadataDecodes() != 0) {
@@ -587,10 +587,10 @@ func TestScaleP21SW150IssueAttachmentRoutesDifferential(t *testing.T) {
 						t.Fatal("embedded description retained its previous collaboration generation")
 					}
 				}
-				outcomes = append(outcomes, scaleP21SW150Normalize(t, got, before, attachment, test.created && got.Code < 400, documentID, started, finished))
+				outcomes = append(outcomes, issueAttachmentRoutesNormalize(t, got, before, attachment, test.created && got.Code < 400, documentID, started, finished))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatal("actual attachment route/SQL/event/webhook/realtime differential", scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatal("actual attachment route/SQL/event/webhook/realtime differential", policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 			pairs++
 		})

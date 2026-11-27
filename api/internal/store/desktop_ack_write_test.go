@@ -15,11 +15,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW134Input struct {
+type desktopAckWriteInput struct {
 	NotificationIDs []string `json:"notificationIds"`
 }
 
-func scaleP21SW134Metadata(t *testing.T, f scaleP09Fixture, at time.Time) domain.Bootstrap {
+func desktopAckWriteMetadata(t *testing.T, f scaleFixture, at time.Time) domain.Bootstrap {
 	t.Helper()
 	data, found := f.WorkspaceMetadata(f.data.Workspace.URLKey)
 	if !found {
@@ -46,9 +46,9 @@ func scaleP21SW134Metadata(t *testing.T, f scaleP09Fixture, at time.Time) domain
 	return data
 }
 
-// scaleP21SW134ReloadEqual: the bounded installed image equals a fresh SQL
+// reloadEqual: the bounded installed image equals a fresh SQL
 // reload of the same view.
-func scaleP21SW134ReloadEqual(t *testing.T, repo *SQLiteStore, workspace string, installed domain.Bootstrap) {
+func reloadEqual(t *testing.T, repo *SQLiteStore, workspace string, installed domain.Bootstrap) {
 	t.Helper()
 	if _, err := repo.db.ExecContext(t.Context(), `UPDATE workspace_cache_revisions SET revision=revision+1 WHERE workspace_key=? AND kind='metadata'`, workspace); err != nil {
 		t.Fatal(err)
@@ -56,14 +56,14 @@ func scaleP21SW134ReloadEqual(t *testing.T, repo *SQLiteStore, workspace string,
 	if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 		t.Fatal(err)
 	}
-	if reloaded := scaleP21SW98Installed(t, repo, workspace); !reflect.DeepEqual(installed, reloaded) {
-		t.Fatal("peer-raced installed image differs from the SQL reload", scaleP21SW98FirstDiff(scaleP21SW63JSON(t, installed), scaleP21SW63JSON(t, reloaded), "installed"))
+	if reloaded := legacyDiscussionWriteInstalled(t, repo, workspace); !reflect.DeepEqual(installed, reloaded) {
+		t.Fatal("peer-raced installed image differs from the SQL reload", firstDiff(discussionWriterJSON(t, installed), discussionWriterJSON(t, reloaded), "installed"))
 	}
 }
 
-func scaleP21SW134Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at time.Time, mode, viewer string) {
+func desktopAckWriteSeed(t *testing.T, f scaleFixture, issue domain.Issue, at time.Time, mode, viewer string) {
 	t.Helper()
-	scaleP21SW63Seed(t, f, issue, at)
+	discussionWriterSeed(t, f, issue, at)
 	deliveries := []domain.NotificationDelivery{
 		{ID: "sw134-first", NotificationID: "selected", RecipientID: viewer, Channel: "desktop", Status: "pending", Error: "Preserve first error", Attempts: 3, CreatedAt: at, UpdatedAt: at},
 		{ID: "sw134-second", NotificationID: "selected", RecipientID: viewer, Channel: "desktop", Status: "failed", Error: "Preserve second error", Attempts: 7, CreatedAt: at, UpdatedAt: at},
@@ -93,18 +93,18 @@ func scaleP21SW134Seed(t *testing.T, f scaleP09Fixture, issue domain.Issue, at t
 	f.mu.Unlock()
 }
 
-func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
+func TestDesktopAcknowledgementDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, reload := range []bool{false, true} {
 		for _, mode := range []string{"selected", "empty-input", "nil-input", "empty-id", "duplicate-input", "duplicate-native", "large-unrelated", "empty-viewer", "canonical-merge", "retry", "noop", "cancel-before", "cancel-callback", "cancel-persist", "callback-error", "audit", "audit-cancel-persist"} {
 			t.Run(fmt.Sprintf("reload=%t/%s", reload, mode), func(t *testing.T) {
-				f, issue := scaleP21IssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Desktop count closure"}}, nil)
+				f, issue := scaleIssuePersistenceFixture(t, []domain.Project{{ID: "p21-project", Name: "Desktop count closure"}}, nil)
 				workspace := f.data.Workspace.URLKey
 				at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-				metadata := scaleP21SW134Metadata(t, f, at)
-				actor := scaleP21SW69OwnedActor(f.data.Viewer)
+				metadata := desktopAckWriteMetadata(t, f, at)
+				actor := ownedActor(f.data.Viewer)
 				actor.Name = "SW134 live request actor"
 				actor.Via = &domain.ActorBot{ID: "sw134-app", Name: "Exact desktop attribution", Type: domain.ActorBotTypeOAuthApplication}
 				viewer := actor.ID
@@ -112,8 +112,8 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					viewer = ""
 				}
 				type outcome struct {
-					Business                   scaleP21SW63Business
-					Metadata                   scaleP21SW76Metadata
+					Business                   discussionWriterBusiness
+					Metadata                   legacyActorWriteMetadata
 					Indexes                    map[string][][]any
 					Installed                  domain.Bootstrap
 					InstalledVia               *domain.ActorBot
@@ -129,18 +129,18 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 				var counts []int64
 				for _, bounded := range []bool{false, true} {
 					writeFullMetadata(t, f.SQLiteStore, workspace, cloneBootstrap(metadata))
-					scaleP21SW134Seed(t, f, issue, at, mode, viewer)
-					repo := scaleP21IssuePersistenceView(t, f, bounded, reload)
+					desktopAckWriteSeed(t, f, issue, at, mode, viewer)
+					repo := scaleIssuePersistenceView(t, f, bounded, reload)
 					if _, err := repo.db.ExecContext(t.Context(), `UPDATE account_state SET last_workspace_key=? WHERE id=1`, "sw134-before"); err != nil {
 						t.Fatal(err)
 					}
 					repo.mu.Lock()
 					repo.lastWorkspaceKey = "sw134-before"
 					repo.mu.Unlock()
-					before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					beforeMetadata := scaleP21SW76MetadataImage(t, repo.db, workspace)
-					beforeIndexes := scaleP21SW98Indexes(t, repo, workspace)
-					prior := scaleP21SW63EventIDs(t, repo, workspace)
+					before := businessRows(t, repo, workspace, issue.ID)
+					beforeMetadata := metadataImage(t, repo.db, workspace)
+					beforeIndexes := legacyDiscussionWriteIndexes(t, repo, workspace)
+					prior := eventIDs(t, repo, workspace)
 					ctx := ContextWithActor(t.Context(), actor)
 					if bounded {
 						ctx = ContextWithDesktopNotificationAcknowledgement(ctx)
@@ -160,7 +160,7 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					if mode == "cancel-before" {
 						cancel()
 					}
-					input := scaleP21SW134Input{NotificationIDs: []string{"selected"}}
+					input := desktopAckWriteInput{NotificationIDs: []string{"selected"}}
 					switch mode {
 					case "nil-input":
 						input.NotificationIDs = nil
@@ -221,8 +221,8 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 							})
 						}
 						if mode == "canonical-merge" {
-							peer := scaleP21SW76Begin(t, f)
-							scaleP21SW83Peer(t, peer, workspace, "actor-merged", metadata)
+							peer := legacyActorWriteBegin(t, f)
+							legacyMetadataWritePeer(t, peer, workspace, "actor-merged", metadata)
 							if err := peer.Commit(); err != nil {
 								t.Fatal(err)
 							}
@@ -258,10 +258,10 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					if mode == "callback-error" && !errors.Is(err, ErrIssueQuery) || strings.Contains(mode, "cancel-") && !errors.Is(err, context.Canceled) {
 						t.Fatal("desktop error identity changed", err)
 					}
-					got.Business = scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
-					got.Metadata = scaleP21SW76MetadataImage(t, repo.db, workspace)
-					got.Indexes = scaleP21SW98Indexes(t, repo, workspace)
-					got.Installed = scaleP21SW98Installed(t, repo, workspace)
+					got.Business = businessRows(t, repo, workspace, issue.ID)
+					got.Metadata = metadataImage(t, repo.db, workspace)
+					got.Indexes = legacyDiscussionWriteIndexes(t, repo, workspace)
+					got.Installed = legacyDiscussionWriteInstalled(t, repo, workspace)
 					got.InstalledVia = got.Installed.Viewer.Via
 					if mode == "canonical-merge" {
 						// A peer committed between the writer's installed
@@ -272,11 +272,11 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 						// SQL after the commit, as a peer event's reload
 						// would, so it must equal that reload instead.
 						if bounded {
-							scaleP21SW134ReloadEqual(t, repo, workspace, got.Installed)
+							reloadEqual(t, repo, workspace, got.Installed)
 						}
 						got.Installed, got.InstalledVia = domain.Bootstrap{}, nil
 					}
-					got.Events = scaleP21SW63NewEvents(t, repo, workspace, prior)
+					got.Events = newEvents(t, repo, workspace, prior)
 					if strings.HasPrefix(mode, "audit") {
 						entries, err := repo.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{Limit: 1000})
 						if err != nil {
@@ -329,7 +329,7 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					if got.Calls != wantCalls || len(got.Events) != wantEvents || len(got.Webhooks) != wantEvents || len(got.Realtime) != wantEvents {
 						t.Fatal("desktop callback/publication count changed", bounded, got.Calls, len(got.Events), len(got.Webhooks), len(got.Realtime))
 					}
-					outputs = append(outputs, scaleP21SW63JSON(t, got))
+					outputs = append(outputs, discussionWriterJSON(t, got))
 					if bounded {
 						for _, data := range captured {
 							if repo.MetadataWorkUsedForTesting() == 0 || reflect.DeepEqual(*data, domain.Bootstrap{}) {
@@ -349,7 +349,7 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 					}
 				}
 				if !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("desktop acknowledgement differs", scaleP21SW98FirstDiff(outputs[0], outputs[1], "desktop"))
+					t.Fatal("desktop acknowledgement differs", firstDiff(outputs[0], outputs[1], "desktop"))
 				}
 				t.Logf("reload=%t mode=%s writer_SQL_old=%d writer_SQL_bounded=%d", reload, mode, counts[0], counts[1])
 			})
@@ -357,26 +357,26 @@ func TestScaleP21SW134DesktopAcknowledgementDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW134DesktopAcknowledgementRequiresOptIn(t *testing.T) {
+func TestDesktopAcknowledgementRequiresOptIn(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f, issue := scaleP21IssuePersistenceFixture(t, nil, nil)
+	f, issue := scaleIssuePersistenceFixture(t, nil, nil)
 	workspace := f.data.Workspace.URLKey
 	at := time.Date(2026, 11, 15, 2, 3, 4, 567, time.UTC)
-	scaleP21SW134Seed(t, f, issue, at, "selected", f.data.Viewer.ID)
-	repo := scaleP21IssuePersistenceView(t, f, true, false)
+	desktopAckWriteSeed(t, f, issue, at, "selected", f.data.Viewer.ID)
+	repo := scaleIssuePersistenceView(t, f, true, false)
 	owner, err := repo.BeginMetadataJSONRead(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer owner.Close()
-	before := scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)
+	before := businessRows(t, repo, workspace, issue.ID)
 	calls := 0
-	err = repo.MutateWorkspace(owner.Context(t.Context()), workspace, "notification.desktop_acknowledged", f.data.Viewer.ID, scaleP21SW134Input{}, func(*domain.Bootstrap) error {
+	err = repo.MutateWorkspace(owner.Context(t.Context()), workspace, "notification.desktop_acknowledged", f.data.Viewer.ID, desktopAckWriteInput{}, func(*domain.Bootstrap) error {
 		calls++
 		return nil
 	})
-	if !errors.Is(err, ErrBoundedMetadataCoverage) || calls != 0 || !reflect.DeepEqual(before, scaleP21SW63BusinessRows(t, repo, workspace, issue.ID)) {
+	if !errors.Is(err, ErrBoundedMetadataCoverage) || calls != 0 || !reflect.DeepEqual(before, businessRows(t, repo, workspace, issue.ID)) {
 		t.Fatal("unmarked callback was routed to sparse desktop inputs", calls, err)
 	}
 }

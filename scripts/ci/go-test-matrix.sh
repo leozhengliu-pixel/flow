@@ -8,7 +8,7 @@
 # shard counts come from scripts/ci/go-test-shards.json:
 #
 #   race / plain  shards of cmd/server and internal/store in the API test job
-#   dialect       shards of the TestScaleP tests per package in each of the
+#   dialect       shards of the scale tests per package in each of the
 #                 PostgreSQL and MySQL "Scale differentials" jobs
 #
 # Writes mode=, api= and dialect= lines (compact JSON matrices) to stdout.

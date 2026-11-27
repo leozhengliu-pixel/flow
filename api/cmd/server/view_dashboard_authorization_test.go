@@ -9,13 +9,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-// SW493: saved views and dashboards by ID, their create roots and their
+// Saved views and dashboards by ID, their create roots and their
 // owner/body checks. Views follow the literal projection (team scope, own
 // personal views, exact-ID visible project) before viewAllowed; dashboards
 // follow the store's settings filter before dashboardVisible.
-func scaleP21SW493Table(t *testing.T, part, parts int) {
+func viewDashboardAuthorizationTable(t *testing.T, part, parts int) {
 	t.Helper()
-	fx := scaleP21SW491Setup(t, func(fx *scaleP21SW491Fixture, data *domain.Bootstrap) {
+	fx := harnessSetup(t, func(fx *harnessFixture, data *domain.Bootstrap) {
 		p := fx.prefix
 		member, admin := fx.f.principals[2].user.ID, fx.f.principals[1].user.ID
 		view := func(id, slug, scope, team, owner, project string) domain.SavedView {
@@ -57,53 +57,53 @@ func scaleP21SW493Table(t *testing.T, part, parts int) {
 	})
 	p, esc := fx.prefix, url.PathEscape
 	member := fx.f.principals[2].user.ID
-	rows := []scaleP21SW491Row{}
+	rows := []harnessRow{}
 	for _, ref := range []string{"view-workspace", "view-workspace-slug", "view-team-public", "view-team-private", "view-team-child", "view-team-retired", "view-team-empty",
 		"view-personal-member", "view-personal-admin", "view-project-public", "view-project-private", "view-project-slug", "view-project-missing", "view-dup", "view-missing"} {
 		rows = append(rows,
-			scaleP21SW491Row{"delete-" + ref, http.MethodDelete, "DELETE /api/views/{id}", "/api/views/" + esc(p+ref), ""},
-			scaleP21SW491Row{"share-" + ref, http.MethodPost, "POST /api/views/{id}/share", "/api/views/" + esc(p+ref) + "/share", ""},
+			harnessRow{"delete-" + ref, http.MethodDelete, "DELETE /api/views/{id}", "/api/views/" + esc(p+ref), ""},
+			harnessRow{"share-" + ref, http.MethodPost, "POST /api/views/{id}/share", "/api/views/" + esc(p+ref) + "/share", ""},
 		)
 	}
 	rows = append(rows,
-		scaleP21SW491Row{"unshare-team-public", http.MethodDelete, "DELETE /api/views/{id}/share", "/api/views/" + p + "view-team-public/share", ""},
-		scaleP21SW491Row{"patch-plain", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-workspace", `{"name":"x"}`},
-		scaleP21SW491Row{"patch-owner", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-project-public", `{"ownerId":"` + p + `other"}`},
-		scaleP21SW491Row{"patch-team-private", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"teamId":"` + fx.privateTeam + `"}`},
-		scaleP21SW491Row{"patch-project-private", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"projectId":"m2-unrelated"}`},
-		scaleP21SW491Row{"patch-project-old-slug", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"projectId":"` + p + `pub-old"}`},
-		scaleP21SW491Row{"patch-invalid-json", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{`},
-		scaleP21SW491Row{"slug-clash", http.MethodDelete, "DELETE /api/views/{id}", "/api/views/" + p + "view-workspace", ""},
-		scaleP21SW491Row{"escaped-prefix", http.MethodDelete, "DELETE /api/views/{id}", "/%61pi/%76iews/" + p + "view-team-public", ""},
-		scaleP21SW491Row{"create-plain", http.MethodPost, "POST /api/views", "/api/views", `{"name":"x"}`},
-		scaleP21SW491Row{"create-team-private", http.MethodPost, "POST /api/views", "/api/views", `{"teamId":"` + fx.privateTeam + `"}`},
-		scaleP21SW491Row{"create-team-key", http.MethodPost, "POST /api/views", "/api/views", `{"teamId":"` + fx.publicKey + `"}`},
-		scaleP21SW491Row{"create-project-slug", http.MethodPost, "POST /api/views", "/api/views", `{"projectId":"` + p + `pub-current"}`},
-		scaleP21SW491Row{"create-project-private", http.MethodPost, "POST /api/views", "/api/views", `{"projectId":"m2-unrelated"}`},
-		scaleP21SW491Row{"create-invalid", http.MethodPost, "POST /api/views", "/api/views", `[`},
+		harnessRow{"unshare-team-public", http.MethodDelete, "DELETE /api/views/{id}/share", "/api/views/" + p + "view-team-public/share", ""},
+		harnessRow{"patch-plain", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-workspace", `{"name":"x"}`},
+		harnessRow{"patch-owner", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-project-public", `{"ownerId":"` + p + `other"}`},
+		harnessRow{"patch-team-private", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"teamId":"` + fx.privateTeam + `"}`},
+		harnessRow{"patch-project-private", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"projectId":"m2-unrelated"}`},
+		harnessRow{"patch-project-old-slug", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{"projectId":"` + p + `pub-old"}`},
+		harnessRow{"patch-invalid-json", http.MethodPatch, "PATCH /api/views/{id}", "/api/views/" + p + "view-personal-member", `{`},
+		harnessRow{"slug-clash", http.MethodDelete, "DELETE /api/views/{id}", "/api/views/" + p + "view-workspace", ""},
+		harnessRow{"escaped-prefix", http.MethodDelete, "DELETE /api/views/{id}", "/%61pi/%76iews/" + p + "view-team-public", ""},
+		harnessRow{"create-plain", http.MethodPost, "POST /api/views", "/api/views", `{"name":"x"}`},
+		harnessRow{"create-team-private", http.MethodPost, "POST /api/views", "/api/views", `{"teamId":"` + fx.privateTeam + `"}`},
+		harnessRow{"create-team-key", http.MethodPost, "POST /api/views", "/api/views", `{"teamId":"` + fx.publicKey + `"}`},
+		harnessRow{"create-project-slug", http.MethodPost, "POST /api/views", "/api/views", `{"projectId":"` + p + `pub-current"}`},
+		harnessRow{"create-project-private", http.MethodPost, "POST /api/views", "/api/views", `{"projectId":"m2-unrelated"}`},
+		harnessRow{"create-invalid", http.MethodPost, "POST /api/views", "/api/views", `[`},
 	)
 	for _, ref := range []string{"dash-workspace", "dash-private-member", "dash-private-admin", "dash-team-public", "dash-team-private", "dash-team-mixed", "dash-dup", "dash-missing"} {
 		rows = append(rows,
-			scaleP21SW491Row{"results-" + ref, http.MethodGet, "GET /api/dashboards/{id}/results", "/api/dashboards/" + p + ref + "/results", ""},
-			scaleP21SW491Row{"delete-" + ref, http.MethodDelete, "DELETE /api/dashboards/{id}", "/api/dashboards/" + p + ref, ""},
+			harnessRow{"results-" + ref, http.MethodGet, "GET /api/dashboards/{id}/results", "/api/dashboards/" + p + ref + "/results", ""},
+			harnessRow{"delete-" + ref, http.MethodDelete, "DELETE /api/dashboards/{id}", "/api/dashboards/" + p + ref, ""},
 		)
 	}
 	rows = append(rows,
-		scaleP21SW491Row{"dash-export", http.MethodGet, "GET /api/dashboards/{id}/export", "/api/dashboards/" + p + "dash-team-private/export", ""},
-		scaleP21SW491Row{"dash-preview", http.MethodPost, "POST /api/dashboards/{id}/preview", "/api/dashboards/" + p + "dash-team-mixed/preview", `{}`},
-		scaleP21SW491Row{"dash-share", http.MethodPost, "POST /api/dashboards/{id}/share", "/api/dashboards/" + p + "dash-workspace/share", ""},
-		scaleP21SW491Row{"dash-unshare", http.MethodDelete, "DELETE /api/dashboards/{id}/share", "/api/dashboards/" + p + "dash-private-member/share", ""},
-		scaleP21SW491Row{"dash-subscribe", http.MethodPut, "PUT /api/dashboards/{id}/subscription", "/api/dashboards/" + p + "dash-workspace/subscription", ""},
-		scaleP21SW491Row{"dash-unsubscribe", http.MethodDelete, "DELETE /api/dashboards/{id}/subscription", "/api/dashboards/" + p + "dash-workspace/subscription", ""},
-		scaleP21SW491Row{"dash-patch-plain", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-private-member", `{"name":"x"}`},
-		scaleP21SW491Row{"dash-patch-owner", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-private-member", `{"ownerId":"` + member + `x"}`},
-		scaleP21SW491Row{"dash-patch-team-private", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-team-mixed", `{"teamIds":["` + fx.privateTeam + `"]}`},
-		scaleP21SW491Row{"dash-patch-invalid", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-team-mixed", `{"teamIds":7}`},
-		scaleP21SW491Row{"dash-create-plain", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `{"name":"x"}`},
-		scaleP21SW491Row{"dash-create-team-private", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `{"teamIds":["` + fx.privateTeam + `"]}`},
-		scaleP21SW491Row{"dash-create-invalid", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `nope`},
+		harnessRow{"dash-export", http.MethodGet, "GET /api/dashboards/{id}/export", "/api/dashboards/" + p + "dash-team-private/export", ""},
+		harnessRow{"dash-preview", http.MethodPost, "POST /api/dashboards/{id}/preview", "/api/dashboards/" + p + "dash-team-mixed/preview", `{}`},
+		harnessRow{"dash-share", http.MethodPost, "POST /api/dashboards/{id}/share", "/api/dashboards/" + p + "dash-workspace/share", ""},
+		harnessRow{"dash-unshare", http.MethodDelete, "DELETE /api/dashboards/{id}/share", "/api/dashboards/" + p + "dash-private-member/share", ""},
+		harnessRow{"dash-subscribe", http.MethodPut, "PUT /api/dashboards/{id}/subscription", "/api/dashboards/" + p + "dash-workspace/subscription", ""},
+		harnessRow{"dash-unsubscribe", http.MethodDelete, "DELETE /api/dashboards/{id}/subscription", "/api/dashboards/" + p + "dash-workspace/subscription", ""},
+		harnessRow{"dash-patch-plain", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-private-member", `{"name":"x"}`},
+		harnessRow{"dash-patch-owner", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-private-member", `{"ownerId":"` + member + `x"}`},
+		harnessRow{"dash-patch-team-private", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-team-mixed", `{"teamIds":["` + fx.privateTeam + `"]}`},
+		harnessRow{"dash-patch-invalid", http.MethodPatch, "PATCH /api/dashboards/{id}", "/api/dashboards/" + p + "dash-team-mixed", `{"teamIds":7}`},
+		harnessRow{"dash-create-plain", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `{"name":"x"}`},
+		harnessRow{"dash-create-team-private", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `{"teamIds":["` + fx.privateTeam + `"]}`},
+		harnessRow{"dash-create-invalid", http.MethodPost, "POST /api/dashboards", "/api/dashboards", `nope`},
 	)
-	fx.runPart(t, "SW493", rows, []scaleP21SW491Control{
+	fx.runPart(t, "SW493", rows, []harnessControl{
 		{"delete-view-workspace/admin/session", true},
 		{"delete-view-workspace/member-private-outsider/session", false},
 		{"share-view-project-public/member-private-outsider/session", true},
@@ -128,12 +128,12 @@ func scaleP21SW493Table(t *testing.T, part, parts int) {
 	}, part, parts)
 }
 
-// The SW493 table runs in 2 top-level tests (every other row each) so the
+// The view dashboard authorization table runs in 2 top-level tests (every other row each) so the
 // CI shards spread it: on PostgreSQL the whole table took 14 minutes.
-func TestScaleP21SW493ViewDashboardAuthorizationDifferential(t *testing.T) {
-	scaleP21SW493Table(t, 0, 2)
+func TestViewDashboardAuthorizationDifferential(t *testing.T) {
+	viewDashboardAuthorizationTable(t, 0, 2)
 }
 
-func TestScaleP21SW493ViewDashboardAuthorizationDifferentialPart2(t *testing.T) {
-	scaleP21SW493Table(t, 1, 2)
+func TestViewDashboardAuthorizationDifferentialPart2(t *testing.T) {
+	viewDashboardAuthorizationTable(t, 1, 2)
 }

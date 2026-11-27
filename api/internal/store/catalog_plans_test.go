@@ -11,16 +11,16 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP05CatalogExplainIndexes(t *testing.T) {
-	s, workspace := scaleP05Database(t)
-	scaleP05CatalogExplainIndexes(t, s, workspace, false)
+func TestScaleCatalogExplainIndexesCatalogPlans(t *testing.T) {
+	s, workspace := catalogScaleDatabase(t)
+	scaleCatalogExplainIndexes(t, s, workspace, false)
 }
 
-func scaleP05CatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace string, journal bool) {
+func scaleCatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace string, journal bool) {
 	t.Helper()
 	previous := 0
 	for _, count := range []int{23210, 232100} {
-		scaleP05SeedPlanCatalog(t, s, workspace, previous, count)
+		scaleSeedPlanCatalog(t, s, workspace, previous, count)
 		previous = count
 		for _, table := range []string{"metadata_catalog", "metadata_catalog_relations"} {
 			statement := "ANALYZE " + table
@@ -64,7 +64,7 @@ func scaleP05CatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace strin
 							if order == "collection" && archived != "all" && s.dialect != "mysql" {
 								index = "metadata_catalog_archived_idx"
 							}
-							scaleP05AssertPlan(t, s, statement, args, index)
+							scaleAssertPlan(t, s, statement, args, index)
 						})
 					}
 				}
@@ -84,11 +84,11 @@ func scaleP05CatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace strin
 					if err := s.db.QueryRowContext(t.Context(), statement, args...).Scan(&actual); err != nil || actual != want {
 						t.Fatalf("archive window fixture: archived=%d rows=%d want=%d err=%v", archived, actual, want, err)
 					}
-					scaleP05AssertPlan(t, s, statement, args, "metadata_catalog_archived_idx")
+					scaleAssertPlan(t, s, statement, args, "metadata_catalog_archived_idx")
 				})
 			}
 			t.Run("team-relation", func(t *testing.T) {
-				scaleP05AssertPlan(t, s, `SELECT record_key FROM metadata_catalog_relations WHERE workspace_key=? AND field='projects' AND relation='teamIds' AND value_hash=?`, []any{workspace, metadataFingerprint([]byte("team-3"))}, "metadata_catalog_relation_idx")
+				scaleAssertPlan(t, s, `SELECT record_key FROM metadata_catalog_relations WHERE workspace_key=? AND field='projects' AND relation='teamIds' AND value_hash=?`, []any{workspace, metadataFingerprint([]byte("team-3"))}, "metadata_catalog_relation_idx")
 			})
 		})
 	}
@@ -96,7 +96,7 @@ func scaleP05CatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace strin
 
 // Populate only summaries: this checks planner choices at the actual catalog
 // sizes without generating gigabytes of unrelated canonical record bodies.
-func scaleP05SeedPlanCatalog(t *testing.T, s *SQLiteStore, workspace string, first, end int) {
+func scaleSeedPlanCatalog(t *testing.T, s *SQLiteStore, workspace string, first, end int) {
 	t.Helper()
 	const batchSize = 128
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -140,7 +140,7 @@ func scaleP05SeedPlanCatalog(t *testing.T, s *SQLiteStore, workspace string, fir
 	}
 }
 
-func scaleP05AssertPlan(t *testing.T, s *SQLiteStore, statement string, args []any, index string) {
+func scaleAssertPlan(t *testing.T, s *SQLiteStore, statement string, args []any, index string) {
 	t.Helper()
 	if s.dialect == "sqlite" {
 		rows, err := s.db.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+statement, args...)
@@ -211,14 +211,14 @@ func scaleP05AssertPlan(t *testing.T, s *SQLiteStore, statement string, args []a
 	inspect(plan)
 	if !usedIndex || sorted || canonical {
 		if trace {
-			scaleP05LogMySQLIndexChoice(t, s)
+			scaleLogMySQLIndexChoice(t, s)
 		}
 		t.Fatalf("index=%s used=%t sorted=%t canonical=%t plan=%s", index, usedIndex, sorted, canonical, raw)
 	}
 	t.Log(string(raw))
 }
 
-func scaleP05LogMySQLIndexChoice(t *testing.T, s *SQLiteStore) {
+func scaleLogMySQLIndexChoice(t *testing.T, s *SQLiteStore) {
 	t.Helper()
 	var trace []byte
 	if err := s.db.QueryRowContext(t.Context(), `SELECT TRACE FROM information_schema.OPTIMIZER_TRACE`).Scan(&trace); err != nil {

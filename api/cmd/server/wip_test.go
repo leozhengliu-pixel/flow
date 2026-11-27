@@ -15,22 +15,22 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW1Error(err error) string {
+func wipError(err error) string {
 	if err == nil {
 		return ""
 	}
 	return err.Error()
 }
 
-func TestScaleP21SW1SelectedConnectorFailuresDifferential(t *testing.T) {
+func TestSelectedConnectorFailuresDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	var calls atomic.Int32
 	var failing atomic.Bool
 	upstream := fakeRuntimeConnector(t, &calls, &failing)
 	broken := newCountingMCP(t, "broken", countingMCPMode{status: http.StatusServiceUnavailable})
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Settings["applicationPolicies"] = []applicationPolicy{
@@ -104,10 +104,10 @@ func TestScaleP21SW1SelectedConnectorFailuresDifferential(t *testing.T) {
 					}
 					tools, discoveryErr := s.discoverAgentRunConnectors(t.Context(), grant)
 					again, againErr := s.discoverAgentRunConnectors(t.Context(), grant)
-					if !reflect.DeepEqual(tools, again) || scaleP21SW1Error(discoveryErr) != scaleP21SW1Error(againErr) {
+					if !reflect.DeepEqual(tools, again) || wipError(discoveryErr) != wipError(againErr) {
 						t.Fatal("repeated discovery changed its result")
 					}
-					got := result{tools: tools, err: scaleP21SW1Error(discoveryErr), notices: s.agentRunNotices(t.Context(), workerID)}
+					got := result{tools: tools, err: wipError(discoveryErr), notices: s.agentRunNotices(t.Context(), workerID)}
 					got.run, err = repo.LoopRun(t.Context(), workspace, runID)
 					if err != nil {
 						t.Fatal(err)
@@ -151,11 +151,11 @@ func TestScaleP21SW1SelectedConnectorFailuresDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW1LoopReplyAndTimeoutDifferential(t *testing.T) {
+func TestLoopReplyAndTimeoutDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		loopID, runID, replyID, workerID := idgen.New("sw1-loop-"), idgen.New("sw1-run-"), idgen.New("sw1-reply-"), idgen.New("sw1-worker-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {

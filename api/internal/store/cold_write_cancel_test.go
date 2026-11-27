@@ -9,7 +9,7 @@ import (
 // A COLD legacy write whose request was cancelled while the facade refreshed
 // reports the cancellation, not "workspace not found".
 func TestColdLegacyWriteCancelledRefreshKeepsContextError(t *testing.T) {
-	_, view, workspace := scaleP21ColdWriteFixture(t)
+	_, view, workspace := scaleColdWriteFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	err := view.coldLegacyWrite(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
@@ -39,7 +39,7 @@ func TestColdLegacyWriteCancelledRefreshKeepsContextError(t *testing.T) {
 }
 
 func TestColdLegacyWriteKeepsFacadeRefreshFailure(t *testing.T) {
-	_, view, workspace := scaleP21ColdWriteFixture(t)
+	_, view, workspace := scaleColdWriteFixture(t)
 	err := view.coldLegacyWrite(t.Context(), workspace, func(_ context.Context, facade *SQLiteStore) error {
 		residency := view.metadataResidency
 		residency.mu.Lock()

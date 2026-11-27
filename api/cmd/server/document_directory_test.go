@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21DocumentDirectoryHTTPTable(t *testing.T) {
+func TestScaleDocumentDirectoryHTTPTable(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("p21-directory-http-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.directory_http", "", nil, func(data *domain.Bootstrap) error {
 			private, child := "", ""
@@ -106,12 +106,12 @@ func TestScaleP21DocumentDirectoryHTTPTable(t *testing.T) {
 	}
 }
 
-func TestScaleP21DocumentDirectoryEncodingLifetime(t *testing.T) {
+func TestScaleDocumentDirectoryEncodingLifetime(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := repo.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.directory_encoder", "", nil, func(data *domain.Bootstrap) error {
 			data.Documents = []domain.Document{{ID: idgen.New("p21-directory-encoder-"), Title: "Owned", Content: strings.Repeat("full body ", 10000), Creator: data.Viewer, TeamIDs: []string{f.public}}}
 			return nil
@@ -130,7 +130,7 @@ func TestScaleP21DocumentDirectoryEncodingLifetime(t *testing.T) {
 					ctx, cancel := context.WithCancel(r.Context())
 					defer cancel()
 					r = r.WithContext(ctx)
-					w := &scaleP21ResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
+					w := &scaleResourceRequestWriter{ResponseRecorder: httptest.NewRecorder(), entered: make(chan struct{}), resume: make(chan struct{})}
 					if exit == "canceled" {
 						w.err = ctx.Err
 					}
@@ -174,13 +174,13 @@ func TestScaleP21DocumentDirectoryEncodingLifetime(t *testing.T) {
 	}
 }
 
-func TestScaleP21DocumentDirectoryUnknownDevelopmentWorkspace(t *testing.T) {
+func TestScaleDocumentDirectoryUnknownDevelopmentWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		r := f.literalRequest(f.data.Viewer, nil, nil)
 		r.Method, r.URL.Path = http.MethodGet, "/api/documents"
 		r.Header.Set("X-Workspace-Key", idgen.New("p21-directory-unknown-"))

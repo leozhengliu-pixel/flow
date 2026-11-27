@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW105FirstGrant(document domain.Document, userID string) (domain.DocumentPermission, bool) {
+func firstGrant(document domain.Document, userID string) (domain.DocumentPermission, bool) {
 	for _, permission := range document.Permissions {
 		if permission.SubjectType == "user" && permission.SubjectID == userID {
 			return permission, true
@@ -21,7 +21,7 @@ func scaleP21SW105FirstGrant(document domain.Document, userID string) (domain.Do
 	return domain.DocumentPermission{}, false
 }
 
-func TestScaleP21SW105PresenceDocumentNativeValue(t *testing.T) {
+func TestPresenceDocumentNativeValue(t *testing.T) {
 	now := time.Now()
 	large := strings.Repeat("Selected native document body. ", 20000)
 	data := domain.Bootstrap{Documents: []domain.Document{
@@ -45,7 +45,7 @@ func TestScaleP21SW105PresenceDocumentNativeValue(t *testing.T) {
 		{ID: "empty", SlugID: "empty-permissions", Permissions: []domain.DocumentPermission{}},
 	}}
 	literal := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": data}, lastWorkspaceKey: "physical"}
-	view := scaleP21HotLogoStore(t, literal.workspaces)
+	view := scaleHotLogoStore(t, literal.workspaces)
 	view.lastWorkspaceKey = "physical"
 	for _, ref := range []string{"first", "collision", "later-exact-id", "duplicate", "", "empty", "old", "missing"} {
 		expected, matched := literal.DocumentByID("", ref)
@@ -55,9 +55,9 @@ func TestScaleP21SW105PresenceDocumentNativeValue(t *testing.T) {
 		if err != nil || !found || read.Found != matched {
 			t.Fatal(ref, found, err)
 		}
-		header := scaleP21SW64PresenceHeader(expected)
+		header := presenceHeader(expected)
 		for _, userID := range []string{"member", "", "user\x00id", "MEMBER", " member ", "missing"} {
-			want, wantFound := scaleP21SW105FirstGrant(expected, userID)
+			want, wantFound := firstGrant(expected, userID)
 			got, gotFound, err := read.FirstUserPermission(ctx, userID)
 			if err != nil || gotFound != wantFound || !reflect.DeepEqual(got, want) {
 				t.Fatal("first full native user grant differs", ref, userID, gotFound, wantFound, err)
@@ -96,7 +96,7 @@ func TestScaleP21SW105PresenceDocumentNativeValue(t *testing.T) {
 			defer read.Close()
 			document, err := read.LoadDocument(t.Context())
 			grant, matched, grantErr := read.FirstUserPermission(t.Context(), "member")
-			wantGrant, _ := scaleP21SW105FirstGrant(data.Documents[0], "member")
+			wantGrant, _ := firstGrant(data.Documents[0], "member")
 			if err != nil || grantErr != nil || !matched || !reflect.DeepEqual(document, data.Documents[0]) || !reflect.DeepEqual(grant, wantGrant) {
 				t.Error("concurrent independent native handle differs", err, grantErr)
 			}
@@ -108,12 +108,12 @@ func TestScaleP21SW105PresenceDocumentNativeValue(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW105PresenceDocumentPinnedGeneration(t *testing.T) {
+func TestPresenceDocumentPinnedGeneration(t *testing.T) {
 	before := domain.Bootstrap{Documents: []domain.Document{{ID: "target", SlugID: "current", Content: "before",
 		Permissions: []domain.DocumentPermission{{ID: "before", SubjectType: "user", SubjectID: "member", Role: "viewer"}}}}}
 	after := domain.Bootstrap{Documents: []domain.Document{{ID: "target", SlugID: "current", Content: "after",
 		Permissions: []domain.DocumentPermission{{ID: "after", SubjectType: "user", SubjectID: "member", Role: "owner"}}}}}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": before})
 	old, _, err := view.BeginPresenceDocumentRead(t.Context(), "physical", "target")
 	if err != nil {
 		t.Fatal(err)
@@ -160,11 +160,11 @@ func TestScaleP21SW105PresenceDocumentPinnedGeneration(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW105PresenceDocumentWarmReloadBodyBound(t *testing.T) {
+func TestPresenceDocumentWarmReloadBodyBoundPresenceDocumentValue(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -207,7 +207,7 @@ func TestScaleP21SW105PresenceDocumentWarmReloadBodyBound(t *testing.T) {
 				}
 				got, err := read.LoadDocument(ctx)
 				grant, grantFound, grantErr := read.FirstUserPermission(ctx, f.data.Viewer.ID)
-				wantGrant, wantGrantFound := scaleP21SW105FirstGrant(want, f.data.Viewer.ID)
+				wantGrant, wantGrantFound := firstGrant(want, f.data.Viewer.ID)
 				if err != nil || grantErr != nil || !reflect.DeepEqual(got, want) ||
 					grantFound != wantGrantFound || !reflect.DeepEqual(grant, wantGrant) {
 					t.Fatal("warm/reloaded full native document or grant differs", size, reload, ref, err, grantErr)
@@ -231,8 +231,8 @@ func TestScaleP21SW105PresenceDocumentWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW105PresenceDocumentFailuresAndRelease(t *testing.T) {
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {Documents: []domain.Document{
+func TestPresenceDocumentFailuresAndRelease(t *testing.T) {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {Documents: []domain.Document{
 		{ID: "target", Content: strings.Repeat("Legal selected body. ", 100000),
 			Permissions: []domain.DocumentPermission{{ID: "grant", SubjectType: "user", SubjectID: "member", Role: "editor"}}},
 	}}})

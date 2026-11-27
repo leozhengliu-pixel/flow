@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-// SW553: a COLD facade shares the live store's agent-run wakers and API key
+// A COLD facade shares the live store's agent-run wakers and API key
 // use queue. A run a COLD legacy write enqueues (or cancels) wakes the claims
 // waiting on the live store, as the same write wakes them flag off; an API key
 // use recorded through a facade goes through the live store's throttle and
 // worker, which a facade alone would not start or shut down.
-func TestScaleP21SW553FacadeSharesWakersAndAPIKeyUses(t *testing.T) {
-	fixture, view, workspace := scaleP21ColdReadFixture(t)
+func TestFacadeSharesWakersAndAPIKeyUses(t *testing.T) {
+	fixture, view, workspace := scaleColdReadFixture(t)
 	view.metadataResidency.work.limit = metadataWorkBytes()
 	runs, cancels := view.AgentRunWake(), view.AgentRunCancelWake()
-	if err := view.WithColdMetadataRead(t.Context(), scaleP21SW191Read, func(ctx context.Context, facade *SQLiteStore) error {
+	if err := view.WithColdMetadataRead(t.Context(), coldDispatchRead, func(ctx context.Context, facade *SQLiteStore) error {
 		if facade == view || facade.coldParent != view {
 			t.Fatal("SW553 no COLD facade")
 		}

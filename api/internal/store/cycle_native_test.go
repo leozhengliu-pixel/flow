@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW194CycleCloneNativeOwnership(t *testing.T) {
+func TestCycleCloneNativeOwnership(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	viewer := domain.User{ID: "sw194-viewer", AppScopes: []string{"read"}, Via: &domain.ActorBot{ID: "bot", Name: "Original"}}
 	data := domain.Bootstrap{
@@ -56,7 +56,7 @@ func TestScaleP21SW194CycleCloneNativeOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW194CycleCloneSharesImmutableBodies(t *testing.T) {
+func TestCycleCloneSharesImmutableBodies(t *testing.T) {
 	var prior uint64
 	for _, size := range []int{32, 5 << 20} {
 		body := strings.Repeat("x", size)
@@ -83,7 +83,7 @@ func TestScaleP21SW194CycleCloneSharesImmutableBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW194CycleHeadersIgnoreBodies(t *testing.T) {
+func TestCycleHeadersIgnoreBodies(t *testing.T) {
 	var prior int
 	for _, size := range []int{32, 5 << 20} {
 		at := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
@@ -126,7 +126,7 @@ func TestScaleP21SW194CycleHeadersIgnoreBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW194CycleCloneRefusal(t *testing.T) {
+func TestCycleCloneRefusal(t *testing.T) {
 	view := &SQLiteStore{metadataResidency: newMetadataResidency()}
 	data := domain.Bootstrap{Issues: []domain.Issue{{ID: "issue"}}}
 	view.metadataResidency.work.limit = 1

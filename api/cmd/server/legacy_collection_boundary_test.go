@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW211Node(t *testing.T, node ast.Node) string {
+func legacyCollectionBoundaryNode(t *testing.T, node ast.Node) string {
 	t.Helper()
 	var text bytes.Buffer
 	if err := format.Node(&text, token.NewFileSet(), node); err != nil {
@@ -20,7 +20,7 @@ func scaleP21SW211Node(t *testing.T, node ast.Node) string {
 	return text.String()
 }
 
-func scaleP21SW211FunctionName(fn *ast.FuncDecl) string {
+func legacyCollectionBoundaryFunctionName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil {
 		return fn.Name.Name
 	}
@@ -34,7 +34,7 @@ func scaleP21SW211FunctionName(fn *ast.FuncDecl) string {
 	return "unknown." + fn.Name.Name
 }
 
-func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
+func TestLegacyCollectionHotBoundaries(t *testing.T) {
 	// Every account reader goes through server.accountCollections, which
 	// with bounded metadata on copies the values out of the reviewed
 	// BeginAccountCollectionRead; the literal store.AccountCollections runs
@@ -76,7 +76,7 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 				})
 				continue
 			}
-			name := scaleP21SW211FunctionName(fn)
+			name := legacyCollectionBoundaryFunctionName(fn)
 			var ancestors []ast.Node
 			ast.Inspect(fn.Body, func(node ast.Node) bool {
 				if node == nil {
@@ -98,7 +98,7 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 					if name == "server.requestAccountSettings" || name == "server.accountCollections" {
 						offOnly := false
 						for _, ancestor := range ancestors {
-							if branch, ok := ancestor.(*ast.IfStmt); ok && scaleP21SW211Node(t, branch.Cond) == "!s.store.BoundedMetadataEnabled()" &&
+							if branch, ok := ancestor.(*ast.IfStmt); ok && legacyCollectionBoundaryNode(t, branch.Cond) == "!s.store.BoundedMetadataEnabled()" &&
 								branch.Body.Pos() <= call.Pos() && call.End() <= branch.Body.End() {
 								offOnly = true
 							}
@@ -121,7 +121,7 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 				trashOnly := false
 				for _, ancestor := range ancestors {
 					branch, ok := ancestor.(*ast.IfStmt)
-					if ok && scaleP21SW211Node(t, branch.Cond) == `ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/")` &&
+					if ok && legacyCollectionBoundaryNode(t, branch.Cond) == `ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/")` &&
 						branch.Body.Pos() <= call.Pos() && call.End() <= branch.Body.End() {
 						trashOnly = true
 					}
@@ -144,17 +144,17 @@ func TestScaleP21SW211LegacyCollectionHotBoundaries(t *testing.T) {
 			if !ok || fn.Body == nil {
 				continue
 			}
-			boundedCall, hot := hotAccount[scaleP21SW211FunctionName(fn)]
+			boundedCall, hot := hotAccount[legacyCollectionBoundaryFunctionName(fn)]
 			if !hot {
 				continue
 			}
-			counts["hot/"+scaleP21SW211FunctionName(fn)]++
+			counts["hot/"+legacyCollectionBoundaryFunctionName(fn)]++
 			first, ok := fn.Body.List[0].(*ast.IfStmt)
-			if !ok || scaleP21SW211Node(t, first.Cond) != "s.store.BoundedMetadataEnabled()" ||
-				len(first.Body.List) != 2 || scaleP21SW211Node(t, first.Body.List[0]) != boundedCall {
-				t.Errorf("%s lost its first bounded owned dispatch", scaleP21SW211FunctionName(fn))
+			if !ok || legacyCollectionBoundaryNode(t, first.Cond) != "s.store.BoundedMetadataEnabled()" ||
+				len(first.Body.List) != 2 || legacyCollectionBoundaryNode(t, first.Body.List[0]) != boundedCall {
+				t.Errorf("%s lost its first bounded owned dispatch", legacyCollectionBoundaryFunctionName(fn))
 			} else if _, returns := first.Body.List[1].(*ast.ReturnStmt); !returns {
-				t.Errorf("%s bounded dispatch falls through to legacy account collections", scaleP21SW211FunctionName(fn))
+				t.Errorf("%s bounded dispatch falls through to legacy account collections", legacyCollectionBoundaryFunctionName(fn))
 			}
 		}
 	}

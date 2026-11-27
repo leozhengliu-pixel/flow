@@ -411,9 +411,9 @@ jobs:
             done
             for dialect in postgres mysql; do
               total=$(jq -r --arg package "$package" '.dialect[$package]' "$shards")
-              echo "::group::$package TestScaleP, $dialect, $total shards"
-              GO_TEST_SHARD_FILTER='^TestScaleP' GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh check "$package" "$total"
-              GO_TEST_SHARD_FILTER='^TestScaleP' GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh plan "$package" "$total"
+              echo "::group::$package scale tests, $dialect, $total shards"
+              GO_TEST_SHARD_SELECTION=dialect GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh check "$package" "$total"
+              GO_TEST_SHARD_SELECTION=dialect GO_TEST_TIMINGS=../scripts/ci/go-test-timings-dialect.json SHARD_SCOPE=$dialect ../scripts/ci/go-test-shard.sh plan "$package" "$total"
               echo "::endgroup::"
             done
           done
@@ -678,7 +678,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
-          path: scale-p09-write-baseline
+          path: mysql-import-write-baseline
 
       - name: Create isolated binlog regression databases
         run: >-
@@ -688,7 +688,7 @@ jobs:
           GRANT REPLICATION CLIENT ON *.* TO 'flow'@'%';"
 
       - name: Measure main MySQL import writes
-        working-directory: scale-p09-write-baseline/api
+        working-directory: mysql-import-write-baseline/api
         env:
           FLOW_BOUNDED_METADATA: 'off'
           FLOW_RECORD_HYDRATION: 'off'
@@ -696,7 +696,7 @@ jobs:
           FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_prior?parseTime=true
         run: |
           git rev-parse HEAD
-          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/scale-p09-main-binlog.log
+          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/mysql-import-main-binlog.log
           test "${PIPESTATUS[0]}" -eq 0
 
       - name: Verify bounded MySQL import writes
@@ -708,13 +708,13 @@ jobs:
           FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_audit?parseTime=true
           FLOW_ASSERT_WRITE_BOUNDS: '1'
         run: |
-          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/scale-p09-branch-binlog.log
+          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/mysql-import-branch-binlog.log
           test "${PIPESTATUS[0]}" -eq 0
 
       - name: Compare MySQL writes with main
         run: |
-          baseline_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/scale-p09-main-binlog.log)
-          branch_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/scale-p09-branch-binlog.log)
+          baseline_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/mysql-import-main-binlog.log)
+          branch_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/mysql-import-branch-binlog.log)
           [[ "$baseline_bytes" =~ ^[0-9]+$ && "$branch_bytes" =~ ^[0-9]+$ ]]
           printf 'binlog baseline_bytes=%s branch_bytes=%s allowance_bytes=65536\n' "$baseline_bytes" "$branch_bytes"
           test "$baseline_bytes" -gt 0
@@ -764,9 +764,8 @@ jobs:
           FLOW_TEST_S3_SECRET_KEY: flow-development-secret
         run: go test -tags=integration ./internal/objectstore -run TestExternalS3RoundTrip
 
-  # The scalability work keeps an old-path/new-path differential test per package (TestScaleP*); they run on both
-  # external dialects here, since a SQLite-only pass does not prove the SQL paths. The TestScaleP tests of each
-  # package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the per-test seconds measured on
+  # Run the dialect suite from scripts/ci/go-test-selections.tsv on both external database engines.
+  # Tests in each package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the per-test seconds measured on
   # these jobs, scripts/ci/go-test-timings-dialect.json: the SQLite timings leave most of the long differentials
   # untimed and under-weight the SQL ones, so shards ran past the 25-minute round), each shard on its
   # own empty database (store tests leave rows the server tests would open), without the race detector. The
@@ -829,7 +828,8 @@ jobs:
         run: |
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e \
             "CREATE DATABASE flow_capture; GRANT ALL ON flow_capture.* TO 'flow'@'%';"
-          go test ./internal/store -run '^(TestRecordCapture|TestScaleP09)' -count=1 -timeout 20m
+          pattern=$(../scripts/ci/go-test-shard.sh selection mysql-capture ./internal/store)
+          go test ./internal/store -run "$pattern" -count=1 -timeout 20m
 
       - name: Permit triggers in the isolated MySQL service
         if: matrix.dialect == 'mysql'
@@ -837,7 +837,7 @@ jobs:
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
           "SET GLOBAL log_bin_trust_function_creators=1;"
 
-      # Differentials that start a server on an empty database (SW602) create
+      # Differentials that start a server on an empty database create
       # and drop their own scratch databases beside the shared one.
       - name: Permit scratch databases in the isolated MySQL service
         if: matrix.dialect == 'mysql'
@@ -859,7 +859,7 @@ jobs:
       - name: Scale differentials
         working-directory: api
         env:
-          GO_TEST_SHARD_FILTER: '^TestScaleP'
+          GO_TEST_SHARD_SELECTION: dialect
           GO_TEST_TIMINGS: ../scripts/ci/go-test-timings-dialect.json
           SHARD_SCOPE: ${{ matrix.dialect }}
           FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
@@ -875,7 +875,7 @@ jobs:
         run: |
           set -euo pipefail
           ../scripts/ci/go-test-shard.sh list "$PACKAGE" "$SHARD" "$SHARDS" > "$RUNNER_TEMP/names"
-          echo "Shard $SHARD/$SHARDS of the TestScaleP tests of $PACKAGE: $(wc -l < "$RUNNER_TEMP/names") tests"
+          echo "Shard $SHARD/$SHARDS of the scale tests of $PACKAGE: $(wc -l < "$RUNNER_TEMP/names") tests"
           ../scripts/ci/go-test-resume.sh "$PACKAGE" "$RUNNER_TEMP/names" 60m
 
   # The tests of scripts/ci/known-failing-tests.txt, each in every scope it is listed

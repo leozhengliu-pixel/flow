@@ -44,7 +44,7 @@ func TestApplicationClientCredentialsSeparateSubjectAndIssuer(t *testing.T) {
 	if key.SubjectID() == data.Viewer.ID || key.IssuedByUserID != data.Viewer.ID || key.Actor != "app" {
 		t.Fatalf("invalid actor: %+v", key)
 	}
-	auth, err := repo.AuthenticateAPIKeyRecord(scaleP21ResourceOutputContext(t), data.Workspace.URLKey, key.SecretHash, nil)
+	auth, err := repo.AuthenticateAPIKeyRecord(scaleResourceOutputContext(t), data.Workspace.URLKey, key.SecretHash, nil)
 	if err != nil || !auth.User.App || auth.Role != "app" || auth.Key.TeamRestriction != "selected" {
 		t.Fatalf("application principal was not scoped: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestApplicationClientCredentialsSeparateSubjectAndIssuer(t *testing.T) {
 func TestApplicationCredentialsFollowLiveAccessAndRemainRevokedAfterResume(t *testing.T) {
 	repo, data, app := applicationCredentialFixture(t)
 	key := issueFixtureApplicationCredential(t, repo, data, app, "first")
-	ctx := scaleP21ResourceOutputContext(t)
+	ctx := scaleResourceOutputContext(t)
 	installation, err := repo.ApplicationByUser(ctx, key.SubjectID())
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestApplicationCredentialLimitsAndRotation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AuthenticateAPIKeyRecord(scaleP21ResourceOutputContext(t), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
+	if _, err := repo.AuthenticateAPIKeyRecord(scaleResourceOutputContext(t), "", key.SecretHash, nil); !errors.Is(err, ErrAuthForbidden) {
 		t.Fatal("secret rotation did not invalidate machine token", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestApplicationCredentialIssuanceIsAtomic(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected database failure")
 	}
-	items, err := repo.ListApplications(scaleP21ResourceOutputContext(t), data.Workspace.URLKey)
+	items, err := repo.ListApplications(scaleResourceOutputContext(t), data.Workspace.URLKey)
 	if err != nil || len(items) != 0 {
 		t.Fatal("failed transaction left an installed principal", err)
 	}

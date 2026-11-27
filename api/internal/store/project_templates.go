@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW16ProjectTemplateMaxWork = 128 << 20
+const projectTemplateMaxWork = 128 << 20
 
 // ProjectTemplatesRead owns a wire-only installed template snapshot and its
 // cloning/encoding allowance. Keep the handle through the complete response.
@@ -23,7 +23,7 @@ type ProjectTemplatesRead struct {
 	once      sync.Once
 }
 
-type scaleP21SW16TemplateValidationHeader struct {
+type templateValidationHeader struct {
 	id, resource, stamp string
 	order, size         int64
 }
@@ -55,7 +55,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			selected = s.lastWorkspaceKey
 		}
 		source, found := s.workspaces[selected]
-		cost, err := scaleP21SW16ProjectTemplateSourceCost(source)
+		cost, err := projectTemplateSourceCost(source)
 		// Do not pin the borrowed complete graph after leaving its lock.
 		source = domain.Bootstrap{}
 		selected = ""
@@ -73,7 +73,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			selected = s.lastWorkspaceKey
 		}
 		source, found = s.workspaces[selected]
-		current, err := scaleP21SW16ProjectTemplateSourceCost(source)
+		current, err := projectTemplateSourceCost(source)
 		if !found || err != nil || current > cost {
 			source = domain.Bootstrap{}
 			selected = ""
@@ -84,7 +84,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			}
 			continue
 		}
-		value := scaleP21SW16CloneTemplateValue(reflect.ValueOf(source.ProjectTemplates))
+		value := cloneTemplateValue(reflect.ValueOf(source.ProjectTemplates))
 		templates := value.Interface().([]domain.ProjectTemplate)
 		logical := strings.Clone(source.Workspace.URLKey)
 		issues := source.Issues == nil
@@ -112,7 +112,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 		// Preserve its workspace-not-found result on their hydration errors,
 		// while retaining at most one complete typed row at a time.
 		if issues {
-			err = s.scaleP21SW16ValidateTemplateBootstrapRows(ctx, logical, "", func() any { return new(domain.Issue) })
+			err = s.validateTemplateBootstrapRows(ctx, logical, "", func() any { return new(domain.Issue) })
 		}
 		for _, kind := range kinds {
 			if err != nil {
@@ -131,7 +131,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			case "delivery":
 				target = func() any { return new(domain.NotificationDelivery) }
 			}
-			err = s.scaleP21SW16ValidateTemplateBootstrapRows(ctx, logical, kind, target)
+			err = s.validateTemplateBootstrapRows(ctx, logical, kind, target)
 		}
 		if err != nil {
 			release()
@@ -141,7 +141,7 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 			return nil, false, nil
 		}
 		if s.metadataResidency != nil {
-			// The resident image holds no project templates (SW530: bounded
+			// The resident image holds no project templates (bounded
 			// answered null). Read the exact installed value from the
 			// workspace's installed logical source instead.
 			installed, done, found, err := s.installedProjectTemplates(ctx, workspace)
@@ -159,19 +159,19 @@ func (s *SQLiteStore) BeginProjectTemplatesRead(ctx context.Context, workspace s
 	}
 }
 
-func scaleP21SW16ProjectTemplateSourceCost(source domain.Bootstrap) (int, error) {
-	cost, err := scaleP21SW16ProjectTemplateCost(source.ProjectTemplates)
+func projectTemplateSourceCost(source domain.Bootstrap) (int, error) {
+	cost, err := projectTemplateCost(source.ProjectTemplates)
 	extra := int64(33)*int64(len(source.Workspace.URLKey)) + 4096
 	if err != nil {
 		return 0, err
 	}
-	if extra > int64(scaleP21SW16ProjectTemplateMaxWork-cost) {
+	if extra > int64(projectTemplateMaxWork-cost) {
 		return 0, ErrMetadataWorkBudget
 	}
 	return cost + int(extra), nil
 }
 
-func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRows(ctx context.Context, workspace, kind string, target func() any) error {
+func (s *SQLiteStore) validateTemplateBootstrapRows(ctx context.Context, workspace, kind string, target func() any) error {
 	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, 128<<10)
 	if err != nil {
 		return err
@@ -182,7 +182,7 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRows(ctx context.Cont
 		return err
 	}
 	defer tx.Rollback()
-	var cursor *scaleP21SW16TemplateValidationHeader
+	var cursor *templateValidationHeader
 	var releasePrevious func()
 	defer func() {
 		if releasePrevious != nil {
@@ -194,7 +194,7 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRows(ctx context.Cont
 		length = "LENGTH(CAST(data AS BLOB))"
 	}
 	for {
-		headers, releaseHeaders, err := s.scaleP21SW16TemplateValidationHeaders(ctx, tx, workspace, kind, cursor, length)
+		headers, releaseHeaders, err := s.templateValidationHeaders(ctx, tx, workspace, kind, cursor, length)
 		if err != nil {
 			return err
 		}
@@ -211,7 +211,7 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRows(ctx context.Cont
 				where += " AND kind=? AND " + s.metadataRecordKeyEquals("resource_id", "?")
 				args = append(args, kind, header.resource)
 			}
-			if err := s.scaleP21SW16ValidateTemplateBootstrapRow(ctx, tx, " FROM "+table+" WHERE "+where, length, args, header.size, target); err != nil {
+			if err := s.validateTemplateBootstrapRow(ctx, tx, " FROM "+table+" WHERE "+where, length, args, header.size, target); err != nil {
 				return err
 			}
 		}
@@ -222,10 +222,10 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRows(ctx context.Cont
 	}
 }
 
-func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context, tx *sqlTx, workspace, kind string, cursor *scaleP21SW16TemplateValidationHeader, length string) ([]scaleP21SW16TemplateValidationHeader, func(), error) {
+func (s *SQLiteStore) templateValidationHeaders(ctx context.Context, tx *sqlTx, workspace, kind string, cursor *templateValidationHeader, length string) ([]templateValidationHeader, func(), error) {
 	table, where, order := "issue_records", "workspace_key=?", "collection_order,id"
 	columns := "id,collection_order," + length
-	keyBytes := s.scaleP21SW16AttachmentBytes("id")
+	keyBytes := s.attachmentBytes("id")
 	args := []any{workspace}
 	if kind == "" && cursor != nil {
 		where += " AND (collection_order>? OR (collection_order=? AND id>?))"
@@ -234,7 +234,7 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 	if kind != "" {
 		table, where, order = "workspace_content_records", "workspace_key=? AND kind=?", "created_at,id,resource_id"
 		columns = "id,resource_id,created_at," + length
-		keyBytes += "+" + s.scaleP21SW16AttachmentBytes("resource_id") + "+" + s.scaleP21SW16AttachmentBytes("created_at")
+		keyBytes += "+" + s.attachmentBytes("resource_id") + "+" + s.attachmentBytes("created_at")
 		args = append(args, kind)
 		if cursor != nil {
 			where += " AND (created_at>? OR (created_at=? AND id>?) OR (created_at=? AND id=? AND resource_id>?))"
@@ -262,9 +262,9 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 		release()
 		return nil, nil, err
 	}
-	headers := make([]scaleP21SW16TemplateValidationHeader, 0, int(count))
+	headers := make([]templateValidationHeader, 0, int(count))
 	for rows.Next() {
-		var header scaleP21SW16TemplateValidationHeader
+		var header templateValidationHeader
 		var err error
 		if kind == "" {
 			err = rows.Scan(&header.id, &header.order, &header.size)
@@ -288,7 +288,7 @@ func (s *SQLiteStore) scaleP21SW16TemplateValidationHeaders(ctx context.Context,
 	return headers, release, nil
 }
 
-func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRow(ctx context.Context, tx *sqlTx, source, length string, args []any, size int64, target func() any) error {
+func (s *SQLiteStore) validateTemplateBootstrapRow(ctx context.Context, tx *sqlTx, source, length string, args []any, size int64, target func() any) error {
 	if size < 0 || size > (int64(metadataWorkBytes())-(64<<10))/3 {
 		return ErrMetadataWorkBudget
 	}
@@ -318,14 +318,14 @@ func (s *SQLiteStore) scaleP21SW16ValidateTemplateBootstrapRow(ctx context.Conte
 	return json.Unmarshal(raw, target())
 }
 
-func scaleP21SW16ProjectTemplateCost(templates []domain.ProjectTemplate) (int, error) {
-	remaining := scaleP21SW16ProjectTemplateMaxWork - 128<<10
+func projectTemplateCost(templates []domain.ProjectTemplate) (int, error) {
+	remaining := projectTemplateMaxWork - 128<<10
 	nodes := 0
-	err := scaleP21SW16TemplateValueCost(reflect.ValueOf(templates), 0, &remaining, &nodes)
-	return scaleP21SW16ProjectTemplateMaxWork - remaining, err
+	err := templateValueCost(reflect.ValueOf(templates), 0, &remaining, &nodes)
+	return projectTemplateMaxWork - remaining, err
 }
 
-func scaleP21SW16TemplateValueCost(value reflect.Value, depth int, remaining, nodes *int) error {
+func templateValueCost(value reflect.Value, depth int, remaining, nodes *int) error {
 	if depth > 64 || *nodes >= 1<<20 {
 		return ErrMetadataWorkBudget
 	}
@@ -358,7 +358,7 @@ func scaleP21SW16TemplateValueCost(value reflect.Value, depth int, remaining, no
 		if value.IsNil() {
 			return nil
 		}
-		return scaleP21SW16TemplateValueCost(value.Elem(), depth+1, remaining, nodes)
+		return templateValueCost(value.Elem(), depth+1, remaining, nodes)
 	case reflect.Slice, reflect.Array:
 		if value.Kind() == reflect.Slice && value.IsNil() {
 			return nil
@@ -369,7 +369,7 @@ func scaleP21SW16TemplateValueCost(value reflect.Value, depth int, remaining, no
 		}
 		*remaining -= int(storage)
 		for i := range value.Len() {
-			if err := scaleP21SW16TemplateValueCost(value.Index(i), depth+1, remaining, nodes); err != nil {
+			if err := templateValueCost(value.Index(i), depth+1, remaining, nodes); err != nil {
 				return err
 			}
 		}
@@ -383,7 +383,7 @@ func scaleP21SW16TemplateValueCost(value reflect.Value, depth int, remaining, no
 			if field.PkgPath != "" {
 				return ErrBoundedMetadataCoverage
 			}
-			if err := scaleP21SW16TemplateValueCost(value.Field(i), depth+1, remaining, nodes); err != nil {
+			if err := templateValueCost(value.Field(i), depth+1, remaining, nodes); err != nil {
 				return err
 			}
 		}
@@ -393,7 +393,7 @@ func scaleP21SW16TemplateValueCost(value reflect.Value, depth int, remaining, no
 	}
 }
 
-func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
+func cloneTemplateValue(value reflect.Value) reflect.Value {
 	if value.Type() == reflect.TypeFor[time.Time]() {
 		stamp := value.Interface().(time.Time)
 		_, offset := stamp.Zone()
@@ -407,7 +407,7 @@ func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
 			return reflect.Zero(value.Type())
 		}
 		owned := reflect.New(value.Type().Elem())
-		owned.Elem().Set(scaleP21SW16CloneTemplateValue(value.Elem()))
+		owned.Elem().Set(cloneTemplateValue(value.Elem()))
 		return owned
 	case reflect.Slice:
 		if value.IsNil() {
@@ -415,20 +415,20 @@ func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
 		}
 		owned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
 		for i := range value.Len() {
-			owned.Index(i).Set(scaleP21SW16CloneTemplateValue(value.Index(i)))
+			owned.Index(i).Set(cloneTemplateValue(value.Index(i)))
 		}
 		return owned
 	case reflect.Array:
 		owned := reflect.New(value.Type()).Elem()
 		for i := range value.Len() {
-			owned.Index(i).Set(scaleP21SW16CloneTemplateValue(value.Index(i)))
+			owned.Index(i).Set(cloneTemplateValue(value.Index(i)))
 		}
 		return owned
 	case reflect.Struct:
 		owned := reflect.New(value.Type()).Elem()
 		for i := range value.NumField() {
 			if value.Type().Field(i).Tag.Get("json") != "-" {
-				owned.Field(i).Set(scaleP21SW16CloneTemplateValue(value.Field(i)))
+				owned.Field(i).Set(cloneTemplateValue(value.Field(i)))
 			}
 		}
 		return owned
@@ -441,7 +441,7 @@ func scaleP21SW16CloneTemplateValue(value reflect.Value) reflect.Value {
 // workspace's installed logical source, charged to its own resource read;
 // release returns the charge once the response is written. The list is only
 // written as JSON, so it decodes the wire value: a timestamp whose Location
-// the source keeps only as its wire output (SW16 native time wire) answers
+// the source keeps only as its wire output (attachment, template and metadata migrations native time wire) answers
 // the same JSON as the legacy list instead of failing coverage.
 func (s *SQLiteStore) installedProjectTemplates(ctx context.Context, workspace string) (_ []domain.ProjectTemplate, release func(), found bool, err error) {
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)

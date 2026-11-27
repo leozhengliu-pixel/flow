@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW20InstalledViewerOwnershipAndAdmission(t *testing.T) {
+func TestInstalledViewerOwnershipAndAdmission(t *testing.T) {
 	stamp := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	viewer := domain.User{ID: "owner\x00", Name: "name\x00", DisplayName: "display\x00", AppScopes: []string{"read\x00"}, AppTeamIDs: []string{"team\x00"}, OutOfOfficeUntil: &stamp, Via: &domain.ActorBot{ID: "discarded-runtime"}}
 	repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Viewer: viewer, Projects: []domain.Project{{Description: strings.Repeat("unused", 100000)}}}}, lastWorkspaceKey: "workspace", metadataResidency: newMetadataResidency()}
@@ -72,10 +72,10 @@ func TestScaleP21SW20InstalledViewerOwnershipAndAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20InstalledViewerSourceLifecycle(t *testing.T) {
+func TestInstalledViewerSourceLifecycle(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	expected := f.data.Viewer
 	expected.ID += "\x00"
@@ -127,7 +127,7 @@ func TestScaleP21SW20InstalledViewerSourceLifecycle(t *testing.T) {
 	compare("actual-cold-loaded-source")
 }
 
-func TestScaleP21SW20InstalledViewerLargeAndBudget(t *testing.T) {
+func TestInstalledViewerLargeAndBudget(t *testing.T) {
 	viewer := domain.User{ID: "owner", Name: strings.Repeat("plain name ", 60000)}
 	repo := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"workspace": {Viewer: viewer}}, metadataResidency: newMetadataResidency()}
 	read, found, err := repo.BeginInstalledViewerRead(t.Context(), "workspace")
@@ -135,7 +135,7 @@ func TestScaleP21SW20InstalledViewerLargeAndBudget(t *testing.T) {
 		t.Fatal("legal large installed viewer clone failed", found, err)
 	}
 	read.Close()
-	repo.workspaces["workspace"] = domain.Bootstrap{Viewer: domain.User{Name: strings.Repeat("x", scaleP21SW20ViewerMaxWork/33+1)}}
+	repo.workspaces["workspace"] = domain.Bootstrap{Viewer: domain.User{Name: strings.Repeat("x", viewerMaxWork/33+1)}}
 	if read, found, err := repo.BeginInstalledViewerRead(t.Context(), "workspace"); read != nil || !found || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("selected viewer bypassed clone bound", found, err)
 	}

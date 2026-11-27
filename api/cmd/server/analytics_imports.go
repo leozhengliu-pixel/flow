@@ -148,7 +148,7 @@ func (s *server) listExports(w http.ResponseWriter, r *http.Request) {
 	if s.store.BoundedMetadataEnabled() {
 		workspace, owner, access, read, err := s.boundedExportJobAccess(r)
 		if err != nil {
-			scaleP21SW24ExportReadError(w, err)
+			exportReadError(w, err)
 			return
 		}
 		if read != nil {
@@ -170,13 +170,13 @@ func (s *server) listExports(w http.ResponseWriter, r *http.Request) {
 			jobs, total, err = s.store.ExportJobPage(r.Context(), workspace, owner, s.authDisabled, offset, limit)
 			if !s.authDisabled {
 				if accessErr := s.store.ValidateAccess(r.Context(), access); accessErr != nil {
-					scaleP21SW24ExportReadError(w, accessErr)
+					exportReadError(w, accessErr)
 					return
 				}
 			}
 		}
 		if err != nil {
-			scaleP21SW24ExportReadError(w, err)
+			exportReadError(w, err)
 			return
 		}
 		if offset < 0 || offset > total {
@@ -203,7 +203,7 @@ func (s *server) getExport(w http.ResponseWriter, r *http.Request) {
 	if s.store.BoundedMetadataEnabled() {
 		workspace, owner, access, read, err := s.boundedExportJobAccess(r)
 		if err != nil {
-			scaleP21SW24ExportReadError(w, err)
+			exportReadError(w, err)
 			return
 		}
 		if read != nil {
@@ -215,12 +215,12 @@ func (s *server) getExport(w http.ResponseWriter, r *http.Request) {
 			job, found, err = s.store.ExportJobRecord(r.Context(), workspace, owner, r.PathValue("id"), s.authDisabled)
 			if !s.authDisabled {
 				if accessErr := s.store.ValidateAccess(r.Context(), access); accessErr != nil {
-					scaleP21SW24ExportReadError(w, accessErr)
+					exportReadError(w, accessErr)
 					return
 				}
 			}
 			if err != nil {
-				scaleP21SW24ExportReadError(w, err)
+				exportReadError(w, err)
 				return
 			}
 			if found {

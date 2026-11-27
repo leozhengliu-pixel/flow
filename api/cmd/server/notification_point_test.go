@@ -17,13 +17,13 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW42NotificationPointDifferential(t *testing.T) {
+func TestNotificationPointDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{61}, 32)))
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -190,7 +190,7 @@ func TestScaleP21SW42NotificationPointDifferential(t *testing.T) {
 						if source == f.probe && test.held && source.MetadataWorkUsedForTesting() == 0 {
 							t.Fatal("returned card/error lost point ownership before encoding")
 						}
-						result.Card, result.Actions = scaleP21M2JSON(t, card, false), scaleP21M2JSON(t, actions, false)
+						result.Card, result.Actions = normalizePolicyJSON(t, card, false), normalizePolicyJSON(t, actions, false)
 						close()
 					case "personal-worker":
 						raw, _ := json.Marshal(chatPersonalJob{DeliveryID: deliveryID, NotificationID: notificationID, UserID: actor.ID, OpenID: identity.OpenID})
@@ -202,7 +202,7 @@ func TestScaleP21SW42NotificationPointDifferential(t *testing.T) {
 						for _, delivery := range deliveries.NotificationDeliveries {
 							if delivery.ID == deliveryID {
 								delivery.DeliveredAt = nil
-								result.Delivery = scaleP21M2JSON(t, delivery, false)
+								result.Delivery = normalizePolicyJSON(t, delivery, false)
 							}
 						}
 					case "quick":
@@ -242,7 +242,7 @@ func TestScaleP21SW42NotificationPointDifferential(t *testing.T) {
 					}
 				}
 				if test.variant != "closed-owner" && !reflect.DeepEqual(outputs[0], outputs[1]) {
-					t.Fatal("notification point differential", scaleP21M2Diff(outputs[0], outputs[1]))
+					t.Fatal("notification point differential", policyFirstDifference(outputs[0], outputs[1]))
 				}
 			})
 		}

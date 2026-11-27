@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	scaleP21SW22VisibilityWork       = 128 << 20
-	scaleP21SW22VisibilityPolicy     = 8 << 20
-	scaleP21SW22VisibilityMembers    = 8 << 20
-	scaleP21SW22VisibilityMembership = 16 << 20
-	scaleP21SW22VisibilityResult     = 16 << 20
-	scaleP21SW22VisibilityRow        = 64 << 10
-	scaleP21SW22VisibilityApp        = 512 << 10
+	visibilityWork       = 128 << 20
+	visibilityPolicy     = 8 << 20
+	visibilityMembers    = 8 << 20
+	visibilityMembership = 16 << 20
+	visibilityResult     = 16 << 20
+	visibilityRow        = 64 << 10
+	visibilityApp        = 512 << 10
 )
 
-type scaleP21SW22VisibilityMember struct {
+type visibilityMember struct {
 	id, role, status string
 }
 
@@ -54,11 +54,11 @@ func (s *SQLiteStore) BeginViewerVisibilityKeysRead(ctx context.Context, workspa
 	}
 	// The handle owns an independent lease. Borrowing a caller's live lease
 	// would let that caller release admission while Keys remains in use.
-	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, scaleP21SW22VisibilityWork)
+	ctx, release, err := s.tryAdmitAdditionalMetadataWork(ctx, visibilityWork)
 	if err != nil {
 		return nil, err
 	}
-	keys, err := s.scaleP21SW22ViewerVisibilityKeys(ctx, workspace)
+	keys, err := s.boundedViewerVisibilityKeys(ctx, workspace)
 	if err != nil {
 		release()
 		return nil, err
@@ -71,15 +71,15 @@ func (s *SQLiteStore) BeginViewerVisibilityKeysRead(ctx context.Context, workspa
 // never enter the policy graph or returned map. No credential intersects this
 // global invalidation map: its callers select the relevant principal's key.
 // BeginViewerVisibilityKeysRead owns its construction and result lease.
-func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, workspace string) (map[string]string, error) {
-	data, ok, err := s.scaleP21SW22VisibilityPolicy(workspace)
+func (s *SQLiteStore) boundedViewerVisibilityKeys(ctx context.Context, workspace string) (map[string]string, error) {
+	data, ok, err := s.visibilityPolicy(workspace)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, ErrAuthForbidden
 	}
-	members, err := s.scaleP21SW22VisibilityMemberHeaders(ctx, data.Workspace.ID)
+	members, err := s.visibilityMemberHeaders(ctx, data.Workspace.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, work
 	memberBytes := 0
 	for index := range members {
 		memberBytes += len(members[index].id) + len(members[index].role) + len(members[index].status) + 256
-		if memberBytes > scaleP21SW22VisibilityMembers {
+		if memberBytes > visibilityMembers {
 			return nil, ErrMetadataWorkBudget
 		}
 		if !strings.HasPrefix(members[index].id, "app_") {
@@ -98,12 +98,12 @@ func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, work
 		}
 		var size int
 		var raw []byte
-		length := s.scaleP21SW22VisibilityLength("data")
-		err := s.db.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM application_installations WHERE user_id=?`, scaleP21SW22VisibilityApp, members[index].id).Scan(&size, &raw)
+		length := s.visibilityLength("data")
+		err := s.db.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM application_installations WHERE user_id=?`, visibilityApp, members[index].id).Scan(&size, &raw)
 		if err != nil {
 			return nil, err
 		}
-		if size > scaleP21SW22VisibilityApp {
+		if size > visibilityApp {
 			return nil, ErrMetadataWorkBudget
 		}
 		var app domain.ApplicationInstallation
@@ -111,12 +111,12 @@ func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, work
 			return nil, err
 		}
 		memberBytes += len(app.UserID)
-		if memberBytes > scaleP21SW22VisibilityMembers {
+		if memberBytes > visibilityMembers {
 			return nil, ErrMetadataWorkBudget
 		}
 		members[index].id = app.UserID
 	}
-	byUser, err := s.scaleP21SW22VisibilityMembershipHeaders(ctx, data.Workspace.ID)
+	byUser, err := s.visibilityMembershipHeaders(ctx, data.Workspace.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, work
 			key += "|" + strings.Join(readable, ",")
 		}
 		cost := len(member.id) + len(key) + 256
-		if cost > scaleP21SW22VisibilityResult-used {
+		if cost > visibilityResult-used {
 			return nil, ErrMetadataWorkBudget
 		}
 		used += cost
@@ -153,7 +153,7 @@ func (s *SQLiteStore) scaleP21SW22ViewerVisibilityKeys(ctx context.Context, work
 	return result, nil
 }
 
-func (s *SQLiteStore) scaleP21SW22VisibilityPolicy(workspace string) (domain.Bootstrap, bool, error) {
+func (s *SQLiteStore) visibilityPolicy(workspace string) (domain.Bootstrap, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {
@@ -166,24 +166,24 @@ func (s *SQLiteStore) scaleP21SW22VisibilityPolicy(workspace string) (domain.Boo
 	used := len(source.Workspace.ID) + len(source.Workspace.URLKey) + 512
 	for _, team := range source.Teams {
 		used += 512 + 2*(len(team.ID)+len(team.Key)+len(team.ExternalSource))
-		if used > scaleP21SW22VisibilityPolicy {
+		if used > visibilityPolicy {
 			return domain.Bootstrap{}, true, ErrMetadataWorkBudget
 		}
 	}
 	for id, settings := range source.TeamSettings {
 		used += 512 + 2*(len(id)+len(settings.ParentTeamID)+len(settings.Access)+len(settings.MembershipRestriction)+len(settings.SettingsPermission)+len(settings.LabelPermission)+len(settings.MemberPermission))
-		if used > scaleP21SW22VisibilityPolicy {
+		if used > visibilityPolicy {
 			return domain.Bootstrap{}, true, ErrMetadataWorkBudget
 		}
 	}
-	if used > scaleP21SW22VisibilityPolicy {
+	if used > visibilityPolicy {
 		return domain.Bootstrap{}, true, ErrMetadataWorkBudget
 	}
 	data := resourcePolicyMetadata(source)
 	return data, true, nil
 }
 
-func (s *SQLiteStore) scaleP21SW22VisibilityMemberHeaders(ctx context.Context, workspaceID string) ([]scaleP21SW22VisibilityMember, error) {
+func (s *SQLiteStore) visibilityMemberHeaders(ctx context.Context, workspaceID string) ([]visibilityMember, error) {
 	cast := "TEXT"
 	if s.dialect == "mysql" {
 		cast = "CHAR"
@@ -192,10 +192,10 @@ func (s *SQLiteStore) scaleP21SW22VisibilityMemberHeaders(ctx context.Context, w
 	columns := []string{"u.id", "u.email", "u.name", "u.display_name", "u.avatar_url", "u.email_verified_at", "u.active", "u.deleted_at", "m.role", "m.status", "m.joined_at", "m.last_seen_at", subject}
 	sizes := slices.Clone(columns)
 	sizes[6] = "CAST(u.active AS " + cast + ")"
-	size := s.scaleP21SW22VisibilityLength(sizes...)
+	size := s.visibilityLength(sizes...)
 	selected := []string{size}
 	for _, column := range columns {
-		selected = append(selected, "CASE WHEN ("+size+")<="+strconv.Itoa(scaleP21SW22VisibilityRow)+" THEN "+column+" ELSE NULL END")
+		selected = append(selected, "CASE WHEN ("+size+")<="+strconv.Itoa(visibilityRow)+" THEN "+column+" ELSE NULL END")
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+strings.Join(selected, ",")+`,CASE WHEN `+scimManagedMemberSQL+` THEN 1 ELSE 0 END
 		FROM workspace_memberships m JOIN auth_users u ON u.id=m.user_id WHERE m.workspace_id=? ORDER BY lower(u.display_name)`, workspaceID)
@@ -203,22 +203,22 @@ func (s *SQLiteStore) scaleP21SW22VisibilityMemberHeaders(ctx context.Context, w
 		return nil, err
 	}
 	defer rows.Close()
-	var result []scaleP21SW22VisibilityMember
+	var result []visibilityMember
 	used := 0
 	for rows.Next() {
-		var member scaleP21SW22VisibilityMember
+		var member visibilityMember
 		var email, verified, deleted, lastSeen sql.NullString
 		var name, displayName, avatar, joined, subject string
 		var active, managed, size int
 		err := rows.Scan(&size, &member.id, &email, &name, &displayName, &avatar, &verified, &active, &deleted, &member.role, &member.status, &joined, &lastSeen, &subject, &managed)
-		if size > scaleP21SW22VisibilityRow {
+		if size > visibilityRow {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err != nil {
 			return nil, err
 		}
 		cost := len(member.id) + len(member.role) + len(member.status) + 256
-		if cost > scaleP21SW22VisibilityMembers-used {
+		if cost > visibilityMembers-used {
 			return nil, ErrMetadataWorkBudget
 		}
 		used += cost
@@ -227,12 +227,12 @@ func (s *SQLiteStore) scaleP21SW22VisibilityMemberHeaders(ctx context.Context, w
 	return result, rows.Err()
 }
 
-func (s *SQLiteStore) scaleP21SW22VisibilityMembershipHeaders(ctx context.Context, workspaceID string) (map[string][]domain.TeamMember, error) {
+func (s *SQLiteStore) visibilityMembershipHeaders(ctx context.Context, workspaceID string) (map[string][]domain.TeamMember, error) {
 	columns := []string{"m.team_id", "m.user_id", "m.role", "m.joined_at", "m.origin"}
-	size := s.scaleP21SW22VisibilityLength(columns...)
+	size := s.visibilityLength(columns...)
 	selected := []string{size}
 	for _, column := range columns {
-		selected = append(selected, "CASE WHEN ("+size+")<="+strconv.Itoa(scaleP21SW22VisibilityRow)+" THEN "+column+" ELSE NULL END")
+		selected = append(selected, "CASE WHEN ("+size+")<="+strconv.Itoa(visibilityRow)+" THEN "+column+" ELSE NULL END")
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+strings.Join(selected, ",")+`,
 		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END
@@ -247,14 +247,14 @@ func (s *SQLiteStore) scaleP21SW22VisibilityMembershipHeaders(ctx context.Contex
 		var joined, origin string
 		var managed, size int
 		err := rows.Scan(&size, &member.TeamID, &member.UserID, &member.Role, &joined, &origin, &managed)
-		if size > scaleP21SW22VisibilityRow {
+		if size > visibilityRow {
 			return nil, ErrMetadataWorkBudget
 		}
 		if err != nil {
 			return nil, err
 		}
 		cost := len(member.TeamID) + len(member.UserID) + len(member.Role) + 512
-		if cost > scaleP21SW22VisibilityMembership-used {
+		if cost > visibilityMembership-used {
 			return nil, ErrMetadataWorkBudget
 		}
 		used += cost
@@ -263,7 +263,7 @@ func (s *SQLiteStore) scaleP21SW22VisibilityMembershipHeaders(ctx context.Contex
 	return result, rows.Err()
 }
 
-func (s *SQLiteStore) scaleP21SW22VisibilityLength(columns ...string) string {
+func (s *SQLiteStore) visibilityLength(columns ...string) string {
 	result := make([]string, 0, len(columns))
 	for _, column := range columns {
 		if s.dialect == "sqlite" {

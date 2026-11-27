@@ -59,7 +59,7 @@ func TestMetadataSpoolDirectoryLayout(t *testing.T) {
 
 func TestMetadataSpoolShutdownRemovesInstalledFiles(t *testing.T) {
 	tmp := withFreshMetadataSpool(t)
-	f, view, _ := scaleP21SW27KnownWarmReloadFixture(t)
+	f, view, _ := knownWarmReloadFixture(t)
 	workspace := f.data.Workspace.URLKey
 	source, err := view.retainMetadataLogicalSource(t.Context(), workspace)
 	if err != nil {

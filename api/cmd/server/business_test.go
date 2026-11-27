@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP17DocumentBusinessDifferential(t *testing.T) {
+func TestScaleDocumentBusinessDifferential(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	for _, mode := range []string{"off", "on", "shadow", "selected"} {
 		t.Run(mode, func(t *testing.T) {
@@ -23,7 +23,7 @@ func TestScaleP17DocumentBusinessDifferential(t *testing.T) {
 				t.Setenv("FLOW_TRASH_RECORDS", "on")
 				t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "off")
 			}
-			db := newScaleP04Database(t)
+			db := newScaleDatabase(t)
 			handler := db.handler(t, true)
 			project := requestJSON[domain.Project](t, handler, "POST", "/api/projects", map[string]any{"name": "P17 project", "teamIds": []string{"team_test"}}, http.StatusCreated)
 			body := strings.Repeat("P17 body & history <tag> \\ \"\n", 12000)

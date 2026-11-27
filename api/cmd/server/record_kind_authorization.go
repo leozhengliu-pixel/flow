@@ -37,7 +37,7 @@ func (s *server) boundedProjectedIssueVisible(r *http.Request, workspace, userID
 // reviews: the paged projection keeps a review with no linked issues or with
 // a visible one, keeping only visible links; the literal predicate then needs
 // ID == ref and (no projected links or issueAllowed of one of them).
-func (s *server) boundedReviewPredicate(r *http.Request, workspace, userID, ref string) scaleP21RecordPredicate {
+func (s *server) boundedReviewPredicate(r *http.Request, workspace, userID, ref string) recordPredicate {
 	return func(_ store.AccessContext, data domain.Bootstrap) (bool, error) {
 		for _, item := range data.Reviews {
 			if item.ID != ref {
@@ -116,7 +116,7 @@ func (s *server) boundedReleaseMutationAllowed(r *http.Request, access store.Acc
 
 // boundedReleasePredicate mirrors the "releases" case (create root, reorder,
 // point, PATCH body).
-func (s *server) boundedReleasePredicate(r *http.Request, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedReleasePredicate(r *http.Request, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		if create {
 			var input releaseInput
@@ -163,7 +163,7 @@ func pipelineMutationTeamsAllowed(access store.AccessContext, input releasePipel
 }
 
 // boundedPipelinePredicate mirrors the "release-pipelines" case.
-func (s *server) boundedPipelinePredicate(r *http.Request, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedPipelinePredicate(r *http.Request, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		if create {
 			var input releasePipelineInput
@@ -204,7 +204,7 @@ func (s *server) boundedCustomerAllowed(r *http.Request, access store.AccessCont
 	return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == id }), nil
 }
 
-func (s *server) boundedCustomerPredicate(r *http.Request, ref string) scaleP21RecordPredicate {
+func (s *server) boundedCustomerPredicate(r *http.Request, ref string) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		return s.boundedCustomerAllowed(r, access, ref)
 	}
@@ -299,7 +299,7 @@ func (s *server) boundedCustomerRequestAllowedWhere(r *http.Request, access stor
 }
 
 // boundedCustomerRequestPredicate mirrors the "customer-requests" case.
-func (s *server) boundedCustomerRequestPredicate(r *http.Request, workspace, userID, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedCustomerRequestPredicate(r *http.Request, workspace, userID, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, _ domain.Bootstrap) (bool, error) {
 		if create {
 			if access.ViewerRole() == "guest" {
@@ -326,7 +326,7 @@ func (s *server) boundedCustomerRequestPredicate(r *http.Request, workspace, use
 
 // asks: the projection keeps unscoped asks and asks of content teams; the
 // literal askAllowed then requires teamAllowed of a scoped ask's team.
-func (s *server) boundedAskPredicate(r *http.Request, ref string, create bool) scaleP21RecordPredicate {
+func (s *server) boundedAskPredicate(r *http.Request, ref string, create bool) recordPredicate {
 	return func(access store.AccessContext, data domain.Bootstrap) (bool, error) {
 		if create {
 			if access.ViewerRole() == "guest" {

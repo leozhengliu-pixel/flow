@@ -8,7 +8,7 @@ import (
 	"testing/fstest"
 )
 
-func scaleP21TemperatureFiles(t *testing.T, files ...metadataConsumerFile) fstest.MapFS {
+func scaleTemperatureFiles(t *testing.T, files ...metadataConsumerFile) fstest.MapFS {
 	t.Helper()
 	result := fstest.MapFS{}
 	for _, file := range files {
@@ -22,9 +22,9 @@ func scaleP21TemperatureFiles(t *testing.T, files ...metadataConsumerFile) fstes
 	return result
 }
 
-func TestScaleP21TemperatureMissingDefaultsHot(t *testing.T) {
+func TestScaleTemperatureMissingDefaultsHot(t *testing.T) {
 	review := metadataConsumerReview{Owner: "P21", Status: "unmigrated", Accessors: []string{"WorkspaceMetadata"}}
-	files := scaleP21TemperatureFiles(t, metadataConsumerFile{
+	files := scaleTemperatureFiles(t, metadataConsumerFile{
 		Source: "store/example.go", Unmigrated: 1,
 		Consumers: map[string]metadataConsumerReview{"read": review},
 	})
@@ -45,7 +45,7 @@ func TestScaleP21TemperatureMissingDefaultsHot(t *testing.T) {
 	}
 }
 
-func TestScaleP21TemperatureRejectsMalformed(t *testing.T) {
+func TestScaleTemperatureRejectsMalformed(t *testing.T) {
 	base := metadataConsumerFile{
 		Source: "store/example.go", Unmigrated: 1,
 		Consumers: map[string]metadataConsumerReview{"read": {
@@ -69,7 +69,7 @@ func TestScaleP21TemperatureRejectsMalformed(t *testing.T) {
 			review := base.Consumers["read"]
 			review.Temperature, review.TemperatureReason = test.temperature, test.reason
 			file.Consumers = map[string]metadataConsumerReview{"read": review}
-			if _, err := readMetadataConsumerInventory(scaleP21TemperatureFiles(t, file)); err == nil {
+			if _, err := readMetadataConsumerInventory(scaleTemperatureFiles(t, file)); err == nil {
 				t.Fatal("invalid temperature registration was accepted")
 			}
 		})
@@ -91,7 +91,7 @@ func TestScaleP21TemperatureRejectsMalformed(t *testing.T) {
 	}
 }
 
-func TestScaleP21TemperaturePartitionsPending(t *testing.T) {
+func TestScaleTemperaturePartitionsPending(t *testing.T) {
 	pending := func(temperature string) metadataConsumerReview {
 		review := metadataConsumerReview{
 			Owner: "P21", Status: "unmigrated", Accessors: []string{"WorkspaceMetadata"},
@@ -107,7 +107,7 @@ func TestScaleP21TemperaturePartitionsPending(t *testing.T) {
 	reviewedHot.Status, reviewedHot.Reason = "reviewed", "Bounded hot reader verified."
 	reviewedCold := pending("cold")
 	reviewedCold.Status, reviewedCold.Reason = "reviewed", "Original cold operation retained."
-	files := scaleP21TemperatureFiles(t,
+	files := scaleTemperatureFiles(t,
 		metadataConsumerFile{Source: "server/example.go", Unmigrated: 3, Consumers: map[string]metadataConsumerReview{
 			"unknown": pending(""), "hot": pending("hot"), "cold": pending("cold"), "reviewed": reviewedHot,
 		}},

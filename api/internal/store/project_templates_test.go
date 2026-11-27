@@ -15,9 +15,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21SW16ProjectTemplateInstalledWireRead(t *testing.T) {
+func TestProjectTemplateInstalledWireRead(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 6, time.FixedZone(strings.Repeat("private-zone", 5000), 7*3600+123))
 	outOfOffice := stamp.Add(time.Hour)
@@ -89,7 +89,7 @@ func TestScaleP21SW16ProjectTemplateInstalledWireRead(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16ProjectTemplateNativeTimeWire(t *testing.T) {
+func TestProjectTemplateNativeTimeWire(t *testing.T) {
 	for _, stamp := range []time.Time{
 		{}, time.Now(), time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC),
 		time.Date(2026, 1, 2, 3, 4, 5, 6, time.FixedZone("odd", -3600-123)),
@@ -97,11 +97,11 @@ func TestScaleP21SW16ProjectTemplateNativeTimeWire(t *testing.T) {
 		time.Date(10000, 1, 2, 3, 4, 5, 6, time.FixedZone("wide", 25*3600)),
 	} {
 		source := []domain.ProjectTemplate{{CreatedAt: stamp, UpdatedAt: stamp, Creator: domain.User{OutOfOfficeUntil: &stamp}}}
-		cost, err := scaleP21SW16ProjectTemplateCost(source)
+		cost, err := projectTemplateCost(source)
 		if err != nil || cost <= 0 {
 			t.Fatal("native timestamp preflight failed", err)
 		}
-		clone := scaleP21SW16CloneTemplateValue(reflect.ValueOf(source)).Interface().([]domain.ProjectTemplate)
+		clone := cloneTemplateValue(reflect.ValueOf(source)).Interface().([]domain.ProjectTemplate)
 		want, oldErr := json.Marshal(source)
 		got, newErr := json.Marshal(clone)
 		if !bytes.Equal(got, want) || (oldErr == nil) != (newErr == nil) || oldErr != nil && oldErr.Error() != newErr.Error() {
@@ -111,19 +111,19 @@ func TestScaleP21SW16ProjectTemplateNativeTimeWire(t *testing.T) {
 	long := strings.Repeat("unrelated backing ", 1<<15)
 	values := [1]*string{new(string)}
 	*values[0] = long[:3]
-	remaining, nodes := scaleP21SW16ProjectTemplateMaxWork, 0
-	if err := scaleP21SW16TemplateValueCost(reflect.ValueOf(values), 0, &remaining, &nodes); err != nil {
+	remaining, nodes := projectTemplateMaxWork, 0
+	if err := templateValueCost(reflect.ValueOf(values), 0, &remaining, &nodes); err != nil {
 		t.Fatal("supported fixed-size array preflight failed", err)
 	}
-	clone := scaleP21SW16CloneTemplateValue(reflect.ValueOf(values)).Interface().([1]*string)
+	clone := cloneTemplateValue(reflect.ValueOf(values)).Interface().([1]*string)
 	if !reflect.DeepEqual(clone, values) || clone[0] == values[0] || unsafe.StringData(*clone[0]) == unsafe.StringData(*values[0]) {
 		t.Fatal("supported fixed-size array retained mutable/string source backing")
 	}
 }
 
-func TestScaleP21SW16ProjectTemplateAdmission(t *testing.T) {
+func TestProjectTemplateAdmission(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "sw16.template_budget", "", nil, func(data *domain.Bootstrap) error {
 		data.ProjectTemplates = []domain.ProjectTemplate{{ID: "template", Description: "small"}}
@@ -147,7 +147,7 @@ func TestScaleP21SW16ProjectTemplateAdmission(t *testing.T) {
 	if !errors.Is(err, ErrMetadataWorkBudget) || read != nil || !found || view.metadataResidency.work.used != 0 {
 		t.Fatal("admission shortage cloned/retained payload", read, found, err)
 	}
-	if _, err := scaleP21SW16ProjectTemplateCost([]domain.ProjectTemplate{{Description: strings.Repeat("x", 5<<20)}}); !errors.Is(err, ErrMetadataWorkBudget) {
+	if _, err := projectTemplateCost([]domain.ProjectTemplate{{Description: strings.Repeat("x", 5<<20)}}); !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("oversized selected templates bypassed preflight", err)
 	}
 	read, found, err = view.BeginProjectTemplatesRead(t.Context(), workspace)
@@ -166,9 +166,9 @@ func TestScaleP21SW16ProjectTemplateAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16ProjectTemplateBootstrapErrorBoundary(t *testing.T) {
+func TestProjectTemplateBootstrapErrorBoundary(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	issueID := "sw16-template-error-issue"
 	if err := f.ImportIssues(t.Context(), workspace, []domain.Issue{{ID: issueID, Identifier: "SW16-ERROR", Title: "Unrelated issue"}}); err != nil {
@@ -196,9 +196,9 @@ func TestScaleP21SW16ProjectTemplateBootstrapErrorBoundary(t *testing.T) {
 	t.Log("same actual store: legacy BootstrapFor and bounded validation preserve unrelated issue hydration failure")
 }
 
-func TestScaleP21SW16ProjectTemplateContentValidation(t *testing.T) {
+func TestProjectTemplateContentValidation(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	for _, kind := range []string{"import_input", "migration_input", "activity", "comment", "notification", "delivery"} {
 		t.Run(kind, func(t *testing.T) {
@@ -235,9 +235,9 @@ func TestScaleP21SW16ProjectTemplateContentValidation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW16ProjectTemplateLogicalWorkspace(t *testing.T) {
+func TestProjectTemplateLogicalWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	const issueID = "sw16-template-logical-issue"
 	if err := f.ImportIssues(t.Context(), workspace, []domain.Issue{{ID: issueID, Title: "Physical source"}}); err != nil {
@@ -278,9 +278,9 @@ func TestScaleP21SW16ProjectTemplateLogicalWorkspace(t *testing.T) {
 	read.Close()
 }
 
-func TestScaleP21SW16ProjectTemplateLifecycleOracle(t *testing.T) {
+func TestProjectTemplateLifecycleOracle(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projectTemplates"), workspace, "scale_p21_sw16.template_nil", "", nil, func(data *domain.Bootstrap) error {
 		data.ProjectTemplates = nil

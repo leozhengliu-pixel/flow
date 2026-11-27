@@ -5,7 +5,7 @@
     "ApplyCommittedPage": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "resident-state"
       ]
@@ -13,7 +13,7 @@
     "ShadowCommittedPage": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "resident-state"
       ]
@@ -21,7 +21,7 @@
     "preparePeerPage": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Original bounded metadata bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the bounded metadata integration tests.",
       "accessors": [
         "Bootstrap"
       ]

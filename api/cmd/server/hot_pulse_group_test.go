@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21HotPulseGroupHandlerDifferential(t *testing.T) {
+func TestScaleHotPulseGroupHandlerDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, project, initiative := f.data.Workspace.URLKey, idgen.New("pulse-group-project-"), idgen.New("pulse-group-initiative-")
 		at := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.pulse_group_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -57,13 +57,13 @@ func TestScaleP21HotPulseGroupHandlerDifferential(t *testing.T) {
 					r.Method, r.URL.Path, r.URL.RawQuery = http.MethodGet, "/api/pulse/feed", query.Encode()
 					w := httptest.NewRecorder()
 					(&server{store: source}).getPulseFeed(w, r)
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 					if source.MetadataWorkUsedForTesting() != 0 {
 						t.Fatal("feed response leaked work admission")
 					}
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("query=%s differential: %s", query.Encode(), scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("query=%s differential: %s", query.Encode(), policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 			var unread []any
@@ -71,10 +71,10 @@ func TestScaleP21HotPulseGroupHandlerDifferential(t *testing.T) {
 				r := f.literalRequest(user, key, nil)
 				w := httptest.NewRecorder()
 				(&server{store: source}).getPulseUnread(w, r)
-				unread = append(unread, []any{w.Code, scaleP21M2Response(t, w, false)})
+				unread = append(unread, []any{w.Code, policyDifferentialResponse(t, w, false)})
 			}
 			if !reflect.DeepEqual(unread[0], unread[1]) {
-				t.Fatal("unread differential", scaleP21M2Diff(unread[0], unread[1]))
+				t.Fatal("unread differential", policyFirstDifference(unread[0], unread[1]))
 			}
 		})
 		// The legacy history response keeps full comments/reactions and strips
@@ -102,7 +102,7 @@ func TestScaleP21HotPulseGroupHandlerDifferential(t *testing.T) {
 				}
 			}
 			if !reflect.DeepEqual(bodies[0], bodies[1]) {
-				t.Fatal("complete history changed", scaleP21M2Diff(bodies[0], bodies[1]))
+				t.Fatal("complete history changed", policyFirstDifference(bodies[0], bodies[1]))
 			}
 		}
 		if f.probe.WorkspaceMetadataDecodes() != 0 {

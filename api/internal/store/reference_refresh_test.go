@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW28AggregateUnselectedReferenceRefresh(t *testing.T) {
+func TestAggregateUnselectedReferenceRefresh(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
@@ -21,7 +21,7 @@ func TestScaleP21SW28AggregateUnselectedReferenceRefresh(t *testing.T) {
 			name = "legacy-field-scoped"
 		}
 		t.Run(name, func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			id, personID := idgen.New("project_sw28_refresh_"), idgen.New("usr_sw28_refresh_")
 			fresh := domain.User{ID: personID, Name: "Fresh directory name", DisplayName: "Fresh directory display", Active: true}

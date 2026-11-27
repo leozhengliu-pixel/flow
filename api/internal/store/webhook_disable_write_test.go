@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21DisableMutation(target, notification string, now time.Time, observed func(*domain.Bootstrap)) func(*domain.Bootstrap) error {
+func scaleDisableMutation(target, notification string, now time.Time, observed func(*domain.Bootstrap)) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(hook domain.Webhook) bool { return hook.ID == target })
 		if index < 0 || !data.Webhooks[index].Enabled {
@@ -35,7 +35,7 @@ func scaleP21DisableMutation(target, notification string, now time.Time, observe
 	}
 }
 
-func scaleP21DisableContent(t *testing.T, repo *SQLiteStore, workspace string) [][]any {
+func scaleDisableContent(t *testing.T, repo *SQLiteStore, workspace string) [][]any {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT kind,resource_id,id,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,id`, workspace)
 	if err != nil {
@@ -57,10 +57,10 @@ func scaleP21DisableContent(t *testing.T, repo *SQLiteStore, workspace string) [
 	return result
 }
 
-func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
+func TestScaleWebhookDisableWriteDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("wh-disable-")
 	at := time.Date(2026, 11, 14, 3, 4, 5, 6, time.UTC)
 	type effects struct {
@@ -140,7 +140,7 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 				got.Payload, got.Before, got.Snapshot = event.Payload, event.PreviousValues, event.Snapshot
 			})
 			source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { got.Realtime = event.Payload })
-			mutate := scaleP21DisableMutation(target, target+"-new", at, nil)
+			mutate := scaleDisableMutation(target, target+"-new", at, nil)
 			ctx := WithMutationScope(t.Context(), MutationScope{Resources: []string{target}})
 			statements := 0
 			ctx = WithSQLStatementObserver(ctx, func(string) { statements++ })
@@ -154,9 +154,9 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 			if err != nil {
 				t.Fatal("disable", reload, bounded, err)
 			}
-			got.Hooks = scaleP21WebhookFailureRows(t, source, workspace, "webhooks")
-			got.Documents = scaleP21WebhookFailureRows(t, source, workspace, "documents")
-			got.Content = scaleP21DisableContent(t, source, workspace)
+			got.Hooks = scaleWebhookFailureRows(t, source, workspace, "webhooks")
+			got.Documents = scaleWebhookFailureRows(t, source, workspace, "documents")
+			got.Content = scaleDisableContent(t, source, workspace)
 			got.Audits, err = source.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{ResourceID: target})
 			if err != nil {
 				t.Fatal(err)
@@ -209,10 +209,10 @@ func TestScaleP21WebhookDisableWriteDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
+func TestScaleWebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("wh-disable-atomic-")
 	now := time.Date(2026, 11, 14, 3, 4, 5, 0, time.UTC)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "webhooks"), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
@@ -231,7 +231,7 @@ func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Release()
-	original := scaleP21WebhookFailureRows(t, view, workspace, "webhooks")
+	original := scaleWebhookFailureRows(t, view, workspace, "webhooks")
 	for _, phase := range []string{"canceled", "parser-quota", "content-write"} {
 		ctx, cancel := context.WithCancel(t.Context())
 		limit := view.metadataResidency.work.limit
@@ -248,13 +248,13 @@ func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 				}
 			})
 		}
-		err := view.MutateFailingWebhookDisable(ctx, workspace, target, scaleP21DisableMutation(target, target+"-new", now, nil))
+		err := view.MutateFailingWebhookDisable(ctx, workspace, target, scaleDisableMutation(target, target+"-new", now, nil))
 		cancel()
 		view.metadataResidency.work.limit = limit
 		if phase == "parser-quota" && !errors.Is(err, ErrMetadataWorkBudget) || phase != "parser-quota" && !errors.Is(err, context.Canceled) {
 			t.Fatal("failure injection did not reject", phase, err)
 		}
-		if !reflect.DeepEqual(original, scaleP21WebhookFailureRows(t, view, workspace, "webhooks")) || len(scaleP21DisableContent(t, view, workspace)) != 0 || view.metadataResidency.work.used != 0 {
+		if !reflect.DeepEqual(original, scaleWebhookFailureRows(t, view, workspace, "webhooks")) || len(scaleDisableContent(t, view, workspace)) != 0 || view.metadataResidency.work.used != 0 {
 			t.Fatal("rollback changed webhook/content or leaked work", phase)
 		}
 		entries, err := view.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{ResourceID: target})
@@ -268,7 +268,7 @@ func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			result <- view.MutateFailingWebhookDisable(t.Context(), workspace, target, scaleP21DisableMutation(target, target+"-new", now, nil))
+			result <- view.MutateFailingWebhookDisable(t.Context(), workspace, target, scaleDisableMutation(target, target+"-new", now, nil))
 		}()
 	}
 	group.Wait()
@@ -278,7 +278,7 @@ func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	content := scaleP21DisableContent(t, view, workspace)
+	content := scaleDisableContent(t, view, workspace)
 	entries, err := view.ListAuditEntries(t.Context(), f.data.Workspace.ID, AuditQuery{ResourceID: target})
 	if err != nil || len(content) != 2 || len(entries) != 1 || view.metadataResidency.work.used != 0 {
 		t.Fatal("concurrent disable did not commit exactly once", len(content), len(entries), err)
@@ -293,10 +293,10 @@ func TestScaleP21WebhookDisableWriteRollbackAndExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookDisableWriteInlineNative(t *testing.T) {
+func TestScaleWebhookDisableWriteInlineNative(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	notificationID := idgen.New("inline-disable-")
 	now := time.Date(2026, 11, 14, 3, 4, 5, 6, time.UTC)
@@ -346,7 +346,7 @@ func TestScaleP21WebhookDisableWriteInlineNative(t *testing.T) {
 					payload, before, snapshot = event.Payload, event.PreviousValues, event.Snapshot
 				})
 				var input domain.Webhook
-				mutate := scaleP21DisableMutation(target, notificationID, now, func(data *domain.Bootstrap) { input = data.Webhooks[0] })
+				mutate := scaleDisableMutation(target, notificationID, now, func(data *domain.Bootstrap) { input = data.Webhooks[0] })
 				ctx := WithMutationScope(t.Context(), MutationScope{Resources: []string{target}})
 				if bounded {
 					err = source.MutateFailingWebhookDisable(ctx, workspace, target, mutate)
@@ -374,7 +374,7 @@ func TestScaleP21WebhookDisableWriteInlineNative(t *testing.T) {
 					data, _ := source.WorkspaceMetadata(workspace)
 					hooks = data.Webhooks
 				}
-				rows := scaleP21WebhookFailureRows(t, source, workspace, "webhooks")
+				rows := scaleWebhookFailureRows(t, source, workspace, "webhooks")
 				if !bounded {
 					want, wantInput, wantRows = hooks, input, rows
 					wantPayload, wantBefore, wantSnapshot = payload, before, snapshot
@@ -399,10 +399,10 @@ func TestScaleP21WebhookDisableWriteInlineNative(t *testing.T) {
 	}
 }
 
-func TestScaleP21WebhookDisableWriteBodyBound(t *testing.T) {
+func TestScaleWebhookDisableWriteBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, target := f.data.Workspace.URLKey, idgen.New("wh-disable-body-")
 	now := time.Date(2026, 11, 14, 3, 4, 5, 0, time.UTC)
 	wantPeak := map[bool]int{}
@@ -430,14 +430,14 @@ func TestScaleP21WebhookDisableWriteBodyBound(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			documents := scaleP21WebhookFailureRows(t, view, workspace, "documents")
+			documents := scaleWebhookFailureRows(t, view, workspace, "documents")
 			peak := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) {
 				view.metadataResidency.work.mu.Lock()
 				peak = max(peak, view.metadataResidency.work.used)
 				view.metadataResidency.work.mu.Unlock()
 			})
-			if err := view.MutateFailingWebhookDisable(ctx, workspace, target, scaleP21DisableMutation(target, idgen.New("body-notification-"), now, nil)); err != nil {
+			if err := view.MutateFailingWebhookDisable(ctx, workspace, target, scaleDisableMutation(target, idgen.New("body-notification-"), now, nil)); err != nil {
 				t.Fatal(err)
 			}
 			if scale == 1 {
@@ -445,7 +445,7 @@ func TestScaleP21WebhookDisableWriteBodyBound(t *testing.T) {
 			} else if peak != wantPeak[reload] {
 				t.Fatal("unrelated body growth increased admitted work", reload, peak, wantPeak[reload])
 			}
-			if !reflect.DeepEqual(documents, scaleP21WebhookFailureRows(t, view, workspace, "documents")) || view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
+			if !reflect.DeepEqual(documents, scaleWebhookFailureRows(t, view, workspace, "documents")) || view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("unrelated body changed, work leaked, or full metadata decoded")
 			}
 			t.Logf("scale=%d reload=%v admittedPeak=%d", scale, reload, peak)

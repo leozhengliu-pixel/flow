@@ -10,7 +10,7 @@ import (
 
 // DocumentRecordDirectory owns its policy and summaries. The immutable source
 // records live only until the legacy response producer finishes; a slow socket
-// is served from P15's detached response spool.
+// is served from record hydration's detached response spool.
 type DocumentRecordDirectory struct {
 	Data      domain.Bootstrap
 	documents map[string]domain.Document

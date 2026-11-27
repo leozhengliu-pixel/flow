@@ -15,10 +15,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21HotDeliveryContextSourceAndCountBound(t *testing.T) {
+func TestScaleHotDeliveryContextSourceAndCountBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	now := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
 	past, future := now.Add(-time.Minute), now.Add(time.Hour)
@@ -76,8 +76,8 @@ func TestScaleP21HotDeliveryContextSourceAndCountBound(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(scaleP21DeliveryConsumed(read.Data), scaleP21DeliveryConsumed(want)) {
-			t.Fatalf("rendering inputs differ: got=%#v want=%#v", scaleP21DeliveryConsumed(read.Data), scaleP21DeliveryConsumed(want))
+		if !reflect.DeepEqual(scaleDeliveryConsumed(read.Data), scaleDeliveryConsumed(want)) {
+			t.Fatalf("rendering inputs differ: got=%#v want=%#v", scaleDeliveryConsumed(read.Data), scaleDeliveryConsumed(want))
 		}
 		if count == 100 {
 			held = view.metadataResidency.work.used
@@ -127,7 +127,7 @@ func TestScaleP21HotDeliveryContextSourceAndCountBound(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(scaleP21DeliveryConsumed(read.Data), scaleP21DeliveryConsumed(want)) {
+			if !reflect.DeepEqual(scaleDeliveryConsumed(read.Data), scaleDeliveryConsumed(want)) {
 				t.Fatal("rendering silently switched the installed M to canonical rows")
 			}
 			read.Close()
@@ -136,7 +136,7 @@ func TestScaleP21HotDeliveryContextSourceAndCountBound(t *testing.T) {
 	}
 }
 
-func scaleP21DeliveryConsumed(data domain.Bootstrap) []any {
+func scaleDeliveryConsumed(data domain.Bootstrap) []any {
 	result := []any{data.WorkspaceSettings.HIPAACompliance, data.NotificationDeliveries}
 	for _, delivery := range data.NotificationDeliveries {
 		row := []any{delivery.ID, "", ""}
@@ -171,10 +171,10 @@ func scaleP21DeliveryConsumed(data domain.Bootstrap) []any {
 	return result
 }
 
-func TestScaleP21HotDeliveryMutationAdmissionAndRollback(t *testing.T) {
+func TestScaleHotDeliveryMutationAdmissionAndRollback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, now := f.data.Workspace.URLKey, time.Now().UTC()
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.hot_delivery_writer", "", nil, func(data *domain.Bootstrap) error {
 		data.NotificationDeliveries = []domain.NotificationDelivery{{ID: "delivery-native-write", RecipientID: data.Viewer.ID, Channel: "email", Status: "pending", CreatedAt: now, UpdatedAt: now}}

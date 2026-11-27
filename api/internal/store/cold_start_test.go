@@ -19,7 +19,7 @@ import (
 // This opt-in integration measurement keeps seeding outside the measured open.
 // 1x is 2,000 projects, 500 documents and 500 trash records; 10x grows counts,
 // project memberships, subscriptions and history together, with unchanged body sizes.
-func TestScaleP21ColdStartMeasurement(t *testing.T) {
+func TestScaleColdStartMeasurement(t *testing.T) {
 	path := os.Getenv("FLOW_P21_COLD_DATABASE")
 	if path == "" {
 		t.Skip("set FLOW_P21_COLD_DATABASE for the cold-start measurement")
@@ -64,12 +64,12 @@ func TestScaleP21ColdStartMeasurement(t *testing.T) {
 				project := domain.Project{ID: id, Name: id, Description: body, TeamIDs: []string{data.Teams[i%len(data.Teams)].ID}, MemberIDs: []string{user.ID}, CreatedAt: now, UpdatedAt: now,
 					DescriptionRevisions: []domain.ProjectDescriptionRevision{{ID: id + "-revision", ProjectID: id, Description: body, Author: user, CreatedAt: now}},
 					Comments:             []domain.Comment{{ID: id + "-comment", Body: "project discussion", User: user, CreatedAt: now}}}
-				scaleP21SeedRow(t, tx, workspace, "projects", id, i, project)
-				scaleP21SeedRow(t, tx, workspace, "subscriptions", id, i, domain.Subscription{ID: id, UserID: user.ID, ResourceType: "project", ResourceID: id, Events: []string{"all"}, CreatedAt: now})
+				scaleSeedRow(t, tx, workspace, "projects", id, i, project)
+				scaleSeedRow(t, tx, workspace, "subscriptions", id, i, domain.Subscription{ID: id, UserID: user.ID, ResourceType: "project", ResourceID: id, Events: []string{"all"}, CreatedAt: now})
 				if i < 5000 {
-					scaleP21SeedRow(t, tx, workspace, "documents", id, i, domain.Document{ID: id, Title: id, Content: body, Creator: user, TeamIDs: project.TeamIDs, CreatedAt: now, UpdatedAt: now})
+					scaleSeedRow(t, tx, workspace, "documents", id, i, domain.Document{ID: id, Title: id, Content: body, Creator: user, TeamIDs: project.TeamIDs, CreatedAt: now, UpdatedAt: now})
 					payload, _ := json.Marshal(project)
-					scaleP21SeedRow(t, tx, workspace, "trash", id, i, domain.TrashEntry{ID: id, ResourceType: "project", ResourceID: id, Payload: payload, DeletedBy: user, DeletedAt: now, ExpiresAt: now.AddDate(1, 0, 0)})
+					scaleSeedRow(t, tx, workspace, "trash", id, i, domain.TrashEntry{ID: id, ResourceType: "project", ResourceID: id, Payload: payload, DeletedBy: user, DeletedAt: now, ExpiresAt: now.AddDate(1, 0, 0)})
 				}
 			}
 			if err := tx.Commit(); err != nil {
@@ -113,7 +113,7 @@ func TestScaleP21ColdStartMeasurement(t *testing.T) {
 
 // This measures the loader only. It deliberately does not bypass the
 // OpenDatabase activation gate or certify the complete application startup.
-func TestScaleP21RecoveryPrimitiveMeasurement(t *testing.T) {
+func TestScaleRecoveryPrimitiveMeasurement(t *testing.T) {
 	path := os.Getenv("FLOW_P21_RECOVERY_DATABASE")
 	if path == "" {
 		t.Skip("set FLOW_P21_RECOVERY_DATABASE for the loader measurement")
@@ -153,7 +153,7 @@ func TestScaleP21RecoveryPrimitiveMeasurement(t *testing.T) {
 	runtime.KeepAlive(repo)
 }
 
-func scaleP21SeedRow(t *testing.T, tx *sqlTx, workspace, field, key string, order int, value any) {
+func scaleSeedRow(t *testing.T, tx *sqlTx, workspace, field, key string, order int, value any) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {

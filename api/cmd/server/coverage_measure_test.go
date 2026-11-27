@@ -15,20 +15,20 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP12Request(workspace string, user domain.User) *http.Request {
+func scaleRequest(workspace string, user domain.User) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/api/realtime/events?workspace="+workspace, nil)
 	return r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, user))
 }
 
 // The same cold event and viewers are used before and after implementation.
 // SQL is counted separately so observation does not affect the timed region.
-func TestScaleP12Measurements(t *testing.T) {
+func TestRealtimeFanoutMeasurements(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P12_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P12_MEASURE=1 to measure fan-out")
 	}
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
-		_, user := scaleP03Join(t, f, "P12 measurement", fmt.Sprintf("p12-measure-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
+		_, user := resourceAccessScaleJoin(t, f, "P12 measurement", fmt.Sprintf("p12-measure-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
 		issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "P12 measured issue", "teamId": f.data.Teams[0].ID}, f.data.Workspace.URLKey, http.StatusCreated)
 		for _, viewers := range []int{1, 100, 2000} {
 			t.Run(fmt.Sprint(viewers), func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestScaleP12Measurements(t *testing.T) {
 					event := domain.RealtimeEvent{ID: fmt.Sprintf("p12-measure-%d-%d", viewers, pass), Type: "issue.updated", AggregateID: issue.ID, Payload: []byte(`{"title":"P12 measured issue"}`)}
 					requests := make([]*http.Request, viewers)
 					for i := range requests {
-						requests[i] = scaleP12Request(f.data.Workspace.URLKey, user)
+						requests[i] = scaleRequest(f.data.Workspace.URLKey, user)
 					}
 					runtime.GC()
 					var before, after runtime.MemStats

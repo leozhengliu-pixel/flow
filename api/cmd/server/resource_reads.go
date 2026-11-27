@@ -13,17 +13,17 @@ import (
 	"flow/api/internal/store"
 )
 
-func (s *server) registerScaleP20Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/resource-windows/members", s.scaleP20Members)
-	mux.HandleFunc("GET /api/resource-windows/trash", s.scaleP20Trash)
-	mux.HandleFunc("GET /api/documents/{id}/history/{revisionId}", s.scaleP20Revision)
+func (s *server) registerScaleRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/resource-windows/members", s.scaleMembers)
+	mux.HandleFunc("GET /api/resource-windows/trash", s.scaleTrash)
+	mux.HandleFunc("GET /api/documents/{id}/history/{revisionId}", s.scaleRevision)
 }
 
-func scaleP20SyncRequest(r *http.Request) bool {
+func scaleSyncRequest(r *http.Request) bool {
 	return r.URL.Query().Get("surface") == "resource-window" && syncReadRequest(r)
 }
 
-func scaleP20ReadRequest(r *http.Request) bool {
+func scaleReadRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
@@ -35,7 +35,7 @@ func scaleP20ReadRequest(r *http.Request) bool {
 		(len(parts) == 3 && r.URL.Query().Get("history") == "summary" || len(parts) == 4 && parts[3] == "history" && r.URL.Query().Get("projection") == "summary" || len(parts) == 5 && parts[3] == "history")
 }
 
-func (s *server) scaleP20Metadata(w http.ResponseWriter, r *http.Request, kind string) (domain.Bootstrap, string, store.AccessContext, bool) {
+func (s *server) resourceReadsScaleMetadata(w http.ResponseWriter, r *http.Request, kind string) (domain.Bootstrap, string, store.AccessContext, bool) {
 	access, ok := s.syncAccess(w, r)
 	if !ok {
 		return domain.Bootstrap{}, "", access, false
@@ -46,7 +46,7 @@ func (s *server) scaleP20Metadata(w http.ResponseWriter, r *http.Request, kind s
 	}
 	data, revision, err := s.store.ResourceWindowMetadata(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), kind)
 	if err != nil {
-		scaleP20ReadError(w, err)
+		scaleReadError(w, err)
 		return domain.Bootstrap{}, "", access, false
 	}
 	filterBootstrapForAPIKey(&data, r)
@@ -67,7 +67,7 @@ func (s *server) scaleP20Metadata(w http.ResponseWriter, r *http.Request, kind s
 	return data, revision, access, true
 }
 
-func scaleP20ReadError(w http.ResponseWriter, err error) {
+func scaleReadError(w http.ResponseWriter, err error) {
 	if errors.Is(err, store.ErrMetadataPageBudget) {
 		writeError(w, http.StatusNotImplemented, "Resource window exceeds the bounded adapter; use the legacy read endpoint")
 		return
@@ -75,8 +75,8 @@ func scaleP20ReadError(w http.ResponseWriter, err error) {
 	writeSyncError(w, err)
 }
 
-func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
-	if !scaleP20SyncRequest(r) {
+func (s *server) resourceReadsScaleManifest(w http.ResponseWriter, r *http.Request) bool {
+	if !scaleSyncRequest(r) {
 		return false
 	}
 	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") || !syncFlagEnabled("FLOW_INDEXED_READS") || !store.RecordHydrationEnabled(r.Context()) {
@@ -91,7 +91,7 @@ func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
 		writeSyncError(w, err)
 		return true
 	}
-	data, revision, access, ok := s.scaleP20Metadata(w, r, "core")
+	data, revision, access, ok := s.resourceReadsScaleMetadata(w, r, "core")
 	if !ok {
 		return true
 	}
@@ -115,14 +115,14 @@ func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
 	result := map[string]any{"schema": 2, "workspaceId": data.Workspace.ID, "viewerId": data.Viewer.ID, "authzEpoch": access.AuthzEpoch, "head": strconv.FormatInt(head, 10), "capabilities": []string{"resource-windows"}, "core": core, "collections": collections}
 	encoded, _ := json.Marshal(result)
 	if len(encoded)+1 > store.MetadataRecordPageMaxBytes {
-		scaleP20ReadError(w, store.ErrMetadataPageBudget)
+		scaleReadError(w, store.ErrMetadataPageBudget)
 		return true
 	}
 	writeSyncJSON(w, result, store.MetadataRecordPageMaxBytes)
 	return true
 }
 
-func scaleP20Nodes(data domain.Bootstrap, kind string) ([]any, error) {
+func scaleNodes(data domain.Bootstrap, kind string) ([]any, error) {
 	value := reflect.ValueOf(data)
 	typ := value.Type()
 	for i := range value.NumField() {
@@ -139,8 +139,8 @@ func scaleP20Nodes(data domain.Bootstrap, kind string) ([]any, error) {
 	return nil, store.ErrMetadataRecordQuery
 }
 
-func (s *server) scaleP20Page(w http.ResponseWriter, r *http.Request, kind string) {
-	data, revision, access, ok := s.scaleP20Metadata(w, r, kind)
+func (s *server) scalePage(w http.ResponseWriter, r *http.Request, kind string) {
+	data, revision, access, ok := s.resourceReadsScaleMetadata(w, r, kind)
 	if !ok {
 		return
 	}
@@ -161,7 +161,7 @@ func (s *server) scaleP20Page(w http.ResponseWriter, r *http.Request, kind strin
 		writeSyncError(w, err)
 		return
 	}
-	nodes, err := scaleP20Nodes(data, kind)
+	nodes, err := scaleNodes(data, kind)
 	if err != nil || start > len(nodes) {
 		writeSyncError(w, store.ErrMetadataCursor)
 		return
@@ -201,7 +201,7 @@ func (s *server) scaleP20Page(w http.ResponseWriter, r *http.Request, kind strin
 			break
 		}
 		if len(encoded)+1 > remaining {
-			scaleP20ReadError(w, store.ErrMetadataPageBudget)
+			scaleReadError(w, store.ErrMetadataPageBudget)
 			return
 		}
 		page.Items = append(page.Items, item)
@@ -223,19 +223,19 @@ func (s *server) scaleP20Page(w http.ResponseWriter, r *http.Request, kind strin
 	writeSyncJSON(w, page, q.MaxBytes)
 }
 
-func (s *server) scaleP20Records(w http.ResponseWriter, r *http.Request) bool {
-	if !scaleP20SyncRequest(r) {
+func (s *server) scaleRecords(w http.ResponseWriter, r *http.Request) bool {
+	if !scaleSyncRequest(r) {
 		return false
 	}
 	if !syncFlagEnabled("FLOW_INDEXED_READS") {
 		writeError(w, http.StatusNotFound, "not found")
 		return true
 	}
-	s.scaleP20Page(w, r, r.URL.Query().Get("kind"))
+	s.scalePage(w, r, r.URL.Query().Get("kind"))
 	return true
 }
 
-func (s *server) scaleP20Members(w http.ResponseWriter, r *http.Request) {
+func (s *server) scaleMembers(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("collection")
 	if kind == "" {
 		kind = "members"
@@ -244,10 +244,10 @@ func (s *server) scaleP20Members(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, store.ErrMetadataRecordQuery)
 		return
 	}
-	s.scaleP20Page(w, r, kind)
+	s.scalePage(w, r, kind)
 }
 
-func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request, ref string, trashOnly bool) (domain.Bootstrap, domain.Document, *domain.TrashEntry, func(), bool) {
+func (s *server) scaleDocumentMetadata(w http.ResponseWriter, r *http.Request, ref string, trashOnly bool) (domain.Bootstrap, domain.Document, *domain.TrashEntry, func(), bool) {
 	userID := authUser(r).ID
 	if s.authDisabled {
 		userID = ""
@@ -265,7 +265,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 		data, err = s.store.SelectedDocumentMetadata(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), func(source domain.Bootstrap) (store.MetadataRecordScope, bool) {
 			scope := store.MetadataRecordScope{Fields: documentRecordReadFields}
 			if !trashOnly {
-				if doc, err := scaleP20DocumentByRef(&source, ref); err == nil {
+				if doc, err := scaleDocumentByRef(&source, ref); err == nil {
 					scope = documentRecordRequirements(source, *doc, nil)
 					scope.Fields = documentRecordReadFields
 				}
@@ -284,7 +284,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 						PreviousSlugIDs []string
 					}
 					if json.Unmarshal(entry.Payload, &header) == nil {
-						match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref) || scaleP20SameDocumentSuffix(header.SlugID, ref)
+						match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref) || scaleSameDocumentSuffix(header.SlugID, ref)
 					}
 				}
 				if match {
@@ -299,7 +299,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 		return data, domain.Document{}, nil, closeRead, false
 	}
 	filterBootstrapForAPIKey(&data, r)
-	if doc, err := scaleP20DocumentByRef(&data, ref); !trashOnly && err == nil && documentRole(s, data, *doc) != "none" {
+	if doc, err := scaleDocumentByRef(&data, ref); !trashOnly && err == nil && documentRole(s, data, *doc) != "none" {
 		return data, *doc, nil, closeRead, true
 	}
 	for _, entry := range data.Trash {
@@ -314,24 +314,24 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 	return data, domain.Document{}, nil, closeRead, false
 }
 
-func scaleP20SameDocumentSuffix(slug, ref string) bool {
+func scaleSameDocumentSuffix(slug, ref string) bool {
 	suffix := domain.SlugSuffix(ref)
 	return suffix != "" && suffix == domain.SlugSuffix(slug)
 }
 
-func scaleP20DocumentByRef(data *domain.Bootstrap, ref string) (*domain.Document, error) {
+func scaleDocumentByRef(data *domain.Bootstrap, ref string) (*domain.Document, error) {
 	if document, err := documentByID(data, ref); err == nil {
 		return document, nil
 	}
 	for index := range data.Documents {
-		if scaleP20SameDocumentSuffix(data.Documents[index].SlugID, ref) {
+		if scaleSameDocumentSuffix(data.Documents[index].SlugID, ref) {
 			return &data.Documents[index], nil
 		}
 	}
 	return nil, errNotFound
 }
 
-func scaleP20RevisionHeaders(doc domain.Document) []map[string]any {
+func scaleRevisionHeaders(doc domain.Document) []map[string]any {
 	result := make([]map[string]any, len(doc.Revisions))
 	for index, revision := range doc.Revisions {
 		current := index == 0 && revision.Title == doc.Title && revision.Content == doc.Content && len(revision.Offloaded) == 0
@@ -348,8 +348,8 @@ func scaleP20RevisionHeaders(doc domain.Document) []map[string]any {
 	return result
 }
 
-func scaleP20DocumentJSON(doc domain.Document) map[string]any {
-	headers := scaleP20RevisionHeaders(doc)
+func scaleDocumentJSON(doc domain.Document) map[string]any {
+	headers := scaleRevisionHeaders(doc)
 	doc.Revisions = nil
 	raw, _ := json.Marshal(doc)
 	var result map[string]any
@@ -358,14 +358,14 @@ func scaleP20DocumentJSON(doc domain.Document) map[string]any {
 	return result
 }
 
-func (s *server) scaleP20DocumentResult(r *http.Request, doc domain.Document) any {
+func (s *server) scaleDocumentResult(r *http.Request, doc domain.Document) any {
 	if r.URL.Query().Get("history") == "summary" {
-		return scaleP20DocumentJSON(doc)
+		return scaleDocumentJSON(doc)
 	}
 	return s.withDocumentVersions(r, doc)
 }
 
-func (s *server) scaleP20DocumentRead(w http.ResponseWriter, r *http.Request) bool {
+func (s *server) scaleDocumentRead(w http.ResponseWriter, r *http.Request) bool {
 	if r.URL.Query().Get("history") != "summary" {
 		return false
 	}
@@ -373,34 +373,34 @@ func (s *server) scaleP20DocumentRead(w http.ResponseWriter, r *http.Request) bo
 	if !allowed {
 		return true
 	}
-	_, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	_, doc, _, closeRead, ok := s.scaleDocumentMetadata(w, r, r.PathValue("id"), false)
 	defer closeRead()
 	if ok {
 		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 			writeSyncError(w, err)
 			return true
 		}
-		writeJSON(w, http.StatusOK, scaleP20DocumentJSON(doc))
+		writeJSON(w, http.StatusOK, scaleDocumentJSON(doc))
 	}
 	return true
 }
 
-func (s *server) scaleP20Trash(w http.ResponseWriter, r *http.Request) {
+func (s *server) scaleTrash(w http.ResponseWriter, r *http.Request) {
 	ref := r.URL.Query().Get("resourceId")
 	if ref == "" {
-		s.scaleP20Page(w, r, "trash")
+		s.scalePage(w, r, "trash")
 		return
 	}
 	access, allowed := s.syncAccess(w, r)
 	if !allowed {
 		return
 	}
-	_, doc, entry, closeRead, ok := s.scaleP20DocumentMetadata(w, r, ref, true)
+	_, doc, entry, closeRead, ok := s.scaleDocumentMetadata(w, r, ref, true)
 	defer closeRead()
 	if !ok {
 		return
 	}
-	raw, _ := json.Marshal(scaleP20DocumentJSON(doc))
+	raw, _ := json.Marshal(scaleDocumentJSON(doc))
 	entry.Payload, entry.Links = raw, nil
 	if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 		writeSyncError(w, err)
@@ -409,7 +409,7 @@ func (s *server) scaleP20Trash(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entry)
 }
 
-func (s *server) scaleP20History(w http.ResponseWriter, r *http.Request) bool {
+func (s *server) scaleHistory(w http.ResponseWriter, r *http.Request) bool {
 	if r.URL.Query().Get("projection") != "summary" {
 		return false
 	}
@@ -417,24 +417,24 @@ func (s *server) scaleP20History(w http.ResponseWriter, r *http.Request) bool {
 	if !allowed {
 		return true
 	}
-	_, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	_, doc, _, closeRead, ok := s.scaleDocumentMetadata(w, r, r.PathValue("id"), false)
 	defer closeRead()
 	if ok {
 		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 			writeSyncError(w, err)
 			return true
 		}
-		writePage(w, r, scaleP20RevisionHeaders(doc))
+		writePage(w, r, scaleRevisionHeaders(doc))
 	}
 	return true
 }
 
-func (s *server) scaleP20Revision(w http.ResponseWriter, r *http.Request) {
+func (s *server) scaleRevision(w http.ResponseWriter, r *http.Request) {
 	access, allowed := s.syncAccess(w, r)
 	if !allowed {
 		return
 	}
-	data, doc, _, closeRead, ok := s.scaleP20DocumentMetadata(w, r, r.PathValue("id"), false)
+	data, doc, _, closeRead, ok := s.scaleDocumentMetadata(w, r, r.PathValue("id"), false)
 	defer closeRead()
 	if !ok {
 		return
@@ -456,8 +456,8 @@ func (s *server) scaleP20Revision(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, revisions[0])
 }
 
-func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []store.RecordKey, projection string) bool {
-	if !scaleP20SyncRequest(r) {
+func (s *server) scaleBatch(w http.ResponseWriter, r *http.Request, keys []store.RecordKey, projection string) bool {
+	if !scaleSyncRequest(r) {
 		return false
 	}
 	if len(keys) > 50 || projection != "detail" {
@@ -480,11 +480,11 @@ func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []st
 			writeSyncError(w, store.ErrMetadataRecordQuery)
 			return true
 		}
-		// Reuse the selected P17 authorization, but keep missing keys anonymous.
+		// Reuse the selected resource windows authorization, but keep missing keys anonymous.
 		probe := *r
 		probe.SetPathValue("id", key.ID)
-		recorder := newScaleP20ReadRecorder()
-		_, doc, _, closeRead, found := s.scaleP20DocumentMetadata(recorder, &probe, key.ID, false)
+		recorder := newScaleReadRecorder()
+		_, doc, _, closeRead, found := s.scaleDocumentMetadata(recorder, &probe, key.ID, false)
 		item := store.MetadataRecord{Key: key, Missing: !found}
 		if !found && recorder.code != http.StatusNotFound {
 			closeRead()
@@ -496,7 +496,7 @@ func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []st
 				item.Missing = true
 			} else {
 				item.Version = revision
-				item.Data, _ = json.Marshal(scaleP20DocumentJSON(doc))
+				item.Data, _ = json.Marshal(scaleDocumentJSON(doc))
 				encoded, _ := json.Marshal(item)
 				if len(encoded)+1 > remaining {
 					item.Data, item.Omitted, item.Detail = nil, true, &item.Key
@@ -520,23 +520,23 @@ func (s *server) scaleP20Batch(w http.ResponseWriter, r *http.Request, keys []st
 	return true
 }
 
-type scaleP20ReadRecorder struct {
+type scaleReadRecorder struct {
 	header http.Header
 	code   int
 }
 
-func newScaleP20ReadRecorder() *scaleP20ReadRecorder {
-	return &scaleP20ReadRecorder{header: http.Header{}}
+func newScaleReadRecorder() *scaleReadRecorder {
+	return &scaleReadRecorder{header: http.Header{}}
 }
-func (w *scaleP20ReadRecorder) Header() http.Header            { return w.header }
-func (w *scaleP20ReadRecorder) WriteHeader(code int)           { w.code = code }
-func (w *scaleP20ReadRecorder) Write(data []byte) (int, error) { return len(data), nil }
+func (w *scaleReadRecorder) Header() http.Header            { return w.header }
+func (w *scaleReadRecorder) WriteHeader(code int)           { w.code = code }
+func (w *scaleReadRecorder) Write(data []byte) (int, error) { return len(data), nil }
 
-func (s *server) scaleP20Changes(w http.ResponseWriter, r *http.Request) bool {
+func (s *server) resourceReadsScaleChanges(w http.ResponseWriter, r *http.Request) bool {
 	if s.localStoreChanges(w, r) {
 		return true
 	}
-	if !scaleP20SyncRequest(r) {
+	if !scaleSyncRequest(r) {
 		return false
 	}
 	if !syncFlagEnabled("FLOW_INDEXED_READS") {

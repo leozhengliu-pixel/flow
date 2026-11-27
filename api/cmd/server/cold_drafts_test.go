@@ -19,17 +19,17 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP21SW191DraftFixture struct {
-	scaleP21M2Fixture
+type draftFixture struct {
+	policyDifferentialFixture
 	project, document, issue, draft, beforeDecode string
 	reset                                         func(bool)
 }
 
-func scaleP21SW191DraftSetup(t *testing.T, repo *store.SQLiteStore) scaleP21SW191DraftFixture {
+func draftSetup(t *testing.T, repo *store.SQLiteStore) draftFixture {
 	t.Helper()
-	f := scaleP21M2Setup(t, repo)
+	f := setupPolicyDifferential(t, repo)
 	prefix, workspace := idgen.New("sw191-draft-"), f.data.Workspace.URLKey
-	result := scaleP21SW191DraftFixture{scaleP21M2Fixture: f, project: prefix + "project", document: prefix + "document", issue: prefix + "issue", draft: prefix + "draft", beforeDecode: prefix + "decode-project"}
+	result := draftFixture{policyDifferentialFixture: f, project: prefix + "project", document: prefix + "document", issue: prefix + "issue", draft: prefix + "draft", beforeDecode: prefix + "decode-project"}
 	at := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw191_draft_seed", "", nil, func(data *domain.Bootstrap) error {
 		var team domain.Team
@@ -86,12 +86,12 @@ func scaleP21SW191DraftSetup(t *testing.T, repo *store.SQLiteStore) scaleP21SW19
 	return result
 }
 
-func TestScaleP21SW191ColdDraftValidatorDifferential(t *testing.T) {
+func TestColdDraftValidatorDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW191DraftSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := draftSetup(t, repo)
 		cases := []domain.Draft{
 			{Type: "issue"}, {Type: "loop"}, {Type: "unsupported"},
 			{Type: "comment"}, {Type: "comment", ResourceID: f.issue},
@@ -149,18 +149,18 @@ func TestScaleP21SW191ColdDraftValidatorDifferential(t *testing.T) {
 	}
 }
 
-type scaleP21SW191ReadHook struct {
+type readHook struct {
 	io.Reader
 	before func()
 	once   sync.Once
 }
 
-func (r *scaleP21SW191ReadHook) Read(data []byte) (int, error) {
+func (r *readHook) Read(data []byte) (int, error) {
 	r.once.Do(r.before)
 	return r.Reader.Read(data)
 }
 
-func scaleP21SW191NormalizeDraft(t *testing.T, raw []byte, generatedID string, started, finished time.Time) any {
+func normalizeDraft(t *testing.T, raw []byte, generatedID string, started, finished time.Time) any {
 	t.Helper()
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
@@ -190,12 +190,12 @@ func scaleP21SW191NormalizeDraft(t *testing.T, raw []byte, generatedID string, s
 	return walk(value)
 }
 
-func TestScaleP21SW191ColdDraftRoutesAndCaptureTiming(t *testing.T) {
+func TestColdDraftRoutesAndCaptureTiming(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21SW191DraftSetup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := draftSetup(t, repo)
 		workspace := f.data.Workspace.URLKey
 		for _, reload := range []bool{false, true} {
 			for _, test := range []struct {
@@ -221,7 +221,7 @@ func TestScaleP21SW191ColdDraftRoutesAndCaptureTiming(t *testing.T) {
 					}
 					reader := io.Reader(bytes.NewReader(raw))
 					if test.hook {
-						reader = &scaleP21SW191ReadHook{Reader: reader, before: func() {
+						reader = &readHook{Reader: reader, before: func() {
 							if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.sw191_before_decode", "", nil, func(data *domain.Bootstrap) error {
 								data.Projects = append(data.Projects, domain.Project{ID: f.beforeDecode, TeamIDs: []string{f.public}})
 								return nil
@@ -257,7 +257,7 @@ func TestScaleP21SW191ColdDraftRoutesAndCaptureTiming(t *testing.T) {
 						t.Fatal(err)
 					}
 					rows, _ := json.Marshal(drafts)
-					actual := []any{response.Code, scaleP21SW191NormalizeDraft(t, response.Body.Bytes(), generated, started, finished), scaleP21SW191NormalizeDraft(t, rows, generated, started, finished)}
+					actual := []any{response.Code, normalizeDraft(t, response.Body.Bytes(), generated, started, finished), normalizeDraft(t, rows, generated, started, finished)}
 					if source == repo {
 						expected = actual
 					} else if !reflect.DeepEqual(expected, actual) {

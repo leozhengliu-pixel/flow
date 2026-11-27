@@ -337,7 +337,7 @@ func legacyIssueCanonicalContentData(ctx context.Context, s *SQLiteStore, frames
 }
 
 type legacyIssueCanonicalMapFrames struct {
-	stage  *sw26MigrationStage
+	stage  *migrationStage
 	frames *metadataLogicalBuilder
 	shape  metadataLogicalNode
 }
@@ -409,7 +409,7 @@ func legacyIssueCanonicalMapUnion(ctx context.Context, s *SQLiteStore, frames *m
 	if err := owner.reserve(ctx, logicalJSONStreamWork); err != nil {
 		return metadataLogicalNode{}, err
 	}
-	stage, err := sw26NewMigrationStage(ctx)
+	stage, err := newMigrationStage(ctx)
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}

@@ -12,13 +12,13 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW36Coordinator struct{}
+type retryCoordinator struct{}
 
-func (scaleP21SW36Coordinator) WithWorkspaceLock(_ context.Context, _ string, run func() error) error {
+func (retryCoordinator) WithWorkspaceLock(_ context.Context, _ string, run func() error) error {
 	return run()
 }
 
-func TestScaleP21SW36RetryAndMergedInstallDifferential(t *testing.T) {
+func TestRetryAndMergedInstallDifferential(t *testing.T) {
 	for _, test := range []struct {
 		name                                                             string
 		warm, peerConflict, peerMerge, deleted, image, coordinator, full bool
@@ -40,7 +40,7 @@ func TestScaleP21SW36RetryAndMergedInstallDifferential(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			stamp := time.Date(2026, 11, 13, 10, 20, 30, 0, time.UTC)
 			native := time.Now()
@@ -116,7 +116,7 @@ func TestScaleP21SW36RetryAndMergedInstallDifferential(t *testing.T) {
 					}
 				}
 				if test.coordinator {
-					repo.SetWorkspaceCoordinator(scaleP21SW36Coordinator{})
+					repo.SetWorkspaceCoordinator(retryCoordinator{})
 				}
 				result := outcome{}
 				repo.SetWebhookSink(func(_ string, event domain.DomainEvent) { result.event = event; result.webhooks++ })
@@ -178,19 +178,19 @@ func TestScaleP21SW36RetryAndMergedInstallDifferential(t *testing.T) {
 			old, new := results[0], results[1]
 			if !reflect.DeepEqual(old.callbacks, new.callbacks) || !reflect.DeepEqual(old.returned, new.returned) ||
 				!reflect.DeepEqual(old.installed, new.installed) || !reflect.DeepEqual(old.settings, new.settings) ||
-				old.canonical != new.canonical && !scaleP21SW36JSONEqual([]byte(old.canonical), []byte(new.canonical)) {
+				old.canonical != new.canonical && !retryJSONEqual([]byte(old.canonical), []byte(new.canonical)) {
 				t.Fatalf("callback/canonical/installed differential: callbacks=%v returned=%v installed=%v settings=%v canonical old=%s new=%s",
 					reflect.DeepEqual(old.callbacks, new.callbacks), reflect.DeepEqual(old.returned, new.returned),
 					reflect.DeepEqual(old.installed, new.installed), reflect.DeepEqual(old.settings, new.settings), old.canonical, new.canonical)
 			}
-			if !scaleP21SW36JSONEqual(old.event.PreviousValues, new.event.PreviousValues) || !scaleP21SW36JSONEqual(old.event.Snapshot, new.event.Snapshot) || !scaleP21SW36JSONEqual(old.realtime.Payload, new.realtime.Payload) {
+			if !retryJSONEqual(old.event.PreviousValues, new.event.PreviousValues) || !retryJSONEqual(old.event.Snapshot, new.event.Snapshot) || !retryJSONEqual(old.realtime.Payload, new.realtime.Payload) {
 				t.Fatal("pre-persist event/previous/snapshot/realtime semantics changed")
 			}
 		})
 	}
 }
 
-func scaleP21SW36JSONEqual(a, b []byte) bool {
+func retryJSONEqual(a, b []byte) bool {
 	if string(a) == string(b) {
 		return true
 	}
@@ -201,7 +201,7 @@ func scaleP21SW36JSONEqual(a, b []byte) bool {
 	return reflect.DeepEqual(left, right)
 }
 
-func TestScaleP21SW36RefreshPreservesPrivateInputsAndNilAppend(t *testing.T) {
+func TestRefreshPreservesPrivateInputsAndNilAppend(t *testing.T) {
 	native := time.Now()
 	before := domain.Bootstrap{
 		ExportJobs:    []domain.ExportJob{{ID: "export", Data: "native\x00private", CreatedAt: native}},

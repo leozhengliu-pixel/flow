@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW85Oracle(t *testing.T, literal, view *SQLiteStore, ctx context.Context, workspace, field, id string) int {
+func realtimeRecordHeaderOracle(t *testing.T, literal, view *SQLiteStore, ctx context.Context, workspace, field, id string) int {
 	t.Helper()
 	var want RealtimeRecordHeader
 	raw, found := literal.MetadataRecord(workspace, field, id)
@@ -54,7 +54,7 @@ func scaleP21SW85Oracle(t *testing.T, literal, view *SQLiteStore, ctx context.Co
 	return held
 }
 
-func TestScaleP21SW85RealtimeRecordLiteralTable(t *testing.T) {
+func TestRealtimeRecordLiteralTable(t *testing.T) {
 	data := domain.Bootstrap{}
 	root := reflect.ValueOf(&data).Elem()
 	// Cover every literal persisted slice-of-struct family, including those
@@ -108,29 +108,29 @@ func TestScaleP21SW85RealtimeRecordLiteralTable(t *testing.T) {
 	}
 	values := map[string]domain.Bootstrap{"physical\x00key": data, "other": {SavedViews: []domain.SavedView{{ID: "duplicate", TeamID: "other-team"}}}}
 	literal := &SQLiteStore{workspaces: values, lastWorkspaceKey: "physical\x00key"}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	view.lastWorkspaceKey = literal.lastWorkspaceKey
 	statements := 0
 	ctx := WithSQLStatementObserver(t.Context(), func(string) { statements++ })
 	for _, field := range fields {
 		t.Run(field, func(t *testing.T) {
 			for _, id := range []string{"duplicate", "empty-slices", "nil-slices", "alias-only", "missing", "", " duplicate", "DUPLICATE", "duplicate\x00"} {
-				scaleP21SW85Oracle(t, literal, view, ctx, "", field, id)
+				realtimeRecordHeaderOracle(t, literal, view, ctx, "", field, id)
 			}
 		})
 	}
 	for _, field := range []string{"SavedViews", "savedviews", "unknown", "settings", "workspace", "issues", "comments", "projectUpdates"} {
-		scaleP21SW85Oracle(t, literal, view, ctx, "", field, "duplicate")
+		realtimeRecordHeaderOracle(t, literal, view, ctx, "", field, "duplicate")
 	}
 	for _, workspace := range []string{"other", "missing", " physical\x00key", "PHYSICAL\x00KEY"} {
-		scaleP21SW85Oracle(t, literal, view, ctx, workspace, "savedViews", "duplicate")
+		realtimeRecordHeaderOracle(t, literal, view, ctx, workspace, "savedViews", "duplicate")
 	}
 	if statements != 0 || view.WorkspaceMetadataDecodes() != 0 || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("literal table performed SQL, decoded metadata, or leaked work", statements)
 	}
 }
 
-func TestScaleP21SW85RealtimeRecordFullEncoding(t *testing.T) {
+func TestRealtimeRecordFullEncoding(t *testing.T) {
 	badTime := time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
 	type fixture struct {
 		name, field string
@@ -158,8 +158,8 @@ func TestScaleP21SW85RealtimeRecordFullEncoding(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			values := map[string]domain.Bootstrap{"physical": test.data}
 			literal := &SQLiteStore{workspaces: values}
-			view := scaleP21HotLogoStore(t, values)
-			scaleP21SW85Oracle(t, literal, view, t.Context(), "physical", test.field, "selected")
+			view := scaleHotLogoStore(t, values)
+			realtimeRecordHeaderOracle(t, literal, view, t.Context(), "physical", test.field, "selected")
 			if view.MetadataWorkUsedForTesting() != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatal("encoding case leaked or hydrated metadata")
 			}
@@ -167,9 +167,9 @@ func TestScaleP21SW85RealtimeRecordFullEncoding(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW85RealtimeRecordOwnershipAndCurrentGeneration(t *testing.T) {
+func TestRealtimeRecordOwnershipAndCurrentGeneration(t *testing.T) {
 	values := map[string]domain.Bootstrap{"physical": {SavedViews: []domain.SavedView{{ID: "selected", TeamID: "old"}}}}
-	view := scaleP21HotLogoStore(t, values)
+	view := scaleHotLogoStore(t, values)
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -186,13 +186,13 @@ func TestScaleP21SW85RealtimeRecordOwnershipAndCurrentGeneration(t *testing.T) {
 	view.installMetadataLogicalSource("physical", source)
 	literal := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": next}}
 	base := view.MetadataWorkUsedForTesting()
-	scaleP21SW85Oracle(t, literal, view, pinned, "physical", "savedViews", "selected")
+	realtimeRecordHeaderOracle(t, literal, view, pinned, "physical", "savedViews", "selected")
 	if view.MetadataWorkUsedForTesting() != base {
 		t.Fatal("current generation read leaked work")
 	}
 	parent.Close()
 	// An expired caller pin is equally irrelevant to the literal accessor.
-	scaleP21SW85Oracle(t, literal, view, pinned, "physical", "savedViews", "selected")
+	realtimeRecordHeaderOracle(t, literal, view, pinned, "physical", "savedViews", "selected")
 	read, _, err := view.BeginRealtimeRecordRead(t.Context(), "physical", "savedViews", "selected")
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +205,7 @@ func TestScaleP21SW85RealtimeRecordOwnershipAndCurrentGeneration(t *testing.T) {
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("selected output leaked")
 	}
-	view = scaleP21HotLogoStore(t, values)
+	view = scaleHotLogoStore(t, values)
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	if r, _, err := view.BeginRealtimeRecordRead(canceled, "physical", "savedViews", "selected"); r != nil || !errors.Is(err, context.Canceled) || view.MetadataWorkUsedForTesting() != 0 {
@@ -228,17 +228,17 @@ func TestScaleP21SW85RealtimeRecordOwnershipAndCurrentGeneration(t *testing.T) {
 	}
 	view.metadataResidency.work.limit = limit
 	values["physical"] = domain.Bootstrap{Documents: []domain.Document{{ID: "selected", TeamIDs: []string{strings.Repeat("large", 2000000)}}}}
-	large := scaleP21HotLogoStore(t, values)
+	large := scaleHotLogoStore(t, values)
 	large.metadataResidency.work.limit = 1 << 20
 	if r, _, err := large.BeginRealtimeRecordRead(t.Context(), "physical", "documents", "selected"); r != nil || !errors.Is(err, ErrMetadataWorkBudget) || large.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("oversized selected header was not refused and released", err)
 	}
 }
 
-func TestScaleP21SW85RealtimeRecordWarmReloadBoundedBodies(t *testing.T) {
+func TestRealtimeRecordWarmReloadBoundedBodies(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -265,7 +265,7 @@ func TestScaleP21SW85RealtimeRecordWarmReloadBoundedBodies(t *testing.T) {
 			}
 			statements := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { statements++ })
-			held := scaleP21SW85Oracle(t, f.SQLiteStore, view, ctx, workspace, "savedViews", "selected")
+			held := realtimeRecordHeaderOracle(t, f.SQLiteStore, view, ctx, workspace, "savedViews", "selected")
 			if expectedWork == 0 {
 				expectedWork = held
 			}
@@ -283,8 +283,8 @@ func TestScaleP21SW85RealtimeRecordWarmReloadBoundedBodies(t *testing.T) {
 		"unrelated": {Documents: []domain.Document{{ID: "other", Content: body}}},
 	}
 	literal := &SQLiteStore{workspaces: values}
-	oversized := scaleP21HotLogoStore(t, values)
-	scaleP21SW85Oracle(t, literal, oversized, t.Context(), "physical", "savedViews", "selected")
+	oversized := scaleHotLogoStore(t, values)
+	realtimeRecordHeaderOracle(t, literal, oversized, t.Context(), "physical", "savedViews", "selected")
 	if oversized.MetadataWorkUsedForTesting() != 0 || oversized.WorkspaceMetadataDecodes() != 0 {
 		t.Fatal("oversized unrelated bodies leaked or hydrated metadata")
 	}

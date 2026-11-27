@@ -12,11 +12,11 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21M1LoopFinishDifferential(t *testing.T) {
+func TestScaleLoopFinishDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, loopID, runID := f.data.Workspace.URLKey, idgen.New("m1-loop-"), idgen.New("m1-run-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
 			data.Loops = append(data.Loops, domain.Loop{ID: loopID, OwnerID: f.data.Viewer.ID, Name: "Finish", Status: "published"})

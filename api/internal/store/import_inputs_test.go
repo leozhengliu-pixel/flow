@@ -13,7 +13,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW51InputRows(t *testing.T, repo *SQLiteStore, workspace string) map[string][32]byte {
+func inputRows(t *testing.T, repo *SQLiteStore, workspace string) map[string][32]byte {
 	t.Helper()
 	rows, err := repo.db.QueryContext(t.Context(), `SELECT kind,id,data FROM workspace_content_records WHERE workspace_key=? AND kind IN ('import_input','migration_input')`, workspace)
 	if err != nil {
@@ -35,13 +35,13 @@ func scaleP21SW51InputRows(t *testing.T, repo *SQLiteStore, workspace string) ma
 	return result
 }
 
-func TestScaleP21SW51ScopedImportInputMembership(t *testing.T) {
+func TestScopedImportInputMembership(t *testing.T) {
 	for _, name := range []string{"unrelated-setting", "read-only-import", "import-point", "complete-import", "delete-migration", "import-field", "migration-field"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("FLOW_BOUNDED_METADATA", "off")
 			t.Setenv("FLOW_RECORD_HYDRATION", "on")
 			t.Setenv("FLOW_RECORD_JOURNAL", "on")
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			prefix := idgen.New("sw51_")
 			first, second := prefix+"first", prefix+"second"
@@ -69,7 +69,7 @@ func TestScaleP21SW51ScopedImportInputMembership(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				before := scaleP21SW51InputRows(t, f.SQLiteStore, workspace)
+				before := inputRows(t, f.SQLiteStore, workspace)
 				if len(before) != 4 {
 					t.Fatal("real upload inputs were not seeded", len(before))
 				}
@@ -114,7 +114,7 @@ func TestScaleP21SW51ScopedImportInputMembership(t *testing.T) {
 				if err != nil {
 					t.Fatal("input mutation", bounded, err)
 				}
-				after := scaleP21SW51InputRows(t, f.SQLiteStore, workspace)
+				after := inputRows(t, f.SQLiteStore, workspace)
 				expected := map[string][32]byte{}
 				for key, value := range before {
 					expected[key] = value

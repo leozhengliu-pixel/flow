@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-type sw17AttributeOutcome struct {
+type attributeMigrationOutcome struct {
 	Rows       [][]string
 	Last       string
 	Complete   int
@@ -24,9 +24,9 @@ type sw17AttributeOutcome struct {
 	Recurrence bool
 }
 
-func sw17AttributeOutcomeFor(t *testing.T, f scaleP09Fixture) sw17AttributeOutcome {
+func attributeMigrationOutcomeFor(t *testing.T, f scaleFixture) attributeMigrationOutcome {
 	t.Helper()
-	out := sw17AttributeOutcome{Rows: [][]string{}}
+	out := attributeMigrationOutcome{Rows: [][]string{}}
 	rows, err := f.db.QueryContext(t.Context(), `SELECT issue_id,field,value FROM issue_attribute_records WHERE workspace_key=? ORDER BY issue_id,field,value`, f.data.Workspace.URLKey)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func sw17AttributeOutcomeFor(t *testing.T, f scaleP09Fixture) sw17AttributeOutco
 	return out
 }
 
-func sw17AttributeSourceHash(t *testing.T, f scaleP09Fixture) [32]byte {
+func attributeMigrationSourceHash(t *testing.T, f scaleFixture) [32]byte {
 	t.Helper()
 	digest := sha256.New()
 	rows, err := f.db.QueryContext(t.Context(), `SELECT id,data FROM issue_records WHERE workspace_key=? ORDER BY id`, f.data.Workspace.URLKey)
@@ -80,18 +80,18 @@ func sw17AttributeSourceHash(t *testing.T, f scaleP09Fixture) [32]byte {
 	return [32]byte(digest.Sum(nil))
 }
 
-func sw17AttributeProbe(f scaleP09Fixture, legacy *SQLiteStore) *SQLiteStore {
+func attributeMigrationProbe(f scaleFixture, legacy *SQLiteStore) *SQLiteStore {
 	return &SQLiteStore{
 		db: f.db, dialect: f.dialect, maxStateBytes: f.maxStateBytes,
 		workspaces: legacy.workspaces, metadataResidency: newMetadataResidency(),
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationDifferential(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
+func TestAttributeMigrationDifferential(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
 	workspace := f.data.Workspace.URLKey
-	before := sw17AttributeSourceHash(t, f)
+	before := attributeMigrationSourceHash(t, f)
 	outside := workspace + "-outside"
 	if _, err := f.db.ExecContext(t.Context(), `INSERT INTO issue_attribute_records(workspace_key,issue_id,field,value) VALUES(?,'outside','estimate','99')`, outside); err != nil {
 		t.Fatal(err)
@@ -110,9 +110,9 @@ func TestScaleP21SW17AttributeMigrationDifferential(t *testing.T) {
 	} {
 		for _, phase := range []string{"fresh", "completed", "resume", "older-version"} {
 			t.Run(job.name+"/"+phase, func(t *testing.T) {
-				var outcomes []sw17AttributeOutcome
+				var outcomes []attributeMigrationOutcome
 				for _, source := range []*SQLiteStore{legacy, probe} {
-					sw17ResetAttributeMigration(t, f)
+					resetAttributeMigration(t, f)
 					if _, err := f.db.ExecContext(t.Context(), `INSERT INTO issue_attribute_records(workspace_key,issue_id,field,value) VALUES(?,'sw17-attribute-0001','stale-field','remove'),(?,'orphan','orphan-field','keep')`, workspace, workspace); err != nil {
 						t.Fatal(err)
 					}
@@ -139,7 +139,7 @@ func TestScaleP21SW17AttributeMigrationDifferential(t *testing.T) {
 					if err := job.run(source, ctx); err != nil {
 						t.Fatal("migration failed", source == probe, err)
 					}
-					outcome := sw17AttributeOutcomeFor(t, f)
+					outcome := attributeMigrationOutcomeFor(t, f)
 					if phase == "fresh" && len(outcome.Rows) < 5000 {
 						t.Fatal("fixture did not exercise a complete multi-batch index migration", len(outcome.Rows))
 					}
@@ -152,7 +152,7 @@ func TestScaleP21SW17AttributeMigrationDifferential(t *testing.T) {
 			})
 		}
 	}
-	if sw17AttributeSourceHash(t, f) != before {
+	if attributeMigrationSourceHash(t, f) != before {
 		t.Fatal("index migration changed canonical issue bodies")
 	}
 	var outsideValue string
@@ -164,10 +164,10 @@ func TestScaleP21SW17AttributeMigrationDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationRollback(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
-	before := sw17AttributeSourceHash(t, f)
+func TestAttributeMigrationRollback(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
+	before := attributeMigrationSourceHash(t, f)
 	type faultKey struct{}
 	injected := errors.New("sw17 migration precommit failure")
 	t.Cleanup(func() { f.db.commitHooks.Store(nil) })
@@ -179,9 +179,9 @@ func TestScaleP21SW17AttributeMigrationRollback(t *testing.T) {
 		{"recurrence", (*SQLiteStore).migrateRecurrenceInstances},
 	} {
 		t.Run(job.name, func(t *testing.T) {
-			var outcomes []sw17AttributeOutcome
+			var outcomes []attributeMigrationOutcome
 			for _, source := range []*SQLiteStore{legacy, probe} {
-				sw17ResetAttributeMigration(t, f)
+				resetAttributeMigration(t, f)
 				commits, failAt := 0, 1
 				if job.name == "attributes" {
 					failAt = 3
@@ -200,7 +200,7 @@ func TestScaleP21SW17AttributeMigrationRollback(t *testing.T) {
 				if !errors.Is(err, injected) || commits != failAt {
 					t.Fatal("late precommit failure changed", source == probe, commits, err)
 				}
-				outcomes = append(outcomes, sw17AttributeOutcomeFor(t, f))
+				outcomes = append(outcomes, attributeMigrationOutcomeFor(t, f))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 				t.Fatalf("late error changed atomic/checkpoint state: old=%+v native=%+v", outcomes[0], outcomes[1])
@@ -213,14 +213,14 @@ func TestScaleP21SW17AttributeMigrationRollback(t *testing.T) {
 			}
 		})
 	}
-	if sw17AttributeSourceHash(t, f) != before || probe.metadataResidency.work.used != 0 {
+	if attributeMigrationSourceHash(t, f) != before || probe.metadataResidency.work.used != 0 {
 		t.Fatal("failed migration changed source or leaked work")
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationTypedRows(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
+func TestAttributeMigrationTypedRows(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
 	workspace := f.data.Workspace.URLKey
 	ids := []string{"sw17-attribute-0000", "sw17-attribute-0001", "sw17-attribute-0002", "sw17-attribute-0501"}
 	for _, id := range ids {
@@ -264,7 +264,7 @@ func TestScaleP21SW17AttributeMigrationTypedRows(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE issue_records SET data=? WHERE workspace_key=? AND id=?`, lastDuplicate, workspace, ids[3]); err != nil {
 		t.Fatal(err)
 	}
-	before := sw17AttributeSourceHash(t, f)
+	before := attributeMigrationSourceHash(t, f)
 	for _, job := range []struct {
 		name string
 		run  func(*SQLiteStore, context.Context) error
@@ -273,13 +273,13 @@ func TestScaleP21SW17AttributeMigrationTypedRows(t *testing.T) {
 		{"recurrence", (*SQLiteStore).migrateRecurrenceInstances},
 	} {
 		t.Run(job.name, func(t *testing.T) {
-			var outcomes []sw17AttributeOutcome
+			var outcomes []attributeMigrationOutcome
 			for _, source := range []*SQLiteStore{legacy, probe} {
-				sw17ResetAttributeMigration(t, f)
+				resetAttributeMigration(t, f)
 				if err := job.run(source, t.Context()); err != nil {
 					t.Fatal(err)
 				}
-				outcomes = append(outcomes, sw17AttributeOutcomeFor(t, f))
+				outcomes = append(outcomes, attributeMigrationOutcomeFor(t, f))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 				t.Fatalf("typed source/batch fidelity differs: old rows=%d native rows=%d", len(outcomes[0].Rows), len(outcomes[1].Rows))
@@ -298,27 +298,27 @@ func TestScaleP21SW17AttributeMigrationTypedRows(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			var outcomes []sw17AttributeOutcome
+			var outcomes []attributeMigrationOutcome
 			for _, source := range []*SQLiteStore{legacy, probe} {
-				sw17ResetAttributeMigration(t, f)
+				resetAttributeMigration(t, f)
 				if err := source.migrateRecurrenceInstances(t.Context()); err != nil {
 					t.Fatal(err)
 				}
-				outcomes = append(outcomes, sw17AttributeOutcomeFor(t, f))
+				outcomes = append(outcomes, attributeMigrationOutcomeFor(t, f))
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
 				t.Fatal("native recurrence changed duplicate winners under reverse source order")
 			}
 		})
 	}
-	if sw17AttributeSourceHash(t, f) != before || probe.metadataResidency.work.used != 0 {
+	if attributeMigrationSourceHash(t, f) != before || probe.metadataResidency.work.used != 0 {
 		t.Fatal("typed migration changed canonical rows or leaked work")
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
+func TestAttributeMigrationAdmission(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
 	workspace := f.data.Workspace.URLKey
 	f.db.SetMaxOpenConns(1)
 	defer f.db.SetMaxOpenConns(4)
@@ -330,7 +330,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 		{"recurrence", (*SQLiteStore).migrateRecurrenceInstances},
 	} {
 		t.Run(job.name, func(t *testing.T) {
-			sw17ResetAttributeMigration(t, f)
+			resetAttributeMigration(t, f)
 			probe.metadataResidency.work.limit = 4 << 20
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			err := job.run(probe, ctx)
@@ -338,7 +338,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 			if !errors.Is(err, ErrMetadataWorkBudget) {
 				t.Fatal("constrained snapshot job did not fail admission", err)
 			}
-			state := sw17AttributeOutcomeFor(t, f)
+			state := attributeMigrationOutcomeFor(t, f)
 			if len(state.Rows) != 0 || state.Recurrence || state.Last != "" || probe.metadataResidency.work.used != 0 {
 				t.Fatal("failed admission committed partial work or leaked leases")
 			}
@@ -349,7 +349,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 			if probe.metadataResidency.work.used != 0 {
 				t.Fatal("successful migration leaked leases")
 			}
-			sw17ResetAttributeMigration(t, f)
+			resetAttributeMigration(t, f)
 			cancelled, stop := context.WithCancel(t.Context())
 			stop()
 			if err := job.run(probe, cancelled); !errors.Is(err, context.Canceled) {
@@ -358,13 +358,13 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 		})
 	}
 	t.Run("recurrence-spool-budget", func(t *testing.T) {
-		sw17ResetAttributeMigration(t, f)
+		resetAttributeMigration(t, f)
 		used := recordSpoolBytes.Load()
 		t.Setenv("FLOW_RECORD_SPOOL_MAX_BYTES", fmt.Sprint(used+64))
 		if err := probe.migrateRecurrenceInstances(t.Context()); !errors.Is(err, ErrRecordSpoolBudget) {
 			t.Fatal("spool exhaustion did not fail explicitly", err)
 		}
-		state := sw17AttributeOutcomeFor(t, f)
+		state := attributeMigrationOutcomeFor(t, f)
 		if len(state.Rows) != 0 || state.Recurrence || recordSpoolBytes.Load() != used || probe.metadataResidency.work.used != 0 {
 			t.Fatal("spool failure committed index rows/marker or leaked reservations")
 		}
@@ -380,7 +380,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = probe.sw17ReadAttributeIssue(ctx, tx, workspace, sw17AttributeHeader{id: "sw17-attribute-0000", size: 100}, func(context.Context, domain.Issue) error {
+	err = probe.readAttributeIssue(ctx, tx, workspace, attributeHeader{id: "sw17-attribute-0000", size: 100}, func(context.Context, domain.Issue) error {
 		t.Fatal("failed SQL reached issue visitor")
 		return nil
 	})
@@ -418,7 +418,7 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nativeErr := probe.sw17ReadAttributeIssue(ctx, tx, workspace, sw17AttributeHeader{id: id, size: int64(len(invalid))}, func(context.Context, domain.Issue) error {
+	nativeErr := probe.readAttributeIssue(ctx, tx, workspace, attributeHeader{id: id, size: int64(len(invalid))}, func(context.Context, domain.Issue) error {
 		t.Fatal("malformed issue reached attribute visitor")
 		return nil
 	})
@@ -432,9 +432,9 @@ func TestScaleP21SW17AttributeMigrationAdmission(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationMeasurement(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
-	probe := sw17AttributeProbe(f, legacy)
+func TestAttributeMigrationMeasurement(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
+	probe := attributeMigrationProbe(f, legacy)
 	for _, job := range []struct {
 		name string
 		run  func(*SQLiteStore, context.Context) error
@@ -443,7 +443,7 @@ func TestScaleP21SW17AttributeMigrationMeasurement(t *testing.T) {
 		{"recurrence", (*SQLiteStore).migrateRecurrenceInstances},
 	} {
 		for _, source := range []*SQLiteStore{legacy, probe} {
-			sw17ResetAttributeMigration(t, f)
+			resetAttributeMigration(t, f)
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
@@ -456,12 +456,12 @@ func TestScaleP21SW17AttributeMigrationMeasurement(t *testing.T) {
 	}
 }
 
-func sw17AttributeFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
+func attributeMigrationFixture(t *testing.T) (scaleFixture, *SQLiteStore) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	// Other packages open this same persistent database in CI. Their startup
 	// migrations must not advance the owned checkpoints being compared here.
 	if f.startupLock != nil {
@@ -522,7 +522,7 @@ func sw17AttributeFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore) {
 	return f, legacy
 }
 
-func sw17ResetAttributeMigration(t *testing.T, f scaleP09Fixture) {
+func resetAttributeMigration(t *testing.T, f scaleFixture) {
 	t.Helper()
 	for _, table := range []string{"issue_attribute_records", "issue_attribute_migrations", "recurrence_instance_migrations"} {
 		if _, err := f.db.ExecContext(t.Context(), "DELETE FROM "+table+" WHERE workspace_key=?", f.data.Workspace.URLKey); err != nil {
@@ -531,13 +531,13 @@ func sw17ResetAttributeMigration(t *testing.T, f scaleP09Fixture) {
 	}
 }
 
-func TestScaleP21SW17AttributeMigrationBaseline(t *testing.T) {
-	f, legacy := sw17AttributeFixture(t)
+func TestAttributeMigrationBaseline(t *testing.T) {
+	f, legacy := attributeMigrationFixture(t)
 	for _, job := range []struct {
 		name string
 		run  func(context.Context) error
 	}{{"attributes", legacy.migrateIssueAttributes}, {"recurrence", legacy.migrateRecurrenceInstances}} {
-		sw17ResetAttributeMigration(t, f)
+		resetAttributeMigration(t, f)
 		runtime.GC()
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)

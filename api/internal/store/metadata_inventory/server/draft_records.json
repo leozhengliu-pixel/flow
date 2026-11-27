@@ -5,7 +5,7 @@
     "draftRecordValidator": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Literal validator with an explicit repository parameter. The query/access helper delegates the unchanged parser/cache/dev fallback to the borrowed legacy repository; authenticated metadata and live issue queries use that same repository. Metadata/query are captured before the mutation callback exactly as before, rather than reconstructed from mutation data. The create/update COLD roots retain the facade through validation, writer publication and response. SW191 compares the whole M matrix on warm/reloaded data, actual routes and rows, body-decode capture timing, and preservation of metadata after constructor-time capture.",
+      "reason": "Literal validator with an explicit repository parameter. The query/access helper delegates the unchanged parser/cache/dev fallback to the borrowed legacy repository; authenticated metadata and live issue queries use that same repository. Metadata/query are captured before the mutation callback exactly as before, rather than reconstructed from mutation data. The create/update COLD roots retain the facade through validation, writer publication and response. draft and settings reads compares the whole M matrix on warm/reloaded data, actual routes and rows, body-decode capture timing, and preservation of metadata after constructor-time capture.",
       "coldDispatch": "server/draft_records.go:draftRecordValidator",
       "accessors": [
         "Bootstrap",

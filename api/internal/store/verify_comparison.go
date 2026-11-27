@@ -11,7 +11,7 @@ import (
 // Exact equality is already a complete comparison. Avoid JSON decoding and
 // stamp normalization of those same immutable collections in both results.
 // Leave unequal fields intact for the existing generated-ID/clock oracle.
-func scaleP16BoundVerificationComparison(ctx context.Context, a, b mutationCallbackResult, protected []byte) (mutationCallbackResult, mutationCallbackResult, []byte) {
+func scaleBoundVerificationComparison(ctx context.Context, a, b mutationCallbackResult, protected []byte) (mutationCallbackResult, mutationCallbackResult, []byte) {
 	enabled := func(name string) bool {
 		switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
 		case "on", "1", "true":

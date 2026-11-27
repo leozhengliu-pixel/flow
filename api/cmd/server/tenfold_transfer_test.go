@@ -13,17 +13,17 @@ import (
 	"flow/api/internal/store"
 )
 
-type scaleP20TransferCounter struct {
+type scaleTransferCounter struct {
 	header http.Header
 	status int
 	bytes  int64
 }
 
-func (w *scaleP20TransferCounter) Header() http.Header { return w.header }
-func (w *scaleP20TransferCounter) WriteHeader(status int) {
+func (w *scaleTransferCounter) Header() http.Header { return w.header }
+func (w *scaleTransferCounter) WriteHeader(status int) {
 	w.status = status
 }
-func (w *scaleP20TransferCounter) Write(data []byte) (int, error) {
+func (w *scaleTransferCounter) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
@@ -31,7 +31,7 @@ func (w *scaleP20TransferCounter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func TestScaleP20ProgrammeTenfoldTransfer(t *testing.T) {
+func TestScaleProgrammeTenfoldTransfer(t *testing.T) {
 	if os.Getenv("FLOW_P20_MEASURE_TENFOLD") != "1" {
 		t.Skip("set FLOW_P20_MEASURE_TENFOLD=1 for the P01 tenfold transfer fixture")
 	}
@@ -39,7 +39,7 @@ func TestScaleP20ProgrammeTenfoldTransfer(t *testing.T) {
 	t.Setenv("FLOW_SYNC_MANIFEST", "on")
 	t.Setenv("FLOW_INDEXED_READS", "on")
 	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32))))
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	core, ok := db.repo.WorkspaceMetadata(db.key)
 	if !ok || len(core.Teams) == 0 {
 		t.Fatal("fixture workspace missing")
@@ -67,7 +67,7 @@ func TestScaleP20ProgrammeTenfoldTransfer(t *testing.T) {
 		"/api/documents/lt-doc-0000/history?projection=summary&limit=200",
 		"/api/documents/lt-doc-0000/history/lt-doc-revision-00000",
 	} {
-		response := &scaleP20TransferCounter{header: http.Header{}}
+		response := &scaleTransferCounter{header: http.Header{}}
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.status != http.StatusOK {
 			t.Fatalf("%s: status=%d", path, response.status)

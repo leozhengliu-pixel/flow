@@ -13,16 +13,16 @@ import (
 
 // Canonical witnesses deliberately bypass the installed logical source. They
 // continue testing why an arbitrary SQL substitution cannot certify a reader.
-func scaleP21SW30CanonicalMetadataWitness(ctx context.Context, s *SQLiteStore, workspace string, scope MetadataRecordScope) (domain.Bootstrap, bool, error) {
+func canonicalMetadataWitness(ctx context.Context, s *SQLiteStore, workspace string, scope MetadataRecordScope) (domain.Bootstrap, bool, error) {
 	hydrated, err := s.HydrateWorkspaceMetadata(ctx, workspace, scope)
 	return hydrated.Data, err == nil, err
 }
 
-func TestScaleP21SW30LogicalReloadLifecycle(t *testing.T) {
+func TestLogicalReloadLifecycle(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	id := idgen.New("sw30_emoji_")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "customEmojis"), workspace, "application_policy.updated", id, nil, func(data *domain.Bootstrap) error {
@@ -70,11 +70,11 @@ func TestScaleP21SW30LogicalReloadLifecycle(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW30LogicalNormalizerErrorCleansUp(t *testing.T) {
+func TestLogicalNormalizerErrorCleansUp(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	source, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{
 		Workspace: f.data.Workspace,
 		Projects:  []domain.Project{{ID: "sw30-error-project"}},
@@ -106,13 +106,13 @@ func TestScaleP21SW30LogicalNormalizerErrorCleansUp(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW30LogicalWriterDefaultWorkspace(t *testing.T) {
+func TestLogicalWriterDefaultWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, policy := range []bool{false, true} {
 		t.Run(map[bool]string{false: "record", true: "policy"}[policy], func(t *testing.T) {
-			f := scaleP09Database(t)
+			f := journalScaleDatabase(t)
 			workspace := f.data.Workspace.URLKey
 			second := idgen.New("sw30_default_")
 			if _, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "Second default workspace", second, "us"); err != nil {
@@ -158,7 +158,7 @@ func TestScaleP21SW30LogicalWriterDefaultWorkspace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW30LogicalNormalizationDifferential(t *testing.T) {
+func TestLogicalNormalizationDifferential(t *testing.T) {
 	when := time.Date(2026, 11, 13, 1, 0, 0, 0, time.UTC)
 	current := domain.User{ID: "usr_current", Name: "Current", DisplayName: "Current name"}
 	stale := current

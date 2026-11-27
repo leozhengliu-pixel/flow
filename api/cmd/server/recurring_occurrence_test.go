@@ -24,13 +24,13 @@ import (
 // the ordered realtime publications (the mutation's own event and the
 // source/sub-issue entity events).
 
-type scaleP21SW206Case struct {
+type recurringOccurrenceCase struct {
 	name       string
 	sequence   int
 	noSequence bool
 	// bulk archived sub-issues of the source, imported in batches.
 	bulk int
-	edit func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time)
+	edit func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time)
 	// tick runs the workspace pass instead of one occurrence of the source.
 	tick bool
 	// want is the number of created issues (instance plus sub-issues); -1
@@ -39,20 +39,20 @@ type scaleP21SW206Case struct {
 	err  error
 }
 
-type scaleP21SW206Outcome struct {
+type recurringOccurrenceOutcome struct {
 	Created  any
 	Error    string
-	Rows     scaleP21SW59Rows
-	Metadata []scaleP21SW182MetadataRow
+	Rows     discussionWriteRows
+	Metadata []metadataRow
 	Sequence [][]any
 	Events   []domain.DomainEvent
 	Webhooks []json.RawMessage
 	Realtime []json.RawMessage
 }
 
-var scaleP21SW206Collaboration = regexp.MustCompile(`collab_\d+_[0-9a-f]{16}`)
+var recurringOccurrenceCollaboration = regexp.MustCompile(`collab_\d+_[0-9a-f]{16}`)
 
-func (f scaleP21SW182Fixture) sw206Exec(t *testing.T, query string, args ...any) {
+func (f automationCycleScheduleFixture) recurringOccurrenceExec(t *testing.T, query string, args ...any) {
 	t.Helper()
 	f.reader.query(t, `SELECT 1 FROM workspace_states WHERE workspace_key=?`, f.data.Workspace.URLKey).Close()
 	if f.reader.config.Driver == "postgres" || f.reader.config.Driver == "postgresql" {
@@ -65,7 +65,7 @@ func (f scaleP21SW182Fixture) sw206Exec(t *testing.T, query string, args ...any)
 	}
 }
 
-func (f scaleP21SW182Fixture) sw206Rows(t *testing.T, query string, arg any) [][]any {
+func (f automationCycleScheduleFixture) recurringOccurrenceRows(t *testing.T, query string, arg any) [][]any {
 	t.Helper()
 	rows := f.reader.query(t, query, arg)
 	defer rows.Close()
@@ -96,10 +96,10 @@ func (f scaleP21SW182Fixture) sw206Rows(t *testing.T, query string, arg any) [][
 	return result
 }
 
-// scaleP21SW206Seed replaces the workspace with the fixture's baseline plus a
+// recurringOccurrenceSeed replaces the workspace with the fixture's baseline plus a
 // recurring source, its sub-issue templates and the case's edit, sets the
 // issue sequence, and refreshes the bounded view.
-func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206Case, now time.Time, reload bool) {
+func recurringOccurrenceSeed(t *testing.T, f automationCycleScheduleFixture, test recurringOccurrenceCase, now time.Time, reload bool) {
 	t.Helper()
 	for _, source := range []*store.SQLiteStore{f.repository, f.probe} {
 		source.SetWebhookSink(nil)
@@ -110,11 +110,11 @@ func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206C
 	}
 	restore := store.ForceFullMutationsForTesting(true)
 	err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw206_fixture", "", nil, func(data *domain.Bootstrap) error {
-		base := cloneSW206(t, f.base)
+		base := recurringOccurrenceClone(t, f.base)
 		*data = base
 		data.Issues, data.Activities, data.Comments = []domain.Issue{}, map[string][]domain.ActivityEvent{}, map[string][]domain.Comment{}
 		data.Notifications, data.NotificationDeliveries = []domain.Notification{}, []domain.NotificationDelivery{}
-		scaleP21SW206Family(f, data, now)
+		recurringOccurrenceFamily(f, data, now)
 		if test.edit != nil {
 			test.edit(f, data, now)
 		}
@@ -124,7 +124,7 @@ func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206C
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceID := f.sw206ID("source")
+	sourceID := f.recurringOccurrenceId("source")
 	for start := 0; start < test.bulk; start += 1000 {
 		var batch []domain.Issue
 		for index := start; index < min(start+1000, test.bulk); index++ {
@@ -132,7 +132,7 @@ func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206C
 			batch = append(batch, domain.Issue{
 				ID: fmt.Sprintf("%sbulk-%05d", f.prefix, index), Number: 5000 + index, Identifier: fmt.Sprintf("REC-%d", 5000+index),
 				Title: "Archived bulk child", Team: domain.Team{ID: f.team, Key: "REC", Name: "Recurring team"},
-				State:   domain.WorkflowState{ID: f.sw206ID("todo"), Name: "Todo", Type: "unstarted", TeamID: f.team, Position: 1, Default: true},
+				State:   domain.WorkflowState{ID: f.recurringOccurrenceId("todo"), Name: "Todo", Type: "unstarted", TeamID: f.team, Position: 1, Default: true},
 				Creator: f.base.Viewer, ParentID: &sourceID, ArchivedAt: &at, Version: 1, CreatedAt: at, UpdatedAt: at,
 			})
 		}
@@ -144,9 +144,9 @@ func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206C
 	if sequence == 0 {
 		sequence = 1999
 	}
-	f.sw206Exec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, sequence, f.data.Workspace.URLKey)
+	f.recurringOccurrenceExec(t, `UPDATE issue_number_sequences SET last_number=? WHERE workspace_key=?`, sequence, f.data.Workspace.URLKey)
 	if test.noSequence {
-		f.sw206Exec(t, `DELETE FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
+		f.recurringOccurrenceExec(t, `DELETE FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
 	}
 	if reload {
 		if err := f.repository.ReloadWorkspace(t.Context(), f.data.Workspace.URLKey); err != nil {
@@ -158,7 +158,7 @@ func scaleP21SW206Seed(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206C
 	}
 }
 
-func cloneSW206(t *testing.T, data domain.Bootstrap) domain.Bootstrap {
+func recurringOccurrenceClone(t *testing.T, data domain.Bootstrap) domain.Bootstrap {
 	t.Helper()
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -171,46 +171,48 @@ func cloneSW206(t *testing.T, data domain.Bootstrap) domain.Bootstrap {
 	return result
 }
 
-func (f scaleP21SW182Fixture) sw206ID(name string) string { return f.prefix + name }
+func (f automationCycleScheduleFixture) recurringOccurrenceId(name string) string {
+	return f.prefix + name
+}
 
-// scaleP21SW206Family seeds a weekly source due on 2026-09-07 in a triage
+// recurringOccurrenceFamily seeds a weekly source due on 2026-09-07 in a triage
 // team with labels, an assignee, a rich description and document content,
 // and three sub-issue templates in explicit order (one archived, one in a
 // private team, one in an archived team), an existing recent edit history
 // and an unrelated high-numbered issue outside the scope.
-func scaleP21SW206Family(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+func recurringOccurrenceFamily(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 	team := domain.Team{ID: f.team, Key: "REC", Name: "Recurring team"}
-	private := domain.Team{ID: f.sw206ID("private"), Key: "RPRV", Name: "Private recurring team", Private: true}
-	archivedTeam := domain.Team{ID: f.sw206ID("archived-team"), Key: "RARC", Name: "Archived team", ArchivedAt: &now}
+	private := domain.Team{ID: f.recurringOccurrenceId("private"), Key: "RPRV", Name: "Private recurring team", Private: true}
+	archivedTeam := domain.Team{ID: f.recurringOccurrenceId("archived-team"), Key: "RARC", Name: "Archived team", ArchivedAt: &now}
 	data.Teams = append(data.Teams, team, private, archivedTeam)
 	if data.TeamSettings == nil {
 		data.TeamSettings = map[string]domain.TeamSettings{}
 	}
 	data.TeamSettings[team.ID] = domain.TeamSettings{TeamID: team.ID, Timezone: "America/Los_Angeles", TriageEnabled: true, Access: "public"}
 	data.TeamSettings[private.ID] = domain.TeamSettings{TeamID: private.ID, Timezone: "UTC", Access: "private"}
-	backlog := domain.WorkflowState{ID: f.sw206ID("backlog"), Name: "Backlog", Type: "backlog", TeamID: team.ID, Position: 0}
-	todo := domain.WorkflowState{ID: f.sw206ID("todo"), Name: "Todo", Type: "unstarted", TeamID: team.ID, Position: 1, Default: true}
-	privateTodo := domain.WorkflowState{ID: f.sw206ID("private-todo"), Name: "Todo", Type: "unstarted", TeamID: private.ID, Position: 0}
+	backlog := domain.WorkflowState{ID: f.recurringOccurrenceId("backlog"), Name: "Backlog", Type: "backlog", TeamID: team.ID, Position: 0}
+	todo := domain.WorkflowState{ID: f.recurringOccurrenceId("todo"), Name: "Todo", Type: "unstarted", TeamID: team.ID, Position: 1, Default: true}
+	privateTodo := domain.WorkflowState{ID: f.recurringOccurrenceId("private-todo"), Name: "Todo", Type: "unstarted", TeamID: private.ID, Position: 0}
 	data.States = append(data.States, backlog, todo, privateTodo)
 	settings := data.TeamSettings[team.ID]
 	settings.DefaultStateID = backlog.ID
 	data.TeamSettings[team.ID] = settings
-	label := domain.IssueLabel{ID: f.sw206ID("label"), Name: "Chore", Scope: team.ID}
-	archivedLabel := domain.IssueLabel{ID: f.sw206ID("archived-label"), Name: "Old", ArchivedAt: &now}
+	label := domain.IssueLabel{ID: f.recurringOccurrenceId("label"), Name: "Chore", Scope: team.ID}
+	archivedLabel := domain.IssueLabel{ID: f.recurringOccurrenceId("archived-label"), Name: "Old", ArchivedAt: &now}
 	data.Labels = append(data.Labels, label, archivedLabel)
 	viewer := data.Viewer
 	assignee := f.actor
 	due := "2026-09-07"
 	dueAt := recurrenceCreationInstant(day(due), teamLocation("America/Los_Angeles"))
-	sourceID := f.sw206ID("source")
+	sourceID := f.recurringOccurrenceId("source")
 	estimate := 3.0
 	source := domain.Issue{
 		ID: sourceID, Version: 4, Number: 1000, Identifier: "REC-1000", Title: "Weekly report", Description: "Exact recurring text",
 		DescriptionState: "legacy-state", Team: team, Creator: viewer, State: todo, Priority: 2, PriorityLabel: "High", Estimate: &estimate,
 		Labels: []domain.IssueLabel{label, archivedLabel}, Assignee: &assignee, SubscriberIDs: []string{viewer.ID, assignee.ID},
 		Recurrence: "weekly", DueDate: &due, NextOccurrenceAt: &dueAt, Icon: "repeat",
-		SubIssueIDs: []string{f.sw206ID("child-b"), f.sw206ID("child-a")},
-		DocumentContent: &domain.DocumentContent{ID: f.sw206ID("content"), Version: 2, Content: "Copied body", ContentState: "must-clear",
+		SubIssueIDs: []string{f.recurringOccurrenceId("child-b"), f.recurringOccurrenceId("child-a")},
+		DocumentContent: &domain.DocumentContent{ID: f.recurringOccurrenceId("content"), Version: 2, Content: "Copied body", ContentState: "must-clear",
 			ContentData: map[string]any{"type": "doc", "content": []any{map[string]any{"value": "kept"}}}},
 		CreatedAt: now.Add(-30 * 24 * time.Hour), UpdatedAt: now.Add(-time.Hour), Reactions: map[string][]string{}, Relations: []domain.IssueRelation{},
 	}
@@ -221,30 +223,30 @@ func scaleP21SW206Family(f scaleP21SW182Fixture, data *domain.Bootstrap, now tim
 		issue.Assignee, issue.Labels, issue.DocumentContent, issue.Estimate = nil, []domain.IssueLabel{label}, nil, nil
 		return issue
 	}
-	childA := child(f.sw206ID("child-a"), 1001, "Native first child", team, todo)
+	childA := child(f.recurringOccurrenceId("child-a"), 1001, "Native first child", team, todo)
 	childA.Assignee = &viewer
-	childB := child(f.sw206ID("child-b"), 2500, "Explicit first child", private, privateTodo)
+	childB := child(f.recurringOccurrenceId("child-b"), 2500, "Explicit first child", private, privateTodo)
 	childB.Description = "Private child body"
-	childC := child(f.sw206ID("child-c"), 1003, "Archived team child", archivedTeam, todo)
-	archivedChild := child(f.sw206ID("child-archived"), 1004, "Archived child", team, todo)
+	childC := child(f.recurringOccurrenceId("child-c"), 1003, "Archived team child", archivedTeam, todo)
+	archivedChild := child(f.recurringOccurrenceId("child-archived"), 1004, "Archived child", team, todo)
 	archivedChild.ArchivedAt = &now
-	unrelated := child(f.sw206ID("unrelated"), 3000, "Unrelated high number", team, todo)
+	unrelated := child(f.recurringOccurrenceId("unrelated"), 3000, "Unrelated high number", team, todo)
 	unrelated.ParentID = nil
 	data.Issues = append(data.Issues, childA, source, childB, childC, archivedChild, unrelated)
-	data.Activities[sourceID] = []domain.ActivityEvent{{ID: f.sw206ID("history"), Type: "issue.updated", Actor: viewer,
+	data.Activities[sourceID] = []domain.ActivityEvent{{ID: f.recurringOccurrenceId("history"), Type: "issue.updated", Actor: viewer,
 		CreatedAt: now.Add(-20 * time.Minute), Metadata: domain.ActivityMetadata{"priority": "2", "priorityBefore": "3"}}}
-	data.Comments[sourceID] = []domain.Comment{{ID: f.sw206ID("comment"), User: viewer, Body: "Kept comment", CreatedAt: now.Add(-40 * time.Minute)}}
+	data.Comments[sourceID] = []domain.Comment{{ID: f.recurringOccurrenceId("comment"), User: viewer, Body: "Kept comment", CreatedAt: now.Add(-40 * time.Minute)}}
 }
 
-func scaleP21SW206Normalize(t *testing.T, value any, started time.Time) string {
+func recurringOccurrenceNormalize(t *testing.T, value any, started time.Time) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := scaleP21SW206Collaboration.ReplaceAllString(string(raw), "<collaboration>")
-	text = scaleP21TriageStamp.ReplaceAllString(text, "<stamp>")
-	text = scaleP21TriageClock.ReplaceAllStringFunc(text, func(clock string) string {
+	text := recurringOccurrenceCollaboration.ReplaceAllString(string(raw), "<collaboration>")
+	text = scaleTriageStamp.ReplaceAllString(text, "<stamp>")
+	text = scaleTriageClock.ReplaceAllStringFunc(text, func(clock string) string {
 		if at, err := time.Parse(time.RFC3339Nano, clock); err == nil && !at.Before(started) {
 			return "<now>"
 		}
@@ -273,14 +275,14 @@ func scaleP21SW206Normalize(t *testing.T, value any, started time.Time) string {
 	return string(normalized)
 }
 
-func scaleP21SW206Run(t *testing.T, f scaleP21SW182Fixture, source *store.SQLiteStore, test scaleP21SW206Case, now time.Time, call func(*server) (any, error)) (scaleP21SW206Outcome, time.Time) {
+func recurringOccurrenceRun(t *testing.T, f automationCycleScheduleFixture, source *store.SQLiteStore, test recurringOccurrenceCase, now time.Time, call func(*server) (any, error)) (recurringOccurrenceOutcome, time.Time) {
 	t.Helper()
 	priorIDs := map[string]bool{}
-	for _, event := range scaleP21SW182Events(t, f) {
+	for _, event := range automationCycleScheduleEvents(t, f) {
 		priorIDs[event.ID] = true
 	}
 	service := &server{store: source, realtime: newRealtimeHub()}
-	var got scaleP21SW206Outcome
+	var got recurringOccurrenceOutcome
 	var mu sync.Mutex
 	source.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 		mu.Lock()
@@ -288,7 +290,7 @@ func scaleP21SW206Run(t *testing.T, f scaleP21SW182Fixture, source *store.SQLite
 		if source.BoundedMetadataEnabled() && source.MetadataWorkUsedForTesting() == 0 {
 			t.Error("recurring webhook lost its output owner")
 		}
-		got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+		got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 			"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 		}))
@@ -304,17 +306,17 @@ func scaleP21SW206Run(t *testing.T, f scaleP21SW182Fixture, source *store.SQLite
 	f.repository.SetRealtimeSink(nil)
 	service.realtime.mu.Lock()
 	for _, event := range service.realtime.history[f.data.Workspace.URLKey] {
-		got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+		got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 			"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID, "clientId": event.ClientID,
 			"payload": event.Payload, "journaled": event.Seq > 0,
 		}))
 	}
 	service.realtime.mu.Unlock()
-	got.Created, got.Error = created, scaleP21ChatPointError(err)
-	got.Rows = scaleP21SW59SQL(t, f.scaleP21SW10Fixture)
-	got.Metadata = scaleP21SW182Metadata(t, f)
-	got.Sequence = f.sw206Rows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
-	for _, event := range scaleP21SW182Events(t, f) {
+	got.Created, got.Error = created, scaleChatPointError(err)
+	got.Rows = discussionWriteSql(t, f.notificationsFixture)
+	got.Metadata = automationCycleScheduleMetadata(t, f)
+	got.Sequence = f.recurringOccurrenceRows(t, `SELECT last_number FROM issue_number_sequences WHERE workspace_key=?`, f.data.Workspace.URLKey)
+	for _, event := range automationCycleScheduleEvents(t, f) {
 		if !priorIDs[event.ID] {
 			got.Events = append(got.Events, event)
 		}
@@ -325,7 +327,7 @@ func scaleP21SW206Run(t *testing.T, f scaleP21SW182Fixture, source *store.SQLite
 	return got, started
 }
 
-func scaleP21SW206Call(f scaleP21SW182Fixture, test scaleP21SW206Case, now time.Time) func(*server) (any, error) {
+func recurringOccurrenceCall(f automationCycleScheduleFixture, test recurringOccurrenceCase, now time.Time) func(*server) (any, error) {
 	return func(service *server) (any, error) {
 		if test.tick {
 			ctx := context.Background()
@@ -336,20 +338,20 @@ func scaleP21SW206Call(f scaleP21SW182Fixture, test scaleP21SW206Case, now time.
 			}
 			return service.generateWorkspaceRecurringIssues(ctx, f.data.Workspace.URLKey, now)
 		}
-		created, err := service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.sw206ID("source"), now)
+		created, err := service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.recurringOccurrenceId("source"), now)
 		return created, err
 	}
 }
 
-func scaleP21SW206Differential(t *testing.T, f scaleP21SW182Fixture, test scaleP21SW206Case, now time.Time) scaleP21SW206Outcome {
+func recurringOccurrenceDifferential(t *testing.T, f automationCycleScheduleFixture, test recurringOccurrenceCase, now time.Time) recurringOccurrenceOutcome {
 	t.Helper()
 	var expected string
-	var legacy scaleP21SW206Outcome
+	var legacy recurringOccurrenceOutcome
 	for _, mode := range []struct {
 		name            string
 		bounded, reload bool
 	}{{"legacy", false, false}, {"warm", true, false}, {"legacy-reloaded", false, true}, {"reloaded", true, true}} {
-		scaleP21SW206Seed(t, f, test, now, mode.reload)
+		recurringOccurrenceSeed(t, f, test, now, mode.reload)
 		source := f.repository
 		if mode.bounded {
 			source = f.probe
@@ -361,24 +363,24 @@ func scaleP21SW206Differential(t *testing.T, f scaleP21SW182Fixture, test scaleP
 				}
 			}
 		}
-		got, started := scaleP21SW206Run(t, f, source, test, now, scaleP21SW206Call(f, test, now))
-		normalized := scaleP21SW206Normalize(t, got, started)
+		got, started := recurringOccurrenceRun(t, f, source, test, now, recurringOccurrenceCall(f, test, now))
+		normalized := recurringOccurrenceNormalize(t, got, started)
 		if mode.name == "legacy" {
 			expected, legacy = normalized, got
 			continue
 		}
 		if normalized != expected {
-			t.Fatalf("%s: %s differs: %s", test.name, mode.name, scaleP21M2Diff(expected, normalized))
+			t.Fatalf("%s: %s differs: %s", test.name, mode.name, policyFirstDifference(expected, normalized))
 		}
 	}
 	return legacy
 }
 
-func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
+func TestRecurringOccurrenceDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -388,34 +390,34 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 	recent := time.Now().UTC().Add(-2 * time.Minute)
 	source := func(data *domain.Bootstrap) *domain.Issue {
 		for index := range data.Issues {
-			if data.Issues[index].ID == f.sw206ID("source") {
+			if data.Issues[index].ID == f.recurringOccurrenceId("source") {
 				return &data.Issues[index]
 			}
 		}
 		panic("recurring source missing")
 	}
-	cases := []scaleP21SW206Case{
+	cases := []recurringOccurrenceCase{
 		{name: "weekly-catch-up-with-sub-issues", want: 4},
-		{name: "daily", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "daily", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).Recurrence = "daily"
 		}},
-		{name: "monthly-day-31", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "monthly-day-31", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			due := "2026-08-31"
 			at := recurrenceCreationInstant(day(due), teamLocation("America/Los_Angeles"))
 			issue := source(data)
 			issue.Recurrence, issue.DueDate, issue.NextOccurrenceAt = "FREQ=MONTHLY;BYMONTHDAY=31", &due, &at
 		}},
-		{name: "rrule-weekly-interval", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "rrule-weekly-interval", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).Recurrence = "FREQ=WEEKLY;INTERVAL=2"
 		}},
-		{name: "series-occurrence-kept", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "series-occurrence-kept", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			issue := source(data)
-			issue.RecurrenceSeriesID, issue.RecurrenceOccurrence = f.sw206ID("series"), "2026-09-07"
+			issue.RecurrenceSeriesID, issue.RecurrenceOccurrence = f.recurringOccurrenceId("series"), "2026-09-07"
 		}},
-		{name: "no-sub-issues", want: 1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "no-sub-issues", want: 1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.ParentID != nil })
 		}},
-		{name: "private-source-team", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "private-source-team", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			for index := range data.Teams {
 				if data.Teams[index].ID == f.team {
 					data.Teams[index].Private = true
@@ -427,113 +429,113 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 		}},
 		{name: "sequence-ahead-of-issues", sequence: 4999, want: 4},
 		{name: "missing-sequence-row", noSequence: true, want: 4},
-		{name: "default-team-settings", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "default-team-settings", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			delete(data.TeamSettings, f.team)
 		}},
-		{name: "assignee-removed", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
-			gone := domain.User{ID: f.sw206ID("gone-user"), Name: "Gone"}
+		{name: "assignee-removed", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
+			gone := domain.User{ID: f.recurringOccurrenceId("gone-user"), Name: "Gone"}
 			source(data).Assignee = &gone
 		}},
-		{name: "project-cycle-sla", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "project-cycle-sla", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			project := domain.Project{ID: f.project, Name: "Recurring project", Icon: "box", Color: "#123456", TeamIDs: []string{f.team}, CreatedAt: now, UpdatedAt: now}
 			data.Projects = append(data.Projects, project)
 			source(data).Project = &domain.ProjectSummary{ID: project.ID, Name: project.Name}
 			data.CycleSettings = map[string]domain.CycleSettings{f.team: {Enabled: true, AutoAddDueDate: true}}
-			data.Cycles = append(data.Cycles, domain.Cycle{ID: f.sw206ID("cycle"), TeamID: f.team, Status: "current", Number: 7,
+			data.Cycles = append(data.Cycles, domain.Cycle{ID: f.recurringOccurrenceId("cycle"), TeamID: f.team, Status: "current", Number: 7,
 				StartsAt: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC), EndsAt: time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)})
 			if data.Settings == nil {
 				data.Settings = map[string]any{}
 			}
 			data.Settings["sla"] = map[string]any{"enabled": true, "workWeek": "monFri"}
 			data.SLARules = append(data.SLARules,
-				domain.SLARule{ID: f.sw206ID("other-team-sla"), Name: "Other", TeamIDs: []string{f.other}, Enabled: true, TargetMinutes: 30},
-				domain.SLARule{ID: f.sw206ID("sla"), Name: "Recurring", TeamIDs: []string{f.team}, Enabled: true, TargetMinutes: 60, BusinessHours: true},
-				domain.SLARule{ID: f.sw206ID("later-sla"), Name: "Later", Enabled: true, TargetMinutes: 90})
-			data.SLAEvents = append(data.SLAEvents, domain.SLAEvent{ID: f.sw206ID("old-sla-event"), IssueID: f.sw206ID("unrelated"), Type: "started", CreatedAt: now})
+				domain.SLARule{ID: f.recurringOccurrenceId("other-team-sla"), Name: "Other", TeamIDs: []string{f.other}, Enabled: true, TargetMinutes: 30},
+				domain.SLARule{ID: f.recurringOccurrenceId("sla"), Name: "Recurring", TeamIDs: []string{f.team}, Enabled: true, TargetMinutes: 60, BusinessHours: true},
+				domain.SLARule{ID: f.recurringOccurrenceId("later-sla"), Name: "Later", Enabled: true, TargetMinutes: 90})
+			data.SLAEvents = append(data.SLAEvents, domain.SLAEvent{ID: f.recurringOccurrenceId("old-sla-event"), IssueID: f.recurringOccurrenceId("unrelated"), Type: "started", CreatedAt: now})
 			data.IssueSLAs = append(data.IssueSLAs,
-				domain.IssueSLA{ID: f.sw206ID("unrelated-sla"), IssueID: f.sw206ID("unrelated"), RuleID: f.sw206ID("sla"), Status: "active", StartedAt: now, DueAt: now},
-				domain.IssueSLA{ID: f.sw206ID("colliding-sla"), IssueID: "issue_2501", RuleID: f.sw206ID("sla"), Status: "removed", StartedAt: now, DueAt: now},
-				domain.IssueSLA{ID: f.sw206ID("colliding-later"), IssueID: "issue_2501", RuleID: f.sw206ID("later-sla"), Status: "active", StartedAt: now, DueAt: now.Add(time.Hour)})
+				domain.IssueSLA{ID: f.recurringOccurrenceId("unrelated-sla"), IssueID: f.recurringOccurrenceId("unrelated"), RuleID: f.recurringOccurrenceId("sla"), Status: "active", StartedAt: now, DueAt: now},
+				domain.IssueSLA{ID: f.recurringOccurrenceId("colliding-sla"), IssueID: "issue_2501", RuleID: f.recurringOccurrenceId("sla"), Status: "removed", StartedAt: now, DueAt: now},
+				domain.IssueSLA{ID: f.recurringOccurrenceId("colliding-later"), IssueID: "issue_2501", RuleID: f.recurringOccurrenceId("later-sla"), Status: "active", StartedAt: now, DueAt: now.Add(time.Hour)})
 		}},
-		{name: "sla-collision-breached", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "sla-collision-breached", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			if data.Settings == nil {
 				data.Settings = map[string]any{}
 			}
 			data.Settings["sla"] = map[string]any{"enabled": true}
-			data.SLARules = append(data.SLARules, domain.SLARule{ID: f.sw206ID("sla"), Name: "Recurring", Enabled: true, TargetMinutes: 60})
-			data.IssueSLAs = append(data.IssueSLAs, domain.IssueSLA{ID: f.sw206ID("stale-sla"), IssueID: "issue_2501", RuleID: f.sw206ID("sla"),
+			data.SLARules = append(data.SLARules, domain.SLARule{ID: f.recurringOccurrenceId("sla"), Name: "Recurring", Enabled: true, TargetMinutes: 60})
+			data.IssueSLAs = append(data.IssueSLAs, domain.IssueSLA{ID: f.recurringOccurrenceId("stale-sla"), IssueID: "issue_2501", RuleID: f.recurringOccurrenceId("sla"),
 				Status: "active", StartedAt: now.Add(-48 * time.Hour), DueAt: now.Add(-24 * time.Hour)})
 		}},
-		{name: "archived-label-group", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
-			group := domain.LabelGroup{ID: f.sw206ID("group"), Name: "Old group", ArchivedAt: &now}
+		{name: "archived-label-group", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
+			group := domain.LabelGroup{ID: f.recurringOccurrenceId("group"), Name: "Old group", ArchivedAt: &now}
 			data.LabelGroups = append(data.LabelGroups, group)
-			grouped := domain.IssueLabel{ID: f.sw206ID("grouped"), Name: "Grouped", GroupID: group.ID}
-			duplicate := domain.IssueLabel{ID: f.sw206ID("label"), Name: "Chore duplicate"}
+			grouped := domain.IssueLabel{ID: f.recurringOccurrenceId("grouped"), Name: "Grouped", GroupID: group.ID}
+			duplicate := domain.IssueLabel{ID: f.recurringOccurrenceId("label"), Name: "Chore duplicate"}
 			data.Labels = append(data.Labels, grouped, duplicate)
 			issue := source(data)
 			issue.Labels = append(issue.Labels, grouped)
 		}},
-		{name: "merged-source-history", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
-			data.Activities[f.sw206ID("source")] = []domain.ActivityEvent{{ID: f.sw206ID("recent-edit"), Type: "issue.updated", Actor: data.Viewer,
+		{name: "merged-source-history", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
+			data.Activities[f.recurringOccurrenceId("source")] = []domain.ActivityEvent{{ID: f.recurringOccurrenceId("recent-edit"), Type: "issue.updated", Actor: data.Viewer,
 				CreatedAt: recent, Metadata: domain.ActivityMetadata{"title": "Weekly report", "titleBefore": "Report"}}}
-			data.Comments[f.sw206ID("source")] = nil
+			data.Comments[f.recurringOccurrenceId("source")] = nil
 		}},
-		{name: "large-description", want: 4, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "large-description", want: 4, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).Description = strings.Repeat("legal recurring body ", 50000)
 		}},
-		{name: "existing-instance", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "existing-instance", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			instance := *source(data)
-			instance.ID, instance.Number, instance.Identifier = f.sw206ID("existing"), 1500, "REC-1500"
+			instance.ID, instance.Number, instance.Identifier = f.recurringOccurrenceId("existing"), 1500, "REC-1500"
 			instance.Recurrence, instance.NextOccurrenceAt, instance.SubIssueIDs, instance.DocumentContent = "", nil, nil, nil
-			instance.RecurrenceSeriesID, instance.RecurrenceOccurrence = f.sw206ID("source"), "2026-09-28"
+			instance.RecurrenceSeriesID, instance.RecurrenceOccurrence = f.recurringOccurrenceId("source"), "2026-09-28"
 			data.Issues = append(data.Issues, instance)
 		}},
-		{name: "invalid-rule", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "invalid-rule", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).Recurrence = "FREQ=SECONDLY"
 		}},
-		{name: "retired-team", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "retired-team", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			for index := range data.Teams {
 				if data.Teams[index].ID == f.team {
 					data.Teams[index].RetiredAt = &now
 				}
 			}
 		}},
-		{name: "missing-team", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "missing-team", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return team.ID == f.team })
 		}},
-		{name: "missing-due-date", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "missing-due-date", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).DueDate = nil
 		}},
-		{name: "due-moved-later", want: -1, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "due-moved-later", want: -1, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			due := "2026-10-05"
 			source(data).DueDate = &due
 		}},
-		{name: "not-due", want: 0, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "not-due", want: 0, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			later := now.Add(time.Hour)
 			source(data).NextOccurrenceAt = &later
 		}},
-		{name: "archived-source", want: 0, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "archived-source", want: 0, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			source(data).ArchivedAt = &now
 		}},
-		{name: "deleted-source", want: 0, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
-			data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == f.sw206ID("source") })
+		{name: "deleted-source", want: 0, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
+			data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == f.recurringOccurrenceId("source") })
 		}},
-		{name: "no-workflow-state-rolls-back", want: 0, err: errInvalid, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "no-workflow-state-rolls-back", want: 0, err: errInvalid, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == f.team || state.TeamID == "" })
 			settings := data.TeamSettings[f.team]
 			settings.DefaultStateID = ""
 			data.TeamSettings[f.team] = settings
 		}},
-		{name: "tick-several-due-series", tick: true, want: 5, edit: func(f scaleP21SW182Fixture, data *domain.Bootstrap, now time.Time) {
+		{name: "tick-several-due-series", tick: true, want: 5, edit: func(f automationCycleScheduleFixture, data *domain.Bootstrap, now time.Time) {
 			second := *source(data)
-			second.ID, second.Number, second.Identifier, second.Title = f.sw206ID("second-source"), 1600, "REC-1600", "Daily standup"
+			second.ID, second.Number, second.Identifier, second.Title = f.recurringOccurrenceId("second-source"), 1600, "REC-1600", "Daily standup"
 			second.Recurrence, second.SubIssueIDs, second.DocumentContent = "daily", nil, nil
 			data.Issues = append(data.Issues, second)
 		}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			legacy := scaleP21SW206Differential(t, f, test, now)
+			legacy := recurringOccurrenceDifferential(t, f, test, now)
 			if test.err != nil && !strings.Contains(legacy.Error, test.err.Error()) {
 				t.Fatalf("legacy error %q, want %v", legacy.Error, test.err)
 			}
@@ -556,14 +558,14 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 		})
 	}
 	t.Run("concurrent-ticks-create-once", func(t *testing.T) {
-		test := scaleP21SW206Case{name: "concurrent"}
-		scaleP21SW206Seed(t, f, test, now, false)
-		want, wantStarted := scaleP21SW206Run(t, f, f.repository, test, now, scaleP21SW206Call(f, test, now))
+		test := recurringOccurrenceCase{name: "concurrent"}
+		recurringOccurrenceSeed(t, f, test, now, false)
+		want, wantStarted := recurringOccurrenceRun(t, f, f.repository, test, now, recurringOccurrenceCall(f, test, now))
 		want.Created, want.Webhooks, want.Realtime = nil, nil, nil
-		expected := scaleP21SW206Normalize(t, want, wantStarted)
+		expected := recurringOccurrenceNormalize(t, want, wantStarted)
 		for attempt := range 3 {
-			scaleP21SW206Seed(t, f, test, now, attempt == 2)
-			got, started := scaleP21SW206Run(t, f, f.probe, test, now, func(service *server) (any, error) {
+			recurringOccurrenceSeed(t, f, test, now, attempt == 2)
+			got, started := recurringOccurrenceRun(t, f, f.probe, test, now, func(service *server) (any, error) {
 				var wait sync.WaitGroup
 				results := make([]*domain.Issue, 3)
 				errs := make([]error, 3)
@@ -571,7 +573,7 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 					wait.Add(1)
 					go func() {
 						defer wait.Done()
-						results[index], errs[index] = service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.sw206ID("source"), now)
+						results[index], errs[index] = service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.recurringOccurrenceId("source"), now)
 					}()
 				}
 				wait.Wait()
@@ -590,8 +592,8 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 				return nil, nil
 			})
 			got.Created, got.Webhooks, got.Realtime = nil, nil, nil
-			if normalized := scaleP21SW206Normalize(t, got, started); normalized != expected {
-				t.Fatalf("attempt %d: concurrent ticks differ from one literal tick: %s", attempt, scaleP21M2Diff(expected, normalized))
+			if normalized := recurringOccurrenceNormalize(t, got, started); normalized != expected {
+				t.Fatalf("attempt %d: concurrent ticks differ from one literal tick: %s", attempt, policyFirstDifference(expected, normalized))
 			}
 		}
 	})
@@ -600,11 +602,11 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 		// installed its image. The occurrence edits the same row: its rebase
 		// conflicts, it refreshes and retries, and the result is the literal
 		// sequential order (peer edit, then occurrence).
-		test := scaleP21SW206Case{name: "conflict", edit: cases[11].edit}
+		test := recurringOccurrenceCase{name: "conflict", edit: cases[11].edit}
 		peer := func(t *testing.T) {
 			if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw206_peer", "", nil, func(data *domain.Bootstrap) error {
 				for index := range data.IssueSLAs {
-					if data.IssueSLAs[index].ID == f.sw206ID("colliding-later") {
+					if data.IssueSLAs[index].ID == f.recurringOccurrenceId("colliding-later") {
 						data.IssueSLAs[index].RemainingMinutes = 42
 					}
 				}
@@ -614,46 +616,46 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 			}
 		}
 		occurrence := func(service *server) error {
-			_, err := service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.sw206ID("source"), now)
+			_, err := service.createRecurringOccurrence(context.Background(), f.data.Workspace.URLKey, f.recurringOccurrenceId("source"), now)
 			return err
 		}
-		scaleP21SW206Seed(t, f, test, now, false)
-		want, wantStarted := scaleP21SW206Run(t, f, f.repository, test, now, func(service *server) (any, error) {
+		recurringOccurrenceSeed(t, f, test, now, false)
+		want, wantStarted := recurringOccurrenceRun(t, f, f.repository, test, now, func(service *server) (any, error) {
 			peer(t)
 			return nil, occurrence(service)
 		})
 		want.Webhooks, want.Realtime, want.Events = nil, nil, nil
-		expected := scaleP21SW206Normalize(t, want, wantStarted)
+		expected := recurringOccurrenceNormalize(t, want, wantStarted)
 		for _, reload := range []bool{false, true} {
-			scaleP21SW206Seed(t, f, test, now, reload)
-			got, started := scaleP21SW206Run(t, f, f.probe, test, now, func(service *server) (any, error) {
+			recurringOccurrenceSeed(t, f, test, now, reload)
+			got, started := recurringOccurrenceRun(t, f, f.probe, test, now, func(service *server) (any, error) {
 				peer(t)
 				return nil, occurrence(service)
 			})
 			got.Webhooks, got.Realtime, got.Events = nil, nil, nil
-			if normalized := scaleP21SW206Normalize(t, got, started); normalized != expected {
-				t.Fatalf("reload=%t: stale image state differs from the literal order: %s", reload, scaleP21M2Diff(expected, normalized))
+			if normalized := recurringOccurrenceNormalize(t, got, started); normalized != expected {
+				t.Fatalf("reload=%t: stale image state differs from the literal order: %s", reload, policyFirstDifference(expected, normalized))
 			}
 		}
 	})
 	t.Run("cancelled", func(t *testing.T) {
-		test := scaleP21SW206Case{name: "cancelled"}
+		test := recurringOccurrenceCase{name: "cancelled"}
 		for _, bounded := range []bool{false, true} {
-			scaleP21SW206Seed(t, f, test, now, false)
+			recurringOccurrenceSeed(t, f, test, now, false)
 			source := f.repository
 			if bounded {
 				source = f.probe
 			}
-			before := scaleP21SW59SQL(t, f.scaleP21SW10Fixture)
-			got, _ := scaleP21SW206Run(t, f, source, test, now, func(service *server) (any, error) {
+			before := discussionWriteSql(t, f.notificationsFixture)
+			got, _ := recurringOccurrenceRun(t, f, source, test, now, func(service *server) (any, error) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
-				return service.createRecurringOccurrence(ctx, f.data.Workspace.URLKey, f.sw206ID("source"), now)
+				return service.createRecurringOccurrence(ctx, f.data.Workspace.URLKey, f.recurringOccurrenceId("source"), now)
 			})
 			if !strings.Contains(got.Error, context.Canceled.Error()) || len(got.Events) != 0 || len(got.Realtime) != 0 {
 				t.Fatalf("bounded=%t cancelled occurrence: %q events=%d", bounded, got.Error, len(got.Events))
 			}
-			if scaleP21SW206Normalize(t, map[string]any{"Rows": before}, time.Now()) != scaleP21SW206Normalize(t, map[string]any{"Rows": got.Rows}, time.Now()) {
+			if recurringOccurrenceNormalize(t, map[string]any{"Rows": before}, time.Now()) != recurringOccurrenceNormalize(t, map[string]any{"Rows": got.Rows}, time.Now()) {
 				t.Fatalf("bounded=%t cancelled occurrence changed rows", bounded)
 			}
 		}
@@ -667,27 +669,27 @@ func TestScaleP21SW206RecurringOccurrenceDifferential(t *testing.T) {
 // pins that the refusal is atomic: no row, sequence, event or publication
 // changes and all admitted work is released, while the literal writer creates
 // the instance numbered from every issue.
-func TestScaleP21SW206RecurringOccurrenceFullFallback(t *testing.T) {
+func TestRecurringOccurrenceFullFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21SW182Setup(t)
+	f := automationCycleScheduleSetup(t)
 	if err := f.service.stopDeliveryScheduler(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 29, 15, 0, 0, 0, time.UTC)
-	test := scaleP21SW206Case{name: "over-20000-family", sequence: 21999, bulk: 20001}
-	scaleP21SW206Seed(t, f, test, now, false)
-	legacy, _ := scaleP21SW206Run(t, f, f.repository, test, now, scaleP21SW206Call(f, test, now))
+	test := recurringOccurrenceCase{name: "over-20000-family", sequence: 21999, bulk: 20001}
+	recurringOccurrenceSeed(t, f, test, now, false)
+	legacy, _ := recurringOccurrenceRun(t, f, f.repository, test, now, recurringOccurrenceCall(f, test, now))
 	created, _ := legacy.Created.(*domain.Issue)
 	if created == nil || len(created.SubIssueIDs) != 3 || created.Number != 25001 {
 		t.Fatalf("literal full fallback did not number from every issue: %+v %s", created, legacy.Error)
 	}
-	scaleP21SW206Seed(t, f, test, now, false)
-	before := scaleP21SW59SQL(t, f.scaleP21SW10Fixture)
-	bounded, _ := scaleP21SW206Run(t, f, f.probe, test, now, scaleP21SW206Call(f, test, now))
+	recurringOccurrenceSeed(t, f, test, now, false)
+	before := discussionWriteSql(t, f.notificationsFixture)
+	bounded, _ := recurringOccurrenceRun(t, f, f.probe, test, now, recurringOccurrenceCall(f, test, now))
 	if !strings.Contains(bounded.Error, "metadata process work budget exceeded") || len(bounded.Events) != 0 || len(bounded.Realtime) != 0 ||
-		scaleP21SW206Normalize(t, map[string]any{"Rows": before}, time.Now()) != scaleP21SW206Normalize(t, map[string]any{"Rows": bounded.Rows}, time.Now()) {
+		recurringOccurrenceNormalize(t, map[string]any{"Rows": before}, time.Now()) != recurringOccurrenceNormalize(t, map[string]any{"Rows": bounded.Rows}, time.Now()) {
 		t.Fatalf("bounded over-limit family was not refused atomically: %s events=%d", bounded.Error, len(bounded.Events))
 	}
 }

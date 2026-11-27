@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW22TeamReferenceOrder(t *testing.T) {
+func TestTeamReferenceOrder(t *testing.T) {
 	teams := []domain.Team{
 		{ID: "hidden", Key: "hidden-key"},
 		{ID: "first", Key: "duplicate"},
@@ -35,17 +35,17 @@ func TestScaleP21SW22TeamReferenceOrder(t *testing.T) {
 		{"", "empty-key"}, {" duplicate ", ""}, {"first", "first"},
 		{"FIRST", ""}, {"missing", ""}, {"first\x00", ""},
 	} {
-		if got := scaleP21SW22TeamReference(teams, spec.ref, func(team domain.Team) bool { return team.ID != "hidden" }); got != spec.want {
+		if got := teamReference(teams, spec.ref, func(team domain.Team) bool { return team.ID != "hidden" }); got != spec.want {
 			t.Fatalf("ref=%q got=%q want=%q", spec.ref, got, spec.want)
 		}
 	}
 }
 
-func TestScaleP21SW22TeamNativeReads(t *testing.T) {
+func TestTeamNativeReads(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, owner := f.data.Workspace.URLKey, f.data.Viewer.ID
 	stamp := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	target := domain.Team{
@@ -200,7 +200,7 @@ func TestScaleP21SW22TeamNativeReads(t *testing.T) {
 		if _, err := budgetTx.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='teams' AND record_key=?`, raw, workspace, target.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := view.scaleP21SW22ReadTeam(t.Context(), budgetTx, workspace, target.ID); !errors.Is(err, ErrMetadataPageBudget) {
+		if _, err := view.readTeam(t.Context(), budgetTx, workspace, target.ID); !errors.Is(err, ErrMetadataPageBudget) {
 			t.Fatalf("oversized selected team preflight: %v", err)
 		}
 	}()

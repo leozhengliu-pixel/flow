@@ -15,8 +15,8 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
-	config := scaleP03DatabaseConfig(t)
+func TestScaleCredentialScopedNotificationState(t *testing.T) {
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	if config.Driver == "sqlite" {
 		config.MaxOpenConns = 1
 	}
@@ -59,8 +59,8 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				legacy := scaleP03Read(t, f, nil, secret, http.MethodGet, "/api/notifications?limit=1", workspace)
-				response := scaleP14StateRequest(t, f, nil, secret, workspace)
+				legacy := resourceAccessScaleRead(t, f, nil, secret, http.MethodGet, "/api/notifications?limit=1", workspace)
+				response := scaleStateRequest(t, f, nil, secret, workspace)
 				var page store.NotificationPage
 				var state store.NotificationState
 				if legacy.Code != http.StatusOK || response.Code != http.StatusOK || json.Unmarshal(legacy.Body.Bytes(), &page) != nil || json.Unmarshal(response.Body.Bytes(), &state) != nil {
@@ -127,8 +127,8 @@ func TestScaleP14CredentialScopedNotificationState(t *testing.T) {
 	}
 }
 
-func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
-	config := scaleP03DatabaseConfig(t)
+func TestScaleCountReauthenticatesAfterMetadataDrift(t *testing.T) {
+	config := platformDatabaseFixtureScaleDatabaseConfig(t)
 	if config.Driver == "sqlite" {
 		config.MaxOpenConns = 1
 	}
@@ -137,7 +137,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
-	f := scaleP03Fixture(t, repo)
+	f := resourceAccessScaleFixture(t, repo)
 	workspace, team := f.data.Workspace.URLKey, f.data.Teams[0].ID
 	for _, mode := range []string{"telemetry", "narrowed", "revoked"} {
 		t.Run(mode, func(t *testing.T) {
@@ -187,7 +187,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			response := scaleP14StateRequestContext(t, ctx, f, nil, secret, workspace)
+			response := scaleStateRequestContext(t, ctx, f, nil, secret, workspace)
 			if !changed || !unchangedAuthority && authentications < 2 {
 				t.Fatalf("read did not reauthenticate after epoch drift: changed=%v auth=%d", changed, authentications)
 			}

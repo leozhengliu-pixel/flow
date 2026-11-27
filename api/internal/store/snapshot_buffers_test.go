@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP15SnapshotBuffersPreserveIsolation(t *testing.T) {
+func TestScaleSnapshotBuffersPreserveIsolation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048), Settings: map[string]any{"nested": []any{"original"}}}
 	data.Projects[0] = domain.Project{ID: "original", MemberIDs: []string{"member"}, Lead: &domain.User{ID: "owner"}}
@@ -39,7 +39,7 @@ func TestScaleP15SnapshotBuffersPreserveIsolation(t *testing.T) {
 	}
 }
 
-func TestScaleP15SnapshotBufferCacheIsBoundedAndCleared(t *testing.T) {
+func TestScaleSnapshotBufferCacheIsBoundedAndCleared(t *testing.T) {
 	pool := &hydrationSnapshotBuffers{}
 	value := reflect.ValueOf(make([]*int, 1024))
 	marker := 42
@@ -70,7 +70,7 @@ func TestScaleP15SnapshotBufferCacheIsBoundedAndCleared(t *testing.T) {
 	}
 }
 
-func TestScaleP15SnapshotBuffersConcurrentLifetimes(t *testing.T) {
+func TestScaleSnapshotBuffersConcurrentLifetimes(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
 	var readers sync.WaitGroup
@@ -88,7 +88,7 @@ func TestScaleP15SnapshotBuffersConcurrentLifetimes(t *testing.T) {
 	readers.Wait()
 }
 
-func TestScaleP15SnapshotReuseExplicitOff(t *testing.T) {
+func TestScaleSnapshotReuseExplicitOff(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "off")
 	ctx, release := BeginHydratedSnapshotReuse(t.Context())
 	defer release()
@@ -97,7 +97,7 @@ func TestScaleP15SnapshotReuseExplicitOff(t *testing.T) {
 	}
 }
 
-func TestScaleP15SnapshotScopedReadsRemainOwned(t *testing.T) {
+func TestScaleSnapshotScopedReadsRemainOwned(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
 	data.Projects[0].ID = "independently-owned"
@@ -114,7 +114,7 @@ func TestScaleP15SnapshotScopedReadsRemainOwned(t *testing.T) {
 	}
 }
 
-func TestScaleP15SnapshotReservationAccountsForContainers(t *testing.T) {
+func TestScaleSnapshotReservationAccountsForContainers(t *testing.T) {
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
 	before := HydratedSnapshotReservation(data)
 	data.Projects[0].Description = string(make([]byte, 2<<20))

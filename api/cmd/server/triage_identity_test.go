@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW20TriageRefreshIdentityDifferential(t *testing.T) {
+func TestTriageRefreshIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		services := []*server{{store: repo}, {store: f.probe}}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, binding := range []string{f.data.Workspace.URLKey, "", "sw20-foreign-workspace"} {
@@ -26,10 +26,10 @@ func TestScaleP21SW20TriageRefreshIdentityDifferential(t *testing.T) {
 					r.Header.Set("X-Workspace-Key", binding)
 					r.SetPathValue("id", "sw20-missing-issue")
 					service.refreshIssueSuggestions(w, r)
-					outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+					outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 				}
 				if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-					t.Fatalf("explicit refresh actor binding=%q changed: %s", binding, scaleP21M2Diff(outcomes[0], outcomes[1]))
+					t.Fatalf("explicit refresh actor binding=%q changed: %s", binding, policyFirstDifference(outcomes[0], outcomes[1]))
 				}
 			}
 		})
@@ -40,7 +40,7 @@ func TestScaleP21SW20TriageRefreshIdentityDifferential(t *testing.T) {
 				r.Header.Set("X-Workspace-Key", binding)
 				r.SetPathValue("id", "sw20-missing-issue")
 				service.refreshIssueSuggestions(w, r)
-				outcomes = append(outcomes, []any{w.Code, scaleP21M2Response(t, w, false)})
+				outcomes = append(outcomes, []any{w.Code, policyDifferentialResponse(t, w, false)})
 				read, ok, err := service.store.BeginInstalledViewerRead(r.Context(), binding)
 				legacy, legacyOK := repo.WorkspaceMetadata(binding)
 				if err != nil || !ok || !legacyOK || !reflect.DeepEqual(read.Viewer(), legacy.Viewer) {
@@ -49,7 +49,7 @@ func TestScaleP21SW20TriageRefreshIdentityDifferential(t *testing.T) {
 				read.Close()
 			}
 			if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
-				t.Fatalf("stored refresh actor binding=%q changed: %s", binding, scaleP21M2Diff(outcomes[0], outcomes[1]))
+				t.Fatalf("stored refresh actor binding=%q changed: %s", binding, policyFirstDifference(outcomes[0], outcomes[1]))
 			}
 		}
 		if f.probe.WorkspaceMetadataDecodes() != 0 {
@@ -67,12 +67,12 @@ func TestScaleP21SW20TriageRefreshIdentityDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW20TriageInstalledViewerFullWrite(t *testing.T) {
+func TestTriageInstalledViewerFullWrite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		expected := f.data.Viewer
 		expected.ID += "\x00"

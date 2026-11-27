@@ -36,7 +36,7 @@ func (s *SQLiteStore) NotificationRecord(ctx context.Context, workspace, userID,
 }
 
 // NotificationStateChanges includes both owners on reassignment and the old
-// owner on removal. P09 uses it with the records captured by its write journal.
+// owner on removal. record journal uses it with the records captured by its write journal.
 func NotificationStateChanges(workspace string, before, after *domain.Notification) []NotificationStateChange {
 	if before == nil && after == nil {
 		return nil

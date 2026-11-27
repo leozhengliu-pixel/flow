@@ -11,12 +11,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW188InlineProjects(t *testing.T) (scaleP09Fixture, *SQLiteStore, []byte) {
+func inlineResidentInlineProjects(t *testing.T) (scaleFixture, *SQLiteStore, []byte) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects", "teams", "teamSettings"), f.data.Workspace.URLKey, "scale_p21_sw188.seed", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = []domain.Project{
 			{ID: "sw188-duplicate", Name: "First", Description: strings.Repeat("first", 32000)},
@@ -41,12 +41,12 @@ func scaleP21SW188InlineProjects(t *testing.T) (scaleP09Fixture, *SQLiteStore, [
 	if len(raw) <= MetadataRecordPageMaxBytes {
 		t.Fatalf("fixture did not require streamed projection: %d", len(raw))
 	}
-	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	probe := scaleResidentProbe(f.SQLiteStore)
 	t.Cleanup(probe.releaseMetadataLogicalSources)
 	return f, probe, raw
 }
 
-func scaleP21SW188ComparePolicy(t *testing.T, got, want domain.Bootstrap) {
+func comparePolicy(t *testing.T, got, want domain.Bootstrap) {
 	t.Helper()
 	left, right := reflect.ValueOf(got), reflect.ValueOf(want)
 	for _, field := range persistedMetadataFields() {
@@ -60,8 +60,8 @@ func scaleP21SW188ComparePolicy(t *testing.T, got, want domain.Bootstrap) {
 	}
 }
 
-func TestScaleP21SW188InlineResidentDifferential(t *testing.T) {
-	f, probe, raw := scaleP21SW188InlineProjects(t)
+func TestInlineResidentDifferential(t *testing.T) {
+	f, probe, raw := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	legacy, _, err := f.loadWorkspaceStamped(t.Context(), workspace)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestScaleP21SW188InlineResidentDifferential(t *testing.T) {
 				if err != nil || !reflect.DeepEqual(resourcePolicyMetadata(got), want) || gotStamp != stamp {
 					t.Fatalf("policy/stamp differs from full hydration: err=%v stamp=%v/%v", err, gotStamp, stamp)
 				}
-				scaleP21SW188ComparePolicy(t, got, legacy)
+				comparePolicy(t, got, legacy)
 				if len(got.Projects) != 0 || chunks < 2 || probe.metadataResidency.work.used != 0 || probe.WorkspaceMetadataDecodes() != 0 {
 					t.Fatalf("record body retained or work not released: chunks=%d work=%d", chunks, probe.metadataResidency.work.used)
 				}
@@ -120,13 +120,13 @@ func TestScaleP21SW188InlineResidentDifferential(t *testing.T) {
 		if !ok || !reflect.DeepEqual(resourcePolicyMetadata(got), want) {
 			t.Fatal("resident startup/reload policy differs")
 		}
-		scaleP21SW188ComparePolicy(t, got, legacy)
+		comparePolicy(t, got, legacy)
 	}
 	t.Logf("legacy physical root=%d bytes; bounded resident policy excludes both duplicate project bodies", len(raw))
 }
 
-func TestScaleP21SW188InlineResidentCancellation(t *testing.T) {
-	f, probe, _ := scaleP21SW188InlineProjects(t)
+func TestInlineResidentCancellation(t *testing.T) {
+	f, probe, _ := inlineResidentInlineProjects(t)
 	disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -151,8 +151,8 @@ func TestScaleP21SW188InlineResidentCancellation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188InlineResidentSkippedValidation(t *testing.T) {
-	f, probe, raw := scaleP21SW188InlineProjects(t)
+func TestInlineResidentSkippedValidation(t *testing.T) {
+	f, probe, raw := inlineResidentInlineProjects(t)
 	workspace := f.data.Workspace.URLKey
 	cases := []struct {
 		name, suffix string
@@ -181,8 +181,8 @@ func TestScaleP21SW188InlineResidentSkippedValidation(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW188InlineResidentSelectedCoreBound(t *testing.T) {
-	f, probe, raw := scaleP21SW188InlineProjects(t)
+func TestInlineResidentSelectedCoreBound(t *testing.T) {
+	f, probe, raw := inlineResidentInlineProjects(t)
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &root); err != nil {
 		t.Fatal(err)

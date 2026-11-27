@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
+func TestLoopReadsDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, targetID, runID := f.data.Workspace.URLKey, idgen.New("loop_sw24_"), idgen.New("run_sw24_")
 		now := time.Now().UTC()
 		target := domain.Loop{
@@ -47,7 +47,7 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 		}, func(*domain.LoopRun) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
+		before := pointRecordFingerprint(t, repo, workspace, "loops")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, spec := range []struct {
 				name, id, run, query string
@@ -75,7 +75,7 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 						if spec.events {
 							handler = (*server).listLoopRunEvents
 						}
-						scaleP21M3Call(&server{store: source}, w, r, handler)
+						callPointSettingsHandler(&server{store: source}, w, r, handler)
 						if w.Code != spec.want {
 							t.Fatalf("loop read status=%d want=%d body=%s", w.Code, spec.want, w.Body.String())
 						}
@@ -86,10 +86,10 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 								t.Fatal("loop presentation, count or existing references changed", err)
 							}
 						}
-						results = append(results, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
+						results = append(results, []any{w.Code, normalizeSettingsPointJSON(t, w.Body.Bytes())})
 					}
 					if !reflect.DeepEqual(results[0], results[1]) {
-						t.Fatalf("loop read differential: %s", scaleP21M2Diff(results[0], results[1]))
+						t.Fatalf("loop read differential: %s", policyFirstDifference(results[0], results[1]))
 					}
 				})
 			}
@@ -105,7 +105,7 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				for _, handler := range []func(*server, http.ResponseWriter, *http.Request){(*server).getLoop, (*server).listLoopRunEvents} {
 					w := httptest.NewRecorder()
-					scaleP21M3Call(&server{store: source}, w, queued, handler)
+					callPointSettingsHandler(&server{store: source}, w, queued, handler)
 					if w.Code != http.StatusForbidden {
 						t.Fatalf("%s read reused revoked membership: %d", phase, w.Code)
 					}
@@ -129,7 +129,7 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 		if w.Body.Len() != 0 {
 			t.Fatal("cancelled scoped read released a loop")
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "loops") || f.probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("loop read changed canonical state or decoded complete metadata")
 		}
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW24 loop foreign", idgen.New("sw24-loop-foreign-"), "us")
@@ -148,7 +148,7 @@ func TestScaleP21SW24LoopReadsDifferential(t *testing.T) {
 				r.SetPathValue("workspaceKey", foreign.Workspace.URLKey)
 				r.SetPathValue("id", targetID)
 				r.SetPathValue("runId", runID)
-				scaleP21M3Call(&server{store: source}, w, r, handler)
+				callPointSettingsHandler(&server{store: source}, w, r, handler)
 				if w.Code != http.StatusNotFound {
 					t.Fatal("loop or run escaped its workspace")
 				}

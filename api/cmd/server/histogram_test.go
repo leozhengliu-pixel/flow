@@ -13,12 +13,12 @@ import (
 
 // Fixed memory, one microsecond resolution below 1ms, at most 0.8% bucket
 // rounding above it. Reports use the bucket's upper bound, conservatively.
-type scaleP01Histogram struct {
+type scaleHistogram struct {
 	bins [8192]int
 	n    int
 }
 
-func (h *scaleP01Histogram) add(value time.Duration) {
+func (h *scaleHistogram) add(value time.Duration) {
 	x := uint64(max(value.Microseconds(), 0))
 	if value%time.Microsecond != 0 {
 		x++
@@ -31,7 +31,7 @@ func (h *scaleP01Histogram) add(value time.Duration) {
 	h.bins[min(i, len(h.bins)-1)]++
 	h.n++
 }
-func (h *scaleP01Histogram) rank(rank int) time.Duration {
+func (h *scaleHistogram) rank(rank int) time.Duration {
 	if h.n == 0 {
 		return 0
 	}
@@ -49,22 +49,22 @@ func (h *scaleP01Histogram) rank(rank int) time.Duration {
 	}
 	return 0
 }
-func (h *scaleP01Histogram) quantile(p float64) time.Duration {
+func (h *scaleHistogram) quantile(p float64) time.Duration {
 	return h.rank(max(1, int(math.Ceil(float64(h.n)*p))))
 }
-func (h *scaleP01Histogram) merge(other *scaleP01Histogram) {
+func (h *scaleHistogram) merge(other *scaleHistogram) {
 	for i, n := range other.bins {
 		h.bins[i] += n
 	}
 	h.n += other.n
 }
 
-type scaleP01DeliverySummary struct {
+type scaleDeliverySummary struct {
 	changes, expected, received, invalid, failed int
-	success, all                                 scaleP01Histogram
+	success, all                                 scaleHistogram
 }
 
-func (s *scaleP01DeliverySummary) observe(delivery scaleP01Delivery, target, received map[int]time.Time, now time.Time, timeout time.Duration) {
+func (s *scaleDeliverySummary) observe(delivery scaleDelivery, target, received map[int]time.Time, now time.Time, timeout time.Duration) {
 	s.changes++
 	for client, expected := range delivery.expected {
 		if !expected {
@@ -87,7 +87,7 @@ func (s *scaleP01DeliverySummary) observe(delivery scaleP01Delivery, target, rec
 		}
 	}
 }
-func (s *scaleP01DeliverySummary) merge(other *scaleP01DeliverySummary) {
+func (s *scaleDeliverySummary) merge(other *scaleDeliverySummary) {
 	s.changes += other.changes
 	s.expected += other.expected
 	s.received += other.received
@@ -96,7 +96,7 @@ func (s *scaleP01DeliverySummary) merge(other *scaleP01DeliverySummary) {
 	s.success.merge(&other.success)
 	s.all.merge(&other.all)
 }
-func (s *scaleP01DeliverySummary) report() map[string]any {
+func (s *scaleDeliverySummary) report() map[string]any {
 	slo := map[string]any{"denominator": s.expected, "completed": s.success.n, "failed": s.failed, "failureTreatment": "+infinity", "precision": "upper bucket bound; <=0.8% or 1us rounding"}
 	for _, q := range []struct {
 		name string
@@ -112,7 +112,7 @@ func (s *scaleP01DeliverySummary) report() map[string]any {
 	return map[string]any{"changes": s.changes, "expected": s.expected, "deliveries": s.success.n, "received": s.received, "missing": s.expected - s.received, "unappliedOrLate": s.failed, "invalidAcks": s.invalid, "p50s": s.all.quantile(.5).Seconds(), "p95s": s.all.quantile(.95).Seconds(), "maxs": s.all.quantile(1).Seconds(), "legacyPercentilesIncludeFailurePenalty": true, "sloLatencySeconds": slo}
 }
 
-func (l *scaleP01Ledger) target(phase string) map[string]map[int]time.Time {
+func (l *scaleLedger) target(phase string) map[string]map[int]time.Time {
 	if phase == "received" {
 		return l.received
 	}
@@ -122,7 +122,7 @@ func (l *scaleP01Ledger) target(phase string) map[string]map[int]time.Time {
 	return l.applied
 }
 
-func (l *scaleP01Ledger) compact(now time.Time, timeout time.Duration) {
+func (l *scaleLedger) compact(now time.Time, timeout time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for id, delivery := range l.changes {
@@ -131,10 +131,10 @@ func (l *scaleP01Ledger) compact(now time.Time, timeout time.Duration) {
 		}
 		for _, phase := range []string{"received", "applied", "browser"} {
 			if l.rollups[phase] == nil {
-				l.rollups[phase] = map[string]*scaleP01DeliverySummary{}
+				l.rollups[phase] = map[string]*scaleDeliverySummary{}
 			}
 			if l.rollups[phase][delivery.kind] == nil {
-				l.rollups[phase][delivery.kind] = &scaleP01DeliverySummary{}
+				l.rollups[phase][delivery.kind] = &scaleDeliverySummary{}
 			}
 			l.rollups[phase][delivery.kind].observe(delivery, l.target(phase)[id], l.received[id], now, timeout)
 		}
@@ -165,20 +165,20 @@ func (l *scaleP01Ledger) compact(now time.Time, timeout time.Duration) {
 	}
 }
 
-func TestScaleP01HistogramAndCompaction(t *testing.T) {
+func TestScaleHistogramAndCompaction(t *testing.T) {
 	for _, value := range []time.Duration{0, time.Nanosecond, 900 * time.Microsecond, time.Millisecond, 50 * time.Millisecond, time.Second, time.Minute, time.Hour} {
-		h := scaleP01Histogram{}
+		h := scaleHistogram{}
 		h.add(value)
 		got := h.quantile(.95)
 		if got < value || got-value > max(time.Microsecond, value/125) {
 			t.Fatalf("histogram %s -> %s", value, got)
 		}
 	}
-	l := newScaleP01Ledger()
+	l := newScaleLedger()
 	now := time.Now()
-	l.commit(store.ScaleP01Commit{ID: "a", At: now}, "document", []bool{true, true})
-	l.ack(scaleP01Ack{"a", 0, now.Add(time.Second)}, "received")
-	l.ack(scaleP01Ack{"a", 0, now.Add(2 * time.Second)}, "applied")
+	l.commit(store.ScaleCommit{ID: "a", At: now}, "document", []bool{true, true})
+	l.ack(scaleAck{"a", 0, now.Add(time.Second)}, "received")
+	l.ack(scaleAck{"a", 0, now.Add(2 * time.Second)}, "applied")
 	before := l.report(now.Add(30*time.Second), 10*time.Second, "applied")
 	l.compact(now.Add(30*time.Second), 10*time.Second)
 	after := l.report(now.Add(30*time.Second), 10*time.Second, "applied")

@@ -83,7 +83,7 @@ type logicalJSONStream struct {
 	owner               *ResourceRead
 	view                *WebhookAggregateRead
 	out                 *bufio.Writer
-	stage               *sw26MigrationStage
+	stage               *migrationStage
 	mapID               int64
 	buffer              [32 << 10]byte
 	runes               *bufio.Reader
@@ -522,7 +522,7 @@ func (s *logicalJSONStream) mapping(node metadataLogicalNode, depth int, activit
 	}
 	startStage := func() error {
 		if s.stage == nil {
-			stage, err := sw26NewMigrationStage(s.ctx)
+			stage, err := newMigrationStage(s.ctx)
 			if err != nil {
 				return err
 			}
@@ -718,7 +718,7 @@ func (s *logicalJSONStream) activityIDs(node metadataLogicalNode) error {
 	if err := parser.validate(part, reflect.TypeFor[[]string](), 0); err != nil {
 		return err
 	}
-	scanner := sw17CredentialScanner(s.ctx, node.source, part.offset, part.size)
+	scanner := credentialScanner(s.ctx, node.source, part.offset, part.size)
 	if err := scanner.spaces(); err != nil {
 		return err
 	}

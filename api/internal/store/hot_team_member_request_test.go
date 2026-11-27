@@ -16,7 +16,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21TeamMemberRequestReference(teams []domain.Team, ref string) (domain.Team, bool) {
+func scaleTeamMemberRequestReference(teams []domain.Team, ref string) (domain.Team, bool) {
 	index := slices.IndexFunc(teams, func(team domain.Team) bool { return team.ID == ref })
 	if index < 0 {
 		index = slices.IndexFunc(teams, func(team domain.Team) bool { return strings.EqualFold(team.Key, ref) })
@@ -28,7 +28,7 @@ func scaleP21TeamMemberRequestReference(teams []domain.Team, ref string) (domain
 	return domain.Team{ID: team.ID, Key: team.Key}, true
 }
 
-func TestScaleP21HotTeamMemberRequestNativeDevelopment(t *testing.T) {
+func TestScaleHotTeamMemberRequestNativeDevelopment(t *testing.T) {
 	zone := time.FixedZone(strings.Repeat("ignored native location ", 100000), 7*3600+123)
 	stamp := time.Date(2026, 11, 14, 1, 2, 3, 456789123, zone)
 	data := domain.Bootstrap{
@@ -45,10 +45,10 @@ func TestScaleP21HotTeamMemberRequestNativeDevelopment(t *testing.T) {
 			{TeamID: "", UserID: "empty-team", JoinedAt: stamp},
 		},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical\x00key": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical\x00key": data})
 	view.lastWorkspaceKey = "physical\x00key"
 	for _, ref := range []string{"exact", "duplicate", "DUPLICATE", "N\x00K", "native\x00id", "", "k", "missing", " duplicate "} {
-		wantTeam, wantFound := scaleP21TeamMemberRequestReference(data.Teams, ref)
+		wantTeam, wantFound := scaleTeamMemberRequestReference(data.Teams, ref)
 		read, found, err := view.BeginTeamMemberRequestRead(t.Context(), "", ref, nil, true)
 		if !wantFound {
 			if !found || !errors.Is(err, sql.ErrNoRows) || read != nil {
@@ -116,11 +116,11 @@ func TestScaleP21HotTeamMemberRequestNativeDevelopment(t *testing.T) {
 	}
 }
 
-func TestScaleP21HotTeamMemberRequestSourceAndAuthority(t *testing.T) {
+func TestScaleHotTeamMemberRequestSourceAndAuthority(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, principal := f.data.Workspace.URLKey, f.data.Viewer.ID
 	view, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
@@ -157,7 +157,7 @@ func TestScaleP21HotTeamMemberRequestSourceAndAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ref := range []string{target, "native\x00key", "nativekey", "duplicate", "missing"} {
-		want, wantFound := scaleP21TeamMemberRequestReference(data.Teams, ref)
+		want, wantFound := scaleTeamMemberRequestReference(data.Teams, ref)
 		read, found, err := view.BeginTeamMemberRequestRead(t.Context(), workspace, ref, &access, false)
 		if !wantFound {
 			if !found || !errors.Is(err, sql.ErrNoRows) || read != nil {

@@ -15,11 +15,11 @@ import (
 	"github.com/alicebob/miniredis/v2"
 )
 
-func scaleP21SW94Cached(t *testing.T) (scaleP09Fixture, *SQLiteStore, *coordination.Redis, *miniredis.Miniredis) {
+func projectQueryCacheCached(t *testing.T) (scaleFixture, *SQLiteStore, *coordination.Redis, *miniredis.Miniredis) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	server := miniredis.RunT(t)
 	cache, err := coordination.Open(t.Context(), coordination.Config{
 		Mode: "standalone", Addrs: []string{server.Addr()}, Prefix: "scale-p21-sw94",
@@ -53,8 +53,8 @@ func scaleP21SW94Cached(t *testing.T) (scaleP09Fixture, *SQLiteStore, *coordinat
 	return f, view, cache, server
 }
 
-func TestScaleP21SW94ProjectQueryCacheDifferential(t *testing.T) {
-	f, view, cache, server := scaleP21SW94Cached(t)
+func TestProjectQueryCacheDifferential(t *testing.T) {
+	f, view, cache, server := projectQueryCacheCached(t)
 	query := ProjectRecordQuery{
 		Workspace: f.data.Workspace.URLKey, Limit: 13, IncludeTotal: true, Search: "literal <query>",
 		TeamIDs: []string{"team-one", "team-two"}, AllowedTeamIDs: []string{},
@@ -151,22 +151,22 @@ func TestScaleP21SW94ProjectQueryCacheDifferential(t *testing.T) {
 	})
 }
 
-type scaleP21SW94CacheHook struct {
+type cacheHook struct {
 	*coordination.Redis
 	read func(context.Context, string, int64) ([]byte, int64, error)
 }
 
-func (cache *scaleP21SW94CacheHook) CacheGetBounded(ctx context.Context, key string, maxBytes int64) ([]byte, int64, error) {
+func (cache *cacheHook) CacheGetBounded(ctx context.Context, key string, maxBytes int64) ([]byte, int64, error) {
 	return cache.read(ctx, key, maxBytes)
 }
 
-type scaleP21SW94LegacyCache struct {
+type legacyCache struct {
 	WorkspaceCoordinator
 	hotCache
 }
 
-func TestScaleP21SW94ProjectQueryCacheReadGuards(t *testing.T) {
-	f, view, cache, server := scaleP21SW94Cached(t)
+func TestProjectQueryCacheReadGuards(t *testing.T) {
+	f, view, cache, server := projectQueryCacheCached(t)
 	query := ProjectRecordQuery{Workspace: f.data.Workspace.URLKey, Limit: 10}
 	raw := []byte(`{"items":[{"id":"project","name":"Cached"}],"total":1}`)
 	_, key, _ := f.cacheGetProjectQuery(t.Context(), query)
@@ -176,7 +176,7 @@ func TestScaleP21SW94ProjectQueryCacheReadGuards(t *testing.T) {
 				t.Fatal(err)
 			}
 			pageCalls := 0
-			hook := &scaleP21SW94CacheHook{Redis: cache}
+			hook := &cacheHook{Redis: cache}
 			hook.read = func(ctx context.Context, actualKey string, maxBytes int64) ([]byte, int64, error) {
 				if actualKey != key {
 					return cache.CacheGetBounded(ctx, actualKey, maxBytes)
@@ -253,7 +253,7 @@ func TestScaleP21SW94ProjectQueryCacheReadGuards(t *testing.T) {
 		}
 	})
 	t.Run("unsupported-adapter-and-wrong-owner", func(t *testing.T) {
-		view.SetWorkspaceCoordinator(&scaleP21SW94LegacyCache{WorkspaceCoordinator: cache, hotCache: cache})
+		view.SetWorkspaceCoordinator(&legacyCache{WorkspaceCoordinator: cache, hotCache: cache})
 		owner := &ResourceRead{store: view}
 		_, _, _, err := view.cacheGetProjectQueryOwned(t.Context(), query, owner)
 		owner.Close()

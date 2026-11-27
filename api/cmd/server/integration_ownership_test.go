@@ -21,10 +21,10 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW228IntegrationEnvelopeFallbacksAndOwnership(t *testing.T) {
+func TestIntegrationEnvelopeFallbacksAndOwnership(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		view, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
 		if err != nil {
 			t.Fatal(err)
@@ -74,7 +74,7 @@ func TestScaleP21SW228IntegrationEnvelopeFallbacksAndOwnership(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW228IntegrationWorkerNearLimit delivers a 16,711,695-byte
+// TestIntegrationWorkerNearLimit delivers a 16,711,695-byte
 // payload (16,711,732-byte envelope) through the literal and bounded workers.
 //
 // The background retry write runs under the production 5s deadline in both
@@ -109,7 +109,7 @@ func TestScaleP21SW228IntegrationEnvelopeFallbacksAndOwnership(t *testing.T) {
 // PostgreSQL 0.8-1.1s vs 0.9-1.8s, bounded wall 1.4-1.9s.
 //
 // Margins are not judged under the race detector.
-func TestScaleP21SW228IntegrationWorkerNearLimit(t *testing.T) {
+func TestIntegrationWorkerNearLimit(t *testing.T) {
 	if integrationDeliveryPersistTimeout() != 5*time.Second {
 		t.Fatal("production retry persistence deadline changed")
 	}
@@ -117,7 +117,7 @@ func TestScaleP21SW228IntegrationWorkerNearLimit(t *testing.T) {
 	defer integrationDeliveryPersistOverride.Store(0)
 	var mu sync.Mutex
 	cpu := map[string]time.Duration{}
-	scaleP21SW202DeliveryWorker(t, []string{
+	deliveryWorker(t, []string{
 		"near-limit-no-shadow-split", "near-limit-no-shadow-inline",
 	}, func(bounded bool, mode string, reload bool, elapsed, used time.Duration) {
 		t.Logf("near-limit persistence bounded=%t mode=%s reload=%t wall=%s cpu=%s", bounded, mode, reload, elapsed.Round(time.Millisecond), used.Round(time.Millisecond))
@@ -149,18 +149,18 @@ func TestScaleP21SW228IntegrationWorkerNearLimit(t *testing.T) {
 	}
 }
 
-type scaleP21SW228Coordinator func(context.Context, string, func() error) error
+type integrationOwnershipCoordinator func(context.Context, string, func() error) error
 
-func (run scaleP21SW228Coordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
+func (run integrationOwnershipCoordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
 	return run(ctx, workspace, apply)
 }
 
-func TestScaleP21SW228ResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
+func TestResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace, id := f.data.Workspace.URLKey, idgen.New("sw228-denial-")
 		payload, err := json.Marshal(map[string]string{
 			"body": strings.Repeat("<>&", ((16<<20)-(64<<10))/18),
@@ -205,7 +205,7 @@ func TestScaleP21SW228ResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
 		var before domain.Bootstrap
 		var beforeEvents []domain.DomainEvent
 		locks, pressureHeld := 0, 0
-		view.SetWorkspaceCoordinator(scaleP21SW228Coordinator(func(ctx context.Context, key string, apply func() error) error {
+		view.SetWorkspaceCoordinator(integrationOwnershipCoordinator(func(ctx context.Context, key string, apply func() error) error {
 			locks++
 			if key != workspace {
 				t.Fatal("worker changed its workspace")
@@ -214,7 +214,7 @@ func TestScaleP21SW228ResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
 				// Claim/network inputs have been released. The independent
 				// owner leaves enough room for the retry profile, then
 				// refuses its later exact result-encoding preflight.
-				scaleP21SW202ReloadOracle(t, repo, workspace)
+				deliveryWorkerReloadOracle(t, repo, workspace)
 				before, _ = repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
 				beforeEvents, err = repo.Events(t.Context(), id)
 				if err != nil {
@@ -246,7 +246,7 @@ func TestScaleP21SW228ResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
 			// callback increment proves denial happened after result=*d.
 			t.Fatal("denial happened before the result encoding preflight")
 		}
-		scaleP21SW202ReloadOracle(t, repo, workspace)
+		deliveryWorkerReloadOracle(t, repo, workspace)
 		after, _ := repo.WorkspaceMetadataFields(workspace, "integrationDeliveries", "integrationConnections")
 		afterEvents, err := repo.Events(t.Context(), id)
 		if err != nil {

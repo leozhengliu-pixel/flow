@@ -12,9 +12,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-// scaleP21CompleteWorkspaceCatalog completes the metadata catalog of every
+// scaleCompleteWorkspaceCatalog completes the metadata catalog of every
 // collection of workspace, as the shadow catalog worker does.
-func scaleP21CompleteWorkspaceCatalog(t *testing.T, f scaleP09Fixture, workspace string) {
+func scaleCompleteWorkspaceCatalog(t *testing.T, f scaleFixture, workspace string) {
 	t.Helper()
 	rows, err := f.db.QueryContext(t.Context(), `SELECT DISTINCT field FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field`, workspace)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestRecordJournalMySQLCheckpointUsesCurrentOmissions(t *testing.T) {
 	if _, err := f.db.ExecContext(ctx, put, workspace, field, "legacy", []byte(`"opaque"`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, field); found {
+	if _, _, found := scaleCatalogCheckpoint(t, f, workspace, field); found {
 		t.Fatal("flag-off write opened a checkpoint")
 	}
 	f.db.boundedCatalog.Store(true)
@@ -82,7 +82,7 @@ func TestRecordJournalMySQLCheckpointUsesCurrentOmissions(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if phase, omissions, found := scaleP21CatalogCheckpoint(t, f, workspace, field); !found || phase != 2 || omissions != 2 {
+	if phase, omissions, found := scaleCatalogCheckpoint(t, f, workspace, field); !found || phase != 2 || omissions != 2 {
 		t.Fatal("new checkpoint did not count both omissions", found, phase, omissions)
 	}
 }
@@ -116,7 +116,7 @@ func TestRecordJournalMySQLBackfillLockOrder(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, field); found != test.checkpoint {
+			if _, _, found := scaleCatalogCheckpoint(t, f, workspace, field); found != test.checkpoint {
 				t.Fatal("unexpected checkpoint state before backfill")
 			}
 
@@ -157,7 +157,7 @@ func TestRecordJournalMySQLBackfillLockOrder(t *testing.T) {
 	}
 }
 
-func scaleP21CatalogReady(t *testing.T, f scaleP09Fixture, workspace string) error {
+func scaleCatalogReady(t *testing.T, f scaleFixture, workspace string) error {
 	t.Helper()
 	tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
 	if err != nil {
@@ -167,7 +167,7 @@ func scaleP21CatalogReady(t *testing.T, f scaleP09Fixture, workspace string) err
 	return f.validateResidentBackfill(t.Context(), tx, workspace)
 }
 
-func scaleP21CatalogCheckpoint(t *testing.T, f scaleP09Fixture, workspace, field string) (phase int, omissions int64, found bool) {
+func scaleCatalogCheckpoint(t *testing.T, f scaleFixture, workspace, field string) (phase int, omissions int64, found bool) {
 	t.Helper()
 	err := f.db.QueryRowContext(t.Context(), `SELECT phase,omissions FROM metadata_catalog_collections WHERE workspace_key=? AND field=?`, workspace, field).Scan(&phase, &omissions)
 	if err == nil {
@@ -186,11 +186,11 @@ func scaleP21CatalogCheckpoint(t *testing.T, f scaleP09Fixture, workspace, field
 // checkpoint. Before, every reload of the workspace was refused ("canonical
 // records, catalog or old-writer repair is incomplete") and the installed
 // copy stayed stale.
-func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
+func TestScaleCatalogFirstRecordThenColdWrite(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	workflowID := "catalog-first-" + f.data.Workspace.ID
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.catalog_first_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -205,8 +205,8 @@ func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
 	if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='workflowRuns'`, workspace).Scan(&runs); err != nil || runs != 0 {
 		t.Fatal("fixture already has workflow runs", runs, err)
 	}
-	scaleP21CompleteWorkspaceCatalog(t, f, workspace)
-	if err := scaleP21CatalogReady(t, f, workspace); err != nil {
+	scaleCompleteWorkspaceCatalog(t, f, workspace)
+	if err := scaleCatalogReady(t, f, workspace); err != nil {
 		t.Fatal("completed catalog is not ready", err)
 	}
 	stamp := time.Date(2026, 11, 18, 9, 30, 0, 0, time.UTC)
@@ -225,21 +225,21 @@ func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
 	f.mu.RLock()
 	original := cloneBootstrap(f.workspaces[workspace])
 	f.mu.RUnlock()
-	saved := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+	saved := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 	if err := f.MutateWorkspace(t.Context(), workspace, "workflow_run.executed", workflowID, nil, addRun); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.mutateFull(t.Context(), workspace, "application_policy.updated", nil, setTarget); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, "workflowRuns"); found {
+	if _, _, found := scaleCatalogCheckpoint(t, f, workspace, "workflowRuns"); found {
 		t.Fatal("a flag-off write opened a catalog checkpoint")
 	}
-	wantSQL := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
+	wantSQL := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace)
 	wantNative, _ := f.WorkspaceMetadata(workspace)
 	wantNative = cloneBootstrap(wantNative)
-	scaleP21ColdPreferenceRestore(t, f, workspace, saved, original)
-	if err := scaleP21CatalogReady(t, f, workspace); err != nil {
+	scaleColdPreferenceRestore(t, f, workspace, saved, original)
+	if err := scaleCatalogReady(t, f, workspace); err != nil {
 		t.Fatal("restored catalog is not ready", err)
 	}
 
@@ -264,19 +264,19 @@ func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal("bounded workflow run writer", err)
 	}
-	if phase, omissions, found := scaleP21CatalogCheckpoint(t, f, workspace, "workflowRuns"); !found || phase != 2 || omissions != 0 {
+	if phase, omissions, found := scaleCatalogCheckpoint(t, f, workspace, "workflowRuns"); !found || phase != 2 || omissions != 0 {
 		t.Fatal("the first workflow run opened no complete catalog checkpoint", found, phase, omissions)
 	}
-	if err := scaleP21CatalogReady(t, f, workspace); err != nil {
+	if err := scaleCatalogReady(t, f, workspace); err != nil {
 		t.Fatal("catalog incomplete after the first workflow run", err)
 	}
 	if err := view.coldLegacyMutation(t.Context(), workspace, "application_policy.updated", nil, setTarget); err != nil {
 		t.Fatal("COLD legacy write", err)
 	}
-	if got := scaleP21ColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got.rows, wantSQL.rows) {
+	if got := scaleColdPreferenceSnapshot(t, f.SQLiteStore, workspace); !reflect.DeepEqual(got.rows, wantSQL.rows) {
 		t.Fatal("bounded canonical records differ from legacy")
 	}
-	warm := scaleP21ColdTeamNative(t, view, workspace)
+	warm := scaleColdTeamNative(t, view, workspace)
 
 	// A fresh bounded view hydrated from SQL with production coverage.
 	fresh, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -292,7 +292,7 @@ func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal("SQL reload with coverage", err)
 	}
-	reloaded := scaleP21ColdTeamNative(t, fresh, workspace)
+	reloaded := scaleColdTeamNative(t, fresh, workspace)
 	legacyReload, _, err := f.loadWorkspaceStamped(t.Context(), workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -314,13 +314,13 @@ func TestScaleP21CatalogFirstRecordThenColdWrite(t *testing.T) {
 // The checkpoint opened for a new collection starts from the catalog's
 // omission count, and a collection with older uncatalogued records is left
 // to the backfill.
-func TestScaleP21CatalogNewCollectionCheckpointBounds(t *testing.T) {
+func TestScaleCatalogNewCollectionCheckpointBounds(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
-	scaleP21CompleteWorkspaceCatalog(t, f, workspace)
+	scaleCompleteWorkspaceCatalog(t, f, workspace)
 	f.db.boundedCatalog.Store(true)
 	t.Cleanup(func() { f.db.boundedCatalog.Store(false) })
 	write := func(field, key string, data string) {
@@ -340,11 +340,11 @@ func TestScaleP21CatalogNewCollectionCheckpointBounds(t *testing.T) {
 	// One omitted (non-object) record and one summarized record, in two
 	// transactions: the second adds its omission delta to the checkpoint.
 	write("emailIntakeMessages", "first", `"opaque"`)
-	if phase, omissions, found := scaleP21CatalogCheckpoint(t, f, workspace, "emailIntakeMessages"); !found || phase != 2 || omissions != 1 {
+	if phase, omissions, found := scaleCatalogCheckpoint(t, f, workspace, "emailIntakeMessages"); !found || phase != 2 || omissions != 1 {
 		t.Fatal("new collection checkpoint", found, phase, omissions)
 	}
 	write("emailIntakeMessages", "second", `["opaque"]`)
-	if _, omissions, _ := scaleP21CatalogCheckpoint(t, f, workspace, "emailIntakeMessages"); omissions != 2 {
+	if _, omissions, _ := scaleCatalogCheckpoint(t, f, workspace, "emailIntakeMessages"); omissions != 2 {
 		t.Fatal("omission delta not applied", omissions)
 	}
 	// A collection holding a record the catalog lacks (an old writer's)
@@ -356,7 +356,7 @@ func TestScaleP21CatalogNewCollectionCheckpointBounds(t *testing.T) {
 	}
 	f.db.boundedCatalog.Store(true)
 	write("emailIntakeAddresses", "new", `{"id":"new"}`)
-	if _, _, found := scaleP21CatalogCheckpoint(t, f, workspace, "emailIntakeAddresses"); found {
+	if _, _, found := scaleCatalogCheckpoint(t, f, workspace, "emailIntakeAddresses"); found {
 		t.Fatal("a collection with an uncatalogued record was marked complete")
 	}
 }

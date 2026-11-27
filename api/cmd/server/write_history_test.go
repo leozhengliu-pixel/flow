@@ -9,8 +9,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP20MetadataWriteHistoryProjection(t *testing.T) {
-	db := newScaleP04Database(t)
+func TestScaleMetadataWriteHistoryProjection(t *testing.T) {
+	db := newScaleDatabase(t)
 	handler := db.handler(t, true)
 	doc := requestJSON[domain.Document](t, handler, "POST", "/api/documents", map[string]any{"title": "P20 saved", "content": "Saved body"}, http.StatusCreated)
 	requestJSON[domain.Document](t, handler, "PATCH", "/api/documents/"+doc.ID, map[string]any{"content": "Current body"}, http.StatusOK)
@@ -33,8 +33,8 @@ func TestScaleP20MetadataWriteHistoryProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP20OlderDocumentSuffixLink(t *testing.T) {
-	db := newScaleP04Database(t)
+func TestScaleOlderDocumentSuffixLink(t *testing.T) {
+	db := newScaleDatabase(t)
 	handler := db.handler(t, true)
 	doc := requestJSON[domain.Document](t, handler, "POST", "/api/documents", map[string]any{"title": "P20 current title", "content": "Body at an older link"}, http.StatusCreated)
 	old := "older-title" + doc.SlugID[strings.LastIndex(doc.SlugID, "-"):]

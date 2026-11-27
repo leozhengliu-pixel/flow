@@ -42,7 +42,7 @@ import {
 } from './project-timeline-model'
 import './project-timeline.css'
 import './project-timeline-desktop.css'
-import { ScaleP19TimelineContext } from './scale-p19-view'
+import { ProjectWindowTimelineContext } from './project-window-view'
 
 /** The time axis spans the pane and project names overlay its left edge, on every width (the reference's phone timeline is its desktop one, narrowed). */
 export const TIMELINE_LABEL_WIDTH = 0
@@ -106,7 +106,7 @@ function usePhoneTimeline() {
 }
 
 export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, renderGroupName, renderGroupHeader, groupCount, today: todayProp }: ProjectTimelineProps) {
-  const globalDates = useContext(ScaleP19TimelineContext)
+  const globalDates = useContext(ProjectWindowTimelineContext)
   const { t, locale } = useI18n()
   const phone = usePhoneTimeline()
   // Header bars are 36px tall with 2px above and below (the design reference's 40px group rows).

@@ -14,19 +14,19 @@ import (
 	"flow/api/internal/domain"
 )
 
-type scaleP21SW197Progress string
+type projectProgressStreamProgress string
 
-func (p scaleP21SW197Progress) HasProject(context.Context, string) (bool, error) {
+func (p projectProgressStreamProgress) HasProject(context.Context, string) (bool, error) {
 	return true, nil
 }
-func (p scaleP21SW197Progress) ForEachProject(ctx context.Context, visit func(string) error) error {
+func (p projectProgressStreamProgress) ForEachProject(ctx context.Context, visit func(string) error) error {
 	return visit(string(p))
 }
-func (p scaleP21SW197Progress) Rebuild(ctx context.Context, _ *sqlTx, _ string, source *metadataLogicalSource, _ time.Time) (*metadataLogicalSource, error) {
+func (p projectProgressStreamProgress) Rebuild(ctx context.Context, _ *sqlTx, _ string, source *metadataLogicalSource, _ time.Time) (*metadataLogicalSource, error) {
 	return source, source.Retain()
 }
 
-func TestScaleP21SW197ProjectBodyWireEquality(t *testing.T) {
+func TestProjectBodyWireEquality(t *testing.T) {
 	for _, test := range []struct {
 		name, left, right string
 		equal             bool
@@ -65,7 +65,7 @@ func TestScaleP21SW197ProjectBodyWireEquality(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectStoredBodyEquality(t *testing.T) {
+func TestProjectStoredBodyEquality(t *testing.T) {
 	for _, test := range []struct {
 		name, native, stored string
 	}{
@@ -113,7 +113,7 @@ func TestScaleP21SW197ProjectStoredBodyEquality(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectStoredNULBoundaries(t *testing.T) {
+func TestProjectStoredNULBoundaries(t *testing.T) {
 	for _, pad := range []int{0, metadataRecordChunkBytes - 7, metadataRecordChunkBytes - 3} {
 		raw := []byte(`{"description":"` + strings.Repeat("x", pad) + `\u0000\\u0000\"tail","other":"\u0000"}`)
 		var output bytes.Buffer
@@ -126,7 +126,7 @@ func TestScaleP21SW197ProjectStoredNULBoundaries(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectSearchProjection(t *testing.T) {
+func TestProjectSearchProjection(t *testing.T) {
 	for _, limit := range []int{0, 1, 17, 100000} {
 		project := domain.Project{
 			ID: "search", Name: "Unicode \u4e2d\u6587", Summary: "summary",
@@ -166,7 +166,7 @@ func TestScaleP21SW197ProjectSearchProjection(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectCanonicalDescriptionProperties(t *testing.T) {
+func TestProjectCanonicalDescriptionProperties(t *testing.T) {
 	for _, raw := range []string{
 		`{"id":"p","description":"first","Description":"last","description":null}`,
 		`{"id":"p","descrip\u0074ion":"<tag>&\u2028","description":"invalid-\ufffd"}`,
@@ -207,16 +207,16 @@ func TestScaleP21SW197ProjectCanonicalDescriptionProperties(t *testing.T) {
 	}
 }
 
-type scaleP21SW197Outcome struct {
+type projectProgressStreamOutcome struct {
 	before, next []domain.Project
 	row, search  []byte
 	failed       bool
 	failure      error
 }
 
-func scaleP21SW197Run(t *testing.T, fixture scaleP09Fixture, bounded *SQLiteStore, before, requested domain.Bootstrap, mode string, useBounded bool) (scaleP21SW197Outcome, int) {
+func projectProgressStreamRun(t *testing.T, fixture scaleFixture, bounded *SQLiteStore, before, requested domain.Bootstrap, mode string, useBounded bool) (projectProgressStreamOutcome, int) {
 	t.Helper()
-	tx, ctx := scaleP21SW77Begin(t, fixture, before)
+	tx, ctx := legacyDeltaBudgetBegin(t, fixture, before)
 	defer tx.Rollback()
 	workspace, id := before.Workspace.URLKey, before.Projects[0].ID
 	canonical := cloneSnapshotValue(reflect.ValueOf(before.Projects[0])).Interface().(domain.Project)
@@ -255,7 +255,7 @@ func scaleP21SW197Run(t *testing.T, fixture scaleP09Fixture, bounded *SQLiteStor
 		t.Fatal(err)
 	}
 	field, _ := metadataFieldByName("projects")
-	result := scaleP21SW197Outcome{}
+	result := projectProgressStreamOutcome{}
 	peak := bounded.MetadataWorkUsedForTesting()
 	if !useBounded {
 		previous, next := cloneBootstrap(before), cloneBootstrap(requested)
@@ -304,7 +304,7 @@ func scaleP21SW197Run(t *testing.T, fixture scaleP09Fixture, bounded *SQLiteStor
 		plan := &legacyMetadataWritePlan{
 			store: bounded, tx: tx, workspace: workspace, workspaceID: before.Workspace.ID,
 			work: owner, frames: frames, requested: right, actual: right,
-			progress: scaleP21SW197Progress(id),
+			progress: projectProgressStreamProgress(id),
 		}
 		if strings.HasPrefix(mode, "display-") {
 			plan.progress = nil
@@ -367,11 +367,11 @@ func scaleP21SW197Run(t *testing.T, fixture scaleP09Fixture, bounded *SQLiteStor
 	return result, peak
 }
 
-func TestScaleP21SW197ProjectProgressLegacyDifferential(t *testing.T) {
+func TestProjectProgressLegacyDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -405,8 +405,8 @@ func TestScaleP21SW197ProjectProgressLegacyDifferential(t *testing.T) {
 					next.Projects[0].IssueCount = 13
 				}
 				next.Projects[0].ProgressHistory = []domain.ProjectProgressHistoryPoint{{Date: before.Projects[0].CreatedAt, Value: 0.5}}
-				want, _ := scaleP21SW197Run(t, fixture, bounded, before, next, mode, false)
-				got, _ := scaleP21SW197Run(t, fixture, bounded, before, next, mode, true)
+				want, _ := projectProgressStreamRun(t, fixture, bounded, before, next, mode, false)
+				got, _ := projectProgressStreamRun(t, fixture, bounded, before, next, mode, true)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatal("streamed progress changed native postimages, exact SQL, search or conflict")
 				}
@@ -415,11 +415,11 @@ func TestScaleP21SW197ProjectProgressLegacyDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectProgressBodyWorkBound(t *testing.T) {
+func TestProjectProgressBodyWorkBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	bounded, err := fixture.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -431,8 +431,8 @@ func TestScaleP21SW197ProjectProgressBodyWorkBound(t *testing.T) {
 		before.Projects = []domain.Project{{ID: "sw197-large-" + before.Workspace.ID, Name: "Large project", Description: strings.Repeat("x", size), IssueCount: 11}}
 		next := cloneBootstrap(before)
 		next.Projects[0].IssueCount = 13
-		want, _ := scaleP21SW197Run(t, fixture, bounded, before, next, "canonical-name", false)
-		got, peak := scaleP21SW197Run(t, fixture, bounded, before, next, "canonical-name", true)
+		want, _ := projectProgressStreamRun(t, fixture, bounded, before, next, "canonical-name", false)
+		got, peak := projectProgressStreamRun(t, fixture, bounded, before, next, "canonical-name", true)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatal("large progress write changed exact native/SQL/search output", size)
 		}
@@ -446,7 +446,7 @@ func TestScaleP21SW197ProjectProgressBodyWorkBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW197ProjectStoredNULCancellation(t *testing.T) {
+func TestProjectStoredNULCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := legacyProjectCopyStoredJSON(ctx, io.Discard, strings.NewReader(`{"description":"body"}`)); !errors.Is(err, context.Canceled) {

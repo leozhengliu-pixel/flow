@@ -13,10 +13,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
+func TestNativeSearchRepairDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("sw17-search-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects"), workspace, "scale_p21_sw17.search", "", nil, func(data *domain.Bootstrap) error {
 		for index := range 270 {
@@ -81,8 +81,8 @@ func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
 			repair()
 			var mismatches, total, retainedNeedle int
 			if source.dialect == "mysql" {
-				// MySQL repairs write the application's text (SW470).
-				mismatches = sw17SearchApplicationTextMismatches(t, f, workspace)
+				// MySQL repairs write the application's text.
+				mismatches = searchApplicationTextMismatches(t, f, workspace)
 			} else if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records r LEFT JOIN metadata_search_documents d
 				ON d.workspace_key=r.workspace_key AND d.field=r.field AND d.record_key=r.record_key
 				WHERE r.workspace_key=? AND r.field='projects' AND (d.record_key IS NULL OR d.content<>`+source.metadataSearchContent("r.data")+`)`, workspace).Scan(&mismatches); err != nil {
@@ -125,9 +125,9 @@ func TestScaleP21SW17NativeSearchRepairDifferential(t *testing.T) {
 	}
 }
 
-// sw17SearchApplicationTextMismatches counts the projects of workspace whose
+// searchApplicationTextMismatches counts the projects of workspace whose
 // search document is missing or differs from the application's text.
-func sw17SearchApplicationTextMismatches(t *testing.T, f scaleP09Fixture, workspace string) int {
+func searchApplicationTextMismatches(t *testing.T, f scaleFixture, workspace string) int {
 	t.Helper()
 	rows, err := f.db.QueryContext(t.Context(), `SELECT r.data,d.content FROM workspace_metadata_records r LEFT JOIN metadata_search_documents d
 		ON d.workspace_key=r.workspace_key AND d.field=r.field AND d.record_key=r.record_key

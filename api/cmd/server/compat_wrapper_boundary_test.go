@@ -18,7 +18,7 @@ import (
 	"testing"
 )
 
-// The SW270 guard closes the server compatibility wrappers by reachability,
+// The server compatibility wrapper guard closes the server compatibility wrappers by reachability,
 // not by names or comments. It parses every non-test file of this package,
 // resolves each direct call and function-value reference, and decides for
 // each reference whether a request with FLOW_BOUNDED_METADATA on can execute
@@ -46,14 +46,14 @@ import (
 // hotReach walks every flag-on reference backwards and fails on any
 // HOT-classified inventory consumer it meets. It stops only at route
 // registrations (a handler's temperature is its own inventory
-// classification) and at the pinned scaleP21SW270Boundaries.
+// classification) and at the pinned compatWrapperBoundaryBoundaries.
 
-type scaleP21SW270Func struct {
+type compatWrapperBoundaryFunc struct {
 	key, file string
 	decl      *ast.FuncDecl
 }
 
-type scaleP21SW270Ref struct {
+type compatWrapperBoundaryRef struct {
 	from, to, file string
 	line           int
 	kind           string // call, value or route
@@ -61,27 +61,27 @@ type scaleP21SW270Ref struct {
 	async          bool // inside a go statement
 }
 
-type scaleP21SW270Graph struct {
+type compatWrapperBoundaryGraph struct {
 	fset      *token.FileSet
 	info      *types.Info
 	local     *types.Package
-	funcs     map[string]*scaleP21SW270Func
+	funcs     map[string]*compatWrapperBoundaryFunc
 	byName    map[string][]string
-	refs      []scaleP21SW270Ref
+	refs      []compatWrapperBoundaryRef
 	into      map[string][]int
 	pkgLevel  map[string][]string // function key -> package-level declarations referencing it
 	onTrue    map[string]bool
 	onTrueRun map[string]bool
-	selectors map[string][]scaleP21SW270Ref // selector name (any package) -> uses
+	selectors map[string][]compatWrapperBoundaryRef // selector name (any package) -> uses
 }
 
-// scaleP21SW270Importer resolves every import to an empty package. Only this
+// compatWrapperBoundaryImporter resolves every import to an empty package. Only this
 // package's own functions and methods matter to the guard, and they type-check
 // exactly; expressions of imported types become invalid and are handled
 // conservatively in collect.
-type scaleP21SW270Importer struct{}
+type compatWrapperBoundaryImporter struct{}
 
-func (scaleP21SW270Importer) Import(path string) (*types.Package, error) {
+func (compatWrapperBoundaryImporter) Import(path string) (*types.Package, error) {
 	imported := types.NewPackage(path, path[strings.LastIndex(path, "/")+1:])
 	imported.MarkComplete()
 	return imported, nil
@@ -89,7 +89,7 @@ func (scaleP21SW270Importer) Import(path string) (*types.Package, error) {
 
 // key names a package function as name and a method as Type.name. A method
 // of a package interface has no body and is not a key.
-func (g *scaleP21SW270Graph) key(fn *types.Func) string {
+func (g *compatWrapperBoundaryGraph) key(fn *types.Func) string {
 	if fn == nil || fn.Pkg() != g.local {
 		return ""
 	}
@@ -111,12 +111,12 @@ func (g *scaleP21SW270Graph) key(fn *types.Func) string {
 	return ""
 }
 
-func scaleP21SW270Load(t *testing.T, dir string) *scaleP21SW270Graph {
+func compatWrapperBoundaryLoad(t *testing.T, dir string) *compatWrapperBoundaryGraph {
 	t.Helper()
-	graph := &scaleP21SW270Graph{
-		fset: token.NewFileSet(), funcs: map[string]*scaleP21SW270Func{}, byName: map[string][]string{},
+	graph := &compatWrapperBoundaryGraph{
+		fset: token.NewFileSet(), funcs: map[string]*compatWrapperBoundaryFunc{}, byName: map[string][]string{},
 		into: map[string][]int{}, pkgLevel: map[string][]string{}, onTrue: map[string]bool{}, onTrueRun: map[string]bool{},
-		selectors: map[string][]scaleP21SW270Ref{},
+		selectors: map[string][]compatWrapperBoundaryRef{},
 		info:      &types.Info{Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{}, Selections: map[*ast.SelectorExpr]*types.Selection{}, Types: map[ast.Expr]types.TypeAndValue{}},
 	}
 	paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
@@ -137,7 +137,7 @@ func scaleP21SW270Load(t *testing.T, dir string) *scaleP21SW270Graph {
 		}
 		files = append(files, file)
 	}
-	config := types.Config{Importer: scaleP21SW270Importer{}, Error: func(error) {}}
+	config := types.Config{Importer: compatWrapperBoundaryImporter{}, Error: func(error) {}}
 	graph.local, _ = config.Check("main", graph.fset, files, graph.info)
 	for _, file := range files {
 		name := filepath.Base(graph.fset.Position(file.Pos()).Filename)
@@ -154,7 +154,7 @@ func scaleP21SW270Load(t *testing.T, dir string) *scaleP21SW270Graph {
 			if key == "" || graph.funcs[key] != nil {
 				t.Fatalf("function %s in %s has no unique key %q", fn.Name.Name, name, key)
 			}
-			graph.funcs[key] = &scaleP21SW270Func{key: key, file: name, decl: fn}
+			graph.funcs[key] = &compatWrapperBoundaryFunc{key: key, file: name, decl: fn}
 			if fn.Recv != nil {
 				graph.byName[fn.Name.Name] = append(graph.byName[fn.Name.Name], key)
 			}
@@ -187,7 +187,7 @@ func scaleP21SW270Load(t *testing.T, dir string) *scaleP21SW270Graph {
 	return graph
 }
 
-func scaleP21SW270RouteCall(node ast.Node) bool {
+func compatWrapperBoundaryRouteCall(node ast.Node) bool {
 	call, ok := node.(*ast.CallExpr)
 	if !ok {
 		return false
@@ -200,7 +200,7 @@ func scaleP21SW270RouteCall(node ast.Node) bool {
 // names. Calls through a package interface reach every method of that name;
 // a selector whose receiver has an imported (unresolved) type conservatively
 // reaches every package method of that name too.
-func (g *scaleP21SW270Graph) targets(node ast.Node, parent ast.Node) []string {
+func (g *compatWrapperBoundaryGraph) targets(node ast.Node, parent ast.Node) []string {
 	switch expression := node.(type) {
 	case *ast.SelectorExpr:
 		if selection := g.info.Selections[expression]; selection != nil {
@@ -245,7 +245,7 @@ func (g *scaleP21SW270Graph) targets(node ast.Node, parent ast.Node) []string {
 
 // collect records every reference to a package function or method made by
 // owner, with its route/call/value kind and its flag-on reachability.
-func (g *scaleP21SW270Graph) collect(owner *scaleP21SW270Func) {
+func (g *compatWrapperBoundaryGraph) collect(owner *compatWrapperBoundaryFunc) {
 	var ancestors []ast.Node
 	ast.Inspect(owner.decl.Body, func(node ast.Node) bool {
 		if node == nil {
@@ -261,7 +261,7 @@ func (g *scaleP21SW270Graph) collect(owner *scaleP21SW270Func) {
 			if call, ok := ancestors[len(ancestors)-2].(*ast.CallExpr); ok && call.Fun == node {
 				kind = "call"
 			}
-			g.selectors[selector.Sel.Name] = append(g.selectors[selector.Sel.Name], scaleP21SW270Ref{
+			g.selectors[selector.Sel.Name] = append(g.selectors[selector.Sel.Name], compatWrapperBoundaryRef{
 				from: owner.key, file: owner.file, line: g.fset.Position(node.Pos()).Line, kind: kind, offOnly: g.offOnly(ancestors),
 			})
 		}
@@ -274,7 +274,7 @@ func (g *scaleP21SW270Graph) collect(owner *scaleP21SW270Func) {
 			kind = "call"
 		}
 		for index, ancestor := range ancestors[:len(ancestors)-1] {
-			if scaleP21SW270RouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
+			if compatWrapperBoundaryRouteCall(ancestor) && ancestors[index+1] != ancestor.(*ast.CallExpr).Fun {
 				kind = "route"
 			}
 		}
@@ -283,13 +283,13 @@ func (g *scaleP21SW270Graph) collect(owner *scaleP21SW270Func) {
 		position := g.fset.Position(node.Pos())
 		for _, target := range targets {
 			g.into[target] = append(g.into[target], len(g.refs))
-			g.refs = append(g.refs, scaleP21SW270Ref{from: owner.key, to: target, file: owner.file, line: position.Line, kind: kind, offOnly: offOnly, async: async})
+			g.refs = append(g.refs, compatWrapperBoundaryRef{from: owner.key, to: target, file: owner.file, line: position.Line, kind: kind, offOnly: offOnly, async: async})
 		}
 		return true
 	})
 }
 
-func scaleP21SW270FlagCall(expression ast.Expr) bool {
+func compatWrapperBoundaryFlagCall(expression ast.Expr) bool {
 	call, ok := expression.(*ast.CallExpr)
 	if !ok || len(call.Args) != 0 {
 		return false
@@ -307,7 +307,7 @@ func scaleP21SW270FlagCall(expression ast.Expr) bool {
 }
 
 // onImplied reports whether expression is true whenever the flag is on.
-func (g *scaleP21SW270Graph) onImplied(expression ast.Expr) bool {
+func (g *compatWrapperBoundaryGraph) onImplied(expression ast.Expr) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.onImplied(value.X)
@@ -321,7 +321,7 @@ func (g *scaleP21SW270Graph) onImplied(expression ast.Expr) bool {
 			return g.onImplied(value.X) && g.onImplied(value.Y)
 		}
 	case *ast.CallExpr:
-		if scaleP21SW270FlagCall(value) {
+		if compatWrapperBoundaryFlagCall(value) {
 			return true
 		}
 		return g.callOnTrue(value)
@@ -330,7 +330,7 @@ func (g *scaleP21SW270Graph) onImplied(expression ast.Expr) bool {
 }
 
 // offImplied reports whether expression is false whenever the flag is on.
-func (g *scaleP21SW270Graph) offImplied(expression ast.Expr) bool {
+func (g *compatWrapperBoundaryGraph) offImplied(expression ast.Expr) bool {
 	switch value := expression.(type) {
 	case *ast.ParenExpr:
 		return g.offImplied(value.X)
@@ -349,7 +349,7 @@ func (g *scaleP21SW270Graph) offImplied(expression ast.Expr) bool {
 
 // callOnTrue resolves s.helper(...) / helper(...) to a function whose first
 // statement returns true whenever the flag is on.
-func (g *scaleP21SW270Graph) callOnTrue(call *ast.CallExpr) bool {
+func (g *compatWrapperBoundaryGraph) callOnTrue(call *ast.CallExpr) bool {
 	targets := g.targets(call.Fun, call)
 	if len(targets) != 1 {
 		return false
@@ -367,7 +367,7 @@ func (g *scaleP21SW270Graph) callOnTrue(call *ast.CallExpr) bool {
 	if fn != nil && fn.decl.Type.Results != nil && len(fn.decl.Type.Results.List) == 1 && len(fn.decl.Body.List) > 0 {
 		if ident, ok := fn.decl.Type.Results.List[0].Type.(*ast.Ident); ok && ident.Name == "bool" {
 			if first, ok := fn.decl.Body.List[0].(*ast.IfStmt); ok && first.Init == nil && first.Else == nil && g.onImplied(first.Cond) {
-				result = scaleP21SW270ReturnsTrue(first.Body)
+				result = returnsTrue(first.Body)
 			}
 		}
 	}
@@ -375,7 +375,7 @@ func (g *scaleP21SW270Graph) callOnTrue(call *ast.CallExpr) bool {
 	return result
 }
 
-func scaleP21SW270ReturnsTrue(body *ast.BlockStmt) bool {
+func returnsTrue(body *ast.BlockStmt) bool {
 	if len(body.List) == 0 {
 		return false
 	}
@@ -401,7 +401,7 @@ func scaleP21SW270ReturnsTrue(body *ast.BlockStmt) bool {
 	return all
 }
 
-func scaleP21SW270Terminates(body *ast.BlockStmt) bool {
+func compatWrapperBoundaryTerminates(body *ast.BlockStmt) bool {
 	if len(body.List) == 0 {
 		return false
 	}
@@ -421,7 +421,7 @@ func scaleP21SW270Terminates(body *ast.BlockStmt) bool {
 
 // offOnly decides whether the innermost node of ancestors can execute with
 // the flag on. ancestors[0] is the function body.
-func (g *scaleP21SW270Graph) offOnly(ancestors []ast.Node) bool {
+func (g *compatWrapperBoundaryGraph) offOnly(ancestors []ast.Node) bool {
 	node := ancestors[len(ancestors)-1]
 	for index := len(ancestors) - 2; index >= 0; index-- {
 		child := ancestors[index+1]
@@ -451,38 +451,38 @@ func (g *scaleP21SW270Graph) offOnly(ancestors []ast.Node) bool {
 	return false
 }
 
-func (g *scaleP21SW270Graph) dominatedByOnReturn(list []ast.Stmt, child ast.Node) bool {
+func (g *compatWrapperBoundaryGraph) dominatedByOnReturn(list []ast.Stmt, child ast.Node) bool {
 	for _, statement := range list {
 		if ast.Node(statement) == child {
 			return false
 		}
 		branch, ok := statement.(*ast.IfStmt)
-		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond) && scaleP21SW270Terminates(branch.Body) {
+		if ok && branch.Init == nil && branch.Else == nil && g.onImplied(branch.Cond) && compatWrapperBoundaryTerminates(branch.Body) {
 			return true
 		}
 	}
 	return false
 }
 
-type scaleP21SW270Review struct {
+type compatWrapperBoundaryReview struct {
 	Status, Temperature, TemperatureReason string
 	Accessors                              []string
 }
 
-func scaleP21SW270Inventory(t *testing.T) map[string]scaleP21SW270Review {
+func compatWrapperBoundaryInventory(t *testing.T) map[string]compatWrapperBoundaryReview {
 	t.Helper()
 	paths, err := filepath.Glob("../../internal/store/metadata_inventory/server/*.json")
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("server inventory missing: %v", err)
 	}
-	result := map[string]scaleP21SW270Review{}
+	result := map[string]compatWrapperBoundaryReview{}
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var file struct {
-			Consumers map[string]scaleP21SW270Review `json:"consumers"`
+			Consumers map[string]compatWrapperBoundaryReview `json:"consumers"`
 		}
 		if err := json.Unmarshal(raw, &file); err != nil {
 			t.Fatal(err)
@@ -498,23 +498,23 @@ func scaleP21SW270Inventory(t *testing.T) map[string]scaleP21SW270Review {
 	return result
 }
 
-func (g *scaleP21SW270Graph) inventoryKey(key string) string {
+func (g *compatWrapperBoundaryGraph) inventoryKey(key string) string {
 	fn := g.funcs[key]
 	return fn.file + ":" + fn.decl.Name.Name
 }
 
-type scaleP21SW270Boundary struct {
+type compatWrapperBoundaryBoundary struct {
 	mode, reason string
 }
 
-// scaleP21SW270Boundaries are the references at which the HOT walk stops,
+// compatWrapperBoundaryBoundaries are the references at which the HOT walk stops,
 // besides route registrations. Each is pinned by verifyBoundaries:
 //   - "async": every reference runs inside a go statement that hands an AI
 //     run to its worker after the HOT start boundary has committed;
 //   - "handler": an in-process dispatch to a route handler that is also
 //     bound by HandleFunc, so its temperature is that route's inventory
 //     classification, exactly like a route registration.
-var scaleP21SW270Boundaries = map[string]scaleP21SW270Boundary{
+var compatWrapperBoundaryBoundaries = map[string]compatWrapperBoundaryBoundary{
 	"server.startLoopRun->server.executeLoopRun":                     {"async", "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server.startBoundedLoopRun->server.executeLoopRun":              {"async", "the loop AI run (model and tool calls: executeLoopRun -> runToolCall -> callFlowTool -> runFlowTool, COLD in the inventory) runs on its worker after the HOT start boundary"},
 	"server.chatDMAgentCall->server.createAgentSessionStream":        {"handler", "chat DM agent chat is POST /api/agent/sessions/stream, a COLD agent-session route"},
@@ -522,9 +522,9 @@ var scaleP21SW270Boundaries = map[string]scaleP21SW270Boundary{
 	"server.chatDMAgentCall->server.resolveAgentApproval":            {"handler", "chat DM approval card is POST /api/agent/sessions/{id}/approvals/{approvalId}, a COLD agent-session route"},
 }
 
-func (g *scaleP21SW270Graph) verifyBoundaries(t *testing.T) {
+func (g *compatWrapperBoundaryGraph) verifyBoundaries(t *testing.T) {
 	t.Helper()
-	for edge, boundary := range scaleP21SW270Boundaries {
+	for edge, boundary := range compatWrapperBoundaryBoundaries {
 		from, to, _ := strings.Cut(edge, "->")
 		count, routed := 0, false
 		for _, index := range g.into[to] {
@@ -556,7 +556,7 @@ func (g *scaleP21SW270Graph) verifyBoundaries(t *testing.T) {
 // returns the HOT-classified inventory consumers it meets, each with the path
 // that reached it. Route registrations are roots: a handler's temperature is
 // its own inventory classification.
-func (g *scaleP21SW270Graph) hotReach(inventory map[string]scaleP21SW270Review, start string, skip map[string]bool) []string {
+func (g *compatWrapperBoundaryGraph) hotReach(inventory map[string]compatWrapperBoundaryReview, start string, skip map[string]bool) []string {
 	type step struct{ key, path string }
 	seen := map[string]bool{start: true}
 	queue := []step{{start, start}}
@@ -566,7 +566,7 @@ func (g *scaleP21SW270Graph) hotReach(inventory map[string]scaleP21SW270Review, 
 		queue = queue[1:]
 		for _, index := range g.into[current.key] {
 			ref := g.refs[index]
-			if ref.offOnly || ref.kind == "route" || seen[ref.from] || skip[ref.from] || scaleP21SW270Boundaries[ref.from+"->"+ref.to] != (scaleP21SW270Boundary{}) {
+			if ref.offOnly || ref.kind == "route" || seen[ref.from] || skip[ref.from] || compatWrapperBoundaryBoundaries[ref.from+"->"+ref.to] != (compatWrapperBoundaryBoundary{}) {
 				continue
 			}
 			seen[ref.from] = true
@@ -581,7 +581,7 @@ func (g *scaleP21SW270Graph) hotReach(inventory map[string]scaleP21SW270Review, 
 	return hot
 }
 
-type scaleP21SW270Closure struct {
+type compatWrapperBoundaryClosure struct {
 	wrapper string // graph key, e.g. server.workspaceData
 	// hot callers whose every reference is flag-off-only, with expected counts.
 	hot map[string]int
@@ -600,7 +600,7 @@ type scaleP21SW270Closure struct {
 	bounded map[string]int
 }
 
-func (g *scaleP21SW270Graph) verifyClosure(t *testing.T, inventory map[string]scaleP21SW270Review, closure scaleP21SW270Closure) {
+func (g *compatWrapperBoundaryGraph) verifyClosure(t *testing.T, inventory map[string]compatWrapperBoundaryReview, closure compatWrapperBoundaryClosure) {
 	t.Helper()
 	if files := g.pkgLevel[closure.wrapper]; len(files) != 0 {
 		t.Errorf("package-level reference to %s in %v requires reachability review", closure.wrapper, files)
@@ -690,7 +690,7 @@ func (g *scaleP21SW270Graph) verifyClosure(t *testing.T, inventory map[string]sc
 	}
 }
 
-func scaleP21SW270Counts(names ...string) map[string]int {
+func compatWrapperBoundaryCounts(names ...string) map[string]int {
 	result := map[string]int{}
 	for _, name := range names {
 		count := 1
@@ -703,46 +703,46 @@ func scaleP21SW270Counts(names ...string) map[string]int {
 	return result
 }
 
-// TestScaleP21SW270WorkspaceDataHotBoundaries closes server.workspaceData:
+// TestWorkspaceDataHotBoundaries closes server.workspaceData:
 // every HOT caller reaches it only with the flag off, and each remaining
 // caller is COLD in the inventory and unreachable from any HOT consumer with
 // the flag on. The scoped adapter uses the same projection with error handling.
-func TestScaleP21SW270WorkspaceDataHotBoundaries(t *testing.T) {
-	graph := scaleP21SW270Load(t, ".")
-	inventory := scaleP21SW270Inventory(t)
+func TestWorkspaceDataHotBoundaries(t *testing.T) {
+	graph := compatWrapperBoundaryLoad(t, ".")
+	inventory := compatWrapperBoundaryInventory(t)
 	graph.verifyBoundaries(t)
-	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
+	graph.verifyClosure(t, inventory, compatWrapperBoundaryClosure{
 		wrapper: "server.workspaceData",
-		hot: scaleP21SW270Counts(
+		hot: compatWrapperBoundaryCounts(
 			"listDocuments", "applicationTaskContext", "applicationWebhookDataScoped", "startCommentActions",
 			"listCommentActions", "connectorForRequest", "filterSuggestions", "documentWorkspaceData*2",
 			"getNotificationPreferences", "acknowledgeDesktopNotifications", "listProjectRelations",
 			"listInitiativeRelations", "listDocumentDrafts", "documentContentHistory", "updatePresence",
 			"listPresence", "listWorkspaceLabels", "listTeamLabels", "getTeamSettings",
 		),
-		cold: scaleP21SW270WorkspaceDataCold(),
+		cold: workspaceDataCold(),
 	})
-	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
+	graph.verifyClosure(t, inventory, compatWrapperBoundaryClosure{
 		wrapper: "server.workspaceDataWithError",
-		hot:     scaleP21SW270Counts("workspaceDataScoped"),
-		cold:    scaleP21SW270Counts("developerTokenApplication", "createExport", "updateReview", "submitReview", "commentOnReview", "resolveReviewThread"),
+		hot:     compatWrapperBoundaryCounts("workspaceDataScoped"),
+		cold:    compatWrapperBoundaryCounts("developerTokenApplication", "createExport", "updateReview", "submitReview", "commentOnReview", "resolveReviewThread"),
 		// The closure above checks workspaceData. HOT permission lists
 		// dispatch to the retained reader before findIssueForPermissions.
-		relay: scaleP21SW270Counts("workspaceData", "findIssueForPermissions"),
+		relay: compatWrapperBoundaryCounts("workspaceData", "findIssueForPermissions"),
 	})
 }
 
-// TestScaleP21SW271MCPWorkspaceDataHotBoundaries closes
+// TestMCPWorkspaceDataHotBoundaries closes
 // server.mcpWorkspaceData the same way. The triage routes dispatch to their
 // owned projections first; every other caller is a COLD MCP/agent tool.
-func TestScaleP21SW271MCPWorkspaceDataHotBoundaries(t *testing.T) {
-	graph := scaleP21SW270Load(t, ".")
-	inventory := scaleP21SW270Inventory(t)
+func TestMCPWorkspaceDataHotBoundaries(t *testing.T) {
+	graph := compatWrapperBoundaryLoad(t, ".")
+	inventory := compatWrapperBoundaryInventory(t)
 	graph.verifyBoundaries(t)
-	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
+	graph.verifyClosure(t, inventory, compatWrapperBoundaryClosure{
 		wrapper: "server.mcpWorkspaceData",
-		hot:     scaleP21SW270Counts("previewIssueSuggestions", "listIssueSuggestions", "updateIssueSuggestionState", "requestTriageAIPlan"),
-		cold: scaleP21SW270Counts("agentEntitySnapshot", "appendMCPDocumentEmbed", "deleteMCPResource", "flowDeletePreview",
+		hot:     compatWrapperBoundaryCounts("previewIssueSuggestions", "listIssueSuggestions", "updateIssueSuggestionState", "requestTriageAIPlan"),
+		cold: compatWrapperBoundaryCounts("agentEntitySnapshot", "appendMCPDocumentEmbed", "deleteMCPResource", "flowDeletePreview",
 			"deleteMCPDocument", "saveMCPProject", "deleteMCPComment", "mcpWorkspaceDataForTool"),
 	})
 	// The shared body takes its source as an argument: only the literal
@@ -760,27 +760,27 @@ func TestScaleP21SW271MCPWorkspaceDataHotBoundaries(t *testing.T) {
 			t.Error("owned triage projection captures the hydrating paged metadata")
 		}
 	}
-	if uses := graph.selectors["ProjectedWorkspace"]; !slices.ContainsFunc(uses, func(use scaleP21SW270Ref) bool { return use.from == "server.mcpWorkspaceDataProjected" }) {
+	if uses := graph.selectors["ProjectedWorkspace"]; !slices.ContainsFunc(uses, func(use compatWrapperBoundaryRef) bool { return use.from == "server.mcpWorkspaceDataProjected" }) {
 		t.Error("owned triage projection no longer reads installed projections")
 	}
 }
 
-// TestScaleP21SW272SnapshotReservationHotBoundaries closes
+// TestSnapshotReservationHotBoundaries closes
 // server.hydratedLegacySnapshotReservation by its own bounded branch. Both
 // download admission and the shared legacy projection budget use it. Only
 // flag-off requests reach the store estimator that walks the workspace.
-func TestScaleP21SW272SnapshotReservationHotBoundaries(t *testing.T) {
-	graph := scaleP21SW270Load(t, ".")
-	inventory := scaleP21SW270Inventory(t)
-	graph.verifyClosure(t, inventory, scaleP21SW270Closure{
+func TestSnapshotReservationHotBoundaries(t *testing.T) {
+	graph := compatWrapperBoundaryLoad(t, ".")
+	inventory := compatWrapperBoundaryInventory(t)
+	graph.verifyClosure(t, inventory, compatWrapperBoundaryClosure{
 		wrapper: "server.hydratedLegacySnapshotReservation",
 		values:  map[string]int{"server.signedFileURLs": 1, "newHandler": 1},
 		bounded: map[string]int{"WorkspaceReadSnapshotReservation": 1},
 	})
 }
 
-func scaleP21SW270WorkspaceDataCold() map[string]int {
-	return scaleP21SW270Counts(
+func workspaceDataCold() map[string]int {
+	return compatWrapperBoundaryCounts(
 		"listWebhooks", "manageableWebhook", "listWebhookFailures", "testWebhook",
 		"checkAgentMentions", "listAgentSessions", "getAgentSession", "listAgentSkillsHTTP",
 		"applyAgentMessageChangesLocked", "resolveAgentElicitation", "resolveAgentApproval", "runAgentSession",
@@ -810,7 +810,7 @@ func scaleP21SW270WorkspaceDataCold() map[string]int {
 	)
 }
 
-func TestScaleP21SW273GuardRejectsFlagOnReach(t *testing.T) {
+func TestGuardRejectsFlagOnReachCompatWrapperBoundary(t *testing.T) {
 	const source = `package main
 
 import "net/http"
@@ -874,7 +874,7 @@ func (s *server) bounded(r *http.Request) {}
 	if err := os.WriteFile(filepath.Join(dir, "probe.go"), []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	graph := scaleP21SW270Load(t, dir)
+	graph := compatWrapperBoundaryLoad(t, dir)
 	reach := map[string]bool{}
 	for _, index := range graph.into["server.wrapper"] {
 		ref := graph.refs[index]

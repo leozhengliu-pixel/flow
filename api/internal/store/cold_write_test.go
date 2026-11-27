@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21ColdWriteFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func scaleColdWriteFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(t.Context(), workspace, "application_policy.updated", "", nil, func(data *domain.Bootstrap) error {
 		data.Settings["cold-write-native"] = map[string]any{
@@ -41,7 +41,7 @@ func scaleP21ColdWriteFixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, stri
 	return f, view, workspace
 }
 
-func scaleP21ColdWriteRow(t *testing.T, f scaleP09Fixture, workspace string) []byte {
+func scaleColdWriteRow(t *testing.T, f scaleFixture, workspace string) []byte {
 	t.Helper()
 	var raw []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='settings' AND record_key='cold-write-target'`, workspace).Scan(&raw); err != nil {
@@ -50,8 +50,8 @@ func scaleP21ColdWriteRow(t *testing.T, f scaleP09Fixture, workspace string) []b
 	return raw
 }
 
-func TestScaleP21ColdFullWriteNativePublication(t *testing.T) {
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+func TestScaleColdFullWriteNativePublication(t *testing.T) {
+	f, view, workspace := scaleColdWriteFixture(t)
 	original, _ := f.WorkspaceMetadata(workspace)
 	var oldInput any
 	oldQueries, coldQueries := 0, 0
@@ -63,7 +63,7 @@ func TestScaleP21ColdFullWriteNativePublication(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := scaleP21ColdWriteRow(t, f, workspace)
+	want := scaleColdWriteRow(t, f, workspace)
 	// Reset the literal owner, then transfer the identical native preimage.
 	if err := f.mutateFull(t.Context(), workspace, "application_policy.updated", nil, func(data *domain.Bootstrap) (string, error) {
 		data.Settings["cold-write-target"] = original.Settings["cold-write-target"]
@@ -122,7 +122,7 @@ func TestScaleP21ColdFullWriteNativePublication(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(scaleP21ColdWriteRow(t, f, workspace), want) || events != 1 || webhooks != 1 {
+	if !bytes.Equal(scaleColdWriteRow(t, f, workspace), want) || events != 1 || webhooks != 1 {
 		t.Fatal("canonical write or publication count differs", events, webhooks)
 	}
 	t.Logf("primary SQL statements original=%d cold=%d; cold publication adds one final commit-stamp SELECT", oldQueries, coldQueries)
@@ -141,9 +141,9 @@ func TestScaleP21ColdFullWriteNativePublication(t *testing.T) {
 	view.writeMu.Unlock()
 }
 
-func TestScaleP21ColdFullWriteRollbackAndRejectedDispatch(t *testing.T) {
-	f, view, workspace := scaleP21ColdWriteFixture(t)
-	want := scaleP21ColdWriteRow(t, f, workspace)
+func TestScaleColdFullWriteRollbackAndRejectedDispatch(t *testing.T) {
+	f, view, workspace := scaleColdWriteFixture(t)
+	want := scaleColdWriteRow(t, f, workspace)
 	var eventCount int
 	if err := f.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM domain_events WHERE workspace_id=?`, f.data.Workspace.ID).Scan(&eventCount); err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestScaleP21ColdFullWriteRollbackAndRejectedDispatch(t *testing.T) {
 			if mode == "commit" && !prepared {
 				t.Fatal("commit rejection did not exercise prepared publication")
 			}
-			if !bytes.Equal(want, scaleP21ColdWriteRow(t, f, workspace)) {
+			if !bytes.Equal(want, scaleColdWriteRow(t, f, workspace)) {
 				t.Fatal("rollback changed target row")
 			}
 			var count int
@@ -229,8 +229,8 @@ func TestScaleP21ColdFullWriteRollbackAndRejectedDispatch(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdFullWriteRefreshAndStamps(t *testing.T) {
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+func TestScaleColdFullWriteRefreshAndStamps(t *testing.T) {
+	f, view, workspace := scaleColdWriteFixture(t)
 	err := view.withColdMetadataRead(t.Context(), func(ctx context.Context, facade *SQLiteStore) error {
 		for index := 1; index <= 2; index++ {
 			if err := view.MutateWorkspaceScoped(ctx, workspace, "application_policy.updated", "", nil, MetadataRecordScope{
@@ -298,8 +298,8 @@ func TestScaleP21ColdFullWriteRefreshAndStamps(t *testing.T) {
 	view.writeMu.Unlock()
 }
 
-func TestScaleP21ColdFullWriteOffAndMutex(t *testing.T) {
-	f, _, workspace := scaleP21ColdWriteFixture(t)
+func TestScaleColdFullWriteOffAndMutex(t *testing.T) {
+	f, _, workspace := scaleColdWriteFixture(t)
 	ctx := context.WithValue(t.Context(), struct{ name string }{"off"}, true)
 	called := false
 	want := errors.New("literal full callback")
@@ -321,8 +321,8 @@ func TestScaleP21ColdFullWriteOffAndMutex(t *testing.T) {
 	facade.Unlock()
 }
 
-func TestScaleP21ColdFullWriteConflictRefresh(t *testing.T) {
-	f, view, workspace := scaleP21ColdWriteFixture(t)
+func TestScaleColdFullWriteConflictRefresh(t *testing.T) {
+	f, view, workspace := scaleColdWriteFixture(t)
 	// A same-version writer commits after this view captured its native base.
 	if err := f.mutateFull(t.Context(), workspace, "application_policy.updated", nil, func(data *domain.Bootstrap) (string, error) {
 		data.Settings["cold-write-target"] = map[string]any{"value": "peer"}
@@ -352,15 +352,15 @@ func TestScaleP21ColdFullWriteConflictRefresh(t *testing.T) {
 	}
 }
 
-type scaleP21ColdWriteCoordinator func(context.Context, string, func() error) error
+type scaleColdWriteCoordinator func(context.Context, string, func() error) error
 
-func (run scaleP21ColdWriteCoordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
+func (run scaleColdWriteCoordinator) WithWorkspaceLock(ctx context.Context, workspace string, apply func() error) error {
 	return run(ctx, workspace, apply)
 }
 
-func TestScaleP21ColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
-	f, view, workspace := scaleP21ColdWriteFixture(t)
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, workspace+"-cold-default").Workspace.URLKey
+func TestScaleColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
+	f, view, workspace := scaleColdWriteFixture(t)
+	second := selectedExtraWorkspace(t, f, workspace+"-cold-default").Workspace.URLKey
 	if err := view.RefreshInstalledMetadataViewForTesting(t.Context(), f.SQLiteStore, second); err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestScaleP21ColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
 	view.lastWorkspaceKey = workspace
 	view.mu.Unlock()
 	var locked, mutated string
-	view.SetWorkspaceCoordinator(scaleP21ColdWriteCoordinator(func(ctx context.Context, key string, apply func() error) error {
+	view.SetWorkspaceCoordinator(scaleColdWriteCoordinator(func(ctx context.Context, key string, apply func() error) error {
 		locked = key
 		// Default switches after original selection but before acquiring its
 		// workspace lock. The protected mutation must stay bound to that key.
@@ -388,7 +388,7 @@ func TestScaleP21ColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
 		t.Fatal("default refresh changed the coordinator-protected key", locked, mutated)
 	}
 	var target map[string]any
-	if err := json.Unmarshal(scaleP21ColdWriteRow(t, f, workspace), &target); err != nil || target["value"] != "locked-default" {
+	if err := json.Unmarshal(scaleColdWriteRow(t, f, workspace), &target); err != nil || target["value"] != "locked-default" {
 		t.Fatal("mutation escaped original default workspace", err, target)
 	}
 	var rows int
@@ -397,10 +397,10 @@ func TestScaleP21ColdFullWriteDefaultCoordinatorBinding(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdLegacyWriteRetriesBusyWorkspaceLock(t *testing.T) {
-	_, view, workspace := scaleP21ColdWriteFixture(t)
+func TestScaleColdLegacyWriteRetriesBusyWorkspaceLock(t *testing.T) {
+	_, view, workspace := scaleColdWriteFixture(t)
 	var attempts atomic.Int64
-	view.SetWorkspaceCoordinator(scaleP21ColdWriteCoordinator(func(ctx context.Context, key string, apply func() error) error {
+	view.SetWorkspaceCoordinator(scaleColdWriteCoordinator(func(ctx context.Context, key string, apply func() error) error {
 		if attempts.Add(1) == 1 {
 			return fmt.Errorf("busy: %w", coordination.ErrWorkspaceLockBusy)
 		}

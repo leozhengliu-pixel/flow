@@ -8,7 +8,7 @@ import (
 )
 
 // ReserveIntegrationDeliveryEncoding preflights the ordinary typed delivery
-// result encoder. Six rounded output widths retain the existing SW205 bound
+// result encoder. Six rounded output widths retain the existing delivery result budget bound
 // for Marshal's string growth, encoder growth, returned bytes and capacity
 // slack. This domain record has no map-sort work outside its raw JSON bytes.
 func (r *MetadataJSONRead) ReserveIntegrationDeliveryEncoding(ctx context.Context, value domain.IntegrationDelivery) error {

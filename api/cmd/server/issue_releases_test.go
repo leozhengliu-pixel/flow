@@ -14,14 +14,14 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// scaleP21SW200Outcome is the triage writer outcome plus every release and
+// issueReleasesOutcome is the triage writer outcome plus every release and
 // release pipeline metadata row in canonical collection order.
-type scaleP21SW200Outcome struct {
-	scaleP21TriageOutcome
+type issueReleasesOutcome struct {
+	scaleTriageOutcome
 	Releases, Pipelines [][]any
 }
 
-func scaleP21SW200Request(t *testing.T, f *scaleP21TriageWriterFixture, service *server, actor domain.User, key *domain.APIKey, ref string, ids []string, alias, cancelled bool) *httptest.ResponseRecorder {
+func issueReleasesRequest(t *testing.T, f *scaleTriageWriterFixture, service *server, actor domain.User, key *domain.APIKey, ref string, ids []string, alias, cancelled bool) *httptest.ResponseRecorder {
 	t.Helper()
 	r := f.literalRequest(actor, key, issueReleasesInput{ReleaseIDs: ids})
 	family := "issues"
@@ -54,12 +54,12 @@ func scaleP21SW200Request(t *testing.T, f *scaleP21TriageWriterFixture, service 
 	return w
 }
 
-func (f *scaleP21TriageWriterFixture) sw200Run(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (scaleP21SW200Outcome, time.Time) {
+func (f *scaleTriageWriterFixture) issueReleasesRun(t *testing.T, source string, call func(*server) *httptest.ResponseRecorder) (issueReleasesOutcome, time.Time) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
-	var got scaleP21SW200Outcome
+	var got issueReleasesOutcome
 	var started time.Time
-	got.scaleP21TriageOutcome, started = f.run(t, source, call)
+	got.scaleTriageOutcome, started = f.run(t, source, call)
 	got.Releases = f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='releases' ORDER BY collection_order,record_key`, workspace)
 	got.Pipelines = f.rows(t, `SELECT record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field='releasePipelines' ORDER BY collection_order,record_key`, workspace)
 	// Inline release collections live in the workspace root.
@@ -68,36 +68,36 @@ func (f *scaleP21TriageWriterFixture) sw200Run(t *testing.T, source string, call
 	return got, started
 }
 
-func (f *scaleP21TriageWriterFixture) sw200Differential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []scaleP21SW200Outcome {
+func (f *scaleTriageWriterFixture) issueReleasesDifferential(t *testing.T, name string, call func(*server) *httptest.ResponseRecorder) []issueReleasesOutcome {
 	t.Helper()
 	var normalized []string
-	var outcomes []scaleP21SW200Outcome
+	var outcomes []issueReleasesOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
-		got, started := f.sw200Run(t, source, call)
+		got, started := f.issueReleasesRun(t, source, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Fatalf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Fatalf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-type scaleP21SW200Seed struct {
+type issueReleasesSeed struct {
 	prefix string
 	at     time.Time
 }
 
-func (s scaleP21SW200Seed) id(name string) string { return s.prefix + name }
+func (s issueReleasesSeed) id(name string) string { return s.prefix + name }
 
-// scaleP21SW200Setup adds release pipelines and releases around the triage
+// issueReleasesSetup adds release pipelines and releases around the triage
 // fixture's issues: open, frozen-stage and own-frozen releases, archived and
 // private-pipeline releases, previously linked releases, a release whose ID
 // is the issue ID, large descriptions and existing issue history.
-func scaleP21SW200Setup(t *testing.T) (scaleP21TriageWriterFixture, scaleP21SW200Seed) {
+func issueReleasesSetup(t *testing.T) (scaleTriageWriterFixture, issueReleasesSeed) {
 	t.Helper()
-	f := scaleP21TriageWriterSetup(t)
-	seed := scaleP21SW200Seed{prefix: idgen.New("sw200-"), at: time.Date(2026, 2, 3, 4, 5, 6, 7, time.UTC)}
+	f := scaleTriageWriterSetup(t)
+	seed := issueReleasesSeed{prefix: idgen.New("sw200-"), at: time.Date(2026, 2, 3, 4, 5, 6, 7, time.UTC)}
 	owner := f.principals[0].user
 	issue := f.triage.ID
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "scale_p21.sw200_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -159,21 +159,21 @@ func scaleP21SW200Setup(t *testing.T) (scaleP21TriageWriterFixture, scaleP21SW20
 
 // Reloaded oracle views live until their owning fixture closes, so each
 // scenario group runs on its own fixture.
-func TestScaleP21SW200IssueReleasesDifferential(t *testing.T) {
+func TestIssueReleasesDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
 	for _, group := range []string{"records", "ordinary-development", "misc"} {
-		t.Run(group, func(t *testing.T) { scaleP21SW200Group(t, group, -1) })
+		t.Run(group, func(t *testing.T) { issueReleasesGroup(t, group, -1) })
 	}
 	for principal := range 5 {
-		t.Run(fmt.Sprintf("permission-matrix-%d", principal), func(t *testing.T) { scaleP21SW200Group(t, "matrix", principal) })
+		t.Run(fmt.Sprintf("permission-matrix-%d", principal), func(t *testing.T) { issueReleasesGroup(t, "matrix", principal) })
 	}
 }
 
-func scaleP21SW200Group(t *testing.T, group string, principal int) {
-	f, seed := scaleP21SW200Setup(t)
+func issueReleasesGroup(t *testing.T, group string, principal int) {
+	f, seed := issueReleasesSetup(t)
 	owner := f.principals[0].user
 	issue := f.triage.ID
 	type releaseCase struct {
@@ -266,9 +266,9 @@ func scaleP21SW200Group(t *testing.T, group string, principal int) {
 				if ref == "" {
 					ref = issue
 				}
-				outcomes := f.sw200Differential(t, test.name, func(service *server) *httptest.ResponseRecorder {
+				outcomes := f.issueReleasesDifferential(t, test.name, func(service *server) *httptest.ResponseRecorder {
 					service.authDisabled = !alias
-					return scaleP21SW200Request(t, &f, service, owner, nil, ref, test.ids, alias, false)
+					return issueReleasesRequest(t, &f, service, owner, nil, ref, test.ids, alias, false)
 				})
 				if test.code != 0 && outcomes[0].Code != test.code {
 					t.Fatalf("legacy status=%d want=%d body=%s", outcomes[0].Code, test.code, outcomes[0].Body)
@@ -294,8 +294,8 @@ func scaleP21SW200Group(t *testing.T, group string, principal int) {
 			}
 			for _, target := range []string{issue, f.hidden.ID} {
 				for _, ids := range [][]string{{seed.id("add")}, {seed.id("private-release")}, {}} {
-					f.sw200Differential(t, fmt.Sprintf("M/%s/%s/%v", name, target, ids), func(service *server) *httptest.ResponseRecorder {
-						return scaleP21SW200Request(t, &f, service, actor, key, target, ids, true, false)
+					f.issueReleasesDifferential(t, fmt.Sprintf("M/%s/%s/%v", name, target, ids), func(service *server) *httptest.ResponseRecorder {
+						return issueReleasesRequest(t, &f, service, actor, key, target, ids, true, false)
 					})
 				}
 			}
@@ -314,13 +314,13 @@ func scaleP21SW200Group(t *testing.T, group string, principal int) {
 			}
 		})
 		defer func() { f.prepare = nil }()
-		f.sw200Differential(t, "old-identifier", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW200Request(t, &f, service, owner, nil, "SWOLD-200", []string{seed.id("add")}, true, false)
+		f.issueReleasesDifferential(t, "old-identifier", func(service *server) *httptest.ResponseRecorder {
+			return issueReleasesRequest(t, &f, service, owner, nil, "SWOLD-200", []string{seed.id("add")}, true, false)
 		})
 	})
 	t.Run("cancelled", func(t *testing.T) {
-		f.sw200Differential(t, "cancelled", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW200Request(t, &f, service, owner, nil, issue, []string{seed.id("add")}, true, true)
+		f.issueReleasesDifferential(t, "cancelled", func(service *server) *httptest.ResponseRecorder {
+			return issueReleasesRequest(t, &f, service, owner, nil, issue, []string{seed.id("add")}, true, true)
 		})
 	})
 	t.Run("legal-large-issue", func(t *testing.T) {
@@ -332,16 +332,16 @@ func scaleP21SW200Group(t *testing.T, group string, principal int) {
 			}
 		})
 		defer func() { f.prepare = nil }()
-		outcomes := f.sw200Differential(t, "legal-large-issue", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW200Request(t, &f, service, owner, nil, issue, []string{seed.id("add")}, true, false)
+		outcomes := f.issueReleasesDifferential(t, "legal-large-issue", func(service *server) *httptest.ResponseRecorder {
+			return issueReleasesRequest(t, &f, service, owner, nil, issue, []string{seed.id("add")}, true, false)
 		})
 		if outcomes[0].Code != http.StatusOK {
 			t.Fatalf("legacy large issue status=%d body=%s", outcomes[0].Code, outcomes[0].Body)
 		}
 	})
 	t.Run("ordinary-authenticated-legacy-gate", func(t *testing.T) {
-		outcomes := f.sw200Differential(t, "gate", func(service *server) *httptest.ResponseRecorder {
-			return scaleP21SW200Request(t, &f, service, owner, nil, issue, []string{seed.id("add")}, false, false)
+		outcomes := f.issueReleasesDifferential(t, "gate", func(service *server) *httptest.ResponseRecorder {
+			return issueReleasesRequest(t, &f, service, owner, nil, issue, []string{seed.id("add")}, false, false)
 		})
 		if len(outcomes[0].State.Events) != 0 {
 			t.Fatal("authenticated ordinary route gate changed")
@@ -351,31 +351,31 @@ func scaleP21SW200Group(t *testing.T, group string, principal int) {
 
 // Concurrent release writers on one issue serialize: the bounded state equals
 // one of the legacy sequential orders.
-func TestScaleP21SW200IssueReleasesConcurrent(t *testing.T) {
+func TestIssueReleasesConcurrent(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f, seed := scaleP21SW200Setup(t)
+	f, seed := issueReleasesSetup(t)
 	owner := f.principals[0].user
 	first := func(service *server) *httptest.ResponseRecorder {
-		return scaleP21SW200Request(t, &f, service, owner, nil, f.triage.ID, []string{seed.id("add")}, true, false)
+		return issueReleasesRequest(t, &f, service, owner, nil, f.triage.ID, []string{seed.id("add")}, true, false)
 	}
 	second := func(service *server) *httptest.ResponseRecorder {
-		return scaleP21SW200Request(t, &f, service, owner, nil, f.visible.ID, []string{seed.id("add"), seed.id("second")}, true, false)
+		return issueReleasesRequest(t, &f, service, owner, nil, f.visible.ID, []string{seed.id("add"), seed.id("second")}, true, false)
 	}
 	expected := map[string]bool{}
 	for _, order := range [][2]func(*server) *httptest.ResponseRecorder{{first, second}, {second, first}} {
-		got, started := f.sw200Run(t, "legacy", func(service *server) *httptest.ResponseRecorder {
+		got, started := f.issueReleasesRun(t, "legacy", func(service *server) *httptest.ResponseRecorder {
 			order[0](service)
 			order[1](service)
 			return nil
 		})
 		got.Webhooks, got.Realtime = nil, nil
-		expected[scaleP21TriageNormalize(t, got, started)] = true
+		expected[scaleTriageNormalize(t, got, started)] = true
 	}
 	for _, source := range []string{"warm", "reloaded"} {
 		for attempt := range 3 {
-			got, started := f.sw200Run(t, source, func(service *server) *httptest.ResponseRecorder {
+			got, started := f.issueReleasesRun(t, source, func(service *server) *httptest.ResponseRecorder {
 				done := make(chan int, 2)
 				for _, call := range []func(*server) *httptest.ResponseRecorder{first, second} {
 					go func() { done <- call(service).Code }()
@@ -388,7 +388,7 @@ func TestScaleP21SW200IssueReleasesConcurrent(t *testing.T) {
 				return nil
 			})
 			got.Webhooks, got.Realtime = nil, nil
-			if !expected[scaleP21TriageNormalize(t, got, started)] {
+			if !expected[scaleTriageNormalize(t, got, started)] {
 				t.Fatalf("%s attempt %d: concurrent state matches no sequential legacy order", source, attempt)
 			}
 		}

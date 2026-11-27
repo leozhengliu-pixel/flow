@@ -9,7 +9,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP12IssueScopeGrantInheritanceAndCycles(t *testing.T) {
+func TestScaleIssueScopeGrantInheritanceAndCycles(t *testing.T) {
 	source := &RealtimeIssueSource{workspace: "workspace", scopes: map[string]realtimeIssueScope{
 		"root":    {team: "private", grants: []domain.IssuePermission{{SubjectType: "user", SubjectID: "guest", Role: "viewer"}, {SubjectType: "team", SubjectID: "shared", Role: "viewer"}}},
 		"child":   {team: "private-child", parent: "root"},
@@ -44,8 +44,8 @@ func TestScaleP12IssueScopeGrantInheritanceAndCycles(t *testing.T) {
 	}
 }
 
-func TestScaleP12SourceReferencesDoNotFetchProjectBodies(t *testing.T) {
-	for _, fixture := range scaleP03Stores(t) {
+func TestScaleSourceReferencesDoNotFetchProjectBodies(t *testing.T) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		workspace := fixture.data.Workspace.URLKey
 		body := strings.Repeat("body", 1<<19)
@@ -77,8 +77,8 @@ func TestScaleP12SourceReferencesDoNotFetchProjectBodies(t *testing.T) {
 	}
 }
 
-func TestScaleP12CommentsNeverReturnAPartialReplacement(t *testing.T) {
-	for _, fixture := range scaleP03Stores(t) {
+func TestScaleCommentsNeverReturnAPartialReplacement(t *testing.T) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		workspace := fixture.data.Workspace.URLKey
 		if err := s.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), workspace, "scale_p12.comments", "document", nil, func(data *domain.Bootstrap) error {
@@ -97,7 +97,7 @@ func TestScaleP12CommentsNeverReturnAPartialReplacement(t *testing.T) {
 	}
 }
 
-func TestScaleP12DocumentMarkersDecodeAndExpansionIsBounded(t *testing.T) {
+func TestScaleDocumentMarkersDecodeAndExpansionIsBounded(t *testing.T) {
 	raw := json.RawMessage(`{"id":"document","content":"Current body","contentState":"state","revisions":[{"id":"revision","_offloaded":{"body":"document"}}]}`)
 	document, err := DecodeRealtimeDocument(raw)
 	if err != nil || len(document.Revisions) != 1 || document.Revisions[0].Content != "Current body" || document.Revisions[0].ContentState != "state" || len(document.Revisions[0].Offloaded) != 0 {

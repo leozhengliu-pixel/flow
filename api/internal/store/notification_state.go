@@ -49,8 +49,8 @@ func NotificationStateWriters() []string {
 	}
 }
 
-// NotificationStateReady is deliberately false for partial coverage. P10 may
-// advertise the capability only after P09/P12 and the expiry producer are ready.
+// NotificationStateReady is deliberately false for partial coverage. sync authorization may
+// advertise the capability only after record journal/recipient delivery and the expiry producer are ready.
 func NotificationStateReady(coverage NotificationStateCoverage) bool {
 	if !coverage.CommitHook || !coverage.RecipientProjection || !coverage.AllReplicas || !coverage.SnoozeExpiry {
 		return false
@@ -125,7 +125,7 @@ type NotificationStateCommit struct {
 
 type NotificationStatePublisher func(workspace, recipient string, state NotificationState)
 
-// PrepareNotificationStates is P09's Commit hook. Call once, after all record
+// PrepareNotificationStates is record journal's Commit hook. Call once, after all record
 // writes and before the transaction commits. Capture owners before SQL deletes,
 // including direct batch SQL; the legacy "news" signals omit read-state edits.
 // Only call the returned commit's Publish after a successful database commit.
@@ -182,7 +182,7 @@ func (tx *sqlTx) PrepareNotificationStates(ctx context.Context, changes []Notifi
 }
 
 // Publish reads once per affected recipient, after commit, through the
-// canonical database. P12 must project each envelope to its named recipient
+// canonical database. recipient delivery must project each envelope to its named recipient
 // using current authorization, also on replay. A failed read is recoverable
 // and must not turn the already committed business write into a failed write.
 func (commit NotificationStateCommit) Publish(ctx context.Context, publish NotificationStatePublisher) error {

@@ -868,7 +868,7 @@ func (s *SQLiteStore) MigrateLegacyAuditLog(ctx context.Context) error {
 
 // legacyAuditLogPending reports whether the workspace document still holds
 // audit entries. A bounded image holds no audit log, so the maintenance pass
-// never moved the entries an older server left (SW559): bounded, the entries
+// never moved the entries an older server left: bounded, the entries
 // are read from the workspace's legacy view.
 func (s *SQLiteStore) legacyAuditLogPending(ctx context.Context, key string) bool {
 	if view, release, handled := s.coldAccessorView(ctx, "MigrateLegacyAuditLog", key, []string{"auditLog"}); handled {

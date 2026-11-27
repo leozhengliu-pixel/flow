@@ -13,11 +13,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP17MutationSideEffectsDifferential(t *testing.T) {
+func TestScaleMutationSideEffectsDifferentialSideEffects(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORD_VERIFY", "off")
-	legacy := scaleP17SideEffects(t, "off")
-	selected := scaleP17SideEffects(t, "on")
+	legacy := scaleSideEffects(t, "off")
+	selected := scaleSideEffects(t, "on")
 	compareMutationLists(t, "document realtime", selected.events, legacy.events)
 	compareMutationLists(t, "document webhook", selected.webhooks, legacy.webhooks)
 	for key, value := range legacy.state {
@@ -30,11 +30,11 @@ func TestScaleP17MutationSideEffectsDifferential(t *testing.T) {
 	}
 }
 
-func scaleP17SideEffects(t *testing.T, mode string) mutationScriptResult {
+func scaleSideEffects(t *testing.T, mode string) mutationScriptResult {
 	t.Helper()
 	t.Setenv("FLOW_DOCUMENT_RECORDS", mode)
 	t.Setenv("FLOW_TRASH_RECORDS", mode)
-	db := newScaleP04Database(t)
+	db := newScaleDatabase(t)
 	handler := db.handler(t, true)
 	initial, _ := db.repo.BootstrapFor(db.key)
 	if err := db.repo.MutateWorkspace(workspaceFixtureContext(t.Context()), db.key, "p17.fixture", "", nil, func(data *domain.Bootstrap) error {
@@ -84,7 +84,7 @@ func scaleP17SideEffects(t *testing.T, mode string) mutationScriptResult {
 		pairs = append(pairs, id, fmt.Sprintf("p17-fixture-team-%d", i))
 	}
 	identities := strings.NewReplacer(pairs...)
-	normalize := func(raw []byte) string { return scaleP04Normalize([]byte(identities.Replace(string(raw)))) }
+	normalize := func(raw []byte) string { return scaleNormalize([]byte(identities.Replace(string(raw)))) }
 	result := mutationScriptResult{state: map[string]string{}}
 	for _, event := range events {
 		result.events = append(result.events, event.Type+" "+normalize([]byte(event.AggregateID))+" "+normalize(event.Payload))

@@ -243,7 +243,7 @@ func teamCascadeRun(t *testing.T, seed, bounded, teamID string, body map[string]
 	w := httptest.NewRecorder()
 	newHandler(service).ServeHTTP(w, r)
 	got := teamCascadeOutcome{Code: w.Code, Body: json.RawMessage(w.Body.String())}
-	got.Image = scaleP21SW294Image(t, service.store, teamCascadeWorkspace, teamCascadeFields...)
+	got.Image = oauthMetadataImage(t, service.store, teamCascadeWorkspace, teamCascadeFields...)
 	got.Metadata = teamCascadeRows(t, path, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('teams','teamSettings','states','cycles','cycleSettings','issueTemplates','labels') ORDER BY field,collection_order,record_key`, teamCascadeWorkspace)
 	got.Issues = teamCascadeRows(t, path, `SELECT r.id,r.team_id,r.state_id,r.state_type,r.assignee_id,r.cycle_id,r.version,r.data,(SELECT GROUP_CONCAT(user_id) FROM (SELECT user_id FROM issue_subscriber_records s WHERE s.workspace_key=r.workspace_key AND s.issue_id=r.id ORDER BY user_id)) FROM issue_records r WHERE r.workspace_key=? ORDER BY r.id`, teamCascadeWorkspace)
 	got.Events = teamCascadeRows(t, path, `SELECT event_type,aggregate_id,payload FROM domain_events WHERE event_type='team.settings_updated' ORDER BY created_at,id`)
@@ -258,11 +258,11 @@ func teamCascadeRun(t *testing.T, seed, bounded, teamID string, body map[string]
 				t.Fatal(err)
 			}
 		}
-		image := scaleP21SW294Image(t, reader, teamCascadeWorkspace, teamCascadeFields...)
+		image := oauthMetadataImage(t, reader, teamCascadeWorkspace, teamCascadeFields...)
 		_ = fresh.Close()
 		for _, name := range teamCascadeFields {
 			if want, have := teamCascadeNormalize(t, got.Image[name]), teamCascadeNormalize(t, image[name]); want != have {
-				t.Errorf("bounded %s: %s reload of %s differs from the writing process: %s", bounded, reload, name, scaleP21M2Diff(want, have))
+				t.Errorf("bounded %s: %s reload of %s differs from the writing process: %s", bounded, reload, name, policyFirstDifference(want, have))
 			}
 		}
 	}
@@ -272,7 +272,7 @@ func teamCascadeRun(t *testing.T, seed, bounded, teamID string, body map[string]
 // teamCascadeNormalize replaces the clocks a write stamps.
 func teamCascadeNormalize(t *testing.T, value any) string {
 	t.Helper()
-	return scaleP21TriageNormalize(t, value, time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC))
+	return scaleTriageNormalize(t, value, time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC))
 }
 
 func teamCascadeIssue(t *testing.T, outcome teamCascadeOutcome, id string) domain.Issue {
@@ -437,7 +437,7 @@ func TestTeamSettingsCascadesPersist(t *testing.T) {
 			}
 			bounded := teamCascadeRun(t, seed, "on", test.team, test.body)
 			if want, have := teamCascadeNormalize(t, legacy), teamCascadeNormalize(t, bounded); want != have {
-				t.Fatalf("bounded (COLD) outcome differs from legacy: %s", scaleP21M2Diff(want, have))
+				t.Fatalf("bounded (COLD) outcome differs from legacy: %s", policyFirstDifference(want, have))
 			}
 		})
 	}

@@ -15,7 +15,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21RelationJSON(t *testing.T, value any) string {
+func scaleRelationJSON(t *testing.T, value any) string {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -24,7 +24,7 @@ func scaleP21RelationJSON(t *testing.T, value any) string {
 	return string(raw)
 }
 
-func TestScaleP21ResourceRelationNativeAndShape(t *testing.T) {
+func TestScaleResourceRelationNativeAndShape(t *testing.T) {
 	at := time.Date(2026, 11, 14, 1, 2, 3, 4, time.FixedZone("relation-native", 7*3600+123))
 	for _, shape := range []string{"nil", "empty", "records"} {
 		data := domain.Bootstrap{
@@ -51,7 +51,7 @@ func TestScaleP21ResourceRelationNativeAndShape(t *testing.T) {
 				{ID: "unrelated", InitiativeID: "other", RelatedInitiativeID: "elsewhere"},
 			}
 		}
-		view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+		view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 		view.lastWorkspaceKey = "physical"
 		for _, workspace := range []string{"physical", ""} {
 			for _, kind := range []string{"projects", "initiatives"} {
@@ -69,8 +69,8 @@ func TestScaleP21ResourceRelationNativeAndShape(t *testing.T) {
 					wantInitiatives := slices.DeleteFunc(slices.Clone(data.InitiativeRelations), func(item domain.InitiativeRelation) bool {
 						return item.InitiativeID != ref && item.RelatedInitiativeID != ref
 					})
-					if kind == "projects" && scaleP21RelationJSON(t, read.ProjectRelations) != scaleP21RelationJSON(t, wantProjects) ||
-						kind == "initiatives" && scaleP21RelationJSON(t, read.InitiativeRelations) != scaleP21RelationJSON(t, wantInitiatives) {
+					if kind == "projects" && scaleRelationJSON(t, read.ProjectRelations) != scaleRelationJSON(t, wantProjects) ||
+						kind == "initiatives" && scaleRelationJSON(t, read.InitiativeRelations) != scaleRelationJSON(t, wantInitiatives) {
 						t.Fatal("native relation/shape selection changed", shape, workspace, kind, ref)
 					}
 					if view.MetadataWorkUsedForTesting() == 0 {
@@ -88,12 +88,12 @@ func TestScaleP21ResourceRelationNativeAndShape(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceRelationCaptureQuotaAndConcurrent(t *testing.T) {
+func TestScaleResourceRelationCaptureQuotaAndConcurrent(t *testing.T) {
 	data := domain.Bootstrap{
 		Workspace:        domain.Workspace{ID: "organization"},
 		ProjectRelations: []domain.ProjectRelation{{ID: "old", ProjectID: "target"}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	parent, _, err := view.BeginInstalledMetadataRead(t.Context(), "physical")
 	if err != nil {
 		t.Fatal(err)
@@ -173,11 +173,11 @@ func TestScaleP21ResourceRelationCaptureQuotaAndConcurrent(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceRelationWarmReloadBodyBound(t *testing.T) {
+func TestScaleResourceRelationWarmReloadBodyBound(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("relation-reader-")
 	at := time.Date(2026, 11, 14, 1, 2, 3, 4, time.UTC)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
@@ -251,11 +251,11 @@ func TestScaleP21ResourceRelationWarmReloadBodyBound(t *testing.T) {
 	}
 }
 
-func TestScaleP21ResourceRelationBorrowedSQLPoolOne(t *testing.T) {
+func TestScaleResourceRelationBorrowedSQLPoolOne(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, prefix := f.data.Workspace.URLKey, idgen.New("relation-snapshot-")
 	private := prefix + "private"
 	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.relation_snapshot_seed", "", nil, func(data *domain.Bootstrap) error {

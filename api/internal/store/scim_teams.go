@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-const scaleP21SW19SCIMMaxWork = 64 << 20
+const scimMaxWork = 64 << 20
 
 // SCIMTeamRead owns the trusted canonical snapshot and the work allowance for
 // its typed results. Callers must finish using Teams before Close.
@@ -78,11 +78,11 @@ func (s *SQLiteStore) BeginSCIMTeamRead(ctx context.Context, workspace string, g
 		}
 	}
 	cost := int64(2<<20) + int64(len(groups))*256
-	if mappingBytes.Int64 < 0 || maximumKey.Int64 < 0 || mappingBytes.Int64 > scaleP21SW19SCIMMaxWork/8 || maximumKey.Int64 > scaleP21SW19SCIMMaxWork/8 {
+	if mappingBytes.Int64 < 0 || maximumKey.Int64 < 0 || mappingBytes.Int64 > scimMaxWork/8 || maximumKey.Int64 > scimMaxWork/8 {
 		return fail(true, ErrMetadataWorkBudget)
 	}
 	cost += 8 * (mappingBytes.Int64 + maximumKey.Int64)
-	if cost > scaleP21SW19SCIMMaxWork {
+	if cost > scimMaxWork {
 		return fail(true, ErrMetadataWorkBudget)
 	}
 	admitted, release, err := s.admitMetadataWork(ctx, int(cost))
@@ -221,12 +221,12 @@ func (r *SCIMTeamRead) Teams() ([]domain.Team, error) {
 		if slices.Contains(r.linked, id) {
 			return nil
 		}
-		if size < 0 || size > scaleP21SW19SCIMMaxWork/8 {
+		if size < 0 || size > scimMaxWork/8 {
 			return ErrMetadataWorkBudget
 		}
 		cost += 8*size + 1024
 		count++
-		if cost > scaleP21SW19SCIMMaxWork {
+		if cost > scimMaxWork {
 			return ErrMetadataWorkBudget
 		}
 		return nil
@@ -238,7 +238,7 @@ func (r *SCIMTeamRead) Teams() ([]domain.Team, error) {
 	}
 	// Include selector storage too when the parent already has a reusable
 	// work lease. Without one, the extra selector charge is conservative.
-	if cost+r.headerCost > scaleP21SW19SCIMMaxWork {
+	if cost+r.headerCost > scimMaxWork {
 		return nil, ErrMetadataWorkBudget
 	}
 	_, release, err := r.store.admitMetadataWork(r.parent, int(cost+r.headerCost))

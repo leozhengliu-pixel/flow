@@ -16,14 +16,14 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW309ResourceAuthorizationSQL(t *testing.T) {
+func TestResourceAuthorizationSQL(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for driver, repo := range scaleP03ServerTestStores(t) {
+	for driver, repo := range scaleServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
-			f := scaleP21M2Setup(t, repo)
+			f := setupPolicyDifferential(t, repo)
 			if repo.BoundedMetadataEnabled() || !f.probe.BoundedMetadataEnabled() {
 				t.Fatal("diagnostic requires a literal source and a bounded source")
 			}
@@ -88,8 +88,8 @@ func TestScaleP21SW309ResourceAuthorizationSQL(t *testing.T) {
 								fallback = name
 							}
 							for _, relevant := range []string{
-								"readResidentResourcePolicy", "scaleP21SW23ReadTeamPolicyRows",
-								"(*scaleP21SW23TeamPolicyReaderAt).ReadAt",
+								"readResidentResourcePolicy", "readTeamPolicyRows",
+								"(*teamPolicyReaderAt).ReadAt",
 								"teamPolicyRows", "scanResourcePolicyHeaders", "resourcePolicyRecords",
 								"resourceAccessPrincipal", "ResolveAccess", "BeginResourceAuthorizationRead",
 								"readMetadataStamp", "accessStampAndEpoch", "AuthzEpoch",

@@ -14,12 +14,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21WorkerChatSweepDifferential(t *testing.T) {
+func TestScaleWorkerChatSweepDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_INTERNAL_CONVERSATION_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP03Fixture(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := resourceAccessScaleFixture(t, repo)
 		workspace := f.data.Workspace.URLKey
 		probe, err := repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 		if err != nil {
@@ -151,7 +151,7 @@ func TestScaleP21WorkerChatSweepDifferential(t *testing.T) {
 					}
 					result.StateGone = []bool{errors.Is(err, store.ErrAgentRunNotFound)}
 					wantCancel := name == "queued-expired" || name == "deleted" || name == "duplicate-sessions" || name == "duplicate-messages" || name == "empty-owner" || name == "nul-owner"
-					if driver := scaleP03DatabaseConfig(t).Driver; name == "nul-session" && driver != "" && driver != "sqlite" {
+					if driver := platformDatabaseFixtureScaleDatabaseConfig(t).Driver; name == "nul-session" && driver != "" && driver != "sqlite" {
 						// Only SQLite tells the session ID with NUL from the run's.
 						// PostgreSQL text cannot hold NUL (every SQL argument drops
 						// it) and MySQL's utf8mb4_0900_ai_ci ignores it, so the

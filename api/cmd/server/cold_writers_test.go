@@ -27,15 +27,15 @@ import (
 // SQL: the call's result, every metadata/content row, events, publications,
 // and (bounded) the installed fields equal to a reload.
 
-type scaleP21ColdWritersOutcome struct {
+type scaleColdWritersOutcome struct {
 	Result             string
-	State              scaleP21TeamCreateState
+	State              scaleTeamCreateState
 	Content            [][]any
 	Webhooks, Realtime []json.RawMessage
 	Installed          map[string]json.RawMessage
 }
 
-func (f scaleP21TeamCreateFixture) coldWritersRun(t *testing.T, source string, fields []string, call func(*server) string) (scaleP21ColdWritersOutcome, time.Time) {
+func (f scaleTeamCreateFixture) coldWritersRun(t *testing.T, source string, fields []string, call func(*server) string) (scaleColdWritersOutcome, time.Time) {
 	t.Helper()
 	started := time.Now().UTC()
 	// f.service, keeping the owner: a test view publishes recipient signals
@@ -61,7 +61,7 @@ func (f scaleP21TeamCreateFixture) coldWritersRun(t *testing.T, source string, f
 		service = &server{store: view}
 	}
 	workspace := f.data.Workspace.URLKey
-	got := scaleP21ColdWritersOutcome{}
+	got := scaleColdWritersOutcome{}
 	var mu sync.Mutex
 	sinks := []*store.SQLiteStore{service.store}
 	if owner != service.store {
@@ -71,7 +71,7 @@ func (f scaleP21TeamCreateFixture) coldWritersRun(t *testing.T, source string, f
 		sink.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 			mu.Lock()
 			defer mu.Unlock()
-			got.Webhooks = append(got.Webhooks, scaleP21SW106Envelope(t, map[string]any{
+			got.Webhooks = append(got.Webhooks, discussionRoutesEnvelope(t, map[string]any{
 				"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 				"payload": event.Payload, "previousValues": event.PreviousValues, "snapshot": event.Snapshot,
 			}))
@@ -79,7 +79,7 @@ func (f scaleP21TeamCreateFixture) coldWritersRun(t *testing.T, source string, f
 		sink.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 			mu.Lock()
 			defer mu.Unlock()
-			got.Realtime = append(got.Realtime, scaleP21SW106Envelope(t, map[string]any{
+			got.Realtime = append(got.Realtime, discussionRoutesEnvelope(t, map[string]any{
 				"type": event.Type, "aggregateId": event.AggregateID, "actorId": event.ActorID,
 				"clientId": event.ClientID, "payload": event.Payload,
 			}))
@@ -110,48 +110,48 @@ func (f scaleP21TeamCreateFixture) coldWritersRun(t *testing.T, source string, f
 	if service.store.BoundedMetadataEnabled() && service.store.MetadataWorkUsedForTesting() != 0 {
 		t.Fatalf("%s: retained metadata work %d", source, service.store.MetadataWorkUsedForTesting())
 	}
-	got.Installed = scaleP21SW294Image(t, service.store, workspace, fields...)
+	got.Installed = oauthMetadataImage(t, service.store, workspace, fields...)
 	if service.store.BoundedMetadataEnabled() {
 		reloaded, err := store.OpenDatabase(f.reader.config)
 		if err != nil {
 			t.Fatal(err)
 		}
-		fresh := scaleP21SW294Image(t, reloaded, workspace, fields...)
+		fresh := oauthMetadataImage(t, reloaded, workspace, fields...)
 		if err := reloaded.Close(); err != nil {
 			t.Fatal(err)
 		}
 		for _, name := range fields {
-			want, have := scaleP21TriageNormalize(t, fresh[name], started), scaleP21TriageNormalize(t, got.Installed[name], started)
+			want, have := scaleTriageNormalize(t, fresh[name], started), scaleTriageNormalize(t, got.Installed[name], started)
 			if want != have {
-				t.Errorf("%s: installed %s is not the reloaded one: %s", source, name, scaleP21M2Diff(want, have))
+				t.Errorf("%s: installed %s is not the reloaded one: %s", source, name, policyFirstDifference(want, have))
 			}
 		}
 	}
 	return got, started
 }
 
-func (f scaleP21TeamCreateFixture) coldWritersDifferential(t *testing.T, name string, fields []string, setup func(*testing.T), call func(*server) string) []scaleP21ColdWritersOutcome {
+func (f scaleTeamCreateFixture) coldWritersDifferential(t *testing.T, name string, fields []string, setup func(*testing.T), call func(*server) string) []scaleColdWritersOutcome {
 	t.Helper()
-	f.scaleP21TriageWriterFixture.prepare = f.prepare(setup)
-	defer func() { f.scaleP21TriageWriterFixture.prepare = nil }()
+	f.scaleTriageWriterFixture.prepare = f.prepare(setup)
+	defer func() { f.scaleTriageWriterFixture.prepare = nil }()
 	var normalized []string
-	var outcomes []scaleP21ColdWritersOutcome
+	var outcomes []scaleColdWritersOutcome
 	for _, source := range []string{"legacy", "warm", "reloaded"} {
 		got, started := f.coldWritersRun(t, source, fields, call)
 		outcomes = append(outcomes, got)
-		normalized = append(normalized, scaleP21TriageNormalize(t, got, started))
+		normalized = append(normalized, scaleTriageNormalize(t, got, started))
 		if len(normalized) > 1 && normalized[len(normalized)-1] != normalized[0] {
-			t.Errorf("%s: %s changed: %s", name, source, scaleP21M2Diff(normalized[0], normalized[len(normalized)-1]))
+			t.Errorf("%s: %s changed: %s", name, source, policyFirstDifference(normalized[0], normalized[len(normalized)-1]))
 		}
 	}
 	return outcomes
 }
 
-func TestScaleP21ColdWritersPulseSchedulerWithApplicationMembers(t *testing.T) {
+func TestScaleColdWritersPulseSchedulerWithApplicationMembers(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	repo, workspace, user := f.repository, f.data.Workspace.URLKey, f.data.Viewer
 	if len(f.data.Teams) == 0 {
 		t.Fatal("fixture has no team")
@@ -231,30 +231,30 @@ func TestScaleP21ColdWritersPulseSchedulerWithApplicationMembers(t *testing.T) {
 	}
 }
 
-func TestScaleP21ColdWritersLoopContractStore(t *testing.T) {
+func TestScaleColdWritersLoopContractStore(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	// Stored contracts carry UTC times, as the server writes them.
-	scaleP21ColdWritersLoopContractStore(t, scaleP21TeamCreateSetup(t), time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
+	scaleColdWritersLoopContractStore(t, scaleTeamCreateSetup(t), time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC))
 }
 
 // A stored contract time with another RFC 3339 offset (older data, or a
 // database driver's rendering) decodes on the COLD facade as the legacy
 // decode reads it: the contract store reads the person contract's time.
-func TestScaleP21ColdWritersLoopContractStoreOffsetTimes(t *testing.T) {
+func TestScaleColdWritersLoopContractStoreOffsetTimes(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP21TeamCreateSetup(t)
+	f := scaleTeamCreateSetup(t)
 	for _, offset := range []int{0, 8 * 3600, -(3*3600 + 30*60), 5*3600 + 45*60} {
 		t.Run(strconv.Itoa(offset), func(t *testing.T) {
-			scaleP21ColdWritersLoopContractStore(t, f, time.Date(2026, 11, 13, 12, 0, 0, 0, time.FixedZone("", offset)))
+			scaleColdWritersLoopContractStore(t, f, time.Date(2026, 11, 13, 12, 0, 0, 0, time.FixedZone("", offset)))
 		})
 	}
 }
 
-func scaleP21ColdWritersLoopContractStore(t *testing.T, f scaleP21TeamCreateFixture, extracted time.Time) {
+func scaleColdWritersLoopContractStore(t *testing.T, f scaleTeamCreateFixture, extracted time.Time) {
 	t.Helper()
 	repo, workspace := f.repository, f.data.Workspace.URLKey
 	const loopID, otherID = "cold-writers-loop", "cold-writers-other"

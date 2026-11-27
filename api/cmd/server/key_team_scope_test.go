@@ -18,7 +18,7 @@ import (
 
 // keyTeamScopeServe runs one request through the real authentication (a
 // session cookie, or an API key owned by user) and workspace authorization.
-func keyTeamScopeServe(f scaleP21M2Fixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, method, path string, body any) scaleP21DocRoutesOutcome {
+func keyTeamScopeServe(f policyDifferentialFixture, source *store.SQLiteStore, token string, user domain.User, key *domain.APIKey, method, path string, body any) scaleDocRoutesOutcome {
 	service := &server{store: source, realtime: newRealtimeHub(), uploadPath: f.testingT.TempDir()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/documents", service.listDocuments)
@@ -91,7 +91,7 @@ func keyTeamScopeServe(f scaleP21M2Fixture, source *store.SQLiteStore, token str
 		_ = json.Unmarshal(w.Body.Bytes(), &doc)
 		out = "updated:" + doc.ID + ":" + doc.Title
 	}
-	return scaleP21DocRoutesOutcome{w.Code, out}
+	return scaleDocRoutesOutcome{w.Code, out}
 }
 
 // TestKeyTeamScopeDocuments: a key restricted to some teams never reaches a
@@ -103,8 +103,8 @@ func TestKeyTeamScopeDocuments(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keyscope-")
 		ownerGrant := func(user domain.User) []domain.DocumentPermission {
 			return []domain.DocumentPermission{{ID: "document_permission_" + user.ID, SubjectType: "user", SubjectID: user.ID, Role: "owner"}}
@@ -178,9 +178,9 @@ func TestKeyTeamScopeDocuments(t *testing.T) {
 					if strings.HasPrefix(doc, "gone") != trashOp && op.name != "detail" {
 						continue
 					}
-					outcomes := map[string]scaleP21DocRoutesOutcome{}
+					outcomes := map[string]scaleDocRoutesOutcome{}
 					for _, credential := range credentials {
-						run := func(source *store.SQLiteStore) scaleP21DocRoutesOutcome {
+						run := func(source *store.SQLiteStore) scaleDocRoutesOutcome {
 							seed()
 							return keyTeamScopeServe(f, source, tokens[owner.user.ID], owner.user, credential.key, op.method, op.path, op.body)
 						}
@@ -190,7 +190,7 @@ func TestKeyTeamScopeDocuments(t *testing.T) {
 						}
 						outcomes[credential.name] = want
 						if strings.HasPrefix(credential.name, "restricted") {
-							for mode, outcome := range map[string]scaleP21DocRoutesOutcome{"literal": want, "bounded": got} {
+							for mode, outcome := range map[string]scaleDocRoutesOutcome{"literal": want, "bounded": got} {
 								reached := outcome.code < 400 && op.name != "list" && op.name != "search"
 								if (op.name == "list" || op.name == "search") && strings.Contains(outcome.body, id) {
 									reached = true
@@ -222,8 +222,8 @@ func TestKeyTeamScopeIssues(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keyissue-")
 		restore := store.ForceFullMutationsForTesting(true)
 		seed := func() {
@@ -280,9 +280,9 @@ func TestKeyTeamScopeIssues(t *testing.T) {
 				{"legacy-delete", http.MethodDelete, "/api/issues/" + id, nil},
 				{"legacy-comment", http.MethodPost, "/api/issues/" + id + "/comments", map[string]any{"body": "hello"}},
 			} {
-				outcomes := map[string]scaleP21DocRoutesOutcome{}
+				outcomes := map[string]scaleDocRoutesOutcome{}
 				for _, credential := range credentials {
-					run := func(source *store.SQLiteStore) scaleP21DocRoutesOutcome {
+					run := func(source *store.SQLiteStore) scaleDocRoutesOutcome {
 						restore := store.ForceFullMutationsForTesting(true)
 						seed()
 						restore()
@@ -325,8 +325,8 @@ func TestKeyTeamScopeDocumentSubRoutesParity(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keysub-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "key_scope.sub_seed", "", nil, func(data *domain.Bootstrap) error {
 			private := ""
@@ -426,8 +426,8 @@ func TestKeyTeamScopeViews(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keyview-")
 		private := ""
 		if err := repo.MutateWorkspace(t.Context(), workspace, "key_scope.view_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -472,9 +472,9 @@ func TestKeyTeamScopeViews(t *testing.T) {
 					{"subscribe", http.MethodPut, "/api/subscriptions/view/%s", nil},
 					{"delete", http.MethodDelete, "/api/views/%s", nil},
 				} {
-					outcomes := map[string]scaleP21DocRoutesOutcome{}
+					outcomes := map[string]scaleDocRoutesOutcome{}
 					for _, credential := range credentials {
-						run := func(source *store.SQLiteStore) scaleP21DocRoutesOutcome {
+						run := func(source *store.SQLiteStore) scaleDocRoutesOutcome {
 							counter++
 							id := fmt.Sprintf("%sview-%d", prefix, counter)
 							if err := repo.MutateWorkspace(t.Context(), workspace, "key_scope.view_add", "", nil, func(data *domain.Bootstrap) error {
@@ -523,8 +523,8 @@ func TestKeyTeamScopeLegacyGrantlessDocuments(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	t.Setenv("FLOW_DOCUMENT_RECORDS", "off")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace, prefix := f.data.Workspace.URLKey, idgen.New("keylegacy-")
 		if err := repo.MutateWorkspace(t.Context(), workspace, "key_scope.legacy_seed", "", nil, func(data *domain.Bootstrap) error {
 			private := ""

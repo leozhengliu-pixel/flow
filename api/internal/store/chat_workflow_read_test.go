@@ -12,8 +12,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW54WorkflowWant(data domain.Bootstrap, request ChatDisplayRequest, keys []string, stateTeam *string) domain.Bootstrap {
-	result := scaleP21ChatDisplayProjection(data, request)
+func workflowWant(data domain.Bootstrap, request ChatDisplayRequest, keys []string, stateTeam *string) domain.Bootstrap {
+	result := scaleChatDisplayProjection(data, request)
 	for _, key := range keys {
 		settings, saved := data.TeamSettings[key]
 		if !saved {
@@ -41,7 +41,7 @@ func scaleP21SW54WorkflowWant(data domain.Bootstrap, request ChatDisplayRequest,
 	return result
 }
 
-func scaleP21SW54WorkflowCheck(t *testing.T, view *SQLiteStore, workspace string, request ChatDisplayRequest, teamID string, want domain.Bootstrap) int {
+func workflowCheck(t *testing.T, view *SQLiteStore, workspace string, request ChatDisplayRequest, teamID string, want domain.Bootstrap) int {
 	t.Helper()
 	statements := 0
 	ctx := WithSQLStatementObserver(t.Context(), func(string) { statements++ })
@@ -74,10 +74,10 @@ func scaleP21SW54WorkflowCheck(t *testing.T, view *SQLiteStore, workspace string
 	return held
 }
 
-func TestScaleP21SW54WorkflowLegacyWarmReload(t *testing.T) {
+func TestWorkflowLegacyWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "states", "teamSettings"), workspace, "scale_p21.sw54_seed", "", nil, func(data *domain.Bootstrap) error {
 		data.TeamSettings = map[string]domain.TeamSettings{
@@ -155,14 +155,14 @@ func TestScaleP21SW54WorkflowLegacyWarmReload(t *testing.T) {
 		for _, test := range tests {
 			t.Run(fmt.Sprintf("%s/reload=%t", test.name, reload), func(t *testing.T) {
 				request := ChatDisplayRequest{TeamID: test.team, Policy: test.policy}
-				want := scaleP21SW54WorkflowWant(legacy, request, test.keys, test.states)
-				scaleP21SW54WorkflowCheck(t, view, workspace, request, test.team, want)
+				want := workflowWant(legacy, request, test.keys, test.states)
+				workflowCheck(t, view, workspace, request, test.team, want)
 			})
 		}
 	}
 }
 
-func TestScaleP21SW54WorkflowNativeOrderAndNoCap(t *testing.T) {
+func TestWorkflowNativeOrderAndNoCap(t *testing.T) {
 	const team = "team\x00exact"
 	states := []domain.WorkflowState{{ID: "global", Name: "Global"}}
 	for index := range 137 {
@@ -186,11 +186,11 @@ func TestScaleP21SW54WorkflowNativeOrderAndNoCap(t *testing.T) {
 	if !found {
 		t.Fatal("native oracle missing")
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	request := ChatDisplayRequest{TeamID: team}
 	stateTeam := team
-	want := scaleP21SW54WorkflowWant(legacy, request, []string{team}, &stateTeam)
-	scaleP21SW54WorkflowCheck(t, view, "physical", request, team, want)
+	want := workflowWant(legacy, request, []string{team}, &stateTeam)
+	workflowCheck(t, view, "physical", request, team, want)
 	read, _, err := view.BeginChatDisplayRead(t.Context(), "physical", request)
 	if err != nil {
 		t.Fatal(err)
@@ -207,13 +207,13 @@ func TestScaleP21SW54WorkflowNativeOrderAndNoCap(t *testing.T) {
 	settings.DefaultStateID = "Caller changed"
 	read.Data.TeamSettings[team] = settings
 	read.Close()
-	scaleP21SW54WorkflowCheck(t, view, "physical", request, team, want)
+	workflowCheck(t, view, "physical", request, team, want)
 }
 
-func TestScaleP21SW54WorkflowIgnoredBodiesWarmReload(t *testing.T) {
+func TestWorkflowIgnoredBodiesWarmReload(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -252,8 +252,8 @@ func TestScaleP21SW54WorkflowIgnoredBodiesWarmReload(t *testing.T) {
 			}
 			legacy, _ := f.WorkspaceMetadataFields(workspace, "states", "teamSettings", "workspaceSettings", "userSettings")
 			request := ChatDisplayRequest{TeamID: team}
-			want := scaleP21SW54WorkflowWant(legacy, request, []string{team, stateTeam}, &stateTeam)
-			held := scaleP21SW54WorkflowCheck(t, view, workspace, request, team, want)
+			want := workflowWant(legacy, request, []string{team, stateTeam}, &stateTeam)
+			held := workflowCheck(t, view, workspace, request, team, want)
 			if expected[reload] == 0 {
 				expected[reload] = held
 			}
@@ -265,9 +265,9 @@ func TestScaleP21SW54WorkflowIgnoredBodiesWarmReload(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW54WorkflowBudgetCancellationAndRelease(t *testing.T) {
+func TestWorkflowBudgetCancellationAndRelease(t *testing.T) {
 	const team = "selected-team"
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": {
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": {
 		TeamSettings: map[string]domain.TeamSettings{team: {TeamID: team}},
 		States:       []domain.WorkflowState{{ID: "selected", TeamID: team, Name: strings.Repeat("selected name ", 20000)}},
 	}})
@@ -329,10 +329,10 @@ func TestScaleP21SW54WorkflowBudgetCancellationAndRelease(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW54WorkflowPinnedGeneration(t *testing.T) {
+func TestWorkflowPinnedGeneration(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	const team, parent = "pinned-child", "pinned-parent"
 	seed := func(name string) {
@@ -387,12 +387,12 @@ func TestScaleP21SW54WorkflowPinnedGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	stateTeam := parent
-	if !reflect.DeepEqual(read.Data, scaleP21SW54WorkflowWant(old, request, []string{team, parent}, &stateTeam)) {
+	if !reflect.DeepEqual(read.Data, workflowWant(old, request, []string{team, parent}, &stateTeam)) {
 		t.Fatal("deferred workflow switched from its pinned generation")
 	}
 	read.Close()
 	latest, _ := f.WorkspaceMetadataFields(workspace, "states", "teamSettings", "workspaceSettings", "userSettings")
-	scaleP21SW54WorkflowCheck(t, view, workspace, request, team, scaleP21SW54WorkflowWant(latest, request, []string{team, parent}, &stateTeam))
+	workflowCheck(t, view, workspace, request, team, workflowWant(latest, request, []string{team, parent}, &stateTeam))
 	if statements != 0 || view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
 		t.Fatal("pinned workflow leaked or performed SQL/full metadata decode", statements)
 	}

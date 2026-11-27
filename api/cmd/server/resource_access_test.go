@@ -16,24 +16,24 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP03Fixture(t *testing.T, repo *store.SQLiteStore) scaleP03PlatformFixture {
+func resourceAccessScaleFixture(t *testing.T, repo *store.SQLiteStore) scalePlatformFixture {
 	t.Helper()
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	svc := &server{store: repo, uploadPath: t.TempDir()}
 	host := httptest.NewServer(newTestHandler(t, svc))
 	t.Cleanup(host.Close)
-	return scaleP03CreateFixture(t, repo, svc, host)
+	return scaleCreateFixture(t, repo, svc, host)
 }
 
-func scaleP03Join(t *testing.T, f scaleP03PlatformFixture, name, email, role string, teams ...string) (*http.Client, domain.User) {
+func resourceAccessScaleJoin(t *testing.T, f scalePlatformFixture, name, email, role string, teams ...string) (*http.Client, domain.User) {
 	t.Helper()
-	client, user := scaleP03RegisteredClient(t, f.resources, f.host.URL, name, email)
+	client, user := platformDatabaseFixtureScaleRegisteredClient(t, f.resources, f.host.URL, name, email)
 	invites := authRequest[[]domain.Invitation](t, f.admin, http.MethodPost, f.host.URL+"/api/workspaces/"+f.data.Workspace.URLKey+"/invitations", map[string]any{"emails": []string{user.Email}, "role": role, "teamIds": teams}, "", http.StatusCreated)
 	authRequest[domain.WorkspaceMembership](t, client, http.MethodPost, f.host.URL+"/api/invitations/accept", map[string]string{"token": invites[0].Token}, "", http.StatusOK)
 	return client, user
 }
 
-func scaleP03Key(t *testing.T, f scaleP03PlatformFixture, scopes, teamIDs []string) string {
+func scaleKey(t *testing.T, f scalePlatformFixture, scopes, teamIDs []string) string {
 	t.Helper()
 	input := map[string]any{"name": fmt.Sprintf("P03 key %d", time.Now().UnixNano()), "scopes": scopes}
 	if teamIDs != nil {
@@ -42,7 +42,7 @@ func scaleP03Key(t *testing.T, f scaleP03PlatformFixture, scopes, teamIDs []stri
 	return authRequest[struct{ Secret string }](t, f.admin, http.MethodPost, f.host.URL+"/api/api-keys", input, f.data.Workspace.URLKey, http.StatusCreated).Secret
 }
 
-func scaleP03Read(t *testing.T, f scaleP03PlatformFixture, client *http.Client, token, method, path, workspace string) *httptest.ResponseRecorder {
+func resourceAccessScaleRead(t *testing.T, f scalePlatformFixture, client *http.Client, token, method, path, workspace string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := httptest.NewRequest(method, path, nil)
 	r.Header.Set("X-Workspace-Key", workspace)
@@ -61,11 +61,11 @@ func scaleP03Read(t *testing.T, f scaleP03PlatformFixture, client *http.Client, 
 	return w
 }
 
-func TestScaleP03PermissionDifferential(t *testing.T) {
+func TestScalePermissionDifferentialResourceAccess(t *testing.T) {
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			f := scaleP03Fixture(t, repo)
+			f := resourceAccessScaleFixture(t, repo)
 			workspace := f.data.Workspace.URLKey
 			ctx := context.Background()
 			suffix := fmt.Sprint(time.Now().UnixNano())
@@ -113,11 +113,11 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamMembership(ctx, f.data.Workspace.ID, private, f.data.Viewer.ID, "member", true); err != nil {
 				t.Fatal(err)
 			}
-			member, memberUser := scaleP03Join(t, f, "P03 member", "p03-member-"+suffix+"@example.com", "member", public)
-			outsideAdmin, outsideAdminUser := scaleP03Join(t, f, "P03 outside admin", "p03-admin-"+suffix+"@example.com", "admin", public)
-			guest, _ := scaleP03Join(t, f, "P03 guest", "p03-guest-"+suffix+"@example.com", "guest", public, private)
-			inherited, _ := scaleP03Join(t, f, "P03 inherited", "p03-inherited-"+suffix+"@example.com", "member", private)
-			sharedGuest, sharedUser := scaleP03Join(t, f, "P03 shared guest", "p03-shared-"+suffix+"@example.com", "guest", public)
+			member, memberUser := resourceAccessScaleJoin(t, f, "P03 member", "p03-member-"+suffix+"@example.com", "member", public)
+			outsideAdmin, outsideAdminUser := resourceAccessScaleJoin(t, f, "P03 outside admin", "p03-admin-"+suffix+"@example.com", "admin", public)
+			guest, _ := resourceAccessScaleJoin(t, f, "P03 guest", "p03-guest-"+suffix+"@example.com", "guest", public, private)
+			inherited, _ := resourceAccessScaleJoin(t, f, "P03 inherited", "p03-inherited-"+suffix+"@example.com", "member", private)
+			sharedGuest, sharedUser := resourceAccessScaleJoin(t, f, "P03 shared guest", "p03-shared-"+suffix+"@example.com", "guest", public)
 			issue := authRequest[domain.Issue](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "P03 shared private issue", "teamId": private, "projectId": "p03-secret"}, workspace, http.StatusCreated)
 			authRequest[[]domain.IssuePermission](t, f.admin, http.MethodPut, f.host.URL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": sharedUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
 			otherWorkspace := "p03-other-" + suffix
@@ -131,10 +131,10 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 			if err := repo.SetTeamDefaultFavoriteOverride(ctx, workspace, memberUser.ID, "initiative", "p03-parent", true); err != nil {
 				t.Fatal(err)
 			}
-			unrestricted := scaleP03Key(t, f, []string{"read"}, nil)
-			legacyScopes := scaleP03Key(t, f, nil, nil)
-			emptyScopes := scaleP03Key(t, f, []string{}, nil)
-			selected := scaleP03Key(t, f, []string{"read"}, []string{public})
+			unrestricted := scaleKey(t, f, []string{"read"}, nil)
+			legacyScopes := scaleKey(t, f, nil, nil)
+			emptyScopes := scaleKey(t, f, []string{}, nil)
+			selected := scaleKey(t, f, []string{"read"}, []string{public})
 			empty := "p03-selected-empty-" + suffix
 			if err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
 				data.APIKeys = append(data.APIKeys, domain.APIKey{ID: "p03-selected-empty", Name: "P03 persisted selected empty", SecretHash: secretHash(empty), CreatorID: f.data.Viewer.ID, Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}})
@@ -177,10 +177,10 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 					for _, method := range []string{http.MethodGet, http.MethodHead} {
 						for _, path := range paths {
 							t.Setenv("FLOW_RECORD_ACCESS", "off")
-							old := scaleP03Read(t, f, principal.client, principal.token, method, path, workspace)
+							old := resourceAccessScaleRead(t, f, principal.client, principal.token, method, path, workspace)
 							for _, mode := range []string{"on", "shadow", "off"} {
 								t.Setenv("FLOW_RECORD_ACCESS", mode)
-								got := scaleP03Read(t, f, principal.client, principal.token, method, path, workspace)
+								got := resourceAccessScaleRead(t, f, principal.client, principal.token, method, path, workspace)
 								var oldJSON, gotJSON any
 								_ = json.Unmarshal(old.Body.Bytes(), &oldJSON)
 								_ = json.Unmarshal(got.Body.Bytes(), &gotJSON)
@@ -195,19 +195,19 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 			for _, mode := range []string{"off", "shadow", "on"} {
 				t.Setenv("FLOW_RECORD_ACCESS", mode)
 				for _, path := range []string{"/api/projects/p03-secret", "/api/projects/p03-child", "/api/initiatives/p03-hidden"} {
-					if got := scaleP03Read(t, f, outsideAdmin, "", http.MethodGet, path, workspace); got.Code != http.StatusForbidden {
+					if got := resourceAccessScaleRead(t, f, outsideAdmin, "", http.MethodGet, path, workspace); got.Code != http.StatusForbidden {
 						t.Fatalf("admin outside private team read %s: %d", path, got.Code)
 					}
 				}
-				got := scaleP03Read(t, f, member, "", http.MethodGet, "/api/projects/p03-open", workspace)
+				got := resourceAccessScaleRead(t, f, member, "", http.MethodGet, "/api/projects/p03-open", workspace)
 				project := decodeInto[domain.Project](t, got.Body.Bytes())
 				if got.Code != http.StatusOK || project.IssueCount != 0 || slices.Contains(project.DependencyIDs, "p03-secret") || len(project.Comments) != 1 || len(project.DescriptionRevisions) != 1 {
 					t.Fatal("project count, references or full detail changed")
 				}
-				if got := scaleP03Read(t, f, member, "", http.MethodGet, "/api/projects/p03-open", "does-not-exist"); got.Code != http.StatusNotFound {
+				if got := resourceAccessScaleRead(t, f, member, "", http.MethodGet, "/api/projects/p03-open", "does-not-exist"); got.Code != http.StatusNotFound {
 					t.Fatalf("cross-workspace request: %d", got.Code)
 				}
-				if got := scaleP03Read(t, f, member, "", http.MethodGet, "/api/projects/p03-open", otherWorkspace); got.Code != http.StatusForbidden {
+				if got := resourceAccessScaleRead(t, f, member, "", http.MethodGet, "/api/projects/p03-open", otherWorkspace); got.Code != http.StatusForbidden {
 					t.Fatalf("existing foreign workspace: %d", got.Code)
 				}
 			}
@@ -218,10 +218,10 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 				for _, method := range []string{http.MethodGet, http.MethodHead} {
 					for _, path := range paths {
 						t.Setenv("FLOW_RECORD_ACCESS", "off")
-						old := scaleP03Read(t, f, outsideAdmin, "", method, path, workspace)
+						old := resourceAccessScaleRead(t, f, outsideAdmin, "", method, path, workspace)
 						for _, mode := range []string{"on", "shadow", "off"} {
 							t.Setenv("FLOW_RECORD_ACCESS", mode)
-							got := scaleP03Read(t, f, outsideAdmin, "", method, path, workspace)
+							got := resourceAccessScaleRead(t, f, outsideAdmin, "", method, path, workspace)
 							if got.Code != old.Code || got.Body.String() != old.Body.String() {
 								t.Fatalf("joined admin %s %s mode=%s differs from legacy", method, path, mode)
 							}
@@ -233,7 +233,7 @@ func TestScaleP03PermissionDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP03FlagAndNarrowRoutes(t *testing.T) {
+func TestScaleFlagAndNarrowRoutes(t *testing.T) {
 	for value, want := range map[string]string{"": "on", "unknown": "on", "shadow": "shadow", "on": "on", " ON ": "on", "off": "off", "0": "off", "false": "off"} {
 		t.Setenv("FLOW_RECORD_ACCESS", value)
 		if got := recordAccessMode(); got != want {
@@ -255,15 +255,15 @@ func TestScaleP03FlagAndNarrowRoutes(t *testing.T) {
 	}
 }
 
-func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T) {
+func TestScaleRequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T) {
 	// This compares the legacy projection's handoff with record access.
 	// The bounded point authorization instead checks access at the read.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	for name, repo := range scaleP03ServerTestStores(t) {
+	for name, repo := range scaleServerTestStores(t) {
 		for _, mode := range []string{"off", "on"} {
 			t.Run(name+"/"+mode, func(t *testing.T) {
 				t.Setenv("FLOW_RECORD_ACCESS", mode)
-				f := scaleP03Fixture(t, repo)
+				f := resourceAccessScaleFixture(t, repo)
 				workspace := f.data.Workspace.URLKey
 				ctx := context.Background()
 				err := repo.MutateWorkspace(workspaceFixtureContext(ctx), workspace, "scale_p03.seeded", "", nil, func(data *domain.Bootstrap) error {
@@ -275,7 +275,7 @@ func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T)
 				if err != nil {
 					t.Fatal(err)
 				}
-				member, user := scaleP03Join(t, f, "P03 revoke", fmt.Sprintf("p03-revoke-%d@example.com", time.Now().UnixNano()), "member", "p03-revoke")
+				member, user := resourceAccessScaleJoin(t, f, "P03 revoke", fmt.Sprintf("p03-revoke-%d@example.com", time.Now().UnixNano()), "member", "p03-revoke")
 				r := httptest.NewRequest(http.MethodGet, "/api/projects/p03-revoke", nil)
 				r.SetPathValue("id", "p03-revoke")
 				r = r.WithContext(context.WithValue(r.Context(), authUserContextKey{}, user))
@@ -295,7 +295,7 @@ func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T)
 				if w.Code != http.StatusOK {
 					t.Fatalf("authorized request was re-resolved: %d %s", w.Code, w.Body)
 				}
-				if next := scaleP03Read(t, f, member, "", http.MethodGet, "/api/projects/p03-revoke", workspace); next.Code != http.StatusForbidden {
+				if next := resourceAccessScaleRead(t, f, member, "", http.MethodGet, "/api/projects/p03-revoke", workspace); next.Code != http.StatusForbidden {
 					t.Fatalf("next request survived revocation: %d", next.Code)
 				}
 			})
@@ -303,16 +303,16 @@ func TestScaleP03RequestAuthorizationMatchesLegacyDuringRevocation(t *testing.T)
 	}
 }
 
-func TestScaleP03PeerCompatibility(t *testing.T) {
+func TestScalePeerCompatibilityResourceAccess(t *testing.T) {
 	t.Setenv("FLOW_RECORD_ACCESS", "off")
-	peers := newScaleP03PeerServers(t)
-	f := scaleP03CreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
+	peers := newScalePeerServers(t)
+	f := scaleCreateFixture(t, peers.stores[0], peers.servers[0], peers.first)
 	admin := f.admin
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	workspace := f.data.Workspace.URLKey
 	team := authRequest[domain.Team](t, admin, http.MethodPost, peers.first.URL+"/api/workspaces/"+workspace+"/teams", map[string]any{"name": "P03 peer private", "key": "P03", "private": true}, "", http.StatusCreated)
 	project := authRequest[domain.Project](t, admin, http.MethodPost, peers.first.URL+"/api/projects", map[string]any{"name": "P03 peer project", "teamIds": []string{team.ID}}, workspace, http.StatusCreated)
-	member, user := scaleP03Join(t, f, "P03 peer member", "p03-peer-member-"+suffix+"@example.com", "member", team.ID)
+	member, user := resourceAccessScaleJoin(t, f, "P03 peer member", "p03-peer-member-"+suffix+"@example.com", "member", team.ID)
 	for _, name := range []string{"P03 peer first edit", "P03 peer second edit"} {
 		t.Setenv("FLOW_RECORD_ACCESS", "off")
 		authRequest[domain.Project](t, admin, http.MethodPatch, peers.first.URL+"/api/projects/"+project.ID, map[string]any{"name": name}, workspace, http.StatusOK)

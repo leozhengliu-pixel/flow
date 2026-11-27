@@ -13,7 +13,7 @@
     "BeginInstalledWorkspaceIdentityRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted exact installed-map reader clones only RegistryKey, logical installed URLKey and ID under one read lock after independent retained admission. Caller keeps its original accessor off mode and uses the same logical field rather than substituting a physical key. TestScaleP21SW0InstalledWorkspaceExactRegistry covers case/trailing/NUL/missing/default/deleted/empty semantics; OwnedAdmission covers parent lifetime, cancellation, budget/exhaustion/recovery; ConstantWork compares fixed allocations with 64KiB and 8MiB ignored bodies and accepted long SQLite keys. Producer proves normal CreateWorkspace warm/resident/reload logical source equality and catalog removal. This read does not authorize or pin future membership.",
+      "reason": "Trusted exact installed-map reader clones only RegistryKey, logical installed URLKey and ID under one read lock after independent retained admission. Caller keeps its original accessor off mode and uses the same logical field rather than substituting a physical key. TestInstalledWorkspaceExactRegistry covers case/trailing/NUL/missing/default/deleted/empty semantics; OwnedAdmission covers parent lifetime, cancellation, budget/exhaustion/recovery; ConstantWork compares fixed allocations with 64KiB and 8MiB ignored bodies and accepted long SQLite keys. Producer proves normal CreateWorkspace warm/resident/reload logical source equality and catalog removal. This read does not authorize or pin future membership.",
       "accessors": [
         "resident-state"
       ]

@@ -25,7 +25,7 @@ type issueCollabOutcome struct {
 
 // issueCollabRun drives the real join, a recheck and an update frame of one
 // issue description on the selected store, draining the socket's output.
-func issueCollabRun(t *testing.T, selected *store.SQLiteStore, f scaleP21M2Fixture, user domain.User, issueID, documentID string) issueCollabOutcome {
+func issueCollabRun(t *testing.T, selected *store.SQLiteStore, f policyDifferentialFixture, user domain.User, issueID, documentID string) issueCollabOutcome {
 	t.Helper()
 	service := &server{store: selected, realtime: newRealtimeHub()}
 	workspace := f.data.Workspace.URLKey
@@ -102,15 +102,15 @@ func issueCollabRun(t *testing.T, selected *store.SQLiteStore, f scaleP21M2Fixtu
 	return result
 }
 
-func TestScaleP21IssueCollaborationJoinDifferential(t *testing.T) {
+func TestScaleIssueCollaborationJoinDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		admin := f.principals[1]
-		client, _ := scaleP03Join(t, f.scaleP03PlatformFixture, "collab-admin", idgen.New("collab-user-")+"@example.test", "admin", f.public)
+		client, _ := resourceAccessScaleJoin(t, f.scalePlatformFixture, "collab-admin", idgen.New("collab-user-")+"@example.test", "admin", f.public)
 		plain := authRequest[domain.Issue](t, client, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Plain description", "teamId": f.public}, workspace, http.StatusCreated)
 		custom := authRequest[domain.Issue](t, client, http.MethodPost, f.host.URL+"/api/issue-records", map[string]any{"title": "Collaborative description", "teamId": f.public}, workspace, http.StatusCreated)
 		generation := idgen.New("document_content_generation_")
@@ -149,7 +149,7 @@ func TestScaleP21IssueCollaborationJoinDifferential(t *testing.T) {
 				old := issueCollabRun(t, repo, f, user, fixture.issue, fixture.document)
 				fresh := issueCollabRun(t, f.probe, f, user, fixture.issue, fixture.document)
 				if !reflect.DeepEqual(old, fresh) {
-					t.Fatalf("%s reloaded=%v changed:\n%s", fixture.name, reloaded, scaleP21M2Diff(old, fresh))
+					t.Fatalf("%s reloaded=%v changed:\n%s", fixture.name, reloaded, policyFirstDifference(old, fresh))
 				}
 				if len(old.Messages) == 0 || !strings.Contains(old.Messages[0], `"type":"`+fixture.wantType+`"`) {
 					t.Fatalf("%s: unexpected first frame %v", fixture.name, old.Messages)

@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	sw26MigrationStageChunk    = int64(1 << 20)
-	sw26MigrationStagePageSize = int64(4096)
+	migrationStageChunk    = int64(1 << 20)
+	migrationStagePageSize = int64(4096)
 )
 
-type sw26MigrationStage struct {
+type migrationStage struct {
 	db       *sql.Conn
 	pool     *sql.DB
 	path     string
@@ -24,7 +24,7 @@ type sw26MigrationStage struct {
 	demand   *atomic.Int64
 }
 
-func sw26MigrationReserve(bytes int64) error {
+func migrationReserve(bytes int64) error {
 	for {
 		used := recordSpoolBytes.Load()
 		if bytes < 0 || bytes > recordSpoolMaxBytes()-used {
@@ -36,16 +36,16 @@ func sw26MigrationReserve(bytes int64) error {
 	}
 }
 
-func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err error) {
+func newMigrationStage(ctx context.Context) (_ *migrationStage, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	config, _ := ctx.Value(metadataLogicalScratchKey{}).(metadataLogicalScratch)
-	stage := &sw26MigrationStage{logical: config.logical, demand: metadataLogicalDiskDemand(ctx)}
-	if err := stage.reserve(sw26MigrationStageChunk); err != nil {
+	stage := &migrationStage{logical: config.logical, demand: metadataLogicalDiskDemand(ctx)}
+	if err := stage.reserve(migrationStageChunk); err != nil {
 		return nil, err
 	}
-	stage.reserved = sw26MigrationStageChunk
+	stage.reserved = migrationStageChunk
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, stage.Close())
@@ -82,7 +82,7 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 	if err := stage.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
 		return nil, err
 	}
-	if pageSize != sw26MigrationStagePageSize {
+	if pageSize != migrationStagePageSize {
 		return nil, ErrRecordSpoolBudget
 	}
 	if err := stage.setPageLimit(ctx); err != nil {
@@ -91,8 +91,8 @@ func sw26NewMigrationStage(ctx context.Context) (_ *sw26MigrationStage, err erro
 	return stage, nil
 }
 
-func (s *sw26MigrationStage) setPageLimit(ctx context.Context) error {
-	limit := s.reserved / sw26MigrationStagePageSize
+func (s *migrationStage) setPageLimit(ctx context.Context) error {
+	limit := s.reserved / migrationStagePageSize
 	var actual int64
 	if err := s.db.QueryRowContext(ctx, fmt.Sprintf("PRAGMA max_page_count=%d", limit)).Scan(&actual); err != nil {
 		return err
@@ -103,7 +103,7 @@ func (s *sw26MigrationStage) setPageLimit(ctx context.Context) error {
 	return nil
 }
 
-func (s *sw26MigrationStage) exec(ctx context.Context, bytes int64, query string, args ...any) (sql.Result, error) {
+func (s *migrationStage) exec(ctx context.Context, bytes int64, query string, args ...any) (sql.Result, error) {
 	// B-tree page splits and indexes need space beyond encoded values. Reserve
 	// before SQLite can grow, and enforce the same physical page ceiling.
 	if bytes < 0 || bytes > metadataPolicyBytes {
@@ -113,9 +113,9 @@ func (s *sw26MigrationStage) exec(ctx context.Context, bytes int64, query string
 	if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
 		return nil, err
 	}
-	want := pages*sw26MigrationStagePageSize + bytes*4 + 64<<10
+	want := pages*migrationStagePageSize + bytes*4 + 64<<10
 	if want > s.reserved {
-		grow := ((want - s.reserved + sw26MigrationStageChunk - 1) / sw26MigrationStageChunk) * sw26MigrationStageChunk
+		grow := ((want - s.reserved + migrationStageChunk - 1) / migrationStageChunk) * migrationStageChunk
 		if err := s.reserve(grow); err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (s *sw26MigrationStage) exec(ctx context.Context, bytes int64, query string
 	return s.db.ExecContext(ctx, query, args...)
 }
 
-func (s *sw26MigrationStage) Close() error {
+func (s *migrationStage) Close() error {
 	if s == nil {
 		return nil
 	}
@@ -158,9 +158,9 @@ func (s *sw26MigrationStage) Close() error {
 	return result
 }
 
-func (s *sw26MigrationStage) reserve(bytes int64) error {
+func (s *migrationStage) reserve(bytes int64) error {
 	if !s.logical {
-		return sw26MigrationReserve(bytes)
+		return migrationReserve(bytes)
 	}
 	limit := metadataLogicalDiskCap()
 	if !reserveMetadataLogicalBytes(&metadataLogicalDiskUsed, bytes, limit) {
@@ -175,14 +175,14 @@ func (s *sw26MigrationStage) reserve(bytes int64) error {
 	return nil
 }
 
-type sw26EventReaderAt struct {
+type eventReaderAt struct {
 	ctx  context.Context
 	tx   *sqlTx
 	id   string
 	size int64
 }
 
-func (r *sw26EventReaderAt) ReadAt(output []byte, offset int64) (int, error) {
+func (r *eventReaderAt) ReadAt(output []byte, offset int64) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}

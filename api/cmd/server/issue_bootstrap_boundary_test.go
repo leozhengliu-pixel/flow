@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func scaleP21SW225Node(node ast.Node) string {
+func issueBootstrapBoundaryNode(node ast.Node) string {
 	if node == nil {
 		return ""
 	}
@@ -24,7 +24,7 @@ func scaleP21SW225Node(node ast.Node) string {
 	return out.String()
 }
 
-func scaleP21SW225Function(fn *ast.FuncDecl) string {
+func issueBootstrapBoundaryFunction(fn *ast.FuncDecl) string {
 	if fn.Recv == nil {
 		return fn.Name.Name
 	}
@@ -32,32 +32,32 @@ func scaleP21SW225Function(fn *ast.FuncDecl) string {
 	if pointer, ok := receiver.(*ast.StarExpr); ok {
 		receiver = pointer.X
 	}
-	return scaleP21SW225Node(receiver) + "." + fn.Name.Name
+	return issueBootstrapBoundaryNode(receiver) + "." + fn.Name.Name
 }
 
-func scaleP21SW225Statements(block *ast.BlockStmt, want ...string) bool {
+func issueBootstrapBoundaryStatements(block *ast.BlockStmt, want ...string) bool {
 	if block == nil || len(block.List) < len(want) {
 		return false
 	}
 	for i, text := range want {
-		if scaleP21SW225Node(block.List[i]) != text {
+		if issueBootstrapBoundaryNode(block.List[i]) != text {
 			return false
 		}
 	}
 	return true
 }
 
-func scaleP21SW225OwnedBranch(stmt ast.Stmt, init, condition, call string) bool {
+func ownedBranch(stmt ast.Stmt, init, condition, call string) bool {
 	branch, ok := stmt.(*ast.IfStmt)
-	if !ok || branch.Else != nil || scaleP21SW225Node(branch.Init) != init ||
-		scaleP21SW225Node(branch.Cond) != condition || len(branch.Body.List) != 2 {
+	if !ok || branch.Else != nil || issueBootstrapBoundaryNode(branch.Init) != init ||
+		issueBootstrapBoundaryNode(branch.Cond) != condition || len(branch.Body.List) != 2 {
 		return false
 	}
 	exit, ok := branch.Body.List[1].(*ast.ReturnStmt)
-	return ok && len(exit.Results) == 0 && scaleP21SW225Node(branch.Body.List[0]) == call
+	return ok && len(exit.Results) == 0 && issueBootstrapBoundaryNode(branch.Body.List[0]) == call
 }
 
-func scaleP21SW225BootstrapTypeReference(file *ast.File, selector *ast.SelectorExpr) bool {
+func bootstrapTypeReference(file *ast.File, selector *ast.SelectorExpr) bool {
 	if selector.Sel.Name != "Bootstrap" {
 		return false
 	}
@@ -82,7 +82,7 @@ func scaleP21SW225BootstrapTypeReference(file *ast.File, selector *ast.SelectorE
 // Dynamic generic GETs can spell the reserved bootstrap path. Their result
 // must remain a statically declared Issue, rejected by the gateway's checked
 // Bootstrap assertion before the in-process handler can be constructed.
-func scaleP21SW225IssueResult(fn *ast.FuncDecl, result ast.Expr) bool {
+func issueBootstrapBoundaryIssueResult(fn *ast.FuncDecl, result ast.Expr) bool {
 	address, ok := result.(*ast.UnaryExpr)
 	if !ok || address.Op != token.AND {
 		return false
@@ -99,7 +99,7 @@ func scaleP21SW225IssueResult(fn *ast.FuncDecl, result ast.Expr) bool {
 			for _, candidate := range node.Names {
 				if candidate.Name == name.Name {
 					declarations++
-					valid = valid && scaleP21SW225Node(node.Type) == "domain.Issue"
+					valid = valid && issueBootstrapBoundaryNode(node.Type) == "domain.Issue"
 				}
 			}
 		case *ast.AssignStmt:
@@ -116,7 +116,7 @@ func scaleP21SW225IssueResult(fn *ast.FuncDecl, result ast.Expr) bool {
 	return valid && declarations == 1
 }
 
-func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
+func TestIssueBootstrapLegacyBoundaries(t *testing.T) {
 	// The two complete typed-bootstrap callers remain committed COLD. The
 	// allowlist preserves their independent cold-routing obligations.
 	coldBootstrap := map[string]bool{
@@ -215,7 +215,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 			fn, isFunction := decl.(*ast.FuncDecl)
 			name := "package-level"
 			if isFunction {
-				name = scaleP21SW225Function(fn)
+				name = issueBootstrapBoundaryFunction(fn)
 				if strings.HasPrefix(name, "server.") {
 					if functions[name] != nil {
 						t.Fatalf("duplicate function %s", name)
@@ -234,7 +234,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 				if !ok {
 					return true
 				}
-				if owned[name] && legacyReads[selector.Sel.Name] && !scaleP21SW225BootstrapTypeReference(parsed, selector) {
+				if owned[name] && legacyReads[selector.Sel.Name] && !bootstrapTypeReference(parsed, selector) {
 					t.Errorf("%s regained a legacy read %s", name, selector.Sel.Name)
 				}
 				if !targets[selector.Sel.Name] {
@@ -251,7 +251,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 				if selector.Sel.Name == "BeginIssueBootstrapRead" {
 					receiver = "s.store"
 				}
-				if !direct || call.Fun != selector || scaleP21SW225Node(selector.X) != receiver {
+				if !direct || call.Fun != selector || issueBootstrapBoundaryNode(selector.X) != receiver {
 					t.Errorf("%s captures a method or changes its receiver; explicit review required", key)
 					return true
 				}
@@ -265,7 +265,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 					t.Errorf("%s changed gateway arguments", key)
 					return true
 				}
-				method, path := scaleP21SW225Node(call.Args[3]), scaleP21SW225Node(call.Args[4])
+				method, path := issueBootstrapBoundaryNode(call.Args[3]), issueBootstrapBoundaryNode(call.Args[4])
 				if method == "http.MethodPost" || method == "http.MethodPatch" {
 					return true // The complete bootstrap branch requires GET.
 				}
@@ -286,7 +286,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 				if coldBootstrap[name] {
 					return true
 				}
-				if !scaleP21SW225IssueResult(fn, call.Args[6]) {
+				if !issueBootstrapBoundaryIssueResult(fn, call.Args[6]) {
 					t.Errorf("%s dynamic GET can reach typed bootstrap without a statically checked Issue result", key)
 				}
 				return true
@@ -307,7 +307,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 		return fn
 	}
 	route := require("issueRecordsBootstrap")
-	if len(route.Body.List) == 0 || !scaleP21SW225OwnedBranch(route.Body.List[0], "", "s.store.BoundedMetadataEnabled()", "s.issueRecordsBootstrapBounded(w, r)") {
+	if len(route.Body.List) == 0 || !ownedBranch(route.Body.List[0], "", "s.store.BoundedMetadataEnabled()", "s.issueRecordsBootstrapBounded(w, r)") {
 		t.Error("HTTP bootstrap no longer returns through its first owned bounded dispatch")
 	}
 	for name, kind := range map[string]string{
@@ -316,12 +316,12 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	} {
 		fn := require(name)
 		want := "if s.store.BoundedMetadataEnabled() {\n\tctx = context.WithValue(ctx, chatBootstrapHeadersKey{}, " + kind + ")\n}"
-		if len(fn.Body.List) != 2 || !scaleP21SW225Statements(fn.Body, want, `return s.chatAuthorizedMutation(ctx, workspace, userID, http.MethodGet, "/api/issue-records/bootstrap", nil, result)`) {
+		if len(fn.Body.List) != 2 || !issueBootstrapBoundaryStatements(fn.Body, want, `return s.chatAuthorizedMutation(ctx, workspace, userID, http.MethodGet, "/api/issue-records/bootstrap", nil, result)`) {
 			t.Errorf("%s lost its bounded kind before entering the gateway", name)
 		}
 	}
 	point := require("chatAuthorizedPointRead")
-	if len(point.Body.List) != 2 || !scaleP21SW225Statements(point.Body,
+	if len(point.Body.List) != 2 || !issueBootstrapBoundaryStatements(point.Body,
 		"if !s.store.BoundedMetadataEnabled() {\n\treturn s.chatAuthorizedMutation(ctx, workspace, userID, http.MethodGet, path, nil, result)\n}",
 		"return s.chatAuthorizedMutation(context.WithValue(ctx, chatPointReadKey{}, true), workspace, userID, http.MethodGet, path, nil, result)") {
 		t.Error("point adapter lost its bounded point marker")
@@ -330,11 +330,11 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	const previewKind = "if s.store.BoundedMetadataEnabled() {\n\tctx = context.WithValue(ctx, chatBootstrapHeadersKey{}, chatPreviewMetadata)\n}"
 	hasPreviewKind := false
 	for i, stmt := range preview.Body.List {
-		if scaleP21SW225Node(stmt) == previewKind && i+1 < len(preview.Body.List) {
+		if issueBootstrapBoundaryNode(stmt) == previewKind && i+1 < len(preview.Body.List) {
 			next, ok := preview.Body.List[i+1].(*ast.IfStmt)
 			hasPreviewKind = ok && next.Init == nil && next.Else == nil &&
-				scaleP21SW225Node(next.Cond) == `s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata) != nil` &&
-				scaleP21SW225Statements(next.Body, `return neutral, "", nil`)
+				issueBootstrapBoundaryNode(next.Cond) == `s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata) != nil` &&
+				issueBootstrapBoundaryStatements(next.Body, `return neutral, "", nil`)
 			break
 		}
 	}
@@ -345,44 +345,44 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	bootstrapCases, pointGuards := 0, 0
 	ast.Inspect(gateway.Body, func(node ast.Node) bool {
 		if clause, ok := node.(*ast.CaseClause); ok && len(clause.List) == 1 &&
-			scaleP21SW225Node(clause.List[0]) == `path == "/api/issue-records/bootstrap" && method == http.MethodGet` {
+			issueBootstrapBoundaryNode(clause.List[0]) == `path == "/api/issue-records/bootstrap" && method == http.MethodGet` {
 			bootstrapCases++
 			block := &ast.BlockStmt{List: clause.Body}
-			if len(block.List) != 5 || !scaleP21SW225Statements(block,
+			if len(block.List) != 5 || !issueBootstrapBoundaryStatements(block,
 				"metadata, ok := result.(*domain.Bootstrap)",
 				"if result != nil && !ok {\n\treturn errors.New(\"unsupported chat operation\")\n}") {
 				t.Error("bootstrap gateway lost its early checked result type")
 				return true
 			}
 			assign, ok := block.List[4].(*ast.AssignStmt)
-			if !ok || len(assign.Rhs) != 1 || len(assign.Lhs) != 1 || scaleP21SW225Node(assign.Lhs[0]) != "handler" {
+			if !ok || len(assign.Rhs) != 1 || len(assign.Lhs) != 1 || issueBootstrapBoundaryNode(assign.Lhs[0]) != "handler" {
 				t.Error("bootstrap gateway changed handler construction")
 				return true
 			}
 			handler, ok := assign.Rhs[0].(*ast.FuncLit)
 			if !ok || len(handler.Body.List) != 3 ||
-				!scaleP21SW225OwnedBranch(handler.Body.List[1],
+				!ownedBranch(handler.Body.List[1],
 					"kind, selected := ctx.Value(chatBootstrapHeadersKey{}).(chatBootstrapHeadersKind)",
 					"selected && s.store.BoundedMetadataEnabled()",
 					"bootstrapErr = s.chatBootstrapHeaders(w, r, metadata, kind)") {
 				t.Error("typed HOT bootstrap no longer returns through its owned kind")
 				return true
 			}
-			if !scaleP21SW225OwnedBranch(handler.Body.List[0], "",
+			if !ownedBranch(handler.Body.List[0], "",
 				`result == nil && (s.store.BoundedMetadataEnabled() || internalRecordsEnabled("FLOW_INTERNAL_CHAT_RECORDS"))`,
 				"w.WriteHeader(http.StatusOK)") {
 				t.Error("consent-only branch changed; bootstrap reachability needs review")
 			}
 			legacy, ok := handler.Body.List[2].(*ast.IfStmt)
-			if !ok || scaleP21SW225Node(legacy.Init) != "data, ok := s.issueRecordsBootstrapData(w, r)" {
+			if !ok || issueBootstrapBoundaryNode(legacy.Init) != "data, ok := s.issueRecordsBootstrapData(w, r)" {
 				t.Error("legacy bootstrap call no longer follows both returning dispatches")
 			}
 		}
 		if branch, ok := node.(*ast.IfStmt); ok &&
-			scaleP21SW225Node(branch.Init) == "point, _ := ctx.Value(chatPointReadKey{}).(bool)" &&
-			scaleP21SW225Node(branch.Cond) == "point && s.store.BoundedMetadataEnabled()" {
+			issueBootstrapBoundaryNode(branch.Init) == "point, _ := ctx.Value(chatPointReadKey{}).(bool)" &&
+			issueBootstrapBoundaryNode(branch.Cond) == "point && s.store.BoundedMetadataEnabled()" {
 			pointGuards++
-			if !scaleP21SW225Statements(branch.Body,
+			if !issueBootstrapBoundaryStatements(branch.Body,
 				"if method != http.MethodGet || inProcess {\n\treturn store.ErrBoundedMetadataCoverage\n}") {
 				t.Error("point gateway no longer refuses in-process bootstrap before dispatch")
 			}
@@ -395,16 +395,16 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	stream := require("issueRecordsBootstrapBounded")
 	// The HTTP entry opens its read (again while authorization moves under
 	// it) and owns it for the whole response.
-	if !scaleP21SW225Statements(stream.Body,
+	if !issueBootstrapBoundaryStatements(stream.Body,
 		"started := time.Now()",
 		"resident := r.WithContext(store.WithResidentBootstrap(r.Context()))",
 		"var read *store.IssueBootstrapRead") ||
-		len(stream.Body.List) < 5 || scaleP21SW225Node(stream.Body.List[4]) != "defer read.Close()" ||
-		!strings.Contains(scaleP21SW225Node(stream.Body.List[3]), "read, err = s.openIssueRecordsBootstrapRead(w, resident)") {
+		len(stream.Body.List) < 5 || issueBootstrapBoundaryNode(stream.Body.List[4]) != "defer read.Close()" ||
+		!strings.Contains(issueBootstrapBoundaryNode(stream.Body.List[3]), "read, err = s.openIssueRecordsBootstrapRead(w, resident)") {
 		t.Error("HTTP owned entry lost its read and containing response lifetime")
 	}
 	chat := require("chatBootstrapHeaders")
-	if !scaleP21SW225Statements(chat.Body,
+	if !issueBootstrapBoundaryStatements(chat.Body,
 		"if kind != chatDMHeaders && kind != chatWorkflowHeaders && kind != chatPreviewMetadata {\n\treturn store.ErrBoundedMetadataCoverage\n}",
 		"read, ok := s.beginIssueRecordsBootstrapRead(w, r)",
 		"if !ok {\n\treturn nil\n}") {
@@ -412,10 +412,10 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	}
 	transfer, destination := -1, -1
 	for i, stmt := range chat.Body.List {
-		if scaleP21SW225Node(stmt) == "if err := read.TransferOutput(r.Context()); err != nil {\n\treturn err\n}" {
+		if issueBootstrapBoundaryNode(stmt) == "if err := read.TransferOutput(r.Context()); err != nil {\n\treturn err\n}" {
 			transfer = i
 		}
-		if scaleP21SW225Node(stmt) == "*result = data" {
+		if issueBootstrapBoundaryNode(stmt) == "*result = data" {
 			destination = i
 		}
 	}
@@ -424,7 +424,7 @@ func TestScaleP21SW225IssueBootstrapLegacyBoundaries(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW225OwnedBranchRejectsFallthrough(t *testing.T) {
+func TestOwnedBranchRejectsFallthrough(t *testing.T) {
 	for _, cell := range []struct {
 		name, body string
 		want       bool
@@ -443,14 +443,14 @@ func TestScaleP21SW225OwnedBranchRejectsFallthrough(t *testing.T) {
 				t.Fatal(err)
 			}
 			fn := parsed.Decls[0].(*ast.FuncDecl)
-			if got := scaleP21SW225OwnedBranch(fn.Body.List[0], "", "enabled", "owned()"); got != cell.want {
+			if got := ownedBranch(fn.Body.List[0], "", "enabled", "owned()"); got != cell.want {
 				t.Fatalf("owned branch=%v want=%v", got, cell.want)
 			}
 		})
 	}
 }
 
-func TestScaleP21SW225DynamicGETResultRejectsBootstrap(t *testing.T) {
+func TestDynamicGETResultRejectsBootstrap(t *testing.T) {
 	for _, cell := range []struct {
 		declaration string
 		want        bool
@@ -467,14 +467,14 @@ func TestScaleP21SW225DynamicGETResultRejectsBootstrap(t *testing.T) {
 			}
 			fn := parsed.Decls[0].(*ast.FuncDecl)
 			result := &ast.UnaryExpr{Op: token.AND, X: ast.NewIdent("issue")}
-			if got := scaleP21SW225IssueResult(fn, result); got != cell.want {
+			if got := issueBootstrapBoundaryIssueResult(fn, result); got != cell.want {
 				t.Fatalf("checked Issue result=%v want=%v", got, cell.want)
 			}
 		})
 	}
 }
 
-func TestScaleP21SW225BootstrapTypeDoesNotHideLegacyReferences(t *testing.T) {
+func TestBootstrapTypeDoesNotHideLegacyReferences(t *testing.T) {
 	for _, cell := range []struct {
 		name, source string
 		legacy       int
@@ -499,7 +499,7 @@ func TestScaleP21SW225BootstrapTypeDoesNotHideLegacyReferences(t *testing.T) {
 			legacy := 0
 			ast.Inspect(parsed, func(node ast.Node) bool {
 				selector, ok := node.(*ast.SelectorExpr)
-				if ok && selector.Sel.Name == "Bootstrap" && !scaleP21SW225BootstrapTypeReference(parsed, selector) {
+				if ok && selector.Sel.Name == "Bootstrap" && !bootstrapTypeReference(parsed, selector) {
 					legacy++
 				}
 				return true

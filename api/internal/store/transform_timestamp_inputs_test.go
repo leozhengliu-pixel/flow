@@ -12,7 +12,7 @@ import (
 	"flow/api/internal/domain"
 )
 
-func scaleP21SW158ReplaceConnections(values []domain.IntegrationConnection) func(string, metadataLogicalNode) (metadataAggregateNode, bool, error) {
+func replaceConnections(values []domain.IntegrationConnection) func(string, metadataLogicalNode) (metadataAggregateNode, bool, error) {
 	return func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
 		if name == "integrationConnections" {
 			return metadataAggregateNativeNode{reflect.ValueOf(values)}, true, nil
@@ -21,8 +21,8 @@ func scaleP21SW158ReplaceConnections(values []domain.IntegrationConnection) func
 	}
 }
 
-func TestScaleP21SW158TransformTimestampInputsNativeIdentity(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTransformTimestampInputsNativeIdentity(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	ctx, inputs := view.WithMetadataTimestampInputs(WithMetadataFields(t.Context(), "integrationConnections"))
 	scope := MetadataRecordScope{Write: []RecordKey{{Kind: "integrationConnections", ID: id}}}
 	var transformed *metadataLogicalSource
@@ -58,7 +58,7 @@ func TestScaleP21SW158TransformTimestampInputsNativeIdentity(t *testing.T) {
 		}
 		expected = append([]domain.IntegrationConnection(nil), before.IntegrationConnections...)
 		expected[0].LastWebhookAt = &replacement
-		transformed, err = source.Transform(activeCtx, scaleP21SW158ReplaceConnections(expected))
+		transformed, err = source.Transform(activeCtx, replaceConnections(expected))
 		if err != nil {
 			return err
 		}
@@ -114,8 +114,8 @@ func TestScaleP21SW158TransformTimestampInputsNativeIdentity(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW158TransformTimestampInputsScopeAndOpaqueGuards(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTransformTimestampInputsScopeAndOpaqueGuards(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	source, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{
 		IntegrationConnections: []domain.IntegrationConnection{{ID: id}},
 	}, copyStamp{})
@@ -134,7 +134,7 @@ func TestScaleP21SW158TransformTimestampInputsScopeAndOpaqueGuards(t *testing.T)
 			check := func(want error) {
 				t.Helper()
 				disk, descriptors := metadataLogicalDiskUsed.Load(), metadataLogicalDescriptorsUsed.Load()
-				next, err := source.Transform(activeCtx, scaleP21SW158ReplaceConnections(values))
+				next, err := source.Transform(activeCtx, replaceConnections(values))
 				if next != nil {
 					index, _, _ := metadataLogicalField("integrationConnections")
 					_, err = next.fields[index].Value(t.Context(), 2<<20)
@@ -187,8 +187,8 @@ func TestScaleP21SW158TransformTimestampInputsScopeAndOpaqueGuards(t *testing.T)
 	}
 }
 
-func TestScaleP21SW158TransformTimestampInputsClearedRegistries(t *testing.T) {
-	f, view, id := scaleP21SW31TimestampFixture(t)
+func TestTransformTimestampInputsClearedRegistries(t *testing.T) {
+	f, view, id := timestampFixture(t)
 	known := time.Now()
 	source, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{
 		Issues: []domain.Issue{{ID: id, CreatedAt: known}},

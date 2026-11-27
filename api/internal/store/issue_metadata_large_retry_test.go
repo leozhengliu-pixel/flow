@@ -17,10 +17,10 @@ import (
 	"flow/api/internal/idgen"
 )
 
-// This is a required-success legal-large variant of SW239. It reuses that
+// This is a required-success legal-large variant of issue metadata retry. It reuses that
 // test's callback capture, exact generated-value normalization and stack
 // attribution helpers; no conflict or refusal is manufactured by the callback.
-func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) {
+func TestIssueMetadataLargeConflictRetryDifferential(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "false")
 	t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "off")
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -80,9 +80,9 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 			}
 
 			var wantOutput any
-			var wantCallbacks []scaleP21SW239Callback
+			var wantCallbacks []issueMetadataRetryCallback
 			var wantNative map[string]any
-			var wantMetadata scaleP21SW76Metadata
+			var wantMetadata legacyActorWriteMetadata
 			for _, bounded := range []bool{false, true} {
 				t.Run(fmt.Sprintf("bounded=%t", bounded), func(t *testing.T) {
 					if err := peer.ReloadWorkspace(t.Context(), workspace); err != nil {
@@ -145,7 +145,7 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 						}
 						return nil
 					})
-					canonicalBefore := scaleP21SW76MetadataImage(t, peer.db, workspace)
+					canonicalBefore := metadataImage(t, peer.db, workspace)
 					var rowBytes int
 					var largeRaw []byte
 					if err := peer.db.QueryRowContext(t.Context(),
@@ -187,11 +187,11 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 					if !errors.Is(conflict, ErrConcurrentWrite) || !typed || !reflect.DeepEqual(keys, []metadataRecordKey{{"documents", document.ID}}) {
 						t.Fatal("fixture did not create the real keyed document conflict", keys, conflict)
 					}
-					var callbacks []scaleP21SW239Callback
+					var callbacks []issueMetadataRetryCallback
 					var literalRefresh, logicalRefresh atomic.Int32
 					ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 						if strings.HasPrefix(query, "SELECT record_key") {
-							switch scaleP21SW239RefreshFrame() {
+							switch refreshFrame() {
 							case "literal":
 								literalRefresh.Add(1)
 							case "logical":
@@ -214,12 +214,12 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 					})
 					defer source.SetWebhookSink(nil)
 					defer source.SetRealtimeSink(nil)
-					priorEvents := scaleP21SW63EventIDs(t, source, workspace)
+					priorEvents := eventIDs(t, source, workspace)
 					started := time.Now().UTC()
 					result, err := source.UpdateIssueRecord(ctx, workspace, issue.ID, &initial.Version,
 						IssueMutationScope{Payload: domain.IssueUpdateInput{TeamID: &destination.ID, StateID: &destinationState.ID}},
 						func(current *domain.Bootstrap, target *domain.Issue) error {
-							capture := scaleP21SW239Callback{Team: target.Team.ID, Version: target.Version}
+							capture := issueMetadataRetryCallback{Team: target.Team.ID, Version: target.Version}
 							for index := range current.Documents {
 								if current.Documents[index].IssueID == target.ID {
 									capture.Documents = append(capture.Documents, current.Documents[index])
@@ -263,19 +263,19 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 						}
 					}
 					native := map[string]any{
-						"documents": scaleP21IssueNative(t, source, workspace, "documents"),
-						"projects":  scaleP21IssueNative(t, source, workspace, "projects"),
+						"documents": scaleIssueNative(t, source, workspace, "documents"),
+						"projects":  scaleIssueNative(t, source, workspace, "projects"),
 					}
 					documents := native["documents"].([]domain.Document)
 					if len(documents) != 1 || documents[0].IssueID != other.ID || documents[0].IssueTeamID != peerTeam.ID ||
 						documents[0].Content != document.Content {
 						t.Fatal("retry overwrote the committed peer attachment or body", len(documents))
 					}
-					metadata := scaleP21SW76MetadataImage(t, source.db, workspace)
+					metadata := metadataImage(t, source.db, workspace)
 					if !reflect.DeepEqual(metadata, canonicalBefore) {
 						t.Fatal("retry changed canonical metadata after peer reattachment")
 					}
-					events := scaleP21SW63NewEvents(t, source, workspace, priorEvents)
+					events := newEvents(t, source, workspace, priorEvents)
 					publicationMu.Lock()
 					hooks, pushes := slices.Clone(webhooks), slices.Clone(realtime)
 					publicationMu.Unlock()
@@ -303,10 +303,10 @@ func TestScaleP21SW258IssueMetadataLargeConflictRetryDifferential(t *testing.T) 
 						replacements[event.ID] = "<sw258-event-id>"
 						replacements[event.CreatedAt.Format(time.RFC3339Nano)] = "<sw258-clock>"
 					}
-					output := scaleP21SW239Normalized(t, map[string]any{
+					output := issueMetadataRetryNormalized(t, map[string]any{
 						"returned":        result,
-						"business":        scaleP21SW63BusinessRows(t, source, workspace, issue.ID),
-						"indexes":         scaleP21SW98Indexes(t, source, workspace),
+						"business":        businessRows(t, source, workspace, issue.ID),
+						"indexes":         legacyDiscussionWriteIndexes(t, source, workspace),
 						"events":          events,
 						"webhooks":        hooks,
 						"webhookActor":    hooks[0].ActorID,

@@ -16,18 +16,18 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP10CursorKey(t *testing.T) {
+func scaleCursorKey(t *testing.T) {
 	t.Helper()
 	t.Setenv(connectorSecretKeyEnv, base64.StdEncoding.EncodeToString(make([]byte, 32)))
 }
 
-func TestScaleP10RecordPermissionDifferential(t *testing.T) {
+func TestScaleRecordPermissionDifferential(t *testing.T) {
 	// Compare the shadow adapter against the legacy policy and verify that
 	// a shadow-only catalog cannot back public reads.
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_METADATA_CATALOG", "off")
-	scaleP10CursorKey(t)
-	for name, fixture := range scaleP03Stores(t) {
+	scaleCursorKey(t)
+	for name, fixture := range resourceAccessScaleStores(t) {
 		t.Run(name, func(t *testing.T) {
 			s, base := fixture.SQLiteStore, fixture.data
 			workspace := base.Workspace.URLKey
@@ -102,7 +102,7 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 				t.Fatal("guest fixture did not exercise an explicit grant", err)
 			}
 			for _, kind := range []string{"projects", "initiatives"} {
-				scaleP05Finish(t, s, workspace, kind)
+				scaleFinish(t, s, workspace, kind)
 			}
 			other, err := s.CreateWorkspace(ContextWithActor(t.Context(), base.Viewer), "P10 other", idgen.New("p10-other-"), "us")
 			if err != nil {
@@ -164,7 +164,7 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 								if projection == "summary" {
 									want = ProjectListProjection(want)
 								}
-								scaleP10Equal(t, want, item.Data)
+								scaleEqual(t, want, item.Data)
 								if viewer.key != nil && viewer.key.TeamRestriction == "selected" {
 									var actual domain.Project
 									if err := json.Unmarshal(item.Data, &actual); err != nil {
@@ -179,7 +179,7 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 								if projection == "summary" {
 									want.Description, want.DescriptionHistory, want.Resources, want.Comments = "", nil, nil, nil
 								}
-								scaleP10Equal(t, want, item.Data)
+								scaleEqual(t, want, item.Data)
 							}
 						}
 					}
@@ -297,7 +297,7 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 	}
 }
 
-func BenchmarkScaleP10AccessRecordPage(b *testing.B) {
+func BenchmarkScaleAccessRecordPage(b *testing.B) {
 	b.Setenv(connectorSecretKeyEnv, base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	for _, scale := range []int{1, 10} {
 		b.Run(fmt.Sprintf("body%d", scale), func(b *testing.B) {
@@ -348,8 +348,8 @@ func BenchmarkScaleP10AccessRecordPage(b *testing.B) {
 	}
 }
 
-func TestScaleP10RecordCoreOwnership(t *testing.T) {
-	for _, fixture := range scaleP03Stores(t) {
+func TestScaleRecordCoreOwnership(t *testing.T) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		access, err := s.ResolveAccess(t.Context(), fixture.data.Workspace.URLKey, fixture.data.Viewer.ID, nil)
 		if err != nil {
@@ -371,9 +371,9 @@ func TestScaleP10RecordCoreOwnership(t *testing.T) {
 	}
 }
 
-func TestScaleP10RecordPageAllocationBudget(t *testing.T) {
-	scaleP10CursorKey(t)
-	for _, fixture := range scaleP03Stores(t) {
+func TestScaleRecordPageAllocationBudget(t *testing.T) {
+	scaleCursorKey(t)
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s, base := fixture.SQLiteStore, fixture.data
 		if err := s.MutateWorkspace(WithColdWork(t.Context(), "workspace fixture"), base.Workspace.URLKey, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
 			data.Projects = nil
@@ -384,7 +384,7 @@ func TestScaleP10RecordPageAllocationBudget(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		scaleP05Finish(t, s, base.Workspace.URLKey, "projects")
+		scaleFinish(t, s, base.Workspace.URLKey, "projects")
 		access, err := s.ResolveAccess(t.Context(), base.Workspace.URLKey, base.Viewer.ID, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -406,8 +406,8 @@ func TestScaleP10RecordPageAllocationBudget(t *testing.T) {
 	}
 }
 
-func TestScaleP10CursorBindingAndPrivacy(t *testing.T) {
-	scaleP10CursorKey(t)
+func TestScaleCursorBindingAndPrivacy(t *testing.T) {
+	scaleCursorKey(t)
 	access := AccessContext{WorkspaceID: "w", PrincipalID: "u", CredentialScope: "scope", AuthzEpoch: "epoch"}
 	q := PageRequest{Kind: "projects", Filter: `{"Archived":"all"}`, Order: "updatedAt"}
 	plain := `{"i":"hidden-private-record","s":2}`
@@ -455,8 +455,8 @@ func TestScaleP10CursorBindingAndPrivacy(t *testing.T) {
 	}
 }
 
-func TestScaleP10RecordQueryBounds(t *testing.T) {
-	for _, fixture := range scaleP03Stores(t) {
+func TestScaleRecordQueryBounds(t *testing.T) {
+	for _, fixture := range resourceAccessScaleStores(t) {
 		s := fixture.SQLiteStore
 		access, err := s.ResolveAccess(t.Context(), fixture.data.Workspace.URLKey, fixture.data.Viewer.ID, nil)
 		if err != nil {

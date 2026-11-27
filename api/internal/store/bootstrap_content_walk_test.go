@@ -16,17 +16,17 @@ import (
 	"flow/api/internal/idgen"
 )
 
-type scaleP21SW163Row struct {
+type bootstrapContentWalkRow struct {
 	resource string
 	raw      []byte
 	nilRaw   bool
 }
 
-func scaleP21SW163Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) {
+func bootstrapContentWalkFixture(t *testing.T) (scaleFixture, *SQLiteStore, string) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	fixture := scaleP09Database(t)
+	fixture := journalScaleDatabase(t)
 	workspace := idgen.New("sw163-")
 	t.Cleanup(func() {
 		_, err := fixture.db.ExecContext(context.Background(), `DELETE FROM workspace_content_records WHERE workspace_key=?`, workspace)
@@ -38,7 +38,7 @@ func scaleP21SW163Fixture(t *testing.T) (scaleP09Fixture, *SQLiteStore, string) 
 	return fixture, view, workspace
 }
 
-func scaleP21SW163Insert(t *testing.T, fixture scaleP09Fixture, workspace, kind string, resource, created, id, raw any) {
+func bootstrapContentWalkInsert(t *testing.T, fixture scaleFixture, workspace, kind string, resource, created, id, raw any) {
 	t.Helper()
 	if text, ok := raw.(string); ok && fixture.dialect == "postgres" {
 		// PostgreSQL reads a text parameter for BYTEA as escaped bytea input
@@ -51,11 +51,11 @@ func scaleP21SW163Insert(t *testing.T, fixture scaleP09Fixture, workspace, kind 
 	}
 }
 
-func scaleP21SW163Collect(t *testing.T, repo *SQLiteStore, ctx context.Context, workspace, kind string, bounded bool) ([]scaleP21SW163Row, error) {
+func bootstrapContentWalkCollect(t *testing.T, repo *SQLiteStore, ctx context.Context, workspace, kind string, bounded bool) ([]bootstrapContentWalkRow, error) {
 	t.Helper()
-	result := []scaleP21SW163Row{}
+	result := []bootstrapContentWalkRow{}
 	visit := func(resource string, raw json.RawMessage) error {
-		result = append(result, scaleP21SW163Row{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
+		result = append(result, bootstrapContentWalkRow{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
 		return nil
 	}
 	var err error
@@ -67,9 +67,9 @@ func scaleP21SW163Collect(t *testing.T, repo *SQLiteStore, ctx context.Context, 
 	return result, err
 }
 
-func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
+func TestBootstrapContentSQLOrder(t *testing.T) {
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	for index := range 181 {
 		resource := fmt.Sprintf("resource-%02d-%s", index%7, []string{"A", "a", "共享"}[index%3])
 		created := fmt.Sprintf("2026-11-15T00:%02d:%02dZ", index%5, index%3)
@@ -90,7 +90,7 @@ func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
 				payload = string(raw)
 			}
 		}
-		scaleP21SW163Insert(t, fixture, workspace, "comment", resourceKey, createdKey, idKey, payload)
+		bootstrapContentWalkInsert(t, fixture, workspace, "comment", resourceKey, createdKey, idKey, payload)
 	}
 	if fixture.dialect == "sqlite" {
 		for index := range 4 {
@@ -101,13 +101,13 @@ func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
 			if index&2 != 0 {
 				id = []byte("same")
 			}
-			scaleP21SW163Insert(t, fixture, workspace, "comment", resource, "same-time", id, fmt.Sprintf(`{"body":"storage-%d"}`, index))
+			bootstrapContentWalkInsert(t, fixture, workspace, "comment", resource, "same-time", id, fmt.Sprintf(`{"body":"storage-%d"}`, index))
 		}
-		scaleP21SW163Insert(t, fixture, workspace, "comment", "\x00\xff", "", "\x00\xff", []byte{})
-		scaleP21SW163Insert(t, fixture, workspace, "comment", "", "", "empty-text", "")
+		bootstrapContentWalkInsert(t, fixture, workspace, "comment", "\x00\xff", "", "\x00\xff", []byte{})
+		bootstrapContentWalkInsert(t, fixture, workspace, "comment", "", "", "empty-text", "")
 	}
-	scaleP21SW163Insert(t, fixture, workspace, "other-kind", "resource", "", "ignored-kind", "not-json")
-	want, err := scaleP21SW163Collect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
+	bootstrapContentWalkInsert(t, fixture, workspace, "other-kind", "resource", "", "ignored-kind", "not-json")
+	want, err := bootstrapContentWalkCollect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
 			}
 		}
 	})
-	got, err := scaleP21SW163Collect(t, view, ctx, workspace, "comment", true)
+	got, err := bootstrapContentWalkCollect(t, view, ctx, workspace, "comment", true)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatal("literal SQL order, physical key storage or raw bytes changed", len(got), len(want), err)
 	}
@@ -133,14 +133,14 @@ func TestScaleP21SW163BootstrapContentSQLOrder(t *testing.T) {
 		t.Fatal("ordinary small rows regressed to individual body queries", len(want), bodyQueries)
 	}
 	t.Logf("rows=%d body_queries=%d peak_observed_work=%d", len(want), bodyQueries, peak)
-	empty, err := scaleP21SW163Collect(t, view, t.Context(), workspace, "missing-kind", true)
+	empty, err := bootstrapContentWalkCollect(t, view, t.Context(), workspace, "missing-kind", true)
 	if err != nil || len(empty) != 0 || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("empty selection changed or leaked", err)
 	}
 }
 
-func TestScaleP21SW163BootstrapContentKinds(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentKinds(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	for _, item := range []struct{ kind, raw string }{
 		{"comment", `{"body":"ok","bodyData":{"nested":[null,{}]}}`},
 		{"activity", `{"id":"activity","metadata":{"comment":"<>&","cycle":"cycle"}}`},
@@ -148,23 +148,23 @@ func TestScaleP21SW163BootstrapContentKinds(t *testing.T) {
 		{"delivery", `{"status":"pending","attempts":1}`},
 		{"unknown", `malformed ignored bytes`},
 	} {
-		scaleP21SW163Insert(t, fixture, workspace, item.kind, "resource", "", "row", []byte(item.raw))
-		want, wantErr := scaleP21SW163Collect(t, fixture.SQLiteStore, t.Context(), workspace, item.kind, false)
-		got, gotErr := scaleP21SW163Collect(t, view, t.Context(), workspace, item.kind, true)
+		bootstrapContentWalkInsert(t, fixture, workspace, item.kind, "resource", "", "row", []byte(item.raw))
+		want, wantErr := bootstrapContentWalkCollect(t, fixture.SQLiteStore, t.Context(), workspace, item.kind, false)
+		got, gotErr := bootstrapContentWalkCollect(t, view, t.Context(), workspace, item.kind, true)
 		if wantErr != nil || gotErr != nil || !reflect.DeepEqual(want, got) || view.MetadataWorkUsedForTesting() != 0 {
 			t.Fatal("raw kind/driver/ignored-value semantics changed", item.kind, wantErr, gotErr)
 		}
 	}
 }
 
-func TestScaleP21SW163BootstrapContentMalformedVisitor(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentMalformedVisitor(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	for index, raw := range []string{"", "{", `{"body":`, `{"body":"ok"} trailing`} {
-		scaleP21SW163Insert(t, fixture, workspace, "comment", "a-ignored", "", fmt.Sprint(index), raw)
+		bootstrapContentWalkInsert(t, fixture, workspace, "comment", "a-ignored", "", fmt.Sprint(index), raw)
 	}
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "b-visible", "", "valid", `{"body":"\ud800","bodyData":{"children":[null,{}]}}`)
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "c-visible", "", "invalid", `{"body":`)
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "d-visible", "", "unreached", `{"body":"later"}`)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "b-visible", "", "valid", `{"body":"\ud800","bodyData":{"children":[null,{}]}}`)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "c-visible", "", "invalid", `{"body":`)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "d-visible", "", "unreached", `{"body":"later"}`)
 	run := func(repo *SQLiteStore, bounded bool) ([]string, error) {
 		var visited []string
 		visit := func(resource string, raw json.RawMessage) error {
@@ -195,8 +195,8 @@ func TestScaleP21SW163BootstrapContentMalformedVisitor(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW163BootstrapContentBorrowedSnapshot(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentBorrowedSnapshot(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	fixture.db.SetMaxOpenConns(1)
 	options := *metadataReadOptions(fixture.dialect)
 	options.ReadOnly = false
@@ -212,13 +212,13 @@ func TestScaleP21SW163BootstrapContentBorrowedSnapshot(t *testing.T) {
 	// The original walker selects by matching workspace, without inspecting
 	// the incidental database field on this existing snapshot context.
 	ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{workspace: workspace, reader: tx})
-	want, err := scaleP21SW163Collect(t, fixture.SQLiteStore, ctx, workspace, "comment", false)
+	want, err := bootstrapContentWalkCollect(t, fixture.SQLiteStore, ctx, workspace, "comment", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []scaleP21SW163Row
+	var got []bootstrapContentWalkRow
 	err = view.walkBoundedBootstrapContentRecords(ctx, workspace, "comment", func(resource string, raw json.RawMessage) error {
-		got = append(got, scaleP21SW163Row{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
+		got = append(got, bootstrapContentWalkRow{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
 		var one int
 		return tx.QueryRowContext(t.Context(), "SELECT 1").Scan(&one)
 	})
@@ -234,8 +234,8 @@ func TestScaleP21SW163BootstrapContentBorrowedSnapshot(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW163BootstrapContentOwnedSnapshot(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentOwnedSnapshot(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	fixture.db.SetMaxOpenConns(2)
 	if fixture.dialect == "sqlite" {
 		var mode string
@@ -247,16 +247,16 @@ func TestScaleP21SW163BootstrapContentOwnedSnapshot(t *testing.T) {
 		}
 	}
 	for index := range 140 {
-		scaleP21SW163Insert(t, fixture, workspace, "comment", "resource", "", fmt.Sprintf("%03d", index), []byte(fmt.Sprintf(`{"body":"before-%d"}`, index)))
+		bootstrapContentWalkInsert(t, fixture, workspace, "comment", "resource", "", fmt.Sprintf("%03d", index), []byte(fmt.Sprintf(`{"body":"before-%d"}`, index)))
 	}
-	want, err := scaleP21SW163Collect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
+	want, err := bootstrapContentWalkCollect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	changed := false
-	var got []scaleP21SW163Row
+	var got []bootstrapContentWalkRow
 	err = view.walkBoundedBootstrapContentRecords(t.Context(), workspace, "comment", func(resource string, raw json.RawMessage) error {
-		got = append(got, scaleP21SW163Row{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
+		got = append(got, bootstrapContentWalkRow{resource: resource, raw: bytes.Clone(raw), nilRaw: raw == nil})
 		if !changed {
 			changed = true
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -274,21 +274,21 @@ func TestScaleP21SW163BootstrapContentOwnedSnapshot(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(want, got) || view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("keyset pages/body reads crossed the original single-query snapshot", len(want), len(got), err)
 	}
-	after, err := scaleP21SW163Collect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
+	after, err := bootstrapContentWalkCollect(t, fixture.SQLiteStore, t.Context(), workspace, "comment", false)
 	if err != nil || len(after) != len(want)+1 || reflect.DeepEqual(after[:len(want)], want) {
 		t.Fatal("peer fixture did not change canonical rows", err)
 	}
 }
 
-func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentLargeDenseAndPageBounds(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	large := []byte(`{"id":"large","body":"` + strings.Repeat("<>&", 1<<20) + `"}`)
 	dense := []byte(`{"bodyData":{"children":[` + strings.Repeat("null,{},", 2000) + `null]}}`)
 	if len(large) <= 2<<20 {
 		t.Fatal("large fixture is not above two MiB")
 	}
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "large", "", "large", large)
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "dense", "", "dense", dense)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "large", "", "large", large)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "dense", "", "dense", dense)
 	var maxWork int
 	count := 0
 	err := view.walkBoundedBootstrapContentRecords(t.Context(), workspace, "comment", func(_ string, raw json.RawMessage) error {
@@ -306,7 +306,7 @@ func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
 	if fixture.dialect == "sqlite" {
 		for index := range 70 {
 			resource := strings.Repeat("native-key-", 1500) + fmt.Sprint(index)
-			scaleP21SW163Insert(t, fixture, workspace, "comment", resource, "", fmt.Sprint(index), []byte(`{}`))
+			bootstrapContentWalkInsert(t, fixture, workspace, "comment", resource, "", fmt.Sprint(index), []byte(`{}`))
 		}
 	}
 	headers, owner, err := view.bootstrapContentHeaders(t.Context(), view.db, workspace, "comment", nil)
@@ -325,7 +325,7 @@ func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
 	}
 	medium := []byte(`{"body":"` + strings.Repeat("x", 16<<10) + `"}`)
 	for index := range 30 {
-		scaleP21SW163Insert(t, fixture, workspace, "medium", "resource", "", fmt.Sprint(index), medium)
+		bootstrapContentWalkInsert(t, fixture, workspace, "medium", "resource", "", fmt.Sprint(index), medium)
 	}
 	ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 		if rows := strings.Count(query, " AS ordinal,CASE WHEN"); rows != 0 && rows*len(medium) > 256<<10 {
@@ -343,7 +343,7 @@ func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
 		t.Fatal("byte-bounded body batch changed or leaked", mediumCount, err)
 	}
 	denseRefusal := []byte(`{"bodyData":{"children":[` + strings.Repeat("{},", 100000) + `null]}}`)
-	scaleP21SW163Insert(t, fixture, workspace, "dense-refusal", "resource", "", "dense", denseRefusal)
+	bootstrapContentWalkInsert(t, fixture, workspace, "dense-refusal", "resource", "", "dense", denseRefusal)
 	visited := false
 	if err := view.walkBoundedBootstrapContentRecords(t.Context(), workspace, "dense-refusal", func(string, json.RawMessage) error {
 		visited = true
@@ -352,7 +352,7 @@ func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
 		t.Fatal("dense structural decode/encoding escaped pre-visitor admission", err)
 	}
 	if fixture.dialect == "sqlite" {
-		scaleP21SW163Insert(t, fixture, workspace, "key-refusal", strings.Repeat("x", 40000), "", "key", []byte(`{}`))
+		bootstrapContentWalkInsert(t, fixture, workspace, "key-refusal", strings.Repeat("x", 40000), "", "key", []byte(`{}`))
 		transferred := false
 		ctx := WithSQLStatementObserver(t.Context(), func(query string) {
 			transferred = transferred || strings.HasPrefix(query, "SELECT CASE WHEN")
@@ -366,10 +366,10 @@ func TestScaleP21SW163BootstrapContentLargeDenseAndPageBounds(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW163BootstrapContentCancellationQuotaAndRelease(t *testing.T) {
-	fixture, view, workspace := scaleP21SW163Fixture(t)
+func TestBootstrapContentCancellationQuotaAndRelease(t *testing.T) {
+	fixture, view, workspace := bootstrapContentWalkFixture(t)
 	raw := []byte(`{"body":"` + strings.Repeat("legal body ", 2000) + `"}`)
-	scaleP21SW163Insert(t, fixture, workspace, "comment", "resource", "", "row", raw)
+	bootstrapContentWalkInsert(t, fixture, workspace, "comment", "resource", "", "row", raw)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := view.walkBoundedBootstrapContentRecords(ctx, workspace, "comment", func(string, json.RawMessage) error {

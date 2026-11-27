@@ -14,7 +14,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW0SelectedExtraWorkspace(t *testing.T, f scaleP09Fixture, key string) domain.Bootstrap {
+func selectedExtraWorkspace(t *testing.T, f scaleFixture, key string) domain.Bootstrap {
 	t.Helper()
 	data, err := f.CreateWorkspace(ContextWithActor(t.Context(), f.data.Viewer), "Selected extra fixture", key, "us")
 	if err != nil {
@@ -30,12 +30,12 @@ func scaleP21SW0SelectedExtraWorkspace(t *testing.T, f scaleP09Fixture, key stri
 	return data
 }
 
-func TestScaleP21SW0SelectedTestViewIsolatesMalformedWorkspace(t *testing.T) {
+func TestSelectedTestViewIsolatesMalformedWorkspace(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	valid := f.data.Workspace.URLKey
-	invalid := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("sw0-unselected-")).Workspace.URLKey
+	invalid := selectedExtraWorkspace(t, f, idgen.New("sw0-unselected-")).Workspace.URLKey
 	var original []byte
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_states WHERE workspace_key=?`, invalid).Scan(&original); err != nil {
 		t.Fatal(err)
@@ -103,12 +103,12 @@ func TestScaleP21SW0SelectedTestViewIsolatesMalformedWorkspace(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SelectedTestViewDefaultsViewerAndExactKeys(t *testing.T) {
+func TestSelectedTestViewDefaultsViewerAndExactKeys(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	first := f.data.Workspace.URLKey
-	second := scaleP21SW0SelectedExtraWorkspace(t, f, idgen.New("sw0-selected-default-")).Workspace.URLKey
+	second := selectedExtraWorkspace(t, f, idgen.New("sw0-selected-default-")).Workspace.URLKey
 	f.mu.Lock()
 	originalViewer := f.viewer
 	when := time.Now()
@@ -170,10 +170,10 @@ func TestScaleP21SW0SelectedTestViewDefaultsViewerAndExactKeys(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SelectedTestViewPhysicalNULAndPoolOne(t *testing.T) {
+func TestSelectedTestViewPhysicalNULAndPoolOne(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	if f.dialect == "postgres" {
 		// Postgres cannot store this physical namespace, even if a synthetic
 		// installed test copy has the raw alias.
@@ -184,7 +184,7 @@ func TestScaleP21SW0SelectedTestViewPhysicalNULAndPoolOne(t *testing.T) {
 		return
 	}
 	rawKey := idgen.New("sw0-selected-nul-") + "\x00physical"
-	data := scaleP21SW0SelectedExtraWorkspace(t, f, rawKey)
+	data := selectedExtraWorkspace(t, f, rawKey)
 	f.db.SetMaxOpenConns(1)
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), rawKey)
 	if err != nil || view == nil {
@@ -199,7 +199,7 @@ func TestScaleP21SW0SelectedTestViewPhysicalNULAndPoolOne(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW0SelectedTestViewViewerBudgetBeforeSQL(t *testing.T) {
+func TestSelectedTestViewViewerBudgetBeforeSQL(t *testing.T) {
 	same := strings.Repeat("x", 64<<10)
 	scopes := make([]string, 4096)
 	for index := range scopes {

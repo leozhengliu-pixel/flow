@@ -366,7 +366,7 @@ func (s *SQLiteStore) memberDirectoryApplication(ctx context.Context, id string,
 func (s *SQLiteStore) applicationInstallationInput(ctx context.Context, tx *sqlTx, id string) (io.ReaderAt, int64, error) {
 	var size int64
 	var raw []byte
-	length := s.scaleP21SW16AttachmentBytes("data")
+	length := s.attachmentBytes("data")
 	if err := tx.QueryRowContext(ctx, "SELECT "+length+",CASE WHEN "+length+"<=? THEN data ELSE NULL END FROM application_installations WHERE user_id=?", metadataRecordChunkBytes, id).Scan(&size, &raw); err != nil {
 		return nil, 0, err
 	}
@@ -487,7 +487,7 @@ func memberDirectoryProjectInstallation(ctx context.Context, input io.ReaderAt, 
 			var flag bool
 			return json.NewDecoder(part).Decode(&flag)
 		case reflect.TypeFor[time.Time]():
-			_, err := scaleP21SW23TeamTime(ctx, part)
+			_, err := teamTime(ctx, part)
 			return err
 		case reflect.TypeFor[[]string]():
 			values := metadataCollectionScanner{ctx: ctx, input: bufio.NewReaderSize(part, metadataRecordChunkBytes)}

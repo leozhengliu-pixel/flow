@@ -7,7 +7,7 @@ import (
 	"flow/api/internal/store"
 )
 
-func scaleP21SW20Rows(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) []any {
+func helpersRows(t *testing.T, repo *store.SQLiteStore, workspace string, keys ...store.RecordKey) []any {
 	t.Helper()
 	batch, err := repo.ReadCanonicalRecords(t.Context(), workspace, keys, "detail")
 	if err != nil {
@@ -23,7 +23,7 @@ func scaleP21SW20Rows(t *testing.T, repo *store.SQLiteStore, workspace string, k
 	return rows
 }
 
-func scaleP21SW20Effects(events []domain.DomainEvent, realtime []domain.RealtimeEvent) []any {
+func helpersEffects(events []domain.DomainEvent, realtime []domain.RealtimeEvent) []any {
 	effects := []any{}
 	for _, event := range events {
 		effects = append(effects, []any{event.Type, event.AggregateID, event.ActorID, event.Payload, event.PreviousValues, event.Snapshot})

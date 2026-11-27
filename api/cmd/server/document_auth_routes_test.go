@@ -16,10 +16,10 @@ import (
 	"flow/api/internal/store"
 )
 
-// scaleP21SW284InWrapper reports whether the calling goroutine is inside one
+// documentAuthRoutesInWrapper reports whether the calling goroutine is inside one
 // of the closed store wrappers. The SQL observer runs on the goroutine that
 // issues the statement, so a statement a wrapper causes is attributed to it.
-func scaleP21SW284InWrapper() bool {
+func documentAuthRoutesInWrapper() bool {
 	pcs := make([]uintptr, 256)
 	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
 	for {
@@ -33,18 +33,18 @@ func scaleP21SW284InWrapper() bool {
 	}
 }
 
-type scaleP21SW284Outcome struct {
+type documentAuthRoutesOutcome struct {
 	Code   int
 	Header http.Header
 	Body   []byte
 }
 
-// scaleP21SW284Authorize runs the real workspace authorization (session
+// authorize runs the real workspace authorization (session
 // cookies through authenticate, credentials and development mode directly)
 // and answers 204 when the request would reach its handler. The COLD
 // handlers themselves are not run: only the authorization that reaches the
 // wrappers is compared. It returns the statements run inside a wrapper.
-func scaleP21SW284Authorize(t *testing.T, f scaleP21M2Fixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, method, path string, body any, development bool) (scaleP21SW284Outcome, int) {
+func documentAuthRoutesAuthorize(t *testing.T, f policyDifferentialFixture, source *store.SQLiteStore, user domain.User, key *domain.APIKey, token, method, path string, body any, development bool) (documentAuthRoutesOutcome, int) {
 	t.Helper()
 	var request *http.Request
 	if key == nil && !development {
@@ -61,7 +61,7 @@ func scaleP21SW284Authorize(t *testing.T, f scaleP21M2Fixture, source *store.SQL
 	}
 	inWrapper := 0
 	request = request.WithContext(store.WithSQLStatementObserver(request.Context(), func(string) {
-		if scaleP21SW284InWrapper() {
+		if documentAuthRoutesInWrapper() {
 			inWrapper++
 		}
 	}))
@@ -86,15 +86,15 @@ func scaleP21SW284Authorize(t *testing.T, f scaleP21M2Fixture, source *store.SQL
 			t.Fatalf("%s %s leaked retained work or decoded the complete workspace", method, path)
 		}
 	}
-	return scaleP21SW284Outcome{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}, inWrapper
+	return documentAuthRoutesOutcome{Code: w.Code, Header: w.Header().Clone(), Body: slices.Clone(w.Body.Bytes())}, inWrapper
 }
 
-type scaleP21SW284Route struct {
+type documentAuthRoutesRoute struct {
 	name, method, path string
 	body               any
 }
 
-func scaleP21SW284Seed(t *testing.T, f scaleP21M2Fixture, repo *store.SQLiteStore) (private string, sessions map[string]string) {
+func documentAuthRoutesSeed(t *testing.T, f policyDifferentialFixture, repo *store.SQLiteStore) (private string, sessions map[string]string) {
 	t.Helper()
 	workspace := f.data.Workspace.URLKey
 	stamp := time.Date(2025, time.March, 4, 5, 6, 7, 0, time.UTC)
@@ -168,7 +168,7 @@ func scaleP21SW284Seed(t *testing.T, f scaleP21M2Fixture, repo *store.SQLiteStor
 	return private, sessions
 }
 
-func scaleP21SW284Credentials(f scaleP21M2Fixture, visit func(name string, user domain.User, key *domain.APIKey)) {
+func documentAuthRoutesCredentials(f policyDifferentialFixture, visit func(name string, user domain.User, key *domain.APIKey)) {
 	for _, principal := range f.principals {
 		for _, credential := range []struct {
 			name string
@@ -185,24 +185,24 @@ func scaleP21SW284Credentials(f scaleP21M2Fixture, visit func(name string, user 
 	}
 }
 
-// TestScaleP21SW284ProjectRecordAuthorizationDifferential drives the P16
+// TestProjectRecordAuthorizationDifferential drives the record mutation
 // project and initiative write authorization, the only caller that reached
 // the arbitrary selector with the flag on, through the real middleware for
 // every principal and credential and development mode. With the flag on the
-// P16 record flags must change nothing: the answer equals the literal
+// record mutation record flags must change nothing: the answer equals the literal
 // authorization with them off, no statement runs inside the selector and the
 // workspace is never decoded. With the flag off the selector still serves
 // the flags (a positive control for the statement probe) with the answer the
 // flags-off authorization gives. HOT reads (GET/HEAD) are compared in every
 // FLOW_RECORD_ACCESS mode.
-func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
+func TestProjectRecordAuthorizationDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
-		_, sessions := scaleP21SW284Seed(t, f, repo)
-		writes := []scaleP21SW284Route{
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
+		_, sessions := documentAuthRoutesSeed(t, f, repo)
+		writes := []documentAuthRoutesRoute{
 			{"create-project", http.MethodPost, "/api/projects", map[string]any{"name": "SW284", "teamIds": []string{f.public}, "initiatives": []string{"sw284-private-initiative"}, "customers": []string{"sw284-customer"}, "dependencyIds": []string{"sw284-private"}}},
 			{"edit-public", http.MethodPatch, "/api/projects/sw284-public", map[string]any{"name": "Renamed"}},
 			{"edit-private", http.MethodPatch, "/api/projects/sw284-private", map[string]any{"name": "Renamed"}},
@@ -223,7 +223,7 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 			{"initiative-relation-create", http.MethodPost, "/api/initiatives/sw284-initiative/relations", map[string]any{"relatedInitiativeId": "sw284-private-initiative", "type": "related"}},
 			{"initiative-relation-delete", http.MethodDelete, "/api/initiatives/sw284-initiative/relations/sw284-initiative-relation", nil},
 		}
-		reads := []scaleP21SW284Route{
+		reads := []documentAuthRoutesRoute{
 			{"read-public", http.MethodGet, "/api/projects/sw284-public", nil},
 			{"read-private", http.MethodGet, "/api/projects/sw284-private", nil},
 			{"read-old-slug", http.MethodHead, "/api/projects/sw284-old", nil},
@@ -234,15 +234,15 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 			t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", value)
 			t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", value)
 		}
-		compare := func(t *testing.T, user domain.User, key *domain.APIKey, development bool, route scaleP21SW284Route) (allowed bool) {
+		compare := func(t *testing.T, user domain.User, key *domain.APIKey, development bool, route documentAuthRoutesRoute) (allowed bool) {
 			t.Helper()
 			token := sessions[user.ID]
 			flags(t, "off")
-			literal, _ := scaleP21SW284Authorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
-			bounded, _ := scaleP21SW284Authorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
+			literal, _ := documentAuthRoutesAuthorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
+			bounded, _ := documentAuthRoutesAuthorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
 			flags(t, "on")
-			literalRecords, selected := scaleP21SW284Authorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
-			boundedRecords, _ := scaleP21SW284Authorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
+			literalRecords, selected := documentAuthRoutesAuthorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
+			boundedRecords, _ := documentAuthRoutesAuthorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
 			flags(t, "off")
 			if !reflect.DeepEqual(bounded, boundedRecords) {
 				t.Fatalf("%s %s: bounded answer depends on the P16 record flags: off=%d %s on=%d %s", route.method, route.path, bounded.Code, bounded.Body, boundedRecords.Code, boundedRecords.Body)
@@ -250,7 +250,7 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 			if !reflect.DeepEqual(literal, literalRecords) {
 				t.Fatalf("%s %s: literal answer depends on the P16 record flags: off=%d %s on=%d %s", route.method, route.path, literal.Code, literal.Body, literalRecords.Code, literalRecords.Body)
 			}
-			// The probe sees the selector with the flag off whenever the P16
+			// The probe sees the selector with the flag off whenever the record mutation
 			// selection applies (non-GET, authorized membership, resource
 			// authorization reached).
 			if !development && route.method != http.MethodGet && route.method != http.MethodHead && literal.Code == http.StatusNoContent && selected == 0 {
@@ -259,7 +259,7 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 			return literal.Code == http.StatusNoContent
 		}
 		allowed := 0
-		scaleP21SW284Credentials(f, func(name string, user domain.User, key *domain.APIKey) {
+		documentAuthRoutesCredentials(f, func(name string, user domain.User, key *domain.APIKey) {
 			t.Run(name, func(t *testing.T) {
 				for _, route := range writes {
 					if compare(t, user, key, false, route) {
@@ -285,7 +285,7 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 	}
 }
 
-// TestScaleP21SW285TrashRestoreHeaderDifferential drives the trash restore
+// TestTrashRestoreHeaderDifferential drives the trash restore
 // authorization, the only caller of the resident trash header, for document,
 // private document, project and release-pipeline entries and for paths of
 // the restore shape the mux does not bind. With the flag on the resident copy
@@ -293,13 +293,13 @@ func TestScaleP21SW284ProjectRecordAuthorizationDifferential(t *testing.T) {
 // the FLOW_TRASH_RECORDS=off answer, no statement runs inside the wrappers
 // and the workspace is never decoded. With the flag off the header still
 // serves the record mode with the flags-off answer.
-func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
+func TestTrashRestoreHeaderDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
-		_, sessions := scaleP21SW284Seed(t, f, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
+		_, sessions := documentAuthRoutesSeed(t, f, repo)
 		workspace := f.data.Workspace.URLKey
 		for _, id := range []string{"sw284-trash-document", "sw284-trash-secret", "sw284-trash-project", "sw284-trash-pipeline"} {
 			literal, found := repo.TrashRecordHeader(workspace, id)
@@ -312,7 +312,7 @@ func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
 				t.Fatalf("bounded resident copy holds trash entry %s", id)
 			}
 			// TrashSnapshot no longer reads the resident copy with the flag
-			// on: it serves the trash from the legacy view (SW559), as the
+			// on: it serves the trash from the legacy view, as the
 			// literal store does.
 			ids := func(entries []domain.TrashEntry) []string {
 				result := []string{}
@@ -325,7 +325,7 @@ func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
 				t.Fatalf("bounded trash snapshot %v, literal %v", bounded, literal)
 			}
 		}
-		routes := []scaleP21SW284Route{
+		routes := []documentAuthRoutesRoute{
 			{"restore-document", http.MethodPost, "/api/trash/sw284-trash-document/restore", nil},
 			{"restore-secret", http.MethodPost, "/api/trash/sw284-trash-secret/restore", nil},
 			{"restore-project", http.MethodPost, "/api/trash/sw284-trash-project/restore", nil},
@@ -335,15 +335,15 @@ func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
 			{"get-restore-shape", http.MethodGet, "/api/trash/sw284-trash-document/restore", nil},
 			{"purge-document", http.MethodDelete, "/api/trash/sw284-trash-document", nil},
 		}
-		compare := func(t *testing.T, user domain.User, key *domain.APIKey, development bool, route scaleP21SW284Route) bool {
+		compare := func(t *testing.T, user domain.User, key *domain.APIKey, development bool, route documentAuthRoutesRoute) bool {
 			t.Helper()
 			token := sessions[user.ID]
 			t.Setenv("FLOW_TRASH_RECORDS", "off")
-			literal, _ := scaleP21SW284Authorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
-			bounded, _ := scaleP21SW284Authorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
+			literal, _ := documentAuthRoutesAuthorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
+			bounded, _ := documentAuthRoutesAuthorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
 			t.Setenv("FLOW_TRASH_RECORDS", "on")
-			literalRecords, _ := scaleP21SW284Authorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
-			boundedRecords, _ := scaleP21SW284Authorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
+			literalRecords, _ := documentAuthRoutesAuthorize(t, f, repo, user, key, token, route.method, route.path, route.body, development)
+			boundedRecords, _ := documentAuthRoutesAuthorize(t, f, f.probe, user, key, token, route.method, route.path, route.body, development)
 			t.Setenv("FLOW_TRASH_RECORDS", "off")
 			if !reflect.DeepEqual(bounded, boundedRecords) {
 				t.Fatalf("%s %s: bounded answer depends on FLOW_TRASH_RECORDS: off=%d %s on=%d %s", route.method, route.path, bounded.Code, bounded.Body, boundedRecords.Code, boundedRecords.Body)
@@ -354,7 +354,7 @@ func TestScaleP21SW285TrashRestoreHeaderDifferential(t *testing.T) {
 			return literal.Code == http.StatusNoContent
 		}
 		allowed := 0
-		scaleP21SW284Credentials(f, func(name string, user domain.User, key *domain.APIKey) {
+		documentAuthRoutesCredentials(f, func(name string, user domain.User, key *domain.APIKey) {
 			t.Run(name, func(t *testing.T) {
 				for _, route := range routes {
 					if compare(t, user, key, false, route) {

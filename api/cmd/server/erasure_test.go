@@ -15,12 +15,12 @@ import (
 	"flow/api/internal/store"
 )
 
-func TestScaleP21SW25ErasureIdentityDifferential(t *testing.T) {
+func TestErasureIdentityDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		workspace := f.data.Workspace.URLKey
 		foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), f.data.Viewer), "SW25 foreign erasure", idgen.New("sw25-erasure-"), "us")
 		if err != nil {
@@ -31,7 +31,7 @@ func TestScaleP21SW25ErasureIdentityDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "projects")
+		before := pointRecordFingerprint(t, repo, workspace, "projects")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, test := range []struct{ key, id string }{
 				{workspace, f.data.Workspace.ID},
@@ -117,19 +117,19 @@ func TestScaleP21SW25ErasureIdentityDifferential(t *testing.T) {
 				t.Fatal("identity lookup changed after cancellation", id, ok)
 			}
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "projects") || probe.WorkspaceMetadataDecodes() != 0 {
+		if before != pointRecordFingerprint(t, repo, workspace, "projects") || probe.WorkspaceMetadataDecodes() != 0 {
 			t.Fatal("identity read changed unrelated bodies or decoded full metadata")
 		}
 	}
 }
 
-func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
+func TestErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	logs := captureServerLogs(t)
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		target := f.principals[2].user
 		workspace := f.data.Workspace.URLKey
 		probe, err := repo.BoundedMetadataViewForTesting(t.Context())
@@ -141,7 +141,7 @@ func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 			request.SetPathValue("userId", target.ID)
 			return request
 		}
-		before := scaleP21M3Fingerprint(t, repo, workspace, "users")
+		before := pointRecordFingerprint(t, repo, workspace, "users")
 		bounded := httptest.NewRecorder()
 		offset := len(logs.String())
 		(&server{store: probe}).eraseMember(bounded, request())
@@ -152,7 +152,7 @@ func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 		if !strings.Contains(logged, "cause=metadata_coverage") || strings.Contains(logged, target.ID) || strings.Contains(logged, workspace) {
 			t.Fatal("erasure failure log must report the coverage refusal without identifiers")
 		}
-		if before != scaleP21M3Fingerprint(t, repo, workspace, "users") {
+		if before != pointRecordFingerprint(t, repo, workspace, "users") {
 			t.Fatal("unported bounded erasure changed users before refusing")
 		}
 		legacy := httptest.NewRecorder()
@@ -170,12 +170,12 @@ func TestScaleP21SW25ErasureLegacySuccessAndRemainingWriter(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW25ErasureIdentityBaseline(t *testing.T) {
+func TestErasureIdentityBaseline(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	for _, repo := range scaleP03ServerTestStores(t) {
-		f := scaleP21M2Setup(t, repo)
+	for _, repo := range scaleServerTestStores(t) {
+		f := setupPolicyDifferential(t, repo)
 		run := func(source *store.SQLiteStore) {
 			t.Helper()
 			id, ok := (&server{store: source}).eraseMemberWorkspaceID(t.Context(), f.data.Workspace.URLKey)

@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21SW97WebhookView(t *testing.T, workspace string, data domain.Bootstrap) (*SQLiteStore, *metadataLogicalSource) {
+func webhookView(t *testing.T, workspace string, data domain.Bootstrap) (*SQLiteStore, *metadataLogicalSource) {
 	t.Helper()
 	source, err := captureMetadataLogicalSource(t.Context(), data, copyStamp{})
 	if err != nil {
@@ -27,7 +27,7 @@ func scaleP21SW97WebhookView(t *testing.T, workspace string, data domain.Bootstr
 	return view, source
 }
 
-func scaleP21SW97WebhookReleased(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, wantRefs int) {
+func webhookReleased(t *testing.T, view *SQLiteStore, source *metadataLogicalSource, wantRefs int) {
 	t.Helper()
 	source.mu.Lock()
 	refs := source.refs
@@ -37,7 +37,7 @@ func scaleP21SW97WebhookReleased(t *testing.T, view *SQLiteStore, source *metada
 	}
 }
 
-func TestScaleP21SW97LegacyWebhookPredicateDifferential(t *testing.T) {
+func TestLegacyWebhookPredicateDifferential(t *testing.T) {
 	for _, item := range []struct {
 		name string
 		data domain.Bootstrap
@@ -71,7 +71,7 @@ func TestScaleP21SW97LegacyWebhookPredicateDifferential(t *testing.T) {
 			item.data.Settings = map[string]any{"ignored": strings.Repeat("settings ", 1<<18)}
 			item.data.Projects = []domain.Project{{Description: strings.Repeat("body ", 1<<18)}}
 			off := &SQLiteStore{workspaces: map[string]domain.Bootstrap{workspace: item.data}}
-			view, source := scaleP21SW97WebhookView(t, workspace, item.data)
+			view, source := webhookView(t, workspace, item.data)
 			queries := 0
 			ctx := WithSQLStatementObserver(t.Context(), func(string) { queries++ })
 			for _, chat := range []bool{false, true} {
@@ -86,7 +86,7 @@ func TestScaleP21SW97LegacyWebhookPredicateDifferential(t *testing.T) {
 				if err != nil || literal != want {
 					t.Fatalf("off helper changed literal=%v want=%v err=%v", literal, want, err)
 				}
-				scaleP21SW97WebhookReleased(t, view, source, 1)
+				webhookReleased(t, view, source, 1)
 			}
 			if queries != 0 || view.WorkspaceMetadataDecodes() != 0 {
 				t.Fatalf("installed predicate performed SQL/full hydration: queries=%d decodes=%d", queries, view.WorkspaceMetadataDecodes())
@@ -95,10 +95,10 @@ func TestScaleP21SW97LegacyWebhookPredicateDifferential(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW97LegacyWebhookIdentityPinsAndFailures(t *testing.T) {
+func TestLegacyWebhookIdentityPinsAndFailures(t *testing.T) {
 	workspace := "physical\x00key"
 	data := domain.Bootstrap{Workspace: domain.Workspace{URLKey: "logical"}, Webhooks: []domain.Webhook{{Enabled: true, AuditLog: true, URL: "url"}}}
-	view, source := scaleP21SW97WebhookView(t, workspace, data)
+	view, source := webhookView(t, workspace, data)
 	foreign, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{}, copyStamp{})
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestScaleP21SW97LegacyWebhookIdentityPinsAndFailures(t *testing.T) {
 			}
 		}
 	}
-	scaleP21SW97WebhookReleased(t, view, source, 1)
+	webhookReleased(t, view, source, 1)
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := view.boundedLegacyWebhookNeeded(canceled, workspace); !errors.Is(err, context.Canceled) {
@@ -134,7 +134,7 @@ func TestScaleP21SW97LegacyWebhookIdentityPinsAndFailures(t *testing.T) {
 		t.Fatalf("admission refusal lost: %v", err)
 	}
 	view.metadataResidency.work.limit = metadataWorkBytes()
-	scaleP21SW97WebhookReleased(t, view, source, 1)
+	webhookReleased(t, view, source, 1)
 	view.metadataResidency.mu.Lock()
 	delete(view.metadataResidency.logical, workspace)
 	view.metadataResidency.mu.Unlock()
@@ -152,12 +152,12 @@ func TestScaleP21SW97LegacyWebhookIdentityPinsAndFailures(t *testing.T) {
 	if !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatalf("blocked source silently succeeded: %v", err)
 	}
-	scaleP21SW97WebhookReleased(t, view, source, 1)
+	webhookReleased(t, view, source, 1)
 }
 
-func TestScaleP21SW97LegacyWebhookAuthoritativeChatFallback(t *testing.T) {
+func TestLegacyWebhookAuthoritativeChatFallback(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace, connection := idgen.New("sw97-chat-workspace-"), idgen.New("sw97-chat-")
 	off := &SQLiteStore{db: f.db, dialect: f.dialect, workspaces: map[string]domain.Bootstrap{}}
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency(), workspaces: map[string]domain.Bootstrap{}}
@@ -192,11 +192,11 @@ func TestScaleP21SW97LegacyWebhookAuthoritativeChatFallback(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW97LegacyWebhookRetainedGeneration(t *testing.T) {
+func TestLegacyWebhookRetainedGeneration(t *testing.T) {
 	for _, phase := range []string{"replace", "cancel"} {
 		t.Run(phase, func(t *testing.T) {
 			const workspace = "sw97-generation"
-			view, source := scaleP21SW97WebhookView(t, workspace, domain.Bootstrap{Loops: []domain.Loop{{Enabled: true, Status: "dra\x00ft", TriggerType: "event"}}})
+			view, source := webhookView(t, workspace, domain.Bootstrap{Loops: []domain.Loop{{Enabled: true, Status: "dra\x00ft", TriggerType: "event"}}})
 			replacement, err := captureMetadataLogicalSource(t.Context(), domain.Bootstrap{}, copyStamp{})
 			if err != nil {
 				t.Fatal(err)
@@ -205,7 +205,7 @@ func TestScaleP21SW97LegacyWebhookRetainedGeneration(t *testing.T) {
 			parent, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			entered := false
-			ctx := scaleP21HotWebhookContext{Context: parent, check: func() {
+			ctx := scaleHotWebhookContext{Context: parent, check: func() {
 				source.mu.Lock()
 				refs := source.refs
 				source.mu.Unlock()
@@ -230,22 +230,22 @@ func TestScaleP21SW97LegacyWebhookRetainedGeneration(t *testing.T) {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("late cancellation lost: %v", err)
 				}
-				scaleP21SW97WebhookReleased(t, view, source, 1)
+				webhookReleased(t, view, source, 1)
 			} else {
 				if err != nil || !got {
 					t.Fatalf("predicate changed installed generation: %v %v", got, err)
 				}
-				scaleP21SW97WebhookReleased(t, view, source, 0)
+				webhookReleased(t, view, source, 0)
 			}
 		})
 	}
 }
 
-func TestScaleP21SW97LegacyWebhookWarmAndReloaded(t *testing.T) {
+func TestLegacyWebhookWarmAndReloaded(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	for _, item := range []struct {
 		name string

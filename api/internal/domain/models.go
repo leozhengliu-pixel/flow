@@ -1879,7 +1879,7 @@ type WorkspaceSettings struct {
 	// the workspace; "remove" removes them from the workspace and its teams.
 	// The account and its work are never deleted either way.
 	SCIMDeprovisionAction string `json:"scimDeprovisionAction,omitempty"`
-	// TrustedSourcesMode: "none" | "allowlist" (Wave 10 / LS-0094 foundations).
+	// TrustedSourcesMode: "none" | "allowlist".
 	TrustedSourcesMode      string    `json:"trustedSourcesMode,omitempty"`
 	TrustedSourcesAllowlist []string  `json:"trustedSourcesAllowlist,omitempty"`
 	UpdatedAt               time.Time `json:"updatedAt"`

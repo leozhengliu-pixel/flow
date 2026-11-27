@@ -16,11 +16,11 @@ import (
 	"flow/api/internal/idgen"
 )
 
-var errScaleP21SW261Missing = errors.New("loop not found")
+var errMissing = errors.New("loop not found")
 
-// scaleP21SW261Stamp is the server's run-start callback (ensureLoopVersion
+// loopRunStartStamp is the server's run-start callback (ensureLoopVersion
 // and the LastRunAt stamp) restated for the store package.
-func scaleP21SW261Stamp(loopID string, now time.Time, captured *domain.LoopVersion, observe func(*domain.Bootstrap)) func(*domain.Bootstrap) error {
+func loopRunStartStamp(loopID string, now time.Time, captured *domain.LoopVersion, observe func(*domain.Bootstrap)) func(*domain.Bootstrap) error {
 	return func(data *domain.Bootstrap) error {
 		if observe != nil {
 			observe(data)
@@ -33,7 +33,7 @@ func scaleP21SW261Stamp(loopID string, now time.Time, captured *domain.LoopVersi
 			}
 		}
 		if item == nil {
-			return errScaleP21SW261Missing
+			return errMissing
 		}
 		versions := []domain.LoopVersion{}
 		for _, version := range data.LoopVersions {
@@ -71,13 +71,13 @@ func scaleP21SW261Stamp(loopID string, now time.Time, captured *domain.LoopVersi
 	}
 }
 
-type scaleP21SW261Owner struct {
+type loopRunStartOwner struct {
 	mu     sync.Mutex
 	closes []func()
 	closed bool
 }
 
-func (o *scaleP21SW261Owner) context(ctx context.Context) context.Context {
+func (o *loopRunStartOwner) context(ctx context.Context) context.Context {
 	return WithMetadataOutputOwner(ctx, func(close func()) bool {
 		o.mu.Lock()
 		defer o.mu.Unlock()
@@ -89,7 +89,7 @@ func (o *scaleP21SW261Owner) context(ctx context.Context) context.Context {
 	})
 }
 
-func (o *scaleP21SW261Owner) Close() {
+func (o *loopRunStartOwner) Close() {
 	o.mu.Lock()
 	closes := o.closes
 	o.closes, o.closed = nil, true
@@ -99,11 +99,11 @@ func (o *scaleP21SW261Owner) Close() {
 	}
 }
 
-func TestScaleP21SW261LoopRunStampDifferential(t *testing.T) {
+func TestLoopRunStampDifferential(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestScaleP21SW261LoopRunStampDifferential(t *testing.T) {
 				domain.LoopVersion{ID: target + "-seven-b", LoopID: target, Version: 70, Definition: domain.LoopDefinition{Instructions: body}})
 		}},
 		{name: "draft-without-version", want: "", seed: func(data *domain.Bootstrap) { data.Loops[1].Status = "draft" }},
-		{name: "missing-loop", wantErr: errScaleP21SW261Missing, seed: func(data *domain.Bootstrap) { data.Loops = data.Loops[:1] }},
+		{name: "missing-loop", wantErr: errMissing, seed: func(data *domain.Bootstrap) { data.Loops = data.Loops[:1] }},
 		{name: "duplicate-loop-occurrences", want: target + "_v1", seed: func(data *domain.Bootstrap) {
 			second := base(target)
 			second.Name = "second occurrence"
@@ -250,10 +250,10 @@ func TestScaleP21SW261LoopRunStampDifferential(t *testing.T) {
 					var live []domain.RealtimeEvent
 					source.SetWebhookSink(func(_ string, event domain.DomainEvent) { hooks = append(hooks, event) })
 					source.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { live = append(live, event) })
-					owner := &scaleP21SW261Owner{}
+					owner := &loopRunStartOwner{}
 					var version domain.LoopVersion
 					peak := 0
-					stamp := scaleP21SW261Stamp(target, now, &version, func(data *domain.Bootstrap) {
+					stamp := loopRunStartStamp(target, now, &version, func(data *domain.Bootstrap) {
 						if len(data.Users) != 0 || len(data.Documents) != 0 {
 							t.Error("the run-start callback received unlisted metadata")
 						}
@@ -301,7 +301,7 @@ func TestScaleP21SW261LoopRunStampDifferential(t *testing.T) {
 						t.Fatalf("bounded stamp err=%v version=%+v, literal err=%v version=%+v", err, version, wantErr, wantVersion)
 					}
 					if got != want {
-						t.Fatalf("bounded stamp effects differ\nliteral: %s\nbounded: %s", scaleP21SW261Clip(want), scaleP21SW261Clip(got))
+						t.Fatalf("bounded stamp effects differ\nliteral: %s\nbounded: %s", clip(want), clip(got))
 					}
 				}
 			})
@@ -309,7 +309,7 @@ func TestScaleP21SW261LoopRunStampDifferential(t *testing.T) {
 	}
 }
 
-func scaleP21SW261Clip(text string) string {
+func clip(text string) string {
 	if len(text) > 4000 {
 		return text[:2000] + " ... " + text[len(text)-2000:]
 	}
@@ -318,10 +318,10 @@ func scaleP21SW261Clip(text string) string {
 
 // The stamp selects the versions current in its own transaction, not those
 // of the installed generation the start read pinned earlier.
-func TestScaleP21SW261LoopRunStampReadsCurrentVersions(t *testing.T) {
+func TestLoopRunStampReadsCurrentVersions(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), workspace)
 	if err != nil {
@@ -353,7 +353,7 @@ func TestScaleP21SW261LoopRunStampReadsCurrentVersions(t *testing.T) {
 			t.Fatal(err)
 		}
 		var version domain.LoopVersion
-		if err := view.MutateLoopRunStart(ctx, workspace, loop.ID, nil, scaleP21SW261Stamp(loop.ID, time.Now().UTC(), &version, nil)); err != nil {
+		if err := view.MutateLoopRunStart(ctx, workspace, loop.ID, nil, loopRunStartStamp(loop.ID, time.Now().UTC(), &version, nil)); err != nil {
 			t.Fatal(err)
 		}
 		read.Close()
@@ -371,7 +371,7 @@ func TestScaleP21SW261LoopRunStampReadsCurrentVersions(t *testing.T) {
 	}
 }
 
-func TestScaleP21SW262LoopRunStartReadLifetimes(t *testing.T) {
+func TestLoopRunStartReadLifetimes(t *testing.T) {
 	wide := strings.Repeat("captured instructions ", 40000)
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	data := domain.Bootstrap{
@@ -386,7 +386,7 @@ func TestScaleP21SW262LoopRunStartReadLifetimes(t *testing.T) {
 		Teams:    []domain.Team{{ID: "team", Name: "Team", Key: "TM"}},
 		Cycles:   []domain.Cycle{{ID: "cycle", Number: 7, Name: "", TeamID: "team"}},
 	}
-	view := scaleP21HotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
+	view := scaleHotLogoStore(t, map[string]domain.Bootstrap{"physical": data})
 	view.lastWorkspaceKey = "physical"
 	for _, key := range []string{"physical", ""} {
 		read, found, err := view.BeginLoopRunStartRead(t.Context(), key, "target")

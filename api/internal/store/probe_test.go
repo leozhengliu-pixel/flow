@@ -9,11 +9,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestScaleP21JournalSurvivesLoadProbePoolReplacement(t *testing.T) {
+func TestScaleJournalSurvivesLoadProbePoolReplacement(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
-	probe, err := f.EnableScaleP01Probe(DatabaseConfig{Driver: os.Getenv("FLOW_TEST_DATABASE_DRIVER"), URL: os.Getenv("FLOW_TEST_DATABASE_URL")})
+	f := journalScaleDatabase(t)
+	probe, err := f.EnableScaleProbe(DatabaseConfig{Driver: os.Getenv("FLOW_TEST_DATABASE_DRIVER"), URL: os.Getenv("FLOW_TEST_DATABASE_URL")})
 	if err != nil {
 		t.Fatal(err)
 	}

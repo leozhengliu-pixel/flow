@@ -11,7 +11,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func scaleP21ResourceOutputContext(t *testing.T) context.Context {
+func scaleResourceOutputContext(t *testing.T) context.Context {
 	t.Helper()
 	return WithMetadataOutputOwner(t.Context(), func(close func()) bool {
 		t.Cleanup(close)
@@ -19,11 +19,11 @@ func scaleP21ResourceOutputContext(t *testing.T) context.Context {
 	})
 }
 
-func TestScaleP21ResourceReadMetadataAdapter(t *testing.T) {
+func TestScaleResourceReadMetadataAdapter(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
-	f := scaleP09Database(t)
+	f := journalScaleDatabase(t)
 	workspace := f.data.Workspace.URLKey
 	project, initiative := idgen.New("resource-adapter-project-"), idgen.New("resource-adapter-initiative-")
 	if err := f.MutateWorkspace(WithMetadataFields(t.Context(), "projects", "initiatives"), workspace, "scale_p21.resource_adapter", "", nil, func(data *domain.Bootstrap) error {
