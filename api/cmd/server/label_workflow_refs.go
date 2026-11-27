@@ -319,16 +319,23 @@ func remapLabelOperand(value any, remap workflowLabelRemap) (any, bool) {
 		}
 		return dedupeWorkflowFilterItems(deduped), true
 	case map[string]any:
+		next := value
+		changed := false
 		for _, key := range []string{"id", "value"} {
-			if next, changed := remapLabelOperand(value[key], remap); changed {
-				if next == nil {
-					return nil, true
-				}
-				copy := maps.Clone(value)
-				copy[key] = next
-				return copy, true
+			mapped, updated := remapLabelOperand(value[key], remap)
+			if !updated {
+				continue
 			}
+			if mapped == nil {
+				return nil, true
+			}
+			if !changed {
+				next = maps.Clone(value)
+				changed = true
+			}
+			next[key] = mapped
 		}
+		return next, changed
 	}
 	return value, false
 }

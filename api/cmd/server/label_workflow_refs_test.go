@@ -205,6 +205,24 @@ func checkLabelWorkflowMerge(t *testing.T, fixture func(func(*domain.Bootstrap))
 	})
 }
 
+func TestWorkflowLabelExcludesAllAfterMerge(t *testing.T) {
+	const otherLabel = "other-label"
+	workflow := domain.WorkflowDefinition{ID: "excludes-all", Conditions: map[string]string{
+		"filters": `{"field":"labels","operator":"excludesAll","values":[{"id":"label:` + labelWorkflowFrom + `","value":"` + labelWorkflowFrom + `"},"` + labelWorkflowTo + `","` + otherLabel + `"]}`,
+	}}
+	workflow, changed := remapWorkflowLabels(workflow, func(id string) (string, bool) {
+		return labelWorkflowTo, id == labelWorkflowFrom
+	})
+	want := `{"field":"labels","operator":"excludesAll","values":[{"id":"label:` + labelWorkflowTo + `","value":"` + labelWorkflowTo + `"},"` + otherLabel + `"]}`
+	if !changed || workflow.Conditions["filters"] != want {
+		t.Fatalf("merged filter = %s, want %s", workflow.Conditions["filters"], want)
+	}
+	issue := domain.Issue{ID: "issue", Labels: []domain.IssueLabel{{ID: labelWorkflowTo}}}
+	checkLabelWorkflowMatch(t, workflow, issue, true)
+	issue.Labels = append(issue.Labels, domain.IssueLabel{ID: otherLabel})
+	checkLabelWorkflowMatch(t, workflow, issue, false)
+}
+
 func TestLabelWorkflowReferencesDelete(t *testing.T) {
 	for _, group := range []bool{false, true} {
 		t.Run(fmt.Sprintf("group=%t", group), func(t *testing.T) {

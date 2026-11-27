@@ -107,8 +107,11 @@ func automationLabelFilterMatches(labels []domain.IssueLabel, value any, operato
 	if !automationOperandMatches(value, func(operand string) bool { return operand != "" }) {
 		return false
 	}
-	if operands, ok := value.([]any); ok && operator == "includesAll" {
-		return !slices.ContainsFunc(operands, func(operand any) bool { return !automationLabelMatches(labels, operand, loop) })
+	if operands, ok := value.([]any); ok && (operator == "includesAll" || operator == "excludesAll") {
+		all := !slices.ContainsFunc(operands, func(operand any) bool {
+			return !automationLabelMatches(labels, operand, loop)
+		})
+		return all != negative
 	}
 	return automationLabelMatches(labels, value, loop) != negative
 }
