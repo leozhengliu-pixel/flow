@@ -192,7 +192,9 @@ func TestBoundedPortfolioDocumentsDifferential(t *testing.T) {
 		{"former-member-mention", create(owner, false, body(map[string]any{"contentData": map[string]any{
 			"type": "doc", "content": []any{map[string]any{"type": "userMention", "userId": former.user.ID}},
 		}})), 400, nil},
-		{"bad-json", create(owner, false, `{"title":`), 403, nil},
+		// A malformed document body is a bad request, decoded once before the
+		// permission check (it used to fail that check's 1 MiB peek as 403).
+		{"bad-json", create(owner, false, `{"title":`), 400, nil},
 		{"owner-id", remove(owner, false, docID), 204, nil},
 		{"owner-current-slug", remove(owner, false, alias), 204, nil},
 		{"explicit-owner", remove(member, false, docID), 204, func(t *testing.T, got sw530Outcome) {
