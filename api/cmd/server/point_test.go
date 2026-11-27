@@ -134,7 +134,7 @@ func checkPointOperationDifferential(t *testing.T, operations []pointDifferentia
 										if w.Code != http.StatusNotFound {
 											t.Fatalf("foreign subscription fixture status=%d", w.Code)
 										}
-									case operation.name == "sw5-team-template-workspace-route-delete":
+									case operation.name == "team-template-workspace-route-delete":
 										if w.Code != http.StatusNotFound {
 											t.Fatalf("team template deleted through the workspace route: status=%d", w.Code)
 										}

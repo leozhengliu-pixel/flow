@@ -1216,7 +1216,7 @@ func routeSweepCaller() string {
 	for {
 		frame, more := frames.Next()
 		name := strings.TrimPrefix(frame.Function, prefix)
-		if name != frame.Function && !strings.Contains(name, "sw530") && !strings.Contains(name, ".func") && !slices.Contains(chain, name) {
+		if name != frame.Function && !strings.Contains(name, "routeSweep") && !strings.Contains(name, ".func") && !slices.Contains(chain, name) {
 			chain = append(chain, name)
 		}
 		if !more || len(chain) == 6 {
