@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -174,7 +175,14 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 	// server or store fixtures to start background workers.
 	const child = "FLOW_TEST_LOOP_TEXT_SCRATCH_CHILD"
 	if os.Getenv(child) != "1" {
-		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+regexp.QuoteMeta(t.Name())+"$", "-test.timeout=2m", "-test.v")
+		// The child has the rest of this run's deadline: the instrumented
+		// 12 MiB measurements take minutes under CI's -race with atomic
+		// coverage, beyond any fixed child timeout that fits a fast machine.
+		timeout := time.Duration(0)
+		if deadline, ok := t.Deadline(); ok {
+			timeout = max(time.Until(deadline)-30*time.Second, time.Second)
+		}
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+regexp.QuoteMeta(t.Name())+"$", "-test.timeout="+timeout.String(), "-test.v")
 		cmd.Env = append(os.Environ(), child+"=1")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -228,12 +236,13 @@ func TestScaleP21SW136LoopTextScratchBound(t *testing.T) {
 		block []byte
 		race  bool
 	}{{"spaced", spaced, false}, {"unspaced", unspaced, true}} {
-		shortBytes, largeBytes := measure(producer(input.block, 4)), measure(producer(input.block, 16384))
 		if raceDetector && !input.race {
-			t.Logf("%s: race build, allocation bound not asserted (instrumented stdlib checkpoint pad): 3KiB=%d 12MiB=%d",
-				input.name, shortBytes, largeBytes)
+			// Not measured either: the unasserted 12 MiB spaced runs were
+			// most of this test's time under -race.
+			t.Logf("%s: race build, allocation bound not asserted (instrumented stdlib checkpoint pad)", input.name)
 			continue
 		}
+		shortBytes, largeBytes := measure(producer(input.block, 4)), measure(producer(input.block, 16384))
 		if largeBytes > 16<<10 || largeBytes > shortBytes+8<<10 {
 			t.Fatal("streamed helper allocated input-sized scratch", input.name, shortBytes, largeBytes)
 		}

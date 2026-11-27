@@ -107,9 +107,11 @@ func (w *legacyArrayWrites) flushUpserts(ctx context.Context) error {
 	if len(w.args) == 0 {
 		return nil
 	}
-	tuples := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?),", len(w.args)/5), ",")
-	_, err := w.plan.tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES`+
-		tuples+` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, w.args...)
+	// The first row's tuple is literal, so the statement keeps the shape the
+	// metadata revision scan checks: every row binds the plan's workspace,
+	// the first bound value (metadataWriteWorkspace).
+	_, err := w.plan.tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?)`+
+		strings.Repeat(",(?,?,?,?,?)", len(w.args)/5-1)+` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, w.args...)
 	clear(w.args)
 	w.args = w.args[:0]
 	w.plan.tx.metadataWritten = true

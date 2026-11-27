@@ -333,8 +333,8 @@ func canceledContext() context.Context {
 // through these paths; they once walked the record one character at a time
 // (the source through a window read each), 15 times slower than the legacy
 // save's encoding/json (26 times under the race detector). Their throughput
-// must stay within a small factor of encoding/json on the same bytes, with
-// or without the race detector.
+// must stay within a small factor of encoding/json on the same bytes, scaled
+// for the instrumentation of the build (jsonStringBulkThroughputFactor).
 func TestJSONStringSourceBulkThroughput(t *testing.T) {
 	random := rand.New(rand.NewSource(7))
 	text := jsonStringBulkText(random, 4<<20, true)
@@ -385,10 +385,33 @@ func TestJSONStringSourceBulkThroughput(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	t.Logf("encoding/json %s, bounded string paths %s (%.1fx)", baseline, bounded, float64(bounded)/float64(baseline))
-	if bounded > 6*baseline+50*time.Millisecond {
-		t.Fatalf("bounded string paths took %s, more than 6x encoding/json's %s", bounded, baseline)
+	factor := jsonStringBulkThroughputFactor(raceDetector, testing.CoverMode() != "")
+	t.Logf("encoding/json %s, bounded string paths %s (%.1fx, bound %dx)", baseline, bounded, float64(bounded)/float64(baseline), factor)
+	if bounded > time.Duration(factor)*baseline+50*time.Millisecond {
+		t.Fatalf("bounded string paths took %s, more than %dx encoding/json's %s", bounded, factor, baseline)
 	}
+}
+
+// jsonStringBulkThroughputFactor is the allowed slowdown against
+// encoding/json. Coverage counts every basic block of this package's code,
+// one counter per byte in the scanning loops, but not encoding/json's; CI
+// tests with atomic coverage, whose counters the race detector intercepts as
+// synchronised atomics. Measured on the same machine (bulk paths / the per
+// character paths they replaced):
+//
+//	plain 1.2x / 15.7x, -race 1.7x / 27.7x,
+//	atomic coverage 3.2x / 31.5x, -race with atomic coverage 12x / 164x
+//	(CI: 11.7x).
+//
+// Each bound sits about a factor of three from both sides.
+func jsonStringBulkThroughputFactor(race, cover bool) int {
+	switch {
+	case race && cover:
+		return 40
+	case cover:
+		return 10
+	}
+	return 6
 }
 
 var (

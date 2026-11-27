@@ -317,3 +317,69 @@ func TestScaleP21SW185InlineFieldMaterializationOwnership(t *testing.T) {
 		})
 	}
 }
+
+// The batched suggestion statements bind several rows in one statement. Each
+// one moves the workspace's metadata revision, journaled or not, so other
+// servers retire the metadata they cached before it.
+func TestIssueSuggestionBatchedWritesMoveTheMetadataRevision(t *testing.T) {
+	for _, journal := range []string{"off", "on"} {
+		t.Run("journal "+journal, func(t *testing.T) {
+			t.Setenv("FLOW_RECORD_JOURNAL", journal)
+			f := scaleP09Database(t)
+			workspace := f.data.Workspace.URLKey
+			ids := []string{"suggestion-a", "suggestion-b", "suggestion-c"}
+			revision := func() int64 {
+				t.Helper()
+				value, err := f.cacheRevision(t.Context(), f.db, workspace, cacheKindMetadata)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return value
+			}
+			write := func(name string, run func(*legacyArrayWrites, *legacyMetadataWritePlan) error) {
+				t.Helper()
+				before := revision()
+				tx, err := f.db.BeginTx(t.Context(), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tx.Rollback()
+				plan := &legacyMetadataWritePlan{tx: tx, workspace: workspace}
+				if err := run(&legacyArrayWrites{plan: plan, field: "issueSuggestions"}, plan); err != nil {
+					t.Fatal(name, err)
+				}
+				want := map[cacheRevisionKey]bool{{workspace, cacheKindMetadata}: true}
+				if !reflect.DeepEqual(tx.cacheRevisions, want) {
+					t.Fatalf("%s queued revisions %v, want %v", name, tx.cacheRevisions, want)
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+				if after := revision(); after <= before {
+					t.Fatalf("%s left the metadata revision at %d (was %d)", name, after, before)
+				}
+			}
+			write("batched upsert", func(w *legacyArrayWrites, _ *legacyMetadataWritePlan) error {
+				for order, id := range ids {
+					w.args = append(w.args, workspace, w.field, id, order, []byte(`{"id":"`+id+`","issueId":"issue","type":"label"}`))
+				}
+				return w.flushUpserts(t.Context())
+			})
+			write("batched move", func(w *legacyArrayWrites, _ *legacyMetadataWritePlan) error {
+				for order, id := range ids {
+					w.moves = append(w.moves, legacyArrayMove{id, len(ids) - order})
+				}
+				return w.flushMoves(t.Context())
+			})
+			write("batched delete", func(_ *legacyArrayWrites, plan *legacyMetadataWritePlan) error {
+				spec, _ := metadataFieldByName("issueSuggestions")
+				change := legacyMetadataWriteField{field: spec}
+				for index, id := range ids {
+					change.oldOrder = append(change.oldOrder, index)
+					change.rows = append(change.rows, legacyMetadataWriteRow{id: id})
+				}
+				return plan.deleteArrayDropped(t.Context(), &change, map[string]bool{})
+			})
+		})
+	}
+}

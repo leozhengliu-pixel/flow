@@ -373,12 +373,13 @@ func TestScaleP21SW139BootstrapLoopTextScratchBound(t *testing.T) {
 		block []byte
 		race  bool
 	}{{"spaced", spaced, false}, {"unspaced", unspaced, true}} {
-		small, large := measure(input.block, 4), measure(input.block, 16384)
 		if raceDetector && !input.race {
-			t.Logf("%s: race build, allocation bound not asserted (instrumented stdlib checkpoint pad): 3KiB=%d 12MiB=%d",
-				input.name, small, large)
+			// Not measured either: the unasserted 12 MiB spaced runs were
+			// most of this test's time under -race.
+			t.Logf("%s: race build, allocation bound not asserted (instrumented stdlib checkpoint pad)", input.name)
 			continue
 		}
+		small, large := measure(input.block, 4), measure(input.block, 16384)
 		// TotalAlloc is process-wide. Under -race the shard's other goroutines
 		// add tens of KiB between samples, so the race build only checks that
 		// scratch stays far below the 12MiB input; normal builds keep 16KiB.
