@@ -234,6 +234,12 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	var result syncV2ChangesResponse
 	for attempt := 1; ; attempt++ {
 		access, err := s.resolveSyncAccess(r)
+		if errors.Is(err, store.ErrEventAccessStale) {
+			// resolveSyncAccess already re-resolved against current
+			// authority; metadata kept moving, which is no denial.
+			writeSyncChangesUnavailable(w, r, err)
+			return
+		}
 		if err != nil {
 			issueRecordsErrorFor(w, r, err)
 			return

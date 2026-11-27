@@ -31,6 +31,9 @@ func retryableBusy(err error) (time.Duration, bool) {
 		return workspaceLockBusyRetryAfter, true
 	case errors.Is(err, store.ErrMetadataWorkBudget), errors.Is(err, context.DeadlineExceeded):
 		return busyDeadlineRetryAfter, true
+	case errors.Is(err, store.ErrEventAccessStale):
+		// Metadata kept moving while access was resolved: retry shortly.
+		return busyDeadlineRetryAfter, true
 	}
 	return 0, false
 }
@@ -145,6 +148,8 @@ func requestErrorCode(err error) string {
 		return "work_budget"
 	case errors.Is(err, store.ErrRecordSpoolContended):
 		return "scratch_busy"
+	case errors.Is(err, store.ErrEventAccessStale):
+		return "event_access_stale"
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return "unexpected_eof"
 	case errors.As(err, &handlerErr):

@@ -183,7 +183,7 @@ func writeSyncJSON(w http.ResponseWriter, value any, budget int) {
 
 func writeSyncError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, store.ErrAuthForbidden):
+	case errors.Is(err, store.ErrAuthForbidden) && !errors.Is(err, store.ErrEventAccessStale):
 		writeError(w, http.StatusForbidden, "Sync access changed; reload the manifest")
 	case errors.Is(err, store.ErrMetadataRecordQuery), errors.Is(err, store.ErrMetadataPageBudget):
 		writeError(w, http.StatusBadRequest, "invalid sync query")

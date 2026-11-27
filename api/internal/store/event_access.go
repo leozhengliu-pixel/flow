@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
@@ -16,6 +17,14 @@ import (
 )
 
 var ErrEventSourceBudget = errors.New("realtime source exceeds its budget")
+
+// ErrEventAccessStale reports that an event access could not be proven
+// against its policy source because the workspace metadata revision moved
+// while it was resolved or validated (an unrelated metadata write, such as
+// API key usage telemetry, committed in between). It is not a denial: the
+// caller selects a current source and resolves again. It still matches
+// ErrAuthForbidden, so a caller that cannot retry keeps failing closed.
+var ErrEventAccessStale = fmt.Errorf("%w: event policy source changed during resolution", ErrAuthForbidden)
 
 const eventSourceMaxReferences = 4096
 
@@ -185,16 +194,25 @@ func (a EventAccess) PermissionFingerprint() string {
 	return string(sum[:])
 }
 
+// eventAccessAttempts bounds how often ResolveEventAccess reads a new source
+// after a metadata write raced the previous one (ErrEventAccessStale).
+const eventAccessAttempts = 3
+
 func (s *SQLiteStore) ResolveEventAccess(ctx context.Context, workspace, principal string, key *domain.APIKey) (EventAccess, error) {
-	version, err := s.RealtimeSourceVersion(ctx, workspace)
-	if err != nil {
-		return EventAccess{}, err
+	for attempt := 1; ; attempt++ {
+		version, err := s.RealtimeSourceVersion(ctx, workspace)
+		if err != nil {
+			return EventAccess{}, err
+		}
+		source, err := s.ReadEventPolicySource(ctx, workspace, version)
+		if err != nil {
+			return EventAccess{}, err
+		}
+		access, err := s.ResolveEventAccessFromSource(ctx, source, principal, key)
+		if !errors.Is(err, ErrEventAccessStale) || attempt == eventAccessAttempts || ctx.Err() != nil {
+			return access, err
+		}
 	}
-	source, err := s.ReadEventPolicySource(ctx, workspace, version)
-	if err != nil {
-		return EventAccess{}, err
-	}
-	return s.ResolveEventAccessFromSource(ctx, source, principal, key)
 }
 
 // RefreshEventResetAccess proves that a SQLite session can request a new
@@ -248,11 +266,17 @@ func (s *SQLiteStore) ResolveEventAccessFromSource(ctx context.Context, source *
 	if err != nil {
 		return EventAccess{}, err
 	}
-	if access.policy.stamp.workspaceID != source.version.WorkspaceID || access.policy.stamp.revision != source.version.Metadata {
-		return EventAccess{}, ErrAuthForbidden
-	}
+	// The viewer state comes from the policy ResolveAccess just read, so a
+	// suspended or deleted viewer is denied even when that policy is newer
+	// than the source.
 	if !access.policy.metadata.Viewer.Active || access.policy.metadata.Viewer.Deleted {
 		return EventAccess{}, ErrAuthForbidden
+	}
+	if access.policy.stamp.workspaceID != source.version.WorkspaceID || access.policy.stamp.revision != source.version.Metadata {
+		// ResolveAccess read a newer policy than the source: a revision race,
+		// not a denial. Live principal and credential checks above and in
+		// ResolveAccess still deny genuinely revoked access first.
+		return EventAccess{}, ErrEventAccessStale
 	}
 	return EventAccess{AccessContext: access, version: source.version, source: source, expiresAt: expiresAt}, nil
 }
@@ -267,7 +291,7 @@ func (s *SQLiteStore) ValidateEventAccess(ctx context.Context, access EventAcces
 		return err
 	}
 	if version != access.version {
-		return ErrAuthForbidden
+		return ErrEventAccessStale
 	}
 	if err := access.CheckCredential(); err != nil {
 		return err
