@@ -25,6 +25,28 @@ func labelAutomationScope(ctx context.Context) func(domain.Bootstrap) []string {
 
 var labelAutomationFields = []string{"loops", "workflowDefinitions"}
 
+// labelAutomationLoopsNeedWebhook reads webhookNeeded's loop input from the
+// loop rows when a label mutation's COLD facade decoded no loops
+// (decodeColdMetadataRead): an event-triggered loop needs previous values
+// there exactly as on the full path. A failed read assumes it does.
+func (s *SQLiteStore) labelAutomationLoopsNeedWebhook(ctx context.Context, workspace string) bool {
+	if s.coldParent == nil || s.coldParent.metadataResidency == nil || labelAutomationScope(ctx) == nil {
+		return false
+	}
+	if scoped, _ := ctx.Value(coldLoopContractReadKey{}).(bool); scoped {
+		// The loop-contract facade decodes the loops.
+		return false
+	}
+	enabled := s.jsonText("data", "enabled") + ` IN ('1','true')`
+	if s.dialect == "sqlite" {
+		enabled = s.jsonText("data", "enabled") + `=1`
+	}
+	var needed int
+	err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field='loops' AND `+enabled+
+		` AND COALESCE(`+s.jsonText("data", "status")+`,'')<>'draft' AND COALESCE(`+s.jsonText("data", "triggerType")+`,'') NOT IN ('','schedule')) THEN 1 ELSE 0 END`, workspace).Scan(&needed)
+	return err != nil || needed != 0
+}
+
 type labelAutomationProjection struct {
 	before domain.Bootstrap
 	rows   map[metadataRecordKey]metadataRecord
