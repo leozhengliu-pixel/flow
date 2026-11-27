@@ -33,9 +33,18 @@ func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
 	var issues []domain.Issue
 	at := time.Date(2026, 11, 16, 1, 2, 3, 0, time.UTC)
 	for i := range 12 {
+		text := "alpha beta"
+		switch i {
+		case 9:
+			text = "alpha only"
+		case 10:
+			text = "beta only"
+		case 11:
+			text = "gamma only"
+		}
 		issue := domain.Issue{
 			ID: fmt.Sprintf("%s%02d", prefix, i), Identifier: fmt.Sprintf("SW192-%d", i), Number: 20000 + i, Version: 1,
-			Title: fmt.Sprintf("Needle candidate %02d alpha beta", i), Priority: i % 3, Team: f.data.Teams[0],
+			Title: fmt.Sprintf("Needle candidate %02d %s", i, text), Priority: i % 3, Team: f.data.Teams[0],
 			State:   domain.WorkflowState{ID: stateID, Name: "Embedded state", Type: "backlog"},
 			Creator: f.data.Viewer, Labels: []domain.IssueLabel{{ID: labelID, Name: "Embedded label"}},
 			Project: &domain.ProjectSummary{ID: projectID, Name: "Embedded project"}, CreatedAt: at, UpdatedAt: at.Add(time.Duration(i) * time.Second),
@@ -104,7 +113,8 @@ func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
 		labels []string
 		limit  int
 	}{
-		{"union", IssueRecordQuery{}, []string{"alpha", "beta"}, nil, 100},
+		{"union", IssueRecordQuery{}, []string{"alpha beta", "alpha", "beta"}, nil, 100},
+		{"mixed-term-union", IssueRecordQuery{Access: &IssueRecordAccess{UserID: f.data.Viewer.ID, WorkspaceID: f.data.Workspace.ID, VisibleTeamIDs: []string{f.data.Teams[0].ID}}}, []string{`"absent"`, "beta", "11"}, nil, 100},
 		{"title", IssueRecordQuery{Sort: "title", Direction: "asc"}, []string{"Needle"}, nil, 100},
 		{"label-union", IssueRecordQuery{Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}, []string{"absent"}, []string{labelID}, 100},
 		{"selected-empty", IssueRecordQuery{AllowedTeamIDs: []string{}}, []string{"Needle"}, nil, 100},
@@ -121,9 +131,15 @@ func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
 					repository, ctx = view, source.Context(ctx)
 				}
 				var got []json.RawMessage
-				queries, peak := 0, 0
-				ctx = WithSQLStatementObserver(ctx, func(string) {
+				seen := map[string]bool{}
+				queries, matches, peak := 0, 0, 0
+				var bodyQuery string
+				ctx = WithSQLStatementObserver(ctx, func(query string) {
 					queries++
+					matches += strings.Count(query, "issue_search_fts MATCH")
+					if strings.Contains(query, "output.list_data ELSE NULL END") {
+						bodyQuery = query
+					}
 					peak = max(peak, view.MetadataWorkUsedForTesting())
 				})
 				err := repository.SearchIssueCandidateTerms(ctx, test.query, test.terms, test.labels, test.limit, func(issue domain.Issue) error {
@@ -132,10 +148,52 @@ func TestScaleP21SW192CandidateRowsDifferential(t *testing.T) {
 					}
 					raw, err := json.Marshal(issue)
 					got = append(got, raw)
+					seen[issue.ID] = true
 					return err
 				})
 				if err != nil {
 					t.Fatal(err)
+				}
+				if repository.dialect == "sqlite" && len(test.terms) > 0 && matches != 1 {
+					t.Fatalf("bounded=%v used %d FTS matches for one candidate selection", bounded, matches)
+				}
+				if repository.dialect == "sqlite" {
+					checkHits := func(wantAlpha, wantGamma bool) {
+						t.Helper()
+						if seen[issues[9].ID] != wantAlpha || !seen[issues[10].ID] || seen[issues[11].ID] != wantGamma {
+							t.Fatalf("unexpected alpha, beta, or gamma hits: %t, %t, %t", seen[issues[9].ID], seen[issues[10].ID], seen[issues[11].ID])
+						}
+					}
+					switch test.name {
+					case "union":
+						checkHits(true, false)
+					case "mixed-term-union":
+						checkHits(false, true)
+					}
+				}
+				if bounded && repository.dialect == "sqlite" && test.name == "union" {
+					if bodyQuery == "" {
+						t.Fatal("candidate query did not fetch selected bodies")
+					}
+					plan, err := repository.db.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+bodyQuery, 4096, "[1,2]", workspace, test.terms[0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer plan.Close()
+					var details []string
+					pointLookup := false
+					for plan.Next() {
+						var id, parent, unused int
+						var detail string
+						if err := plan.Scan(&id, &parent, &unused, &detail); err != nil {
+							t.Fatal(err)
+						}
+						details = append(details, detail)
+						pointLookup = pointLookup || strings.Contains(detail, "SEARCH output USING INTEGER PRIMARY KEY (rowid=?)")
+					}
+					if err := plan.Err(); err != nil || !pointLookup {
+						t.Fatalf("candidate body query did not use rowid lookups: %v (%v)", details, err)
+					}
 				}
 				if bounded && !reflect.DeepEqual(want, got) {
 					t.Fatalf("candidate encounter order, fallback, dedup or canonical references changed:\nlegacy=%s\nbounded=%s", want, got)

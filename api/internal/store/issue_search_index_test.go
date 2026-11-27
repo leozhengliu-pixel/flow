@@ -168,7 +168,8 @@ func TestIssueSearchCandidateProjectionTiming(t *testing.T) {
 	}
 	// Bind the observed query using the same scope and single text term.
 	_, args := issueAccessCTE(q)
-	_, textArgs := f.issueTextVisibleSelection(q, issueSearchProjectionTerm)
+	selection, selectionArgs := f.issueTextSelection(q.Workspace, issueSearchProjectionTerm)
+	_, textArgs := f.issueTextVisibleSelection(q, selection, selectionArgs)
 	q.Access = nil // The full-text subquery already applies visibility.
 	_, whereArgs, err := issueRecordWhere(q)
 	if err != nil {
