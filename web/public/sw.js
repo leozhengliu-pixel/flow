@@ -7,7 +7,9 @@
 // - Never intercepted: /api, /uploads and the other server routes, sign-in/sign-up/OAuth/SSO callback pages, files,
 //   other origins, and anything but GET.
 // Kill switch: replace this file with one that calls self.registration.unregister(); clients drop the worker on
-// their next update check. Clients can also set localStorage['flow:disable-sw'] = '1'.
+// their next update check. Clients can also set localStorage['flow:disable-sw'] = '1': the page then sends RETIRE
+// before it unregisters this worker, which stops every cache write still in flight and drops the caches once the
+// last one settles, so a worker that keeps running for its old page cannot recreate what the page removed.
 const ASSET_CACHE = 'flow-assets-v2'
 const SHELL_CACHE = 'flow-shell-v2'
 const OWNED_CACHE = /^flow-(?:assets|shell)-/
@@ -23,6 +25,8 @@ const SERVER_PATHS = ['/api', '/mcp', '/mcp/readonly', '/oauth/register', '/oaut
 const NETWORK_PAGES = ['auth', 'oauth', 'connect', 'login', 'signup', 'verify-email', 'forgot-password', 'reset-password', 'invite', 'join', 'mobile-auth']
 // Dropped from a stored shell: they describe the network body, not the decoded one the cache keeps.
 const BODY_HEADERS = ['content-length', 'content-encoding', 'transfer-encoding']
+const RETIRE = 'flow:retire'
+let retired = false
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -31,6 +35,16 @@ self.addEventListener('activate', event => {
     for (const key of await caches.keys()) if (OWNED_CACHE.test(key) && key !== ASSET_CACHE && key !== SHELL_CACHE) await caches.delete(key)
     await self.clients.claim()
   })())
+})
+
+async function dropOwnedCaches() {
+  for (const key of await caches.keys()) if (OWNED_CACHE.test(key)) await caches.delete(key)
+}
+
+self.addEventListener('message', event => {
+  if (event.data !== RETIRE) return
+  retired = true
+  event.waitUntil(installing.then(dropOwnedCaches).catch(() => {}))
 })
 
 async function trim(cache) {
@@ -75,7 +89,7 @@ function installShell(response) {
     const html = await response.text()
     const assets = shellAssets(html)
     // Not the app's page (an error page, a proxy's answer): keep what is stored.
-    if (!assets.length) return
+    if (!assets.length || retired) return
     const shellCache = await caches.open(SHELL_CACHE)
     const assetCache = await caches.open(ASSET_CACHE)
     const cached = new Set((await shellCache.keys()).map(request => request.url))
@@ -90,15 +104,18 @@ function installShell(response) {
         // A file the server does not have: this shell cannot be served offline-first, keep the stored one.
         if (file.status !== 200 || file.type !== 'basic') return
       }
+      if (retired) return
       await shellCache.put(path, file)
     }
     // The same page as stored (its files are all there now): nothing to replace.
     const previous = await shellCache.match(SHELL_KEY)
     if (previous && previous.headers.get(SHELL_ASSETS_HEADER) === headers.get(SHELL_ASSETS_HEADER) &&
         await previous.text() === html && previous.headers.get('content-security-policy') === headers.get('content-security-policy')) return
+    if (retired) return
     await shellCache.put(SHELL_KEY, new Response(html, { status: 200, statusText: 'OK', headers }))
     const keep = new Set([SHELL_KEY, ...assets])
     for (const request of await shellCache.keys()) {
+      if (retired) return
       if (keep.has(new URL(request.url).pathname)) continue
       const file = await shellCache.match(request)
       if (file) await assetCache.put(request, file)
@@ -155,12 +172,15 @@ async function asset(event) {
   if (hit) return hit
   const response = await fetch(request)
   // Only a complete 200 is stored: a 404 for a stale chunk must keep failing visibly, never be replayed.
-  if (response.status === 200 && response.type === 'basic') {
+  if (response.status === 200 && response.type === 'basic' && !retired) {
     const copy = response.clone()
-    event.waitUntil(caches.open(ASSET_CACHE).then(async cache => {
+    event.waitUntil((async () => {
+      if (retired) return
+      const cache = await caches.open(ASSET_CACHE)
+      if (retired) return
       await cache.put(request, copy)
       await trim(cache)
-    }))
+    })())
   }
   return response
 }

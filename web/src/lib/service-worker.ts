@@ -21,8 +21,13 @@ export function serviceWorkerEnabled(
   }
 }
 
+// Tells a worker that keeps running for an old page to stop writing caches (see public/sw.js).
+const RETIRE = 'flow:retire'
+
 async function removeServiceWorker() {
   const registrations = await navigator.serviceWorker.getRegistrations()
+  const workers = new Set([navigator.serviceWorker.controller, ...registrations.flatMap(registration => [registration.active, registration.waiting, registration.installing])])
+  for (const worker of workers) worker?.postMessage(RETIRE)
   await Promise.all(registrations.map(registration => registration.unregister()))
   if (typeof caches === 'undefined') return
   const keys = await caches.keys()
