@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/metrics"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,7 +89,7 @@ func (b *capacityLogBuffer) Write(p []byte) (int, error) {
 
 // openCapacityStartup opens a store with bounded metadata on, a per-file
 // capacity of fileBytes and a process spool disk budget of diskBytes.
-func openCapacityStartup(t *testing.T, open func() *SQLiteStore, fileBytes, diskBytes int64) capacityStartup {
+func openCapacityStartup(t *testing.T, open func() *SQLiteStore, fileBytes, diskBytes int64, profilePath string, check func(*SQLiteStore)) capacityStartup {
 	t.Helper()
 	startupHistoryFlags(t, "on")
 	t.Setenv("FLOW_METADATA_SOURCE_DISK_BYTES", strconv.FormatInt(diskBytes, 10))
@@ -102,11 +104,15 @@ func openCapacityStartup(t *testing.T, open func() *SQLiteStore, fileBytes, disk
 	runtime.GC()
 	var result capacityStartup
 	done := make(chan struct{})
-	sampled := make(chan [2]uint64)
+	type heapPeak struct {
+		inuse, live uint64
+		err         error
+	}
+	sampled := make(chan heapPeak)
 	go func() {
 		// HeapInuse includes garbage awaiting collection; the live heap is
 		// what the last collection kept.
-		var peak [2]uint64
+		var peak heapPeak
 		var stats runtime.MemStats
 		live := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
 		ticker := time.NewTicker(5 * time.Millisecond)
@@ -114,9 +120,12 @@ func openCapacityStartup(t *testing.T, open func() *SQLiteStore, fileBytes, disk
 		for {
 			runtime.ReadMemStats(&stats)
 			metrics.Read(live)
-			peak[0] = max(peak[0], stats.HeapInuse)
-			if live[0].Value.Kind() == metrics.KindUint64 {
-				peak[1] = max(peak[1], live[0].Value.Uint64())
+			peak.inuse = max(peak.inuse, stats.HeapInuse)
+			if size := live[0].Value.Uint64(); size > peak.live {
+				peak.live = size
+				if profilePath != "" && peak.err == nil {
+					peak.err = writeStartupHeapProfile(profilePath)
+				}
 			}
 			select {
 			case <-done:
@@ -132,7 +141,14 @@ func openCapacityStartup(t *testing.T, open func() *SQLiteStore, fileBytes, disk
 	result.elapsed = time.Since(started)
 	close(done)
 	peaks := <-sampled
-	result.peakHeap, result.peakLive = peaks[0], peaks[1]
+	if peaks.err != nil {
+		repo.Close()
+		t.Fatal(peaks.err)
+	}
+	if check != nil {
+		check(repo)
+	}
+	result.peakHeap, result.peakLive = peaks.inuse, peaks.live
 	result.bounded = repo.BoundedMetadataEnabled()
 	result.spooled = metadataLogicalDiskUsed.Load() - diskBefore
 	if result.bounded {
@@ -224,7 +240,7 @@ func testStartupLogicalFileCapacity(t *testing.T, open func(name string) func() 
 
 	// The old fixed per-file limit, scaled: the file does not fit it although
 	// the process budget holds it.
-	fixed := openCapacityStartup(t, open("fixed"), fileBytes, diskBytes)
+	fixed := openCapacityStartup(t, open("fixed"), fileBytes, diskBytes, "", nil)
 	if fixed.bounded {
 		t.Fatal("the scaled fixture fits the old per-file capacity; raise FLOW_TEST_CAPACITY_PROJECTS")
 	}
@@ -240,7 +256,7 @@ func testStartupLogicalFileCapacity(t *testing.T, open func(name string) func() 
 
 	// The per-file capacity follows the process budget: the same file is
 	// admitted and passes the old capacity.
-	admitted := openCapacityStartup(t, open("admitted"), defaultCapacity, diskBytes)
+	admitted := openCapacityStartup(t, open("admitted"), defaultCapacity, diskBytes, "", nil)
 	if !admitted.bounded || admitted.largestFile <= fileBytes || admitted.spooled > diskBytes {
 		t.Fatalf("bounded admission within the process budget: bounded=%t largest_file=%d spooled=%d old_capacity=%d budget=%d",
 			admitted.bounded, admitted.largestFile, admitted.spooled, fileBytes, diskBytes)
@@ -252,7 +268,7 @@ func testStartupLogicalFileCapacity(t *testing.T, open func(name string) func() 
 	}
 
 	// A process budget below the file refuses it and names the setting.
-	starved := openCapacityStartup(t, open("starved"), defaultCapacity, admitted.largestFile/2)
+	starved := openCapacityStartup(t, open("starved"), defaultCapacity, admitted.largestFile/2, "", nil)
 	if starved.bounded {
 		t.Fatal("a process budget below the file admitted it")
 	}
@@ -297,11 +313,17 @@ func TestBoundedMetadataStartupLogicalFileCapacity(t *testing.T) {
 
 // The MySQL start uses application journal capture, as in #262.
 func TestBoundedMetadataStartupLogicalFileCapacityMySQL(t *testing.T) {
+	startupHistoryFlags(t, "off")
+	open := startupCapacityMySQLOpener(t)
+	testStartupLogicalFileCapacity(t, func(string) func() *SQLiteStore { return open })
+}
+
+func startupCapacityMySQLOpener(t *testing.T) func() *SQLiteStore {
+	t.Helper()
 	if strings.ToLower(os.Getenv("FLOW_TEST_DATABASE_DRIVER")) != "mysql" {
 		t.Skip("requires FLOW_TEST_DATABASE_DRIVER=mysql and a throwaway MySQL database")
 	}
-	startupHistoryFlags(t, "off")
-	open := scratchMySQLDatabaseWith(t, func() *SQLiteStore {
+	return scratchMySQLDatabaseWith(t, func() *SQLiteStore {
 		repo, err := OpenDatabase(DatabaseConfig{Driver: "mysql", URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 4, MaxIdleConns: 2})
 		if err != nil {
 			t.Fatal(err)
@@ -310,5 +332,123 @@ func TestBoundedMetadataStartupLogicalFileCapacityMySQL(t *testing.T) {
 	}, func(config *DatabaseConfig) {
 		config.RecordJournalCapture = RecordJournalCaptureApplication
 	})
-	testStartupLogicalFileCapacity(t, func(string) func() *SQLiteStore { return open })
+}
+
+func writeStartupHeapProfile(path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	return errors.Join(pprof.WriteHeapProfile(file), file.Close())
+}
+
+// This opt-in probe samples one bounded open and saves the in-use heap
+// profile at each new live-heap high, leaving the peak profile on disk.
+// FLOW_TEST_STARTUP_HEAP_PROFILE_DIR enables it. The fixture sizes come from
+// FLOW_TEST_CAPACITY_PROJECTS and FLOW_TEST_CAPACITY_POINTS. Set
+// FLOW_TEST_STARTUP_HEAP_PENDING=on to add a project that needs a backfill.
+func TestBoundedMetadataStartupHistoryHeapProfile(t *testing.T) {
+	profiles := os.Getenv("FLOW_TEST_STARTUP_HEAP_PROFILE_DIR")
+	if profiles == "" {
+		t.Skip("set FLOW_TEST_STARTUP_HEAP_PROFILE_DIR to capture startup heap profiles")
+	}
+	projects, points, _, _ := capacityHistoryScale(t)
+	pending := os.Getenv("FLOW_TEST_STARTUP_HEAP_PENDING") == "on"
+	for _, dialect := range []string{"SQLite", "MySQL"} {
+		t.Run(dialect, func(t *testing.T) {
+			startupHistoryFlags(t, "off")
+			var seed, open func() *SQLiteStore
+			if dialect == "MySQL" {
+				open = startupCapacityMySQLOpener(t)
+				seed = open
+			} else {
+				path := filepath.Join(t.TempDir(), "seed.db")
+				seed = func() *SQLiteStore {
+					repo, err := OpenSQLiteTestFixture(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return repo
+				}
+				open = func() *SQLiteStore {
+					repo, err := OpenDatabase(DatabaseConfig{Driver: "sqlite", Path: path})
+					if err != nil {
+						t.Fatal(err)
+					}
+					return repo
+				}
+			}
+			repo := seed()
+			seedCapacityHistory(t, repo, projects, points)
+			if pending {
+				seedCapacityPendingHistory(t, repo, points)
+			}
+			prepared, err := repo.PrepareBoundedMetadata(t.Context())
+			if err != nil || !prepared.Ready {
+				repo.Close()
+				t.Fatalf("prepare bounded metadata: %+v %v", prepared, err)
+			}
+			if dialect == "MySQL" && repo.RecordJournalCapture() != RecordJournalCaptureApplication {
+				t.Fatalf("MySQL fixture capture = %q, want application", repo.RecordJournalCapture())
+			}
+			if err := repo.Close(); err != nil {
+				t.Fatal(err)
+			}
+			name := fmt.Sprintf("%s-%dx%d", strings.ToLower(dialect), projects, points)
+			if pending {
+				name += "-pending"
+			}
+			path := filepath.Join(profiles, name+".pb.gz")
+			runtime.GC()
+			result := openCapacityStartup(t, open, metadataLogicalFileAddressBytes, metadataLogicalDiskCap(), path, func(repo *SQLiteStore) {
+				if pending {
+					checkCapacityPendingHistory(t, repo, points)
+				}
+			})
+			if !result.bounded || result.largestFile == 0 || result.peakLive == 0 {
+				t.Fatalf("profile did not capture a bounded open: %+v", result)
+			}
+			t.Logf("projects=%d points=%d profile=%s", projects, points, path)
+		})
+	}
+}
+
+const capacityPendingProjectID = "startup-project-pending"
+
+func seedCapacityPendingHistory(t *testing.T, repo *SQLiteStore, points int) {
+	t.Helper()
+	now := time.Now().UTC()
+	start := now.AddDate(0, 0, -7*(points-1)).Format("2006-01-02")
+	ctx := WithMetadataFields(t.Context(), "projects")
+	if err := repo.MutateWorkspace(ctx, "test-workspace", "startup.history_heavy", "", nil, func(data *domain.Bootstrap) error {
+		data.Projects = append(data.Projects, domain.Project{
+			ID: capacityPendingProjectID, Name: "Pending startup project",
+			TeamIDs: []string{data.Teams[0].ID}, CreatedAt: now, UpdatedAt: now, StartDate: &start,
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkCapacityPendingHistory(t *testing.T, repo *SQLiteStore, points int) {
+	t.Helper()
+	var raw []byte
+	err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key=?`,
+		"test-workspace", capacityPendingProjectID).Scan(&raw)
+	if err != nil {
+		repo.Close()
+		t.Fatal(err)
+	}
+	var project domain.Project
+	if err := json.Unmarshal(raw, &project); err != nil {
+		repo.Close()
+		t.Fatal(err)
+	}
+	for _, series := range [][]domain.ProjectProgressHistoryPoint{project.IssueCountHistory, project.ScopeHistory, project.CompletedScopeHistory, project.InProgressScopeHistory, project.ProgressHistory} {
+		if len(series) != points {
+			repo.Close()
+			t.Fatalf("pending project has a series with %d points, want %d", len(series), points)
+		}
+	}
 }

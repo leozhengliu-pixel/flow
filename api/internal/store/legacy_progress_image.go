@@ -190,14 +190,11 @@ func (p *legacyProgressImage) Rebuild(ctx context.Context, tx *sqlTx, workspace 
 	if stamp.workspaceID == "" || source.Stamp().workspaceID != stamp.workspaceID {
 		return nil, ErrMetadataRecordQuery
 	}
-	patches, err := sw26NewMigrationStage(ctx)
+	patches, err := newLegacyProgressPatches(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer patches.Close()
-	if _, err := patches.exec(ctx, 4096, `CREATE TABLE legacy_progress_patches(ordinal INTEGER PRIMARY KEY,frame_offset INTEGER NOT NULL,frame_size INTEGER NOT NULL,frame_cost INTEGER NOT NULL)`); err != nil {
-		return nil, err
-	}
 	values, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {
 		return nil, err
@@ -224,17 +221,10 @@ func (p *legacyProgressImage) Rebuild(ctx context.Context, tx *sqlTx, workspace 
 				return err
 			}
 			project := value.Interface().(domain.Project)
-			if err := group.rebuildSQL(ctx, tx, workspace, &project, now); err != nil {
+			if _, err := group.rebuildSQL(ctx, tx, workspace, &project, now); err != nil {
 				return err
 			}
-			patch, err := values.writeValue(reflect.ValueOf(project), 0, false)
-			if err != nil {
-				return err
-			}
-			if _, err := patches.exec(ctx, 512, `INSERT INTO legacy_progress_patches(ordinal,frame_offset,frame_size,frame_cost) VALUES(?,?,?,?)`, ordinal, patch.offset, patch.size, patch.cost); err != nil {
-				return err
-			}
-			return ctx.Err()
+			return stageLegacyProgressPatch(ctx, patches, values, ordinal, project)
 		})
 	})
 	if err != nil {
@@ -246,6 +236,27 @@ func (p *legacyProgressImage) Rebuild(ctx context.Context, tx *sqlTx, workspace 
 		}
 		return legacyProgressCollection{base: original, patches: patches, values: values.storage}, true, nil
 	})
+}
+
+func newLegacyProgressPatches(ctx context.Context) (*sw26MigrationStage, error) {
+	stage, err := sw26NewMigrationStage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := stage.exec(ctx, 4096, `CREATE TABLE legacy_progress_patches(ordinal INTEGER PRIMARY KEY,frame_offset INTEGER NOT NULL,frame_size INTEGER NOT NULL,frame_cost INTEGER NOT NULL)`); err != nil {
+		stage.Close()
+		return nil, err
+	}
+	return stage, nil
+}
+
+func stageLegacyProgressPatch(ctx context.Context, stage *sw26MigrationStage, values *metadataLogicalBuilder, ordinal int, project domain.Project) error {
+	patch, err := values.writeValue(reflect.ValueOf(project), 0, false)
+	if err != nil {
+		return err
+	}
+	_, err = stage.exec(ctx, 512, `INSERT INTO legacy_progress_patches(ordinal,frame_offset,frame_size,frame_cost) VALUES(?,?,?,?)`, ordinal, patch.offset, patch.size, patch.cost)
+	return err
 }
 
 type legacyProgressGroup struct {
@@ -453,26 +464,26 @@ func (g *legacyProgressGroup) teamSettings(ctx context.Context, teams map[string
 	return ctx.Err()
 }
 
-func (g *legacyProgressGroup) rebuildSQL(ctx context.Context, tx *sqlTx, workspace string, project *domain.Project, now time.Time) error {
+func (g *legacyProgressGroup) rebuildSQL(ctx context.Context, tx *sqlTx, workspace string, project *domain.Project, now time.Time) (bool, error) {
 	// Run the same SQL readers with explicit admission and indexed state
 	// resolution, avoiding their optional whole-catalogue state scan.
 	ctx = context.WithValue(ctx, issueProgressWorkKey{}, (*issueProgressWork)(nil))
 	if err := g.progress.admitIssues(ctx, tx, workspace, project.ID); err != nil {
-		return err
+		return false, err
 	}
 	issues, err := projectProgressIssues(ctx, tx, workspace, project.ID, g.progress.states)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ids := make([]string, 0, len(issues))
 	teams := map[string]bool{}
 	for _, issue := range issues {
 		ids = append(ids, issue.id)
 		if err := g.inputs.addKey(ctx, teams, issue.teamID); err != nil {
-			return err
+			return false, err
 		}
 		if err := g.loadState(ctx, issue.state.ID); err != nil {
-			return err
+			return false, err
 		}
 	}
 	for index := range issues {
@@ -483,24 +494,24 @@ func (g *legacyProgressGroup) rebuildSQL(ctx context.Context, tx *sqlTx, workspa
 	for start := 0; start < len(ids); start += 500 {
 		clause, args := bindList("resource_id", ids[start:min(start+500, len(ids))])
 		if err := g.progress.admitActivities(ctx, tx, workspace, clause, args); err != nil {
-			return err
+			return false, err
 		}
 	}
 	activities, err := progressActivities(ctx, tx, workspace, ids)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := g.historicalStates(ctx, activities); err != nil {
-		return err
+		return false, err
 	}
 	if err := g.teamSettings(ctx, teams); err != nil {
-		return err
+		return false, err
 	}
 	if err := g.grid(ctx, *project, issues, now); err != nil {
-		return err
+		return false, err
 	}
-	refreshProjectProgress(project, issues, g.progress.states, activities, g.inputs.data.TeamSettings, now)
-	return ctx.Err()
+	changed := refreshProjectProgress(project, issues, g.progress.states, activities, g.inputs.data.TeamSettings, now)
+	return changed, ctx.Err()
 }
 
 // The index stores only native frame descriptors and lookup keys. In

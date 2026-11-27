@@ -218,7 +218,9 @@ func (s *logicalJSONStream) write(value webhookJSONValue, depth int) error {
 			return err
 		}
 		count := 0
-		err := node.Children(s.ctx, func(_ reflect.Value, child metadataLogicalNode) error {
+		// Streaming an inline projects list visits every history in one
+		// pass. Read their headers without retaining a per-point index.
+		err := node.children(s.ctx, typ != progressHistoryType, func(_ reflect.Value, child metadataLogicalNode) error {
 			if count > 0 {
 				if err := s.text(","); err != nil {
 					return err

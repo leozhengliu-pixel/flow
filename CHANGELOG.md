@@ -7,7 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+<<<<<<< HEAD
+- Reduce peak memory when opening workspaces with long project progress histories and bounded metadata enabled. Startup checks stored history headers, rebuilds missing histories one project at a time, and creates history indexes only when a reader needs them.
+=======
 - Paint the document title before preparing the editor, and speed up opening documents with many mentions in large workspaces.
+>>>>>>> origin/main
 - Fix bounded metadata refusing to admit a workspace whose spooled source passed 1 GiB, such as one with thousands of projects with long progress histories, whatever `FLOW_METADATA_SOURCE_DISK_BYTES` allowed. One workspace's source can now use the whole metadata spool disk budget. When startup preparation or bounded admission falls back to legacy reads, the warning now gives the reason, the collection, the spool capacities involved and the setting to raise.
 - Fix Sync V2 answering 403 "You don't have access to this workspace" to an authorized session when an unrelated metadata write, such as recording an API key's first use, committed while the request resolved access. The server now resolves access again against current authority (up to three times) and answers 503 with `Retry-After` if metadata keeps moving; removed members, revoked keys and other real access changes still answer 403. Sync streams send a reconnect hint instead of closing silently in the same case.
 - Fix slow startup with bounded metadata on for workspaces with many projects that have long progress histories. Each spool write looked at every remembered frame of the workspace source, so a start took quadratic time and 2,300 such projects did not finish opening within minutes; startup now finds the affected frames directly.

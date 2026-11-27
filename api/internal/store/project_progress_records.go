@@ -501,26 +501,15 @@ func (s *SQLiteStore) rebuildProgressTx(ctx context.Context, tx *sqlTx, workspac
 }
 
 // backfillAllProjectProgress builds the history of projects that have none
-// yet: record-backed workspaces never ran the snapshot refresh, so projects
-// from older builds would otherwise never show a progress graph. It runs after
-// the record migrations and reads one project's rows at a time, so memory stays
-// bounded by the largest project; later issue writes keep histories current.
-//
-// A bounded image holds no projects, so with bounded metadata on the pass
-// runs as COLD work: each workspace's projects are read from its legacy view
-// and a workspace with a project to backfill is written on a COLD facade.
+// yet, after the record migrations. Subsequent issue writes keep histories
+// current.
 func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
-	if s.metadataResidency != nil && s.coldParent == nil {
-		ctx = WithColdWork(ctx, "project progress backfill")
-	}
 	for _, workspace := range s.WorkspaceKeys() {
-		if !s.projectProgressPending(ctx, workspace) {
-			continue
-		}
-		// Another server's issue write can change a project's progress
-		// meanwhile: rerun the backfill on the stored records.
 		if err := s.rerunBackgroundWrite(ctx, "project progress backfill", workspace, func() error {
-			return s.backfillWorkspaceProjectProgressWrite(ctx, workspace)
+			if s.BoundedMetadataEnabled() {
+				return s.backfillInstalledProjectProgress(ctx, workspace)
+			}
+			return s.backfillWorkspaceProjectProgress(ctx, workspace)
 		}); err != nil {
 			return err
 		}
@@ -528,31 +517,10 @@ func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
 	return nil
 }
 
-// projectProgressPending reports whether a project of the workspace has no
-// progress history yet. Bounded, the projects are read from the workspace's
-// legacy view.
-func (s *SQLiteStore) projectProgressPending(ctx context.Context, workspace string) bool {
-	if view, release, handled := s.coldAccessorView(ctx, "backfillAllProjectProgress", workspace, []string{"projects"}); handled {
-		defer release()
-		return view != nil && view.projectProgressPending(ctx, view.lastWorkspaceKey)
-	}
-	data, ok := s.storedWorkspace(workspace)
-	return ok && slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return len(project.ProgressHistory) == 0 })
-}
-
-// backfillWorkspaceProjectProgressWrite backfills one workspace. A bounded
-// store runs the literal legacy backfill on a COLD facade, which holds the
-// complete workspace, and publishes its result (coldLegacyWrite).
-func (s *SQLiteStore) backfillWorkspaceProjectProgressWrite(ctx context.Context, workspace string) error {
-	if s.metadataResidency == nil || s.coldParent != nil {
-		return s.backfillWorkspaceProjectProgress(ctx, workspace)
-	}
-	return s.coldLegacyWrite(ctx, workspace, func(ctx context.Context, facade *SQLiteStore) error {
-		return facade.backfillWorkspaceProjectProgress(ctx, workspace)
-	})
-}
-
 func (s *SQLiteStore) backfillWorkspaceProjectProgress(ctx context.Context, workspace string) error {
+	if s.BoundedMetadataEnabled() {
+		return ErrBoundedMetadataCoverage
+	}
 	now := time.Now().UTC()
 	{
 		s.lockWorkspaceWrites()

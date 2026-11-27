@@ -93,7 +93,6 @@ var scaleP21SW557Callbacks = map[string]string{
 	"store/SQLiteStore.migrateWorkspaceMetadataRecords": scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateIssueListProjection":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateLoopRunRecords":           scaleP21SW557OpenStage,
-	"store/SQLiteStore.backfillAllProjectProgress":      scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentDefaultAccess":    scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentInheritedScope":   scaleP21SW557OpenStage,
 	"store/SQLiteStore.migrateDocumentOwnerGrants":      scaleP21SW557OpenStage,

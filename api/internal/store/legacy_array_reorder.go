@@ -26,7 +26,7 @@ func legacyMetadataStreamedOrder(ctx context.Context, field string) bool {
 // between them) when its record IDs are unique, valid row keys on both sides.
 // Duplicates keep the materializing writer, which owns their inline shape.
 func (p *legacyMetadataWritePlan) arrayReorderReady(f *legacyMetadataWriteField) bool {
-	if f.full || f.field.name == "projects" || f.field.name == "agentSessions" {
+	if f.full || f.field.name == "projects" && !p.streamProjectBackfill(f) || f.field.name == "agentSessions" {
 		return false
 	}
 	for _, order := range [][]int{f.oldOrder, f.order} {

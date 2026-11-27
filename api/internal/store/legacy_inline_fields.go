@@ -46,8 +46,8 @@ func legacyInlineFieldsPatchFrom(ctx context.Context) *legacyInlineFieldsPatch {
 var errLegacyInlineFieldsShape = errors.New("inline metadata array shape determined")
 
 // inlineFieldReady accepts only an already-inline collection with no canonical
-// rows, whose target also remains inline under splitWorkspaceMetadata. A shape
-// transition or any canonical row keeps the existing full-field algorithm.
+// rows, whose target also remains inline under splitWorkspaceMetadata.
+// Startup progress changes only history, so it can retain an inline layout.
 func (p *legacyMetadataWritePlan) inlineFieldReady(ctx context.Context, field *legacyMetadataWriteField, shapes map[string]string) (bool, error) {
 	if field == nil || field.next.typ == nil || shapes[field.field.name] != "" {
 		return false, nil
@@ -83,6 +83,9 @@ func (p *legacyMetadataWritePlan) inlineFieldReady(ctx context.Context, field *l
 	}
 	if rows != 0 {
 		return false, nil
+	}
+	if p.streamProjectBackfill(field) {
+		return true, nil
 	}
 	if updates {
 		return p.inlineUpdateTargetShape(ctx, field.next)

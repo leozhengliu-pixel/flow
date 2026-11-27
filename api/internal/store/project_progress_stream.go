@@ -455,7 +455,7 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 		return false, nil
 	}
 	row := &f.rows[index]
-	closed, err := legacyProjectBodyPatchOnly(ctx, row.before, row.next, p.progress != nil)
+	closed, err := legacyProjectBodyPatchOnly(ctx, row.before, row.next, p.progress != nil || p.streamProjectBackfill(f))
 	if err != nil || !closed {
 		return false, err
 	}
@@ -840,7 +840,7 @@ func (p *legacyMetadataWritePlan) writeProjectProgressRow(ctx context.Context, f
 	if f.field.name != "projects" || row.before.typ == nil || row.next.typ == nil {
 		return false, nil
 	}
-	closed, err := legacyProjectBodyPatchOnly(ctx, row.before, row.next, p.progress != nil)
+	closed, err := legacyProjectBodyPatchOnly(ctx, row.before, row.next, p.progress != nil || p.streamProjectBackfill(f))
 	if err != nil || !closed {
 		return false, err
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"reflect"
 	"slices"
 	"strconv"
@@ -558,22 +557,6 @@ func (p *bootstrapBodyProjection) rawToken(node metadataLogicalNode, path bootst
 	return json.RawMessage(token)
 }
 
-func bootstrapBodyCollectionSize(ctx context.Context, node metadataLogicalNode) (int, bool, error) {
-	if node.generic {
-		return node.genericCollectionSize(ctx)
-	}
-	cursor := metadataLogicalCursor{node, node.offset + 16, ctx}
-	present, err := cursor.byte()
-	if err != nil || present == 0 {
-		return 0, false, err
-	}
-	count, err := cursor.uint()
-	if err != nil || count > node.cost || count > uint64(^uint(0)>>1) {
-		return 0, false, errors.Join(err, ErrMetadataRecordQuery)
-	}
-	return int(count), true, nil
-}
-
 func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogicalNode, path bootstrapBodyPath) (reflect.Value, error) {
 	if err := ctx.Err(); err != nil {
 		return reflect.Value{}, err
@@ -592,7 +575,7 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 			}
 			return reflect.ValueOf(p.token(node, path)), nil
 		}
-		size, present, err := bootstrapBodyCollectionSize(ctx, node)
+		size, present, err := metadataLogicalCollectionSize(ctx, node)
 		if err != nil {
 			return reflect.Value{}, err
 		}
@@ -659,7 +642,7 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 		})
 		return result, err
 	case reflect.Slice:
-		count, present, err := bootstrapBodyCollectionSize(ctx, node)
+		count, present, err := metadataLogicalCollectionSize(ctx, node)
 		if err != nil || !present {
 			return result, err
 		}
@@ -680,7 +663,7 @@ func (p *bootstrapBodyProjection) project(ctx context.Context, node metadataLogi
 		if node.typ.Key().Kind() != reflect.String {
 			return reflect.Value{}, ErrBoundedMetadataCoverage
 		}
-		count, present, err := bootstrapBodyCollectionSize(ctx, node)
+		count, present, err := metadataLogicalCollectionSize(ctx, node)
 		if err != nil || !present {
 			return result, err
 		}

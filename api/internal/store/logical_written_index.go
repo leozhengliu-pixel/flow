@@ -42,6 +42,11 @@ func newWrittenChildIndex(t reflect.Type, start int64) *writtenChildIndex {
 		// (A byte slice is read whole, never walked.)
 		return nil
 	}
+	// Progress histories are read a project at a time. Indexing each series
+	// during capture would keep a heap entry per point across the workspace.
+	if t == progressHistoryType {
+		return nil
+	}
 	return &writtenChildIndex{start: start}
 }
 

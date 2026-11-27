@@ -932,7 +932,6 @@ func TestScaleP21SW559ResidentImageReadersDetect(t *testing.T) {
 		"store/SQLiteStore.ProjectByID":                      "Projects",
 		"store/SQLiteStore.syncMemberDirectory":              "Users",
 		"store/SQLiteStore.legacyAuditLogPending":            "AuditLog",
-		"store/SQLiteStore.projectProgressPending":           "Projects",
 	}
 	analysis := scaleP21SW559Load(t)
 	reached := analysis.reachable()

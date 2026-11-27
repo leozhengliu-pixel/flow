@@ -50,6 +50,7 @@ type legacyMetadataWritePlan struct {
 	requested, actual *metadataLogicalSource
 	fields            []*legacyMetadataWriteField
 	progress          legacyMetadataProgress
+	progressBackfill  bool
 	inlineRoot        *metadataInlineRoot
 }
 
@@ -69,7 +70,11 @@ func (s *SQLiteStore) persistLegacyMetadataImage(ctx context.Context, tx *sqlTx,
 	return s.persistLegacyMetadataImageWithProgress(ctx, tx, workspace, before, target, nil)
 }
 
-func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context, tx *sqlTx, workspace string, before, target *metadataLogicalSource, progress legacyMetadataProgress) (_ *metadataLogicalSource, err error) {
+func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context, tx *sqlTx, workspace string, before, target *metadataLogicalSource, progress legacyMetadataProgress) (*metadataLogicalSource, error) {
+	return s.persistLegacyMetadataImagePlan(ctx, tx, workspace, before, target, progress, false)
+}
+
+func (s *SQLiteStore) persistLegacyMetadataImagePlan(ctx context.Context, tx *sqlTx, workspace string, before, target *metadataLogicalSource, progress legacyMetadataProgress, progressBackfill bool) (_ *metadataLogicalSource, err error) {
 	if s == nil || !s.BoundedMetadataEnabled() || tx == nil || tx.database != s.db || tx.dialect != s.dialect || before == nil || target == nil {
 		return nil, ErrBoundedMetadataCoverage
 	}
@@ -121,7 +126,7 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 			}
 		}
 	}
-	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target, progress: progress}
+	plan := &legacyMetadataWritePlan{store: s, tx: tx, workspace: workspace, workspaceID: stamp.workspaceID, work: work, frames: frames, requested: target, progress: progress, progressBackfill: progressBackfill}
 	defer func() {
 		if plan.inlineRoot != nil {
 			plan.inlineRoot.Close()
@@ -289,11 +294,12 @@ func (s *SQLiteStore) persistLegacyMetadataImageWithProgress(ctx context.Context
 		if fast {
 			continue
 		}
-		if !field.full && shapes[field.field.name] == "array" && legacyMetadataStreamedOrder(ctx, field.field.name) && plan.arrayReorderReady(field) {
+		streamOrder := legacyMetadataStreamedOrder(ctx, field.field.name)
+		if !field.full && shapes[field.field.name] == "array" && (streamOrder || plan.streamProjectBackfill(field)) && plan.arrayReorderReady(field) {
 			field.reorder = true
 			continue
 		}
-		if legacyMetadataStreamedOrder(ctx, field.field.name) {
+		if streamOrder {
 			ready, err := plan.arrayTransitionReady(ctx, field, shapes)
 			if err != nil {
 				return nil, err
@@ -1312,7 +1318,14 @@ func (p *legacyMetadataWritePlan) postimage(ctx context.Context, source *metadat
 	})
 }
 
+func (p *legacyMetadataWritePlan) streamProjectBackfill(field *legacyMetadataWriteField) bool {
+	return p.progressBackfill && field.field.name == "projects"
+}
+
 func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legacyMetadataWriteField, work *ResourceRead) (reflect.Value, reflect.Value, error) {
+	if p.streamProjectBackfill(f) {
+		return reflect.Value{}, reflect.Value{}, fmt.Errorf("%w: cannot stream project progress backfill for the stored collection shape", ErrBoundedMetadataCoverage)
+	}
 	left, right := f.before, f.next
 	if !f.full {
 		var err error
@@ -1366,7 +1379,7 @@ func (p *legacyMetadataWritePlan) rootShapes(ctx context.Context) (map[string]st
 	if err := p.tx.QueryRowContext(ctx, "SELECT "+length+" FROM workspace_states WHERE workspace_key=?", p.workspace).Scan(&size); err != nil {
 		return nil, err
 	}
-	if size > MetadataRecordPageMaxBytes && size <= int64(p.store.maxStateBytes) {
+	if (size > MetadataRecordPageMaxBytes || p.progressBackfill) && size <= int64(p.store.maxStateBytes) {
 		if p.store.dialect != "sqlite" {
 			// Streaming uses several reads; pin the root after the union's
 			// metadata row locks and recapture its current byte length.

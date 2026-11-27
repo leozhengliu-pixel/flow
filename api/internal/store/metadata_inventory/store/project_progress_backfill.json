@@ -1,0 +1,15 @@
+{
+  "source": "store/project_progress_backfill.go",
+  "unmigrated": 0,
+  "consumers": {
+    "backfillInstalledProjectProgress": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "reason": "Startup pins the installed logical generation. It checks the progress series headers before opening a write transaction, and rebuilds only missing histories using one project's issue and activity rows at a time. The writer stages histories on disk and installs the committed logical generation. TestProjectProgressStartupBackfillBoundedMatchesLegacy compares the stored rows.",
+      "temperature": "cold",
+      "temperatureReason": "Startup only",
+      "callers": ["store/SQLiteStore.backfillAllProjectProgress"]
+    }
+  }
+}
