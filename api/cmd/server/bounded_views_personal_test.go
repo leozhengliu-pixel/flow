@@ -138,7 +138,7 @@ func TestBoundedSavedViewDifferential(t *testing.T) {
 		{"create-project-alias-invalid", "POST", "", `{"name":"Project view","projectId":"` + fx.prefix + `pub-old"}`, owner, false, 400},
 		{"create-private-team-denied", "POST", "", `{"name":"Denied","teamId":"` + fx.privateTeam + `"}`, member, true, 403},
 		{"create-guest-denied", "POST", "", `{"name":"Denied"}`, guest, false, 403},
-		{"create-invalid-json", "POST", "", `{`, owner, false, 403},
+		{"create-invalid-json", "POST", "", `{`, owner, false, 400},
 		{"patch-slug", "PATCH", editableSlug, `{"name":"Renamed","scope":"personal","favorite":true}`, owner, false, 200},
 		{"patch-unchanged", "PATCH", editable, `{}`, owner, false, 200},
 		{"patch-favorite-add", "PATCH", editable, `{"favorite":true}`, owner, false, 200},

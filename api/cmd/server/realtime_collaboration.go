@@ -783,7 +783,11 @@ func (s *server) socketWorkspaceMetadata(r *http.Request, workspace string) (dom
 func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, bool, bool, error) {
 	// The socket lives on; never reuse an access evaluation cached on its
 	// request (requestIssueQueryAccess caches per request for other paths).
-	request := r.Clone(context.WithValue(r.Context(), issueRequestAccessKey{}, struct{}{}))
+	// The reads it opens belong to this check, not to the socket's request,
+	// whose scope closes when its handler returns.
+	ctx, closeReads := beginIndependentMetadataOutputReads(context.WithValue(r.Context(), issueRequestAccessKey{}, struct{}{}))
+	defer closeReads()
+	request := r.Clone(ctx)
 	path := *r.URL
 	path.Path, path.RawPath = "/api/issue-records/"+issueID, ""
 	request.URL = &path
