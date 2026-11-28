@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '37 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -18,16 +20,47 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  # Main pushes keep the complete race, coverage, dialect and release-surface
+  # graph. Pull requests use scripts/ci/ci-scope.sh so a web-only change does
+  # not wait for Go shards, while workflow and unknown root changes stay broad.
+  change-scope:
+    name: CI scope
+    runs-on: ubuntu-latest
+    outputs:
+      all: ${{ steps.scope.outputs.all }}
+      api: ${{ steps.scope.outputs.api }}
+      web: ${{ steps.scope.outputs.web }}
+      sdk: ${{ steps.scope.outputs.sdk }}
+      e2e: ${{ steps.scope.outputs.e2e }}
+      integration: ${{ steps.scope.outputs.integration }}
+      dialect: ${{ steps.scope.outputs.dialect }}
+      packaging: ${{ steps.scope.outputs.packaging }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Fetch pull request base
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
+
+      - name: Determine changed surfaces
+        id: scope
+        env:
+          CI_SCOPE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          CI_SCOPE_HEAD_SHA: ${{ github.sha }}
+        run: scripts/ci/ci-scope.sh | tee -a "$GITHUB_OUTPUT"
+
   # The three vitest coverage gates run the same suite against different coverage
   # scopes and thresholds, so they run side by side instead of one after another.
   # "Web (Node 24 LTS)" below is the required status check that gathers them.
   web-checks:
-    name: Web lint, route inventory and build
-    # Keep the initial 20 hosted runners available for all API shards, browser
-    # shards, the web coverage gates, and the API static checks. This short job
-    # starts after static checks, while the long-running tests finish.
-    needs: [api-static]
-    if: ${{ always() }}
+    name: Web lint and route inventory
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.web == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -47,7 +80,15 @@ jobs:
       - name: Use project npm version
         run: npm install --global npm@10.9.2
 
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node24-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Lint
@@ -57,11 +98,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: node scripts/generate-openapi.mjs --check
 
-      - name: Build
-        run: npm run build
-
   web-tests:
     name: Web unit tests (${{ matrix.name }})
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.web == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -91,7 +131,15 @@ jobs:
       - name: Use project npm version
         run: npm install --global npm@10.9.2
 
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node24-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Unit tests and coverage
@@ -99,7 +147,7 @@ jobs:
 
   web:
     name: Web (Node 24 LTS)
-    needs: [web-checks, web-tests]
+    needs: [change-scope, web-checks, web-tests]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -109,7 +157,7 @@ jobs:
         run: |
           echo "Results: $RESULTS"
           for result in $RESULTS; do
-            if [ "$result" != success ]; then
+            if [ "$result" != success ] && [ "$result" != skipped ]; then
               echo "A web job did not succeed." >&2
               exit 1
             fi
@@ -117,8 +165,8 @@ jobs:
 
   web-node-26:
     name: Web (Node 26 compatibility)
-    needs: [api-static]
-    if: ${{ always() }}
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.web == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -137,7 +185,15 @@ jobs:
       - name: Use project npm version
         run: npm install --global npm@10.9.2
 
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node26-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Lint
@@ -148,8 +204,8 @@ jobs:
 
   sdk:
     name: TypeScript SDK
-    needs: [api-static]
-    if: ${{ always() }}
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.sdk == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -165,7 +221,15 @@ jobs:
           cache: npm
           cache-dependency-path: sdk/typescript/package-lock.json
 
+      - name: Restore SDK node_modules
+        id: sdk-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/sdk/typescript/node_modules
+          key: sdk-node-modules-node24-${{ runner.os }}-${{ hashFiles('sdk/typescript/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.sdk-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Verify generated code matches docs/openapi.json
@@ -181,11 +245,75 @@ jobs:
       - name: Build
         run: npm run build
 
+  e2e-build:
+    name: Browser test build
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.e2e == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Use project npm version
+        run: npm install --global npm@10.9.2
+
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node24-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Build browser API binaries
+        working-directory: api
+        run: |
+          mkdir -p "$RUNNER_TEMP/browser-build/bin"
+          go build -p 1 -o "$RUNNER_TEMP/browser-build/bin/flow-e2e-api" ./cmd/server
+          go build -p 1 -tags securitye2e -o "$RUNNER_TEMP/browser-build/bin/flow-security-fixture-api" ./cmd/server
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Package shared browser build
+        working-directory: ${{ github.workspace }}
+        run: |
+          cp -R web/dist "$RUNNER_TEMP/browser-build/"
+          tar -czf "$RUNNER_TEMP/browser-build.tar.gz" -C "$RUNNER_TEMP/browser-build" bin dist
+
+      - name: Upload shared browser build
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-build
+          path: ${{ runner.temp }}/browser-build.tar.gz
+          retention-days: 1
+
   # 4 browser + 15 API test (api-test max-parallel) + 1 API static job = 20, the
   # hosted-runner limit. The remaining API shards, the web coverage gates and
   # the short jobs take runners as they free up.
   e2e-shard:
     name: Browser E2E (${{ matrix.shard }}/4)
+    needs: [change-scope, e2e-build]
+    if: ${{ needs.change-scope.outputs.e2e == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -211,33 +339,58 @@ jobs:
       - name: Use project npm version
         run: npm install --global npm@10.9.2
 
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node24-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
         working-directory: web
         run: npm ci
+
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Download shared browser build
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-build
+          path: ${{ runner.temp }}/browser-build-download
+
+      - name: Extract shared browser build
+        run: |
+          mkdir -p "$RUNNER_TEMP/browser-build"
+          tar -xzf "$RUNNER_TEMP/browser-build-download/browser-build.tar.gz" -C "$RUNNER_TEMP/browser-build"
+          chmod +x "$RUNNER_TEMP/browser-build/bin/"*
 
       - name: Install Chromium
         working-directory: web
         run: npx playwright install --with-deps chromium
-
-      # Cold compilation can exceed Playwright's server readiness deadline before
-      # the API writes its first log line. Keep the build outside that deadline.
-      - name: Build browser test API
-        working-directory: api
-        run: go build -o "$RUNNER_TEMP/flow-e2e-api" ./cmd/server
 
       - name: Run browser tests
         working-directory: web
         env:
           # The API's log (the detail behind any 500) goes to this file.
           FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
-          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
+          # The regular suite imports source-only E2E fixtures. The shared
+          # artifact still supplies the precompiled API binary, while Vite
+          # serves the checked-out source tree.
+          FLOW_E2E_WEB_MODE: dev
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/4
 
       - name: Run telemetry browser tests
         if: matrix.shard == 1
         working-directory: web
         env:
-          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
         run: npx playwright test -c playwright.telemetry.config.ts
 
       # The response security headers in a real browser, against the production web build
@@ -247,7 +400,9 @@ jobs:
         if: matrix.shard == 1
         working-directory: web
         env:
-          FLOW_SECURITY_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_SECURITY_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
+          FLOW_SECURITY_FIXTURE_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-security-fixture-api
+          FLOW_SECURITY_WEB_DIST: ${{ runner.temp }}/browser-build/dist
         run: npm run test:e2e:security
 
       - name: Upload API log and Playwright output
@@ -266,9 +421,8 @@ jobs:
 
   e2e-performance:
     name: Browser E2E performance
-    # Start after static checks free a hosted runner.
-    needs: [api-static]
-    if: ${{ !cancelled() }}
+    needs: [change-scope, e2e-build]
+    if: ${{ needs.change-scope.outputs.e2e == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -294,23 +448,47 @@ jobs:
       - name: Use project npm version
         run: npm install --global npm@10.9.2
 
+      - name: Restore web node_modules
+        id: web-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/web/node_modules
+          key: web-node-modules-node24-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.web-modules.outputs.cache-hit != 'true'
         run: npm ci
+
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Download shared browser build
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-build
+          path: ${{ runner.temp }}/browser-build-download
+
+      - name: Extract shared browser build
+        run: |
+          mkdir -p "$RUNNER_TEMP/browser-build"
+          tar -xzf "$RUNNER_TEMP/browser-build-download/browser-build.tar.gz" -C "$RUNNER_TEMP/browser-build"
+          chmod +x "$RUNNER_TEMP/browser-build/bin/"*
+          cp -R "$RUNNER_TEMP/browser-build/dist" "$GITHUB_WORKSPACE/web/dist"
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Build browser test API
-        working-directory: api
-        run: go build -o "$RUNNER_TEMP/flow-e2e-api" ./cmd/server
-
-      - name: Build the web app and run performance tests
+      - name: Run performance tests against shared build
         env:
           FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
-          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
           FLOW_E2E_DATABASE_PATH: ${{ runner.temp }}/flow-e2e-performance.db
           FLOW_STORAGE_LOCAL_PATH: ${{ runner.temp }}/flow-e2e-performance-uploads
-        run: npm run test:e2e:performance
+        run: npx playwright test -c playwright.performance.config.ts
 
       - name: Upload API log and Playwright output
         if: ${{ !cancelled() }}
@@ -326,7 +504,7 @@ jobs:
 
   e2e:
     name: Browser E2E
-    needs: [e2e-shard, e2e-performance]
+    needs: [change-scope, e2e-build, e2e-shard, e2e-performance]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -336,7 +514,7 @@ jobs:
         run: |
           echo "Results: $RESULTS"
           for result in $RESULTS; do
-            if [ "$result" != success ]; then
+            if [ "$result" != success ] && [ "$result" != skipped ]; then
               echo "A browser job did not succeed." >&2
               exit 1
             fi
@@ -350,9 +528,14 @@ jobs:
   # (scripts/ci/go-test-shards.json). Tests listed in scripts/ci/known-failing-tests.txt
   # for a mode are left out of its shards and run, never blocking, in "Known failing
   # (tracked)". Each job writes its own coverage profile; api-coverage merges them
-  # and enforces the floor. "API" below is the required status check that gathers everything.
+  # and enforces the floor. The external-database differential matrix below is
+  # still part of push and covered pull-request runs. The SQLite API shards keep
+  # the complete test list, including every Scale differential. "API" below is
+  # the required status check that gathers every API and dialect job.
   api-plan:
     name: API test plan
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.api == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -371,8 +554,119 @@ jobs:
           MODE: ${{ github.event_name == 'pull_request' && 'plain' || 'race' }}
         run: scripts/ci/go-test-matrix.sh "$MODE" | tee -a "$GITHUB_OUTPUT"
 
+  # Compile each sharded SQLite package once. The test jobs download these
+  # binaries and select their shard with -test.run, so runner startup and Go
+  # compilation do not repeat for every shard.
+  api-test-build:
+    name: Build API test binary (${{ matrix.name }})
+    needs: [change-scope, api-plan]
+    if: ${{ needs.change-scope.outputs.api == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: api
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: server
+            package: ./cmd/server
+          - name: store
+            package: ./internal/store
+    env:
+      MODE: ${{ needs.api-plan.outputs.mode }}
+      PACKAGE: ${{ matrix.package }}
+      BINARY_NAME: flow-${{ needs.api-plan.outputs.mode }}-${{ matrix.name }}.test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Compile test binary
+        run: |
+          set -euo pipefail
+          flags=(-covermode=atomic)
+          if [ "$MODE" = race ]; then
+            flags=(-race -covermode=atomic)
+          fi
+          go test -c "${flags[@]}" -o "$RUNNER_TEMP/$BINARY_NAME" "$PACKAGE"
+          chmod +x "$RUNNER_TEMP/$BINARY_NAME"
+          if [ "$MODE" = race ]; then
+            go test -c -race -o "$RUNNER_TEMP/flow-race-${{ matrix.name }}-nocover.test" "$PACKAGE"
+            chmod +x "$RUNNER_TEMP/flow-race-${{ matrix.name }}-nocover.test"
+          fi
+
+      - name: Upload test binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-test-bin-${{ needs.api-plan.outputs.mode }}-${{ matrix.name }}
+          path: ${{ runner.temp }}/${{ env.BINARY_NAME }}
+          retention-days: 3
+
+      - name: Upload race-only differential binary
+        if: ${{ needs.api-plan.outputs.mode == 'race' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-test-bin-race-nocover-${{ matrix.name }}
+          path: ${{ runner.temp }}/flow-race-${{ matrix.name }}-nocover.test
+          retention-days: 3
+
+  # The PostgreSQL and MySQL differential shards use one plain test binary per
+  # package. The database driver is selected at runtime, so the same artifact
+  # serves both matrices.
+  scale-test-build:
+    name: Build Scale test binary (${{ matrix.name }})
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.dialect == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: api
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: server
+            package: ./cmd/server
+          - name: store
+            package: ./internal/store
+    env:
+      PACKAGE: ${{ matrix.package }}
+      BINARY_NAME: flow-scale-${{ matrix.name }}.test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Compile test binary
+        run: |
+          set -euo pipefail
+          go test -c -o "$RUNNER_TEMP/$BINARY_NAME" "$PACKAGE"
+          chmod +x "$RUNNER_TEMP/$BINARY_NAME"
+
+      - name: Upload test binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-scale-test-bin-${{ matrix.name }}
+          path: ${{ runner.temp }}/${{ env.BINARY_NAME }}
+          retention-days: 3
+
   api-static:
     name: API vet and shard check
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.api == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -427,9 +721,10 @@ jobs:
 
   api-test:
     name: API tests (${{ matrix.name }})
-    needs: [api-plan]
+    needs: [change-scope, api-plan, api-test-build]
+    if: ${{ needs.change-scope.outputs.api == 'true' }}
     runs-on: ubuntu-latest
-    # go test's own -timeout (below) fires first and prints the running tests.
+    # The precompiled test binary's timeout fires before the job timeout.
     timeout-minutes: 65
     defaults:
       run:
@@ -440,8 +735,8 @@ jobs:
       matrix: ${{ fromJSON(needs.api-plan.outputs.api) }}
     env:
       MODE: ${{ needs.api-plan.outputs.mode }}
-      # Use the test run's instrumentation so listing and execution reuse the
-      # same build objects.
+      # Use the test run's instrumentation when listing tests so shard
+      # validation and the uploaded binary agree on the test set.
       GO_TEST_LIST_FLAGS: ${{ needs.api-plan.outputs.mode == 'race' && '-race -covermode=atomic' || '-covermode=atomic' }}
       SHARD_SCOPE: ${{ needs.api-plan.outputs.mode }}
       PACKAGE: ${{ matrix.package }}
@@ -459,62 +754,114 @@ jobs:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
-      # setup-go's dependency-only key is immutable: a hit never saves newly
-      # compiled source or race/coverage variants. Layer a source-keyed build
-      # cache over it, with one writer per mode and package group and prior-source fallback.
-      - name: Restore test and coverage build cache
-        id: race-cache
-        uses: actions/cache/restore@v5
+      - name: Download precompiled test binary
+        if: ${{ matrix.package != 'others' }}
+        uses: actions/download-artifact@v8
         with:
-          path: ~/.cache/go-build
-          key: go-test-v2-${{ env.MODE }}-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-${{ hashFiles('api/**/*.go') }}
-          restore-keys: |
-            go-test-v2-${{ env.MODE }}-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-
+          name: go-test-bin-${{ needs.api-plan.outputs.mode }}-${{ matrix.package == './cmd/server' && 'server' || 'store' }}
+          path: ${{ runner.temp }}/go-test-bin
 
-      - name: Test with coverage (race detector on main)
+      - name: Download race-only differential binary
+        if: ${{ matrix.package != 'others' && needs.api-plan.outputs.mode == 'race' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: go-test-bin-race-nocover-${{ matrix.package == './cmd/server' && 'server' || 'store' }}
+          path: ${{ runner.temp }}/go-test-bin
+
+      - name: Make test binaries executable
+        if: ${{ matrix.package != 'others' }}
+        run: chmod +x "$RUNNER_TEMP/go-test-bin/"*.test
+
+      # Every SQLite test remains in the shard assignment. On main, the
+      # differential subset runs from the race-only binary, while the rest of
+      # the same shard runs from the race-plus-atomic binary. This keeps the
+      # SQLite differential race signal and collects package coverage from the
+      # ordinary API tests without paying atomic instrumentation on the
+      # differential loops.
+      - name: Run sharded SQLite tests
+        if: ${{ matrix.package != 'others' }}
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/coverage" "$GITHUB_WORKSPACE/timings"
-          if [ "$PACKAGE" = others ]; then
-            # Everything the sharded jobs do not cover.
-            mapfile -t packages < <(go list ./... | grep -vE '/cmd/server$|/internal/store$')
-            selection=()
+          all_names="$RUNNER_TEMP/all-names"
+          dialect_names="$RUNNER_TEMP/dialect-names"
+          dialect_shard_names="$RUNNER_TEMP/dialect-shard-names"
+          core_names="$RUNNER_TEMP/core-names"
+          export GO_TEST_BINARY="$RUNNER_TEMP/go-test-bin/flow-$MODE-$BUILD_CACHE_GROUP.test"
+          ../scripts/ci/go-test-shard.sh list "$PACKAGE" "$SHARD" "$SHARDS" > "$all_names"
+          if [ "$MODE" = race ]; then
+            GO_TEST_SHARD_SELECTION=dialect SHARD_SCOPE="$SHARD_SCOPE" \
+              ../scripts/ci/go-test-shard.sh list "$PACKAGE" 1 1 > "$dialect_names"
+            LC_ALL=C comm -12 <(LC_ALL=C sort "$all_names") <(LC_ALL=C sort "$dialect_names") > "$dialect_shard_names"
+            LC_ALL=C comm -23 <(LC_ALL=C sort "$all_names") <(LC_ALL=C sort "$dialect_names") > "$core_names"
           else
-            packages=("$PACKAGE")
-            pattern=$(../scripts/ci/go-test-shard.sh run "$PACKAGE" "$SHARD" "$SHARDS")
-            echo "Shard $SHARD/$SHARDS of $PACKAGE: $(( $(printf '%s' "$pattern" | tr -cd '|' | wc -c) + 1 )) tests"
-            selection=(-run "$pattern")
+            : > "$dialect_shard_names"
+            cp "$all_names" "$core_names"
           fi
-          # -json gives every test's duration; go-test-json.sh log prints what
-          # plain `go test` would, and the failing tests' output follows a failure.
+          pattern_for() {
+            printf '^(%s)$' "$(paste -sd'|' "$1")"
+          }
+          events="$GITHUB_WORKSPACE/timings/$PROFILE.jsonl"
+          : > "$events"
+          status=0
+          if [ -s "$core_names" ]; then
+            ../scripts/ci/go-test-binary.sh \
+              "$RUNNER_TEMP/go-test-bin/flow-$MODE-$BUILD_CACHE_GROUP.test" \
+              "$PACKAGE" \
+              "$(pattern_for "$core_names")" \
+              "$events" \
+              "$GITHUB_WORKSPACE/coverage/$PROFILE.out" \
+              50m \
+              "$(go list -m)" || status=$?
+          else
+            echo 'mode: atomic' > "$GITHUB_WORKSPACE/coverage/$PROFILE.out"
+          fi
+          if [ -s "$dialect_shard_names" ]; then
+            dialect_status=0
+            GO_TEST_EVENTS_APPEND=1 ../scripts/ci/go-test-binary.sh \
+              "$RUNNER_TEMP/go-test-bin/flow-race-$BUILD_CACHE_GROUP-nocover.test" \
+              "$PACKAGE" \
+              "$(pattern_for "$dialect_shard_names")" \
+              "$events" \
+              "" \
+              50m \
+              "$(go list -m)" || dialect_status=$?
+            if [ "$status" -eq 0 ] && [ "$dialect_status" -ne 0 ]; then
+              status=$dialect_status
+            fi
+          fi
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Test other API packages with coverage
+        if: ${{ matrix.package == 'others' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/coverage" "$GITHUB_WORKSPACE/timings"
+          mapfile -t packages < <(go list ./... | grep -vE '/cmd/server$|/internal/store$')
+          race_flag=
+          if [ "$MODE" = race ]; then race_flag=-race; fi
           events="$GITHUB_WORKSPACE/timings/$PROFILE.jsonl"
           status=0
-          race=()
-          if [ "$MODE" = race ]; then race=(-race); fi
-          go test -json "${race[@]}" -count=1 -timeout 50m -covermode=atomic \
+          go test -json ${race_flag:+$race_flag} -count=1 -timeout 50m -covermode=atomic \
             -coverprofile="$GITHUB_WORKSPACE/coverage/$PROFILE.out" \
-            "${selection[@]}" "${packages[@]}" 2>&1 |
+            "${packages[@]}" 2>&1 |
             tee "$events" | ../scripts/ci/go-test-json.sh log || status=$?
-          # Timings of the tests that passed, also when others failed or the
-          # shard timed out, so a red run still measures what it ran.
-          if [ "$PACKAGE" = others ]; then
-            # Only the sharded packages need timings.
-            echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
-          else
-            ../scripts/ci/go-test-json.sh timings "$(go list -m)" \
-              "$GITHUB_WORKSPACE/timings/$PROFILE.json" "$events" || echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
-          fi
           if [ "$status" -ne 0 ]; then
             ../scripts/ci/go-test-json.sh failures "$events" || true
             exit "$status"
           fi
 
-      - name: Save test and coverage build cache
-        if: ${{ success() && (matrix.shard == 1 || matrix.shard == 0) && steps.race-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.cache/go-build
-          key: ${{ steps.race-cache.outputs.cache-primary-key }}
+      - name: Convert test events to timings
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "$PACKAGE" = others ]; then
+            echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
+          else
+            ../scripts/ci/go-test-json.sh timings "$(go list -m)" \
+              "$GITHUB_WORKSPACE/timings/$PROFILE.json" "$GITHUB_WORKSPACE/timings/$PROFILE.jsonl" || echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
+          fi
 
       - name: Upload per-package and per-test events
         if: ${{ !cancelled() }}
@@ -545,7 +892,8 @@ jobs:
 
   api-coverage:
     name: API coverage
-    needs: [api-test]
+    needs: [change-scope, api-test]
+    if: ${{ needs.change-scope.outputs.api == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -592,8 +940,8 @@ jobs:
   # detector). Not part of the "API" gate: a missing timings file must never fail a build.
   api-timings:
     name: API test timings
-    needs: [api-test]
-    if: ${{ !cancelled() }}
+    needs: [change-scope, api-test]
+    if: ${{ !cancelled() && needs.change-scope.outputs.api == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -620,7 +968,7 @@ jobs:
 
   api:
     name: API
-    needs: [api-plan, api-static, api-test, api-coverage]
+    needs: [change-scope, api-plan, api-static, api-test-build, api-test, api-coverage, scale-test-build, scale-dialects]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -630,7 +978,7 @@ jobs:
         run: |
           echo "Results: $RESULTS"
           for result in $RESULTS; do
-            if [ "$result" != success ]; then
+            if [ "$result" != success ] && [ "$result" != skipped ]; then
               echo "An API job did not succeed." >&2
               exit 1
             fi
@@ -638,8 +986,8 @@ jobs:
 
   infrastructure:
     name: Infrastructure integration
-    needs: [api-static]
-    if: ${{ always() }}
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.integration == 'true' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -680,6 +1028,30 @@ jobs:
         run: >-
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
           "SET GLOBAL log_bin_trust_function_creators=1;"
+
+      - name: Permit scratch databases in the isolated MySQL service
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';
+          GRANT ALL ON \`flow\\_prepare\\_%\`.* TO 'flow'@'%';"
+
+      - name: PostgreSQL metadata upgrade checks
+        working-directory: api
+        env:
+          FLOW_TEST_DATABASE_DRIVER: postgres
+          FLOW_TEST_DATABASE_URL: postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable
+        run: |
+          go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgrade$' -count=1 -timeout 15m
+          go test -tags integration ./internal/store -run '^TestDefaultMetadataUpgradeResumesLegacyWrites$' -count=1 -timeout 15m
+
+      - name: MySQL metadata upgrade checks
+        working-directory: api
+        env:
+          FLOW_TEST_DATABASE_DRIVER: mysql
+          FLOW_TEST_DATABASE_URL: mysql://flow:flow@127.0.0.1:3306/flow
+        run: |
+          go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgrade$' -count=1 -timeout 15m
+          go test -tags integration ./internal/store -run '^TestDefaultMetadataUpgradeResumesLegacyWrites$' -count=1 -timeout 15m
 
       - name: Checkout main for the MySQL write baseline
         uses: actions/checkout@v7
@@ -771,15 +1143,18 @@ jobs:
           FLOW_TEST_S3_SECRET_KEY: flow-development-secret
         run: go test -tags=integration ./internal/objectstore -run TestExternalS3RoundTrip
 
-  # Run the dialect suite from scripts/ci/go-test-selections.tsv on both external database engines.
-  # Tests in each package are sharded (scripts/ci/go-test-shards.json "dialect", packed by the per-test seconds measured on
-  # these jobs, scripts/ci/go-test-timings-dialect.json: the SQLite timings leave most of the long differentials
-  # untimed and under-weight the SQL ones, so shards ran past the 25-minute round), each shard on its
-  # own empty database (store tests leave rows the server tests would open), without the race detector. The
-  # dialect's known failures (scripts/ci/known-failing-tests.txt) are left out and run in "Known failing (tracked)".
+  # Run the scale differential suite on every main push and on pull requests
+  # that can change Go behavior. Web-only, docs-only, Helm-only and SDK-only
+  # pull requests skip this matrix through scripts/ci/ci-scope.sh. The suite
+  # remains plain because its value is the PostgreSQL/MySQL behavior comparison.
+  # It keeps the restricted-MySQL trigger and journal-capture probes. The
+  # metadata-upgrade checks run once per backend in infrastructure, where those
+  # same backend checks already have service databases. Each shard reuses one
+  # precompiled package test binary.
   scale-dialects:
     name: Scale differentials (${{ matrix.name }})
-    needs: [api-plan]
+    needs: [change-scope, api-plan, scale-test-build]
+    if: ${{ needs.change-scope.outputs.dialect == 'true' && needs.api-plan.result == 'success' && needs.scale-test-build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -808,12 +1183,34 @@ jobs:
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
           --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      GO_TEST_SHARD_SELECTION: dialect
+      GO_TEST_TIMINGS: ../scripts/ci/go-test-timings-dialect.json
+      SHARD_SCOPE: ${{ matrix.dialect }}
+      FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
+      FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
+      PACKAGE: ${{ matrix.package }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ matrix.shards }}
+      BINARY_NAME: flow-scale-${{ matrix.package == './cmd/server' && 'server' || 'store' }}.test
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
+
+      - name: Download precompiled test binary
+        uses: actions/download-artifact@v8
+        with:
+          name: go-scale-test-bin-${{ matrix.package == './cmd/server' && 'server' || 'store' }}
+          path: ${{ runner.temp }}/go-scale-test-bin
+
+      - name: Make test binary executable
+        run: chmod +x "$RUNNER_TEMP/go-scale-test-bin/"*.test
 
       - name: Upgrade with restricted MySQL trigger permissions
         if: matrix.dialect == 'mysql' && matrix.package == './cmd/server' && matrix.shard == 1
@@ -822,9 +1219,6 @@ jobs:
           FLOW_TEST_MYSQL_ADMIN_URL: mysql://root:root@127.0.0.1:3306/flow
         run: go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgradeWithRestrictedMySQL$' -count=1 -timeout 15m
 
-      # Before triggers are permitted, the flow account cannot create them:
-      # the journal tests run on application capture, in a database of their
-      # own (the database keeps its capture choice).
       - name: Application journal capture without MySQL trigger authority
         if: matrix.dialect == 'mysql' && matrix.package == './internal/store' && matrix.shard == 1
         working-directory: api
@@ -836,7 +1230,14 @@ jobs:
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e \
             "CREATE DATABASE flow_capture; GRANT ALL ON flow_capture.* TO 'flow'@'%';"
           pattern=$(../scripts/ci/go-test-shard.sh selection mysql-capture ./internal/store)
-          go test ./internal/store -run "$pattern" -count=1 -timeout 20m
+          (
+            cd ./internal/store
+            timeout --foreground 20m "$RUNNER_TEMP/go-scale-test-bin/$BINARY_NAME" \
+              -test.run "$pattern" \
+              -test.count=1 \
+              -test.timeout=20m \
+              -test.v
+          )
 
       - name: Permit triggers in the isolated MySQL service
         if: matrix.dialect == 'mysql'
@@ -844,8 +1245,6 @@ jobs:
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
           "SET GLOBAL log_bin_trust_function_creators=1;"
 
-      # Differentials that start a server on an empty database create
-      # and drop their own scratch databases beside the shared one.
       - name: Permit scratch databases in the isolated MySQL service
         if: matrix.dialect == 'mysql'
         run: >-
@@ -853,32 +1252,13 @@ jobs:
           "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';
           GRANT ALL ON \`flow\\_prepare\\_%\`.* TO 'flow'@'%';"
 
-      - name: Exercise MySQL and PostgreSQL defaults on a previous-release database
-        if: matrix.package == './cmd/server' && matrix.shard == 1
+      - name: Run scale differentials
         working-directory: api
         env:
-          FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
-          FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
-        run: |
-          go test -tags integration ./cmd/server -run '^TestDefaultMetadataUpgrade$' -count=1 -timeout 15m
-          go test -tags integration ./internal/store -run '^TestDefaultMetadataUpgradeResumesLegacyWrites$' -count=1 -timeout 15m
-
-      - name: Scale differentials
-        working-directory: api
-        env:
-          GO_TEST_SHARD_SELECTION: dialect
-          GO_TEST_TIMINGS: ../scripts/ci/go-test-timings-dialect.json
-          SHARD_SCOPE: ${{ matrix.dialect }}
-          FLOW_TEST_DATABASE_DRIVER: ${{ matrix.dialect }}
-          FLOW_TEST_DATABASE_URL: ${{ matrix.dialect == 'postgres' && 'postgres://flow:flow@127.0.0.1:5432/flow?sslmode=disable' || 'mysql://flow:flow@127.0.0.1:3306/flow' }}
-          PACKAGE: ${{ matrix.package }}
-          SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ matrix.shards }}
-        # go test's -timeout bounds a whole round of the shard, not one test,
-        # and dialect shards take 20-25 minutes: at 60 minutes a hang fails
-        # the round and the tests that had not started run in a further go
-        # test (go-test-resume.sh), so one hang cannot hide the rest of the
-        # shard, while a slow runner no longer reads as a hang.
+          GO_TEST_BINARY: ${{ runner.temp }}/go-scale-test-bin/flow-scale-${{ matrix.package == './cmd/server' && 'server' || 'store' }}.test
+        # A shard is bounded below the job timeout. The resume helper starts
+        # tests that were not reached after a timeout, so one hang cannot hide
+        # the rest of the selected suite.
         run: |
           set -euo pipefail
           ../scripts/ci/go-test-shard.sh list "$PACKAGE" "$SHARD" "$SHARDS" > "$RUNNER_TEMP/names"
@@ -893,8 +1273,8 @@ jobs:
   # after the blocking test jobs so it never holds a runner they wait for.
   known-failing:
     name: Known failing (tracked, ${{ matrix.scope }})
-    needs: [api-plan, api-test, scale-dialects]
-    if: ${{ !cancelled() && needs.api-plan.result == 'success' }}
+    needs: [change-scope, api-plan, api-test, scale-dialects]
+    if: ${{ always() && needs.change-scope.outputs.api == 'true' && needs.api-plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -947,8 +1327,8 @@ jobs:
   # coding sessions (track C): the in-sandbox runner and the sandbox image files.
   sandbox-runner:
     name: Sandbox runner
-    needs: [api-static]
-    if: ${{ always() }}
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.packaging == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -964,7 +1344,15 @@ jobs:
           cache: npm
           cache-dependency-path: sandbox-runner/package-lock.json
 
+      - name: Restore sandbox node_modules
+        id: sandbox-modules
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/sandbox-runner/node_modules
+          key: sandbox-node-modules-node22-${{ runner.os }}-${{ hashFiles('sandbox-runner/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.sandbox-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Type check
@@ -986,8 +1374,8 @@ jobs:
   # egress proxy entrypoint test. Offline only (KUBECONFIG=/dev/null).
   helm-chart:
     name: Helm chart
-    needs: [api-static]
-    if: ${{ always() }}
+    needs: [change-scope]
+    if: ${{ needs.change-scope.outputs.packaging == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository

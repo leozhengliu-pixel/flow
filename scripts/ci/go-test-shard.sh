@@ -13,6 +13,8 @@
 # path such as ./cmd/server. Extra flags for `go test -list` come from
 # GO_TEST_LIST_FLAGS; pass the flags the real run uses (for example -race) so the
 # test binary is compiled once and served from the build cache afterwards.
+# GO_TEST_BINARY may name a precompiled package test binary. When set, the
+# binary's -test.list output supplies the names without recompiling the package.
 #
 # How a test gets its shard
 #
@@ -34,7 +36,8 @@
 # Which tests take part
 #
 # GO_TEST_SHARD_SELECTION keeps only the named suite in go-test-selections.tsv.
-# GO_TEST_SHARD_FILTER (an extended regex, optional) filters the remaining names.
+# GO_TEST_SHARD_FILTER (an extended regex, optional) filters the remaining
+# names.
 # SHARD_SCOPE (race, plain, postgres or mysql) leaves out the tests that scripts/ci/known-failing-tests.txt
 # (KNOWN_FAILING points at another file) lists for this package and scope: the
 # "Known failing (tracked)" job runs those instead. The check command fails when
@@ -65,8 +68,15 @@ trap 'rm -rf "$work"' EXIT
 # Every runnable top-level test name of a package, sorted and unique.
 full_tests() {
   local package=$1
-  # shellcheck disable=SC2086
-  go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list '^(Test|Fuzz|Example)' "$package" |
+  if [ -n "${GO_TEST_BINARY:-}" ]; then
+    (
+      cd "$package"
+      "$GO_TEST_BINARY" -test.list '^(Test|Fuzz|Example)'
+    )
+  else
+    # shellcheck disable=SC2086
+    go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list '^(Test|Fuzz|Example)' "$package"
+  fi |
     grep -E '^(Test|Fuzz|Example)[A-Za-z0-9_]*$' |
     LC_ALL=C sort -u
 }
@@ -341,8 +351,15 @@ case $command in
       # Each shard's pattern must select exactly the shard's tests and nothing else.
       # `go test -list` applies the pattern the same way -run does.
       if [ -n "${CHECK_PATTERNS:-}" ]; then
-        # shellcheck disable=SC2086
-        go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list "$regex" "$package" |
+        if [ -n "${GO_TEST_BINARY:-}" ]; then
+          (
+            cd "$package"
+            "$GO_TEST_BINARY" -test.list "$regex"
+          )
+        else
+          # shellcheck disable=SC2086
+          go test ${GO_TEST_LIST_FLAGS:-} -count=1 -list "$regex" "$package"
+        fi |
           grep -E '^(Test|Fuzz|Example)[A-Za-z0-9_]*$' | LC_ALL=C sort > "$work/selected-$index"
         if ! diff -u "$work/shard-$index" "$work/selected-$index" > /dev/null; then
           echo "shard $index pattern selects a different set than the shard list" >&2
