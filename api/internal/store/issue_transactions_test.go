@@ -190,7 +190,7 @@ func TestNotificationDeliveryTransactionsSelectDueRowsAndRollback(t *testing.T) 
 		t.Fatal("delivery availability ignored row storage")
 	}
 	readSnapshot := func(status string) (domain.Bootstrap, error) {
-		read, err := repo.BeginNotificationDeliveryContextRead(ctx, key, []string{status}, now)
+		read, err := repo.BeginNotificationDeliveryContextRead(ctx, key, NotificationDeliverySelection{Statuses: []string{status}}, now)
 		if err != nil {
 			return domain.Bootstrap{}, err
 		}

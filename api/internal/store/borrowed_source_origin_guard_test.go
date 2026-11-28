@@ -21,7 +21,7 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "f157c0fc7ac57b4167be8349bb308712498b09524b87579218fa2f129fff4d9e",
-		"issue_records.go":      "c2747e0ff45b2691659dac60831b7c8584cad78a3b0e9ec88766618de0925b00",
+		"issue_records.go":      "475e2001455c652c9d3546d89acdc76361ca8d65081b93b72a2677de0e5b0b2a",
 		"issue_query.go":        "1e7cfc29bebf6e58999abc0cb7bf5924e563558b48d346f03865ee1be5c3a621",
 		// Bootstrap bodies reuse the outline's snapshot only for the same
 		// database and workspace; the IDs come from the authorized outline.
@@ -76,7 +76,7 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 		"collaboration_document_read.go":                      "c88b6c53d52611b52141631e0a62c325c7d0154bf1c5165f6bfc4aaff857cd08",
 		"collection_snapshot.go":                              "4c56cbee0ff4e8e6cfb40b1b38044d05c907ee1604f71e877b775c46b1cac137",
 		"cycle_schedule_write.go":                             "9f0dac8dfa14cd1d9c4607ed155f9fc32fc837b0768198012ac6fb9d60dc54af",
-		"delivery_context.go":                                 "1e2479fee146f4bf75cd23ad455eaa8696361fd519a4d03dcde6fe4eae57b6e2",
+		"delivery_context.go":                                 "bc62a21c7a6819988b4714be44873eed41c31d50f9b93e93668e3ac03f2ae75e",
 		"desktop_ack_write.go":                                "caca6a6974572bf3205f7dcf5280b54dd7ad502f75b761967281665259b90682",
 		"document_auxiliary_read.go":                          "509970bec9f7e70a18b5054485374e46e441f5a03c31dfb491497ba16b570a6d",
 		"document_directory_read.go":                          "8e2485e4fd78d48db3e37412a32ea9d4f54289c790f530786b37be9adcc9573a",

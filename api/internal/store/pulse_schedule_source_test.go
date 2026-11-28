@@ -8,13 +8,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-// TestPulseScheduleReadSource pins the fact the store wrapper wrapper
-// guard relies on: a pulse read has no logical source only when the flag-off
-// branch of beginPulseRead built it, so LoadSchedule's literal
-// WorkspaceMetadataFields branch never runs with bounded metadata on. A
-// bounded read answers from its retained source even when the resident copy
-// holds only the workspace identity; a closed read refuses before either
-// branch.
+// A bounded schedule read answers from its retained source even when the
+// resident copy holds only the workspace identity. A closed read refuses
+// before consulting either source.
 func TestPulseScheduleReadSource(t *testing.T) {
 	cursor := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	data := domain.Bootstrap{

@@ -113,9 +113,7 @@ func (s *SQLiteStore) beginPulseRead(ctx context.Context, workspace string, inde
 	if !s.BoundedMetadataEnabled() {
 		var snapshot *PulseFeedSnapshot
 		if schedule {
-			var data domain.Bootstrap
-			data, found = s.WorkspaceMetadataFields(workspace, "workspaceSettings")
-			snapshot = pulseSnapshotOf(data)
+			snapshot, found = s.legacyPulseSchedule(workspace, false)
 		} else if indexed {
 			snapshot, found = s.PulseFeed(workspace)
 		} else {
@@ -178,11 +176,11 @@ func (r *PulseRead) LoadSchedule(ctx context.Context) error {
 		return errMetadataLogicalClosed
 	}
 	if r.source == nil {
-		data, found := r.store.WorkspaceMetadataFields(r.workspace, "workspaceSettings", "settings", "userSettings", "teamSettings")
+		snapshot, found := r.store.legacyPulseSchedule(r.workspace, true)
 		if !found {
 			return ErrResourceAccessChanged
 		}
-		r.Snapshot = pulseSnapshotOf(data)
+		r.Snapshot = snapshot
 		return nil
 	}
 	for _, name := range []string{"settings", "userSettings", "teamSettings"} {
@@ -228,6 +226,41 @@ func (r *PulseRead) LoadSchedule(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *SQLiteStore) legacyPulseSchedule(workspace string, settings bool) (*PulseFeedSnapshot, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, found := s.workspaces[workspace]
+	if !found {
+		return nil, false
+	}
+	snapshot := &PulseFeedSnapshot{Workspace: domain.Workspace{ID: data.Workspace.ID, URLKey: data.Workspace.URLKey}}
+	if enabled, configured := data.WorkspaceSettings.FeatureFlags["pulse"]; configured {
+		snapshot.WorkspaceSettings.FeatureFlags = map[string]bool{"pulse": enabled}
+	}
+	snapshot.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule = data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
+	if settings {
+		if cursor, found := data.Settings["pulseDeliveryCursors"]; found {
+			snapshot.Settings = map[string]any{"pulseDeliveryCursors": cloneSnapshotValue(reflect.ValueOf(&cursor).Elem()).Interface()}
+		}
+		if len(data.UserSettings) > 0 {
+			snapshot.UserSettings = make(map[string]domain.UserSettings, len(data.UserSettings))
+			for id, user := range data.UserSettings {
+				snapshot.UserSettings[id] = domain.UserSettings{PulseSchedule: user.PulseSchedule, Timezone: user.Timezone}
+			}
+		}
+		if len(data.TeamSettings) > 0 {
+			snapshot.TeamSettings = make(map[string]domain.TeamSettings, len(data.TeamSettings))
+			for id, team := range data.TeamSettings {
+				snapshot.TeamSettings[id] = domain.TeamSettings{Timezone: team.Timezone}
+			}
+		}
+	}
+	return snapshot, true
 }
 
 // LoadFeed adds source rules and ordered entries to a scheduler read.

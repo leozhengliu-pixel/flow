@@ -53,7 +53,40 @@ func integrationDeliveryFirst(ctx context.Context, owner *ResourceRead, field, i
 // claim and network stages retain their original request context.
 func (s *SQLiteStore) BeginIntegrationDeliveryRead(ctx context.Context, workspace, id string) (_ *IntegrationDeliveryRead, found bool, err error) {
 	if !s.BoundedMetadataEnabled() {
-		return nil, false, ErrBoundedMetadataCoverage
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		if workspace == "" {
+			workspace = s.lastWorkspaceKey
+		}
+		data, found := s.workspaces[workspace]
+		if !found {
+			return nil, false, nil
+		}
+		read := &IntegrationDeliveryRead{HIPAA: data.WorkspaceSettings.HIPAACompliance}
+		if read.HIPAA {
+			return read, true, nil
+		}
+		for _, item := range data.IntegrationDeliveries {
+			if item.ID == id {
+				read.Delivery = domain.IntegrationDelivery{ID: item.ID, ConnectionID: item.ConnectionID, Status: item.Status, Attempts: item.Attempts}
+				read.DeliveryFound = true
+				break
+			}
+		}
+		if !read.DeliveryFound || read.Delivery.Status != "pending" && read.Delivery.Status != "failed" || read.Delivery.Attempts >= 8 {
+			return read, true, nil
+		}
+		for _, item := range data.IntegrationConnections {
+			if item.ID == read.Delivery.ConnectionID {
+				read.Connection = domain.IntegrationConnection{ID: item.ID, Provider: item.Provider, Config: map[string]string{}}
+				for _, name := range integrationDeliveryConfigKeys {
+					read.Connection.Config[name] = item.Config[name]
+				}
+				read.ConnectionFound = true
+				break
+			}
+		}
+		return read, true, nil
 	}
 	ctx = context.Background()
 	installed, found, err := s.BeginInstalledMetadataRead(ctx, workspace)
@@ -118,7 +151,7 @@ func (s *SQLiteStore) BeginIntegrationDeliveryRead(ctx context.Context, workspac
 	}
 	read.Connection.Config = map[string]string{}
 	err = config.MapEntries(ctx, func(key, value metadataLogicalNode) error {
-		for _, name := range []string{"deliveryURL", "deliverySecret", "deliverySecretEnv", "deliveryTokenEnv"} {
+		for _, name := range integrationDeliveryConfigKeys {
 			match, err := key.StringEqual(ctx, name)
 			if err != nil {
 				return err
@@ -140,3 +173,5 @@ func (s *SQLiteStore) BeginIntegrationDeliveryRead(ctx context.Context, workspac
 	}
 	return read, true, nil
 }
+
+var integrationDeliveryConfigKeys = []string{"deliveryURL", "deliverySecret", "deliverySecretEnv", "deliveryTokenEnv"}

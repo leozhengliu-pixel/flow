@@ -68,11 +68,11 @@ func TestScaleHotDeliveryContextSourceAndCountBound(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want, err := f.NotificationDeliverySnapshot(t.Context(), workspace, []string{"pending"}, now)
+		want, err := f.NotificationDeliverySnapshot(t.Context(), workspace, pendingDeliverySelection, now)
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := view.BeginNotificationDeliveryContextRead(t.Context(), workspace, []string{"pending"}, now)
+		read, err := view.BeginNotificationDeliveryContextRead(t.Context(), workspace, pendingDeliverySelection, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestScaleHotDeliveryContextSourceAndCountBound(t *testing.T) {
 		}
 		cancelled, cancel := context.WithCancel(t.Context())
 		cancel()
-		if read, err := view.BeginNotificationDeliveryContextRead(cancelled, workspace, []string{"pending"}, now); read != nil || !errors.Is(err, context.Canceled) {
+		if read, err := view.BeginNotificationDeliveryContextRead(cancelled, workspace, pendingDeliverySelection, now); read != nil || !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancelled context=%v error=%v", read, err)
 		}
 		if view.WorkspaceMetadataDecodes() != 0 || view.metadataResidency.work.used != 0 {
@@ -119,11 +119,11 @@ func TestScaleHotDeliveryContextSourceAndCountBound(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			want, err := legacy.NotificationDeliverySnapshot(t.Context(), workspace, []string{"pending"}, now)
+			want, err := legacy.NotificationDeliverySnapshot(t.Context(), workspace, pendingDeliverySelection, now)
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, err := view.BeginNotificationDeliveryContextRead(t.Context(), workspace, []string{"pending"}, now)
+			read, err := view.BeginNotificationDeliveryContextRead(t.Context(), workspace, pendingDeliverySelection, now)
 			if err != nil {
 				t.Fatal(err)
 			}

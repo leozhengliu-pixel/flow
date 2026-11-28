@@ -607,21 +607,13 @@ func appUserNotificationAction(notification domain.Notification) string {
 // installed application's user to its webhook. Delivery ids are derived from
 // the notification and its update time, so each change is sent once.
 func (s *server) sweepAppUserNotifications(ctx context.Context, workspace string, now time.Time) {
-	var hooks domain.Bootstrap
-	var ok bool
-	if s.store.BoundedMetadataEnabled() {
-		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
-		if err != nil || !found {
-			return
-		}
-		defer read.Close()
-		hooks, ok = read.Data, true
-	} else {
-		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
+	if err != nil || !found {
+		return
 	}
-	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
-		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
-	}) {
+	defer read.Close()
+	hooks := read.Data
+	if len(hooks.Webhooks) == 0 {
 		return
 	}
 	if s.store.BoundedMetadataEnabled() {
@@ -634,9 +626,6 @@ func (s *server) sweepAppUserNotifications(ctx context.Context, workspace string
 		return
 	}
 	for _, hook := range hooks.Webhooks {
-		if hook.ManagedBy != "application" || !hook.Enabled || !slices.Contains(hook.ResourceTypes, "app_user_notifications") {
-			continue
-		}
 		index := slices.IndexFunc(installations, func(item domain.ApplicationInstallation) bool {
 			return item.ClientID == hook.ApplicationClientID && item.Active
 		})
@@ -644,7 +633,7 @@ func (s *server) sweepAppUserNotifications(ctx context.Context, workspace string
 			continue
 		}
 		appUserID := installations[index].UserID
-		page, err := s.store.QueryNotifications(ctx, store.NotificationQuery{Workspace: workspace, UserID: appUserID, IncludeArchived: true, IncludeSnoozed: true, Limit: 50})
+		page, err := s.store.QueryNotifications(ctx, store.NotificationQuery{Workspace: workspace, UserID: appUserID, IncludeArchived: true, IncludeSnoozed: true, Limit: 50, SkipUnreadCount: true})
 		if err != nil {
 			continue
 		}
@@ -700,24 +689,16 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 	if json.Unmarshal(event.PreviousValues, &previous) != nil || previous["assignee"] == nil && previous["delegate"] == nil {
 		return
 	}
-	var hooks domain.Bootstrap
-	var ok bool
-	if s.store.BoundedMetadataEnabled() {
-		read, found, err := s.store.BeginApplicationWebhookSweepRead(context.Background(), workspace, "app_user_notifications")
-		if err != nil || !found {
-			return
-		}
-		defer read.Close()
-		hooks, ok = read.Data, true
-	} else {
-		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
-	}
-	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
-		return item.ManagedBy == "application" && item.Enabled && slices.Contains(item.ResourceTypes, "app_user_notifications")
-	}) {
+	ctx := context.Background()
+	read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "app_user_notifications")
+	if err != nil || !found {
 		return
 	}
-	ctx := context.Background()
+	defer read.Close()
+	hooks := read.Data
+	if len(hooks.Webhooks) == 0 {
+		return
+	}
 	if s.store.BoundedMetadataEnabled() {
 		var close func()
 		ctx, close = applicationOutputContext(ctx)
@@ -759,7 +740,7 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 				continue
 			}
 			for _, hook := range hooks.Webhooks {
-				if hook.ManagedBy != "application" || !hook.Enabled || hook.ApplicationClientID != installations[index].ClientID || !slices.Contains(hook.ResourceTypes, "app_user_notifications") {
+				if hook.ApplicationClientID != installations[index].ClientID {
 					continue
 				}
 				s.queueAppUserNotification(ctx, workspace, hooks.Workspace.ID, hook, change.user, change.action, event.ID+":"+field+":"+change.action, map[string]any{
@@ -773,66 +754,22 @@ func (s *server) dispatchAppAssignmentNotifications(workspace string, event doma
 // sweepIssueSLAWebhooks sends IssueSLA events (set, highRisk, breached) for
 // SLA changes of the last 15 minutes to webhooks subscribed to issue_sla.
 func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, now time.Time) {
-	var hooks domain.Bootstrap
-	var ok bool
-	if s.store.BoundedMetadataEnabled() {
-		read, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "issue_sla")
-		if err != nil || !found {
-			return
-		}
-		defer read.Close()
-		hooks, ok = read.Data, true
-	} else {
-		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
-	}
-	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(item domain.Webhook) bool {
-		return !item.AuditLog && item.Enabled && slices.Contains(item.ResourceTypes, "issue_sla")
-	}) {
+	hookRead, found, err := s.store.BeginApplicationWebhookSweepRead(ctx, workspace, "issue_sla")
+	if err != nil || !found {
 		return
 	}
-	var events []store.ApplicationSLAWebhookEvent
-	if s.store.BoundedMetadataEnabled() {
-		read, found, err := s.store.BeginApplicationSLAEventRead(ctx, workspace, now)
-		if err != nil || !found {
-			return
-		}
-		defer read.Close()
-		events = read.Events
-	} else {
-		data, ok := s.store.WorkspaceMetadataFields(workspace, "issueSlas", "slaEvents", "users")
-		if !ok {
-			return
-		}
-		slas := map[string]domain.IssueSLA{}
-		for _, sla := range data.IssueSLAs {
-			slas[sla.ID] = sla
-		}
-		for _, event := range data.SLAEvents {
-			if now.Sub(event.CreatedAt) > 15*time.Minute {
-				continue
-			}
-			action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
-			if action == "" {
-				continue
-			}
-			events = append(events, store.ApplicationSLAWebhookEvent{Key: event.ID, Action: action, IssueID: event.IssueID, SLA: slas[event.SLAID], At: event.CreatedAt})
-		}
-		// High risk: less than a quarter of the SLA window (at most 24 hours) left.
-		for _, sla := range data.IssueSLAs {
-			if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
-				continue
-			}
-			window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
-			if sla.DueAt.Sub(now) <= window {
-				events = append(events, store.ApplicationSLAWebhookEvent{Key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), Action: "highRisk", IssueID: sla.IssueID, SLA: sla, At: now})
-			}
-		}
-	}
-	if len(events) == 0 {
+	defer hookRead.Close()
+	hooks := hookRead.Data
+	if len(hooks.Webhooks) == 0 {
 		return
 	}
+	eventRead, found, err := s.store.BeginApplicationSLAEventRead(ctx, workspace, now)
+	if err != nil || !found {
+		return
+	}
+	defer eventRead.Close()
 	root := s.appBaseURL() + "/" + url.PathEscape(workspace)
-	for _, event := range events {
+	for _, event := range eventRead.Events {
 		issue, err := s.store.IssueRecord(ctx, workspace, event.IssueID)
 		if err != nil {
 			continue
@@ -842,7 +779,7 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 			issueURL = root + "/issue/" + url.PathEscape(issue.Identifier) + "/" + url.PathEscape(routeSlug(issue.Title))
 		}
 		for _, hook := range hooks.Webhooks {
-			if hook.AuditLog || !hook.Enabled || !slices.Contains(hook.ResourceTypes, "issue_sla") || hook.TeamRestriction == "selected" && len(hook.TeamIDs) > 0 && !slices.Contains(hook.TeamIDs, issue.Team.ID) {
+			if hook.TeamRestriction == "selected" && len(hook.TeamIDs) > 0 && !slices.Contains(hook.TeamIDs, issue.Team.ID) {
 				continue
 			}
 			body, _ := json.Marshal(map[string]any{

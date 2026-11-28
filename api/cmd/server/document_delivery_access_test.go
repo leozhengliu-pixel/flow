@@ -66,9 +66,9 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 			// Alice's notices are due as immediate mail now (a backlog the dispatcher
 			// meets after the access is gone); Bob's wait in the digest.
 			sink.take()
-			statuses := []string{"pending", "delivering", "delivered", "failed", "digest"}
+			selection := store.NotificationDeliverySelection{Statuses: []string{"pending", "delivering", "delivered", "failed", "digest"}}
 			dueAt := time.Now().UTC().Add(72 * time.Hour)
-			all, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, statuses, dueAt)
+			all, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, selection, dueAt)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -108,7 +108,7 @@ func TestDocumentNotificationDeliveryRechecksAccess(t *testing.T) {
 			if len(mails) != 2 {
 				t.Fatalf("recipients with access got %d mails about the open document, want 2 (immediate and digest)", len(mails))
 			}
-			deliveries, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, statuses, dueAt)
+			deliveries, err := repository.BeginDueNotificationDeliveryRead(t.Context(), workspace, selection, dueAt)
 			if err != nil {
 				t.Fatal(err)
 			}

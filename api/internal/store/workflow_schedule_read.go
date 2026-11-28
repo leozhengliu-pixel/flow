@@ -15,6 +15,29 @@ type WorkflowScheduleItem struct {
 	WorkflowID, Trigger, ResourceType, ResourceID string
 }
 
+// DueWorkflowScheduleItems is the legacy scheduler's installed due list.
+// Only the inputs to the workflow runner survive the read lock.
+func (s *SQLiteStore) DueWorkflowScheduleItems(workspace string, now time.Time) []WorkflowScheduleItem {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data := s.workspaces[workspace]
+	var due []WorkflowScheduleItem
+	for _, definition := range data.WorkflowDefinitions {
+		if definition.Enabled && definition.Trigger == "schedule" && definition.NextRunAt != nil && !definition.NextRunAt.After(now) {
+			due = append(due, WorkflowScheduleItem{WorkflowID: definition.ID, Trigger: "schedule"})
+		}
+	}
+	for _, run := range data.WorkflowRuns {
+		if run.Status == "failed" && run.NextRetryAt != nil && !run.NextRetryAt.After(now) {
+			due = append(due, WorkflowScheduleItem{WorkflowID: run.WorkflowID, Trigger: "retry", ResourceType: run.ResourceType, ResourceID: run.ResourceID})
+		}
+	}
+	return due
+}
+
 type WorkflowScheduleRead struct {
 	store  *SQLiteStore
 	source *InstalledMetadataRead

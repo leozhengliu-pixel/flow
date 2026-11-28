@@ -5,7 +5,7 @@
     "prepareDueNotificationDeliveries": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded retry preparation owns only the original native due rows through all unchanged MutateNotificationDelivery retries and status updates; literal off NotificationDeliveries call/context remains exact. The notification read caller differential repeats failed, pending-disabled, pending and future cases five times per ordinary/resident representation, comparing canonical statuses, attempts, errors and next-attempt nilness. The independent processDueDeliveries metadata consumer remains pending.",
+      "reason": "Both representations select retryable due email failures and, when the mailer is configured, due pending-disabled emails. The bounded reader owns the selected rows through MutateNotificationDelivery. TestNotificationReadCallerEffects compares status, attempts, errors and next-attempt state with the flag off and on.",
       "accessors": [
         "BeginDueNotificationDeliveryRead"
       ]
@@ -13,9 +13,9 @@
     "processDueDeliveries": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Its direct bounded integration-delivery selection now visits only installed ID/status/attempts/next-attempt headers in original collection order, keeping payload/previous-value bodies out of the scheduler. Callback processing and existing conflict/cancellation logging stay unchanged; off-mode WorkspaceMetadataFields call and due loop remain literal originals. TestScaleHotDeliveryContextSourceAndCountBound compares original selection/order across pending, due/future/no-backoff failures and attempt limits with a legal large payload, 100/1000 unrelated records and zero full decodes/leaks. Existing TestDeliverySchedulerProcessesDueEmailAndHonorsBackoff, TestDueDeliveryIDsRespectsNextAttemptAndLimit and notification read caller-effect tests pass with new delivery rendering/writer tests on persistent SQLite count2. This reviews only the direct field accessor; downstream sweep, chat, pulse, integration processing and other dispatch functions remain independent boundaries, and no whole-tick activation certification is claimed.",
+      "reason": "DueIntegrationDeliveryIDs visits eligible IDs in installed order in both representations. It leaves delivery payloads and previous values in the store. TestScaleHotDeliveryContextSourceAndCountBound covers order, future and terminal failures, attempt limits and large unrelated payloads. Downstream delivery and sweep readers are reviewed independently.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "DueIntegrationDeliveryIDs"
       ],
       "temperature": "hot",
       "temperatureReason": "Unconditional delivery scheduler tick scans each workspace and dispatches due notification/integration work.",

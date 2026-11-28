@@ -116,11 +116,11 @@
     "processIntegrationDelivery": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "With FLOW_BOUNDED_METADATA on, the first statement dispatches to the reviewed processBoundedIntegrationDelivery, so the worker never reads WorkspaceMetadata or calls MutateWorkspace; off mode is the literal worker, whose only change is reading the shared 5s retry persistence deadline from integrationDeliveryPersistTimeout. TestDeliveryOutcomesDifferential and TestConcurrentWorkers compare it with the bounded worker on every outcome; TestStoreWrapperHotBoundaries no longer finds it reaching a wrapper with the flag on.",
+      "reason": "Bounded mode dispatches to processBoundedIntegrationDelivery. Off mode uses BeginIntegrationDeliveryRead for the same delivery and connection inputs and keeps the legacy claim and result writes. TestDeliveryOutcomesDifferential and TestConcurrentWorkers compare refusal order, outbound requests, retries and concurrent claims across modes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
-        "WorkspaceMetadata"
+        "BeginIntegrationDeliveryRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Actual delivery work dispatched by the every-tick integration-delivery scheduler; integration setup remains cold.",

@@ -48,9 +48,9 @@ func (r *NotificationDeliveryContextRead) Close() {
 // BeginNotificationDeliveryContextRead keeps the legacy due-row query and its
 // contextless installed-M rendering choice. Only recipients, referenced review
 // headers, and native notification/issue display fields enter request memory.
-func (s *SQLiteStore) BeginNotificationDeliveryContextRead(ctx context.Context, workspace string, statuses []string, now time.Time) (_ *NotificationDeliveryContextRead, err error) {
+func (s *SQLiteStore) BeginNotificationDeliveryContextRead(ctx context.Context, workspace string, selection NotificationDeliverySelection, now time.Time) (_ *NotificationDeliveryContextRead, err error) {
 	if !s.BoundedMetadataEnabled() {
-		data, err := s.NotificationDeliverySnapshot(ctx, workspace, statuses, now)
+		data, err := s.NotificationDeliverySnapshot(ctx, workspace, selection, now)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +62,7 @@ func (s *SQLiteStore) BeginNotificationDeliveryContextRead(ctx context.Context, 
 			r.Close()
 		}
 	}()
-	r.due, err = s.BeginDueNotificationDeliveryRead(ctx, workspace, statuses, now)
+	r.due, err = s.BeginDueNotificationDeliveryRead(ctx, workspace, selection, now)
 	if err != nil {
 		return nil, err
 	}
@@ -223,16 +223,23 @@ func (s *SQLiteStore) deliveryDisplayColumns(ctx context.Context, owner *Resourc
 // DueIntegrationDeliveryIDs preserves installed collection order while
 // transferring only the scalar headers consumed by the scheduler tick.
 func (s *SQLiteStore) DueIntegrationDeliveryIDs(ctx context.Context, workspace string, now time.Time, visit func(string) error) error {
+	due := func(item domain.IntegrationDelivery) bool {
+		return item.Attempts < 8 && (item.Status == "pending" || item.Status == "failed" && item.NextAttemptAt != nil && !item.NextAttemptAt.After(now))
+	}
 	if !s.BoundedMetadataEnabled() {
-		data, ok := s.WorkspaceMetadataFields(workspace, "integrationDeliveries")
-		if !ok {
-			return nil
+		s.mu.RLock()
+		if workspace == "" {
+			workspace = s.lastWorkspaceKey
 		}
-		for _, item := range data.IntegrationDeliveries {
-			if item.Attempts >= 8 || item.Status != "pending" && !(item.Status == "failed" && item.NextAttemptAt != nil && !item.NextAttemptAt.After(now)) {
-				continue
+		var ids []string
+		for _, item := range s.workspaces[workspace].IntegrationDeliveries {
+			if due(item) {
+				ids = append(ids, item.ID)
 			}
-			if err := visit(item.ID); err != nil {
+		}
+		s.mu.RUnlock()
+		for _, id := range ids {
+			if err := visit(id); err != nil {
 				return err
 			}
 		}
@@ -255,7 +262,7 @@ func (s *SQLiteStore) DueIntegrationDeliveryIDs(ctx context.Context, workspace s
 				return err
 			}
 			item := value.Interface().(domain.IntegrationDelivery)
-			if item.Attempts >= 8 || item.Status != "pending" && !(item.Status == "failed" && item.NextAttemptAt != nil && !item.NextAttemptAt.After(now)) {
+			if !due(item) {
 				return nil
 			}
 			return visit(item.ID)

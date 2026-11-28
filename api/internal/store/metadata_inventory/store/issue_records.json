@@ -46,7 +46,6 @@
         "server/server.listCommentActions",
         "server/server.upsertCustomer",
         "server/server.discoverWorkspaceSSO",
-        "server/server.processIntegrationDelivery",
         "server/server.classicGitHubSync",
         "server/server.applyGitLabReleaseHook",
         "server/server.issueRecordsQuery",

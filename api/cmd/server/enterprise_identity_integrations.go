@@ -871,29 +871,31 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	if s.store.BoundedMetadataEnabled() {
 		return s.processBoundedIntegrationDelivery(ctx, workspace, id)
 	}
-	data, ok := s.store.WorkspaceMetadata(workspace)
-	if !ok {
+	read, found, err := s.store.BeginIntegrationDeliveryRead(ctx, workspace, id)
+	if err != nil {
+		return domain.IntegrationDelivery{}, err
+	}
+	if !found {
 		return domain.IntegrationDelivery{}, errNotFound
 	}
-	if data.WorkspaceSettings.HIPAACompliance {
+	defer read.Close()
+	if read.HIPAA {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: external processing is disabled by workspace policy", errConflict)
 	}
-	deliveryIndex := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
-	if deliveryIndex < 0 {
+	if !read.DeliveryFound {
 		return domain.IntegrationDelivery{}, errNotFound
 	}
-	snapshot := data.IntegrationDeliveries[deliveryIndex]
+	snapshot := read.Delivery
 	if snapshot.Status != "pending" && snapshot.Status != "failed" {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery is not retryable", errConflict)
 	}
 	if snapshot.Attempts >= 8 {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery retry limit reached", errConflict)
 	}
-	connectionIndex := slices.IndexFunc(data.IntegrationConnections, func(v domain.IntegrationConnection) bool { return v.ID == snapshot.ConnectionID })
-	if connectionIndex < 0 {
+	if !read.ConnectionFound {
 		return domain.IntegrationDelivery{}, errNotFound
 	}
-	connectionSnapshot := data.IntegrationConnections[connectionIndex]
+	connectionSnapshot := read.Connection
 	endpoint := strings.TrimSpace(connectionSnapshot.Config["deliveryURL"])
 	if err := integrationEndpointError(ctx, endpoint, s.authDisabled, outboundTrustedPrivate); err != nil {
 		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery URL is not allowed: %s", errInvalid, err.Error())
@@ -976,7 +978,7 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	var result domain.IntegrationDelivery
 	persistCtx, persistCancel := context.WithTimeout(context.Background(), integrationDeliveryPersistTimeout())
 	defer persistCancel()
-	err := s.store.MutateWorkspace(persistCtx, workspace, "integration_delivery.retry", id, nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(persistCtx, workspace, "integration_delivery.retry", id, nil, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
 		if i < 0 {
 			return errNotFound

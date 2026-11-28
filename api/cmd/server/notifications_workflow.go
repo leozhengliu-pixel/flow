@@ -296,6 +296,8 @@ func (s *server) retryNotificationDelivery(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
+	selection := store.NotificationDeliverySelection{Channel: "email", Statuses: []string{"pending"}}
+	now := time.Now().UTC()
 	snapshot := s.store.NotificationDeliverySnapshot
 	if s.mailer == nil {
 		// Without a mailer deliveries are only marked pending-disabled; the
@@ -306,14 +308,14 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 	var snapshotErr error
 	if s.store.BoundedMetadataEnabled() {
 		if s.mailer == nil {
-			read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, selection, now)
 			if readErr != nil {
 				return
 			}
 			defer read.Close()
 			data.NotificationDeliveries = read.Deliveries
 		} else {
-			read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, key, selection, now)
 			if readErr != nil {
 				return
 			}
@@ -321,7 +323,7 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 			data = read.Data
 		}
 	} else {
-		data, snapshotErr = snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+		data, snapshotErr = snapshot(ctx, key, selection, now)
 	}
 	if snapshotErr != nil {
 		return

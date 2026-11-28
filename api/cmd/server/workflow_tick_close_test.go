@@ -19,19 +19,8 @@ import (
 // for one owned workspace. TestWorkflowSchedulerDispatchGuard
 // pins this copy to the production source.
 func legacyTick(ctx context.Context, service *server, key string, now time.Time) {
-	data, ok := service.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
-	if !ok {
-		return
-	}
-	for _, definition := range data.WorkflowDefinitions {
-		if definition.Enabled && definition.Trigger == "schedule" && definition.NextRunAt != nil && !definition.NextRunAt.After(now) {
-			_, _ = service.runWorkflow(ctx, key, definition.ID, "schedule", "", "", true)
-		}
-	}
-	for _, run := range data.WorkflowRuns {
-		if run.Status == "failed" && run.NextRetryAt != nil && !run.NextRetryAt.After(now) {
-			_, _ = service.runWorkflow(ctx, key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID, true)
-		}
+	for _, item := range service.store.DueWorkflowScheduleItems(key, now) {
+		_, _ = service.runWorkflow(ctx, key, item.WorkflowID, item.Trigger, item.ResourceType, item.ResourceID, true)
 	}
 }
 

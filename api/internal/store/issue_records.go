@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
+	"testing"
 	"time"
 
 	"flow/api/internal/domain"
@@ -763,6 +765,11 @@ func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int
 	return values, rows.Err()
 }
 
+var workspaceMetadataClones atomic.Int64
+
+// WorkspaceMetadataClonesForTesting counts full WorkspaceMetadata projections.
+func WorkspaceMetadataClonesForTesting() int64 { return workspaceMetadataClones.Load() }
+
 // WorkspaceMetadata does not load the issue collection. Query endpoints must use
 // this projection instead of the compatibility full-bootstrap API.
 func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, bool) {
@@ -798,6 +805,9 @@ func (s *SQLiteStore) WorkspaceMetadataForRead(ctx context.Context, workspace st
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
+	if testing.Testing() {
+		workspaceMetadataClones.Add(1)
+	}
 	clone := CloneHydratedReadSnapshot(ctx, data)
 	clone.Issues = []domain.Issue{}
 	clone.Activities = map[string][]domain.ActivityEvent{}

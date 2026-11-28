@@ -124,35 +124,19 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		s.dispatchNotificationEmails(ctx, key)
 		s.dispatchChatNotifications(ctx, key)
 		s.dispatchNotificationDigests(ctx, key, now)
-		if s.store.BoundedMetadataEnabled() {
-			err := s.store.DueIntegrationDeliveryIDs(ctx, key, now, func(id string) error {
-				if _, err := s.processIntegrationDelivery(ctx, key, id); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, context.Canceled) {
-					log.Printf("Integration delivery workspace=%s id=%s: %v", key, id, err)
-				}
-				return nil
-			})
-			if err != nil {
-				if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
-					continue
-				}
-				return err
+		err := s.store.DueIntegrationDeliveryIDs(ctx, key, now, func(id string) error {
+			if _, err := s.processIntegrationDelivery(ctx, key, id); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, context.Canceled) {
+				log.Printf("Integration delivery workspace=%s id=%s: %v", key, id, err)
 			}
-			s.coveredWorkspacePassed("Delivery scheduler", key)
-			continue
-		}
-		data, ok := s.store.WorkspaceMetadataFields(key, "integrationDeliveries")
-		if !ok {
-			continue
-		}
-		for _, delivery := range data.IntegrationDeliveries {
-			due := delivery.Status == "pending" || delivery.Status == "failed" && delivery.NextAttemptAt != nil && !delivery.NextAttemptAt.After(now)
-			if !due || delivery.Attempts >= 8 {
+			return nil
+		})
+		if err != nil {
+			if s.skipUncoveredWorkspace("Delivery scheduler", key, err) {
 				continue
 			}
-			if _, err := s.processIntegrationDelivery(ctx, key, delivery.ID); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, context.Canceled) {
-				log.Printf("Integration delivery workspace=%s id=%s: %v", key, delivery.ID, err)
-			}
+			return err
 		}
+		s.coveredWorkspacePassed("Delivery scheduler", key)
 	}
 	return nil
 }
@@ -203,30 +187,24 @@ func (s *server) sweepChatIntegrations(ctx context.Context, keys []string, tick 
 }
 
 func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key string, now time.Time) error {
-	statuses := []string{"failed"}
+	selection := store.NotificationDeliverySelection{Channel: "email", Statuses: []string{"failed"}, ExcludeTerminalFailures: true}
 	if s.mailer != nil {
-		statuses = append(statuses, "pending-disabled")
+		selection.Statuses = append(selection.Statuses, "pending-disabled")
 	}
 	var snapshot domain.Bootstrap
 	var err error
 	if s.store.BoundedMetadataEnabled() {
-		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, statuses, now)
+		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, selection, now)
 		if readErr != nil {
 			return readErr
 		}
 		defer read.Close()
 		snapshot.NotificationDeliveries = read.Deliveries
 	} else {
-		snapshot, err = s.store.NotificationDeliveries(ctx, key, statuses, now)
+		snapshot, err = s.store.NotificationDeliveries(ctx, key, selection, now)
 	}
 	if err != nil {
 		return err
-	}
-	needsUpdate := slices.ContainsFunc(snapshot.NotificationDeliveries, func(delivery domain.NotificationDelivery) bool {
-		return delivery.Channel == "email" && (delivery.Status == "failed" && delivery.NextAttemptAt != nil && !delivery.NextAttemptAt.After(now) || delivery.Status == "pending-disabled" && s.mailer != nil)
-	})
-	if !needsUpdate {
-		return nil
 	}
 	for _, item := range snapshot.NotificationDeliveries {
 		err := s.store.MutateNotificationDelivery(ctx, key, item.ID, func(delivery *domain.NotificationDelivery) error {
@@ -234,7 +212,7 @@ func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key strin
 				return nil
 			}
 			dueFailure := delivery.Status == "failed" && delivery.NextAttemptAt != nil && !delivery.NextAttemptAt.After(now)
-			deliveryEnabled := delivery.Status == "pending-disabled" && s.mailer != nil
+			deliveryEnabled := delivery.Status == "pending-disabled" && s.mailer != nil && (delivery.NextAttemptAt == nil || !delivery.NextAttemptAt.After(now))
 			if !dueFailure && !deliveryEnabled {
 				return nil
 			}

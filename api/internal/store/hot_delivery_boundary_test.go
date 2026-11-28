@@ -484,7 +484,7 @@ func TestScaleHotDeliveryLegacyBoundaryAST(t *testing.T) {
 		if method == nil || method.Sel.Name != "notificationDeliverySnapshot" || !deliveryBoundaryStoreReceiver(method.X) || full == nil || full.Name != []string{"false", "true"}[index] {
 			t.Fatal("legacy wrapper no longer preserves full/non-rendering selection", name)
 		}
-		for index, parameter := range []string{"ctx", "workspace", "statuses", "now"} {
+		for index, parameter := range []string{"ctx", "workspace", "selection", "now"} {
 			argument, ok := call.Args[index].(*ast.Ident)
 			if !ok || argument.Name != parameter {
 				t.Fatal("legacy wrapper evaluates or changes an argument before rejection", name)
@@ -562,7 +562,7 @@ func TestScaleHotDeliveryLegacyRejectsAndColdFacade(t *testing.T) {
 		if full {
 			call = view.NotificationDeliverySnapshot
 		}
-		data, err := call(ctx, workspace, []string{"pending"}, now)
+		data, err := call(ctx, workspace, pendingDeliverySelection, now)
 		if !errors.Is(err, ErrBoundedMetadataCoverage) || !reflect.DeepEqual(data, domain.Bootstrap{}) || reads != 0 || view.metadataResidency.coldSlot != coldSlot {
 			t.Fatalf("direct bounded full=%v returned data, performed SQL, or entered cold hydration: %v", full, err)
 		}
@@ -570,7 +570,7 @@ func TestScaleHotDeliveryLegacyRejectsAndColdFacade(t *testing.T) {
 		if full {
 			call = f.NotificationDeliverySnapshot
 		}
-		want, err := call(t.Context(), workspace, []string{"pending"}, now)
+		want, err := call(t.Context(), workspace, pendingDeliverySelection, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -584,7 +584,7 @@ func TestScaleHotDeliveryLegacyRejectsAndColdFacade(t *testing.T) {
 			if full {
 				call = facade.NotificationDeliverySnapshot
 			}
-			got, err := call(ctx, workspace, []string{"pending"}, now)
+			got, err := call(ctx, workspace, pendingDeliverySelection, now)
 			if err != nil {
 				return err
 			}

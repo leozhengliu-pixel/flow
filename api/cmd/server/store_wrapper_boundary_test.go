@@ -1067,16 +1067,6 @@ var storeWrapperBoundaryBoundaries = map[string]storeWrapperBoundaryBoundary{
 		pins: map[string]string{
 			"server/server.teamForMemberRequest": "handedOff := !s.authDisabled && handoff != nil && handoff.workspace == workspace && handoff.userID == authUser(r).ID && !handoff.taken.Load()",
 		}},
-	"store/PulseRead.LoadSchedule->store/SQLiteStore.WorkspaceMetadataFields": {mode: "proof",
-		reason: "a pulse read has no logical source only when the flag-off branch of beginPulseRead built it; the bounded branch retains a non-nil source or returns no read",
-		test:   "TestPulseScheduleReadSource",
-		guard:  "then:r.source == nil",
-		pins: map[string]string{
-			"store/SQLiteStore.beginPulseRead": "read.source, err = owner.retainSource(ctx, owner.workspace)",
-		},
-		off: map[string]string{
-			"store/SQLiteStore.beginPulseRead": "return &PulseRead{Snapshot: snapshot, store: s, workspace: workspace}, true, nil",
-		}},
 	"server/server.listIssuePermissions->server/server.findIssueForPermissions": {mode: "proof",
 		reason:  "both permission-list routes are GET patterns (which also serve HEAD), and with the flag on every GET or HEAD permission list reads the retained authorized issue headers; only the COLD permission writers reach workspaceData",
 		test:    "TestIssuePermissionGETMiddlewareDifferential",

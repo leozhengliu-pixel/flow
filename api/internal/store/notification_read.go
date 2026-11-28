@@ -34,9 +34,9 @@ func (r *DueNotificationDeliveryRead) Close() {
 
 // BeginDueNotificationDeliveryRead preserves NotificationDeliveries selection,
 // order and installed workspace identity without cloning rendering metadata.
-func (s *SQLiteStore) BeginDueNotificationDeliveryRead(ctx context.Context, workspace string, statuses []string, now time.Time) (_ *DueNotificationDeliveryRead, err error) {
+func (s *SQLiteStore) BeginDueNotificationDeliveryRead(ctx context.Context, workspace string, selection NotificationDeliverySelection, now time.Time) (_ *DueNotificationDeliveryRead, err error) {
 	if !s.BoundedMetadataEnabled() {
-		data, err := s.NotificationDeliveries(ctx, workspace, statuses, now)
+		data, err := s.NotificationDeliveries(ctx, workspace, selection, now)
 		if err != nil {
 			return nil, err
 		}
@@ -93,17 +93,20 @@ func (s *SQLiteStore) BeginDueNotificationDeliveryRead(ctx context.Context, work
 	if err != nil {
 		return nil, err
 	}
-	for _, status := range statuses {
+	if err := charge(len(selection.Channel) + 128); err != nil {
+		return nil, err
+	}
+	for _, status := range selection.Statuses {
 		if err := charge(len(status) + 128); err != nil {
 			return nil, err
 		}
 	}
-	clause, args := bindList("status", statuses)
+	query, args := s.dueNotificationDeliveryQuery(workspace, selection, now)
 	length := "OCTET_LENGTH(data)"
 	if s.dialect == "sqlite" {
 		length = "LENGTH(CAST(data AS BLOB))"
 	}
-	rows, err := s.db.QueryContext(work, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND `+clause+` AND (next_attempt_at='' OR next_attempt_at<=?) ORDER BY next_attempt_at,id LIMIT 1000`, append(append([]any{MetadataRecordPageMaxBytes, workspace}, args...), now.UTC().Format(issueRecordTimestamp))...)
+	rows, err := s.db.QueryContext(work, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN data ELSE NULL END`+query, append([]any{MetadataRecordPageMaxBytes}, args...)...)
 	if err != nil {
 		return nil, err
 	}

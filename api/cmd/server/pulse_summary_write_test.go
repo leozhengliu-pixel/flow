@@ -197,7 +197,7 @@ func TestScalePulseSummaryWriterServerPolicyDifferential(t *testing.T) {
 					if recordErr != nil && !errors.Is(recordErr, sql.ErrNoRows) {
 						t.Fatal(recordErr)
 					}
-					deliveries, err := repo.NotificationDeliveries(t.Context(), workspace, []string{"pending", "digest"}, now.AddDate(0, 0, 8))
+					deliveries, err := repo.NotificationDeliveries(t.Context(), workspace, store.NotificationDeliverySelection{Statuses: []string{"pending", "digest"}}, now.AddDate(0, 0, 8))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -297,7 +297,7 @@ func TestScalePulseSummaryWriterSchedulerDifferential(t *testing.T) {
 			if err != nil || notification.Payload == nil || !slices.Equal(notification.Payload.UpdateIDs, []string{"scheduler-update"}) {
 				t.Fatal("scheduler summary is incomplete", bounded, notification, err)
 			}
-			deliveries, err := repo.NotificationDeliveries(t.Context(), workspace, []string{"pending", "digest"}, now.AddDate(0, 0, 8))
+			deliveries, err := repo.NotificationDeliveries(t.Context(), workspace, store.NotificationDeliverySelection{Statuses: []string{"pending", "digest"}}, now.AddDate(0, 0, 8))
 			if err != nil {
 				t.Fatal(err)
 			}
