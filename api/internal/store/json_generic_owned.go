@@ -44,7 +44,7 @@ func (r *MetadataJSONRead) DecodeGeneric(ctx context.Context, raw []byte) (value
 
 // EncodeGeneric accepts the normalized graph produced by DecodeGeneric.
 // Its exact encoder and independently retained output owner are shared with
-// metadata publication. Network/HMAC copies require ReserveEncoded too.
+// metadata publication. Network/HMAC copies require ReserveEncodedCopies too.
 func (r *MetadataJSONRead) EncodeGeneric(ctx context.Context, value any) (raw []byte, valid bool, err error) {
 	if err := r.check(ctx); err != nil {
 		return nil, false, err

@@ -459,7 +459,7 @@ func TestDocumentEventSourceDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer blocker.Close()
-			if err := blocker.ReserveEncoded(t.Context(), 63<<20); err != nil {
+			if err := blocker.ReserveEncodedCopies(t.Context(), 63<<20); err != nil {
 				t.Fatal(err)
 			}
 			held := f.probe.MetadataWorkUsedForTesting()

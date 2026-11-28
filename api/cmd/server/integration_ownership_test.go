@@ -225,7 +225,7 @@ func TestResultAdmissionFailureBeforeRetryCommit(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := pressure.ReserveEncoded(ctx, 36<<20); err != nil {
+				if err := pressure.ReserveEncodedCopies(ctx, 36<<20); err != nil {
 					t.Fatal("independent retry pressure failed before the callback", err)
 				}
 				pressureHeld = view.MetadataWorkUsedForTesting() - usedBeforePressure

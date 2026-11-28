@@ -25,7 +25,7 @@ func (s *server) prepareBoundedIntegrationEnvelope(ctx context.Context, delivery
 		}
 	}()
 	copyPayload := func() ([]byte, func(), error) {
-		if err := output.ReserveEncoded(ctx, len(delivery.Payload)); err != nil {
+		if err := output.ReserveEncodedCopies(ctx, len(delivery.Payload)); err != nil {
 			return nil, nil, err
 		}
 		return append([]byte(nil), delivery.Payload...), output.Close, nil
@@ -61,7 +61,7 @@ func (s *server) prepareBoundedIntegrationEnvelope(ctx context.Context, delivery
 	}
 	// The exact encoder owns payload itself. This independent allowance
 	// retains string/request/HMAC copies until the network operation ends.
-	if err := output.ReserveEncoded(ctx, len(payload)); err != nil {
+	if err := output.ReserveEncodedCopies(ctx, len(payload)); err != nil {
 		return nil, nil, err
 	}
 	return payload, output.Close, nil

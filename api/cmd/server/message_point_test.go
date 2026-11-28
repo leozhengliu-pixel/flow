@@ -230,7 +230,7 @@ func TestMessagePointDifferential(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if err := owner.ReserveEncoded(ctx, (64<<20)-(64<<10)); err != nil {
+					if err := owner.ReserveEncodedCopies(ctx, (64<<20)-(64<<10)); err != nil {
 						t.Fatal(err)
 					}
 					expected = store.ErrMetadataWorkBudget
