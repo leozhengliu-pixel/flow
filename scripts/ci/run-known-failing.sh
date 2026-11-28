@@ -47,7 +47,11 @@ esac
 
 still=0 passing=0
 for package in ./cmd/server ./internal/store; do
-  mapfile -t tests < <("$here/go-test-shard.sh" known "$package" "$scope")
+  tests=()
+  while IFS= read -r test; do
+    [ -n "$test" ] || continue
+    tests[${#tests[@]}]=$test
+  done < <("$here/go-test-shard.sh" known "$package" "$scope")
   [ "${#tests[@]}" -gt 0 ] || continue
   binary=$work/$(basename "$package").test
   if [ "$scope" = race ]; then

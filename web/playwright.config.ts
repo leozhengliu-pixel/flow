@@ -51,8 +51,8 @@ export default defineConfig({
   testDir: './e2e',
   testIgnore: standaloneSpecs,
   timeout: 30_000,
-  // Local runs use Vite's dev server. CI sets FLOW_E2E_WEB_MODE=preview after
-  // the shared production bundle has been downloaded.
+  // The regular suite uses Vite's dev server so source-only E2E fixtures stay
+  // available. The performance suite opts into the production preview.
   expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   fullyParallel: false,
   workers: 1,

@@ -369,7 +369,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/browser-build"
           tar -xzf "$RUNNER_TEMP/browser-build-download/browser-build.tar.gz" -C "$RUNNER_TEMP/browser-build"
           chmod +x "$RUNNER_TEMP/browser-build/bin/"*
-          cp -R "$RUNNER_TEMP/browser-build/dist" "$GITHUB_WORKSPACE/web/dist"
 
       - name: Install Chromium
         working-directory: web
@@ -381,14 +380,17 @@ jobs:
           # The API's log (the detail behind any 500) goes to this file.
           FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
           FLOW_E2E_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
-          FLOW_E2E_WEB_MODE: preview
+          # The regular suite imports source-only E2E fixtures. The shared
+          # artifact still supplies the precompiled API binary, while Vite
+          # serves the checked-out source tree.
+          FLOW_E2E_WEB_MODE: dev
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/4
 
       - name: Run telemetry browser tests
         if: matrix.shard == 1
         working-directory: web
         env:
-          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/browser-build/bin/flow-e2e-api
         run: npx playwright test -c playwright.telemetry.config.ts
 
       # The response security headers in a real browser, against the production web build
@@ -852,6 +854,7 @@ jobs:
           fi
 
       - name: Convert test events to timings
+        if: ${{ !cancelled() }}
         run: |
           if [ "$PACKAGE" = others ]; then
             echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
@@ -1025,6 +1028,12 @@ jobs:
         run: >-
           docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
           "SET GLOBAL log_bin_trust_function_creators=1;"
+
+      - name: Permit scratch databases in the isolated MySQL service
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "GRANT ALL ON \`flow\\_sw602\\_%\`.* TO 'flow'@'%';
+          GRANT ALL ON \`flow\\_prepare\\_%\`.* TO 'flow'@'%';"
 
       - name: PostgreSQL metadata upgrade checks
         working-directory: api
