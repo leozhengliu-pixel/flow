@@ -27,29 +27,30 @@ type webhookChild struct {
 // mutation input as `data`.
 const webhookChildKey = "webhookChild"
 
-// childEventPayload is a mutation input plus the child it changed. Child may
-// be filled in by the mutation (a created entity gets its id there); the
-// payload is encoded after the mutation ran.
+// childEventPayload keeps the mutation input's fields at the top level in
+// the order of the original map encoding. The store can budget the standard
+// JSON encoding of these fields and the child set by the callback.
 type childEventPayload struct {
-	Input any
-	Child *webhookChild
+	Body                *string        `json:"body,omitempty"`
+	BodyData            map[string]any `json:"bodyData,omitempty"`
+	Description         *string        `json:"description,omitempty"`
+	Health              *string        `json:"health,omitempty"`
+	ID                  *string        `json:"id,omitempty"`
+	Name                *string        `json:"name,omitempty"`
+	TargetDate          *string        `json:"targetDate,omitempty"`
+	TemplateMilestoneID string         `json:"templateMilestoneId,omitempty"`
+	Child               *webhookChild  `json:"webhookChild,omitempty"`
 }
 
-func (p childEventPayload) MarshalJSON() ([]byte, error) {
-	fields := map[string]any{}
-	if p.Input != nil {
-		raw, err := json.Marshal(p.Input)
-		if err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(raw, &fields); err != nil {
-			fields = map[string]any{"input": p.Input}
-		}
+func milestoneEventPayload(input domain.ProjectMilestoneMutationInput) childEventPayload {
+	return childEventPayload{
+		Description: input.Description, Name: input.Name,
+		TargetDate: input.TargetDate, TemplateMilestoneID: input.TemplateMilestoneID,
 	}
-	if p.Child != nil && p.Child.ID != "" {
-		fields[webhookChildKey] = p.Child
-	}
-	return json.Marshal(fields)
+}
+
+func pulseUpdateEventPayload(body *string, bodyData map[string]any, health *string) childEventPayload {
+	return childEventPayload{Body: body, BodyData: bodyData, Health: health}
 }
 
 // webhookChildOf reads the child marker from an event payload and returns the

@@ -161,10 +161,6 @@ func TestScaleSupportedProducerCodecs(t *testing.T) {
 		"internal/domain.*ActivityMetadata.UnmarshalJSON": unmarshal,
 		"internal/domain.OptionalInt.MarshalJSON":         marshal,
 		"internal/domain.*OptionalInt.UnmarshalJSON":      unmarshal,
-		// Event payloads are encoded after callbacks, outside logical metadata
-		// reconstruction. This wrapper exposes its complete Input/Child graph
-		// to the bounded payload work estimator before its ordinary encoder.
-		"cmd/server.childEventPayload.MarshalJSON": marshal,
 		// Transport/configuration-only decoders, not logical metadata codecs:
 		// SCIM manager claims live in claims_json; ModelInfo reads provider
 		// configuration; the remaining two decode transient chat responses.

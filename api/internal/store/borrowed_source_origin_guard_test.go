@@ -38,7 +38,7 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 		"snapshot_clone.go":                      "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
 		"../../cmd/server/advanced_features.go":  "c3b1da9ffc6d934bb6e77c4fa4a9d350138da09ba6f9e96bcdf8da7cc3400cb1",
 		"../../cmd/server/loop_settings.go":      "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":               "0ac1532623f36d251dc18c891cbb9d0dc6dd0f279ec919ad60c48c39ea5ec7c0",
+		"../../cmd/server/main.go":               "8ee4c42153efb06fb17368563f5d026659b1b114615a7439c74bce5273357a51",
 		"../../cmd/server/notification_state.go": "c5e058084e8016be49818e55180bdb3859f9222a1821184f4b81d22ea22eba02",
 		"../../cmd/server/personal_data.go":      "b5d62e57389a5eb2f880dbcad11ad17aea5d9a9fda7d57a014b587cbd3792d9c",
 		"../../cmd/server/cold_dispatch.go":      "de00d735cbaf6591548901dcd880ffc7c1a0b41de10ea5103fe532675220fb8a",

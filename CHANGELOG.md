@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Fix 503 responses when writing milestones, project updates, or initiative updates with bounded metadata enabled.
 - Fix MySQL startup hanging with a one-connection pool when recording a full-text index rebuild.
 - Sync V2 delivers an atomic collection invalidation when issue projection exceeds its work budget. Projected summaries stay charged to the realtime budget through delivery.
 - Guard legacy Pulse and workflow schedule reads so bounded stores use their installed metadata source.

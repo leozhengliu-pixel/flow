@@ -4162,8 +4162,8 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	id := r.PathValue("id")
 	var created domain.InitiativeUpdate
-	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update-create", id, input, &created, &payload), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
+	payload := pulseUpdateEventPayload(&input.Body, input.BodyData, &input.Health)
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update-create", id, input, &created, &payload), workspaceKey(r), "initiative.update_created", id, &payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4185,7 +4185,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 		}
 		data.InitiativeUpdates[id] = append([]domain.InitiativeUpdate{created}, data.InitiativeUpdates[id]...)
-		payload.Child.ID = created.ID
+		payload.Child = &webhookChild{ID: created.ID}
 		initiative.Health = health
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -4201,8 +4201,9 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
-	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, input, &updated, &payload), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
+	payload := pulseUpdateEventPayload(input.Body, input.BodyData, input.Health)
+	payload.Child = &webhookChild{ID: updateID}
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, input, &updated, &payload), workspaceKey(r), "initiative.update_updated", id, &payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4255,8 +4256,8 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) {
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
-	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, nil, &objectKeys, &payload), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{ID: &updateID, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, nil, &objectKeys, &payload), workspaceKey(r), "initiative.update_deleted", id, &payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4491,8 +4492,8 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	var created domain.ProjectMilestone
-	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &created, &payload), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
+	payload := milestoneEventPayload(input)
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &created, &payload), workspaceKey(r), "project.milestone_created", projectID, &payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4507,7 +4508,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		project.Milestones = append(project.Milestones, created)
 		project.UpdatedAt = now
-		payload.Child.ID = created.ID
+		payload.Child = &webhookChild{ID: created.ID}
 		appendAudit(data, "milestone_created", "project", projectID, map[string]any{"milestoneId": created.ID, "milestoneName": created.Name})
 		return nil
 	})
@@ -4521,8 +4522,9 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
 	var updated domain.ProjectMilestone
-	payload := childEventPayload{Input: input, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated, &payload), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	payload := milestoneEventPayload(input)
+	payload.Child = &webhookChild{ID: milestoneID}
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated, &payload), workspaceKey(r), "project.milestone_updated", projectID, &payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4603,8 +4605,8 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{IssueAttributes: []store.IssueColumnScope{{Column: "projectMilestoneId", Values: []string{milestoneID}}}, IssueFilter: func(issue domain.Issue) bool {
 		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
 	}})
-	payload := childEventPayload{Input: map[string]string{"id": milestoneID}, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "milestone", projectID, nil, &payload), workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{ID: &milestoneID, Child: &webhookChild{ID: milestoneID}}
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "milestone", projectID, nil, &payload), workspaceKey(r), "project.milestone_deleted", projectID, &payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4861,8 +4863,8 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	// Posting an update archives the project's pending update reminders,
 	// which are notifications owned by the project.
 	ctx := projectContentScope(r.Context(), id)
-	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(ctx, "project", "update-create", id, input, &created, &payload), workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
+	payload := pulseUpdateEventPayload(&input.Body, input.BodyData, &input.Health)
+	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(ctx, "project", "update-create", id, input, &created, &payload), workspaceKey(r), "project.update_created", &payload, func(data *domain.Bootstrap) (string, error) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return "", err
@@ -4899,7 +4901,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 		}
 		data.ProjectUpdates[id] = append([]domain.ProjectUpdate{created}, data.ProjectUpdates[id]...)
-		payload.Child.ID = created.ID
+		payload.Child = &webhookChild{ID: created.ID}
 		project.Health = health
 		project.UpdatedAt = now
 		for index := range data.Notifications {
@@ -4919,8 +4921,8 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
-	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, nil, &objectKeys, &payload), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{ID: &updateID, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, nil, &objectKeys, &payload), workspaceKey(r), "project.update_deleted", projectID, &payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4979,8 +4981,9 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
-	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, input, &updated, &payload), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	payload := pulseUpdateEventPayload(input.Body, input.BodyData, input.Health)
+	payload.Child = &webhookChild{ID: updateID}
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, input, &updated, &payload), workspaceKey(r), "project.update_updated", projectID, &payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
