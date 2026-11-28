@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,121 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestDeliverySchedulerIdleClonesAndEmailDigests(t *testing.T) {
+	for _, mode := range []string{"legacy", "flags-off", "bounded"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("FLOW_BOUNDED_METADATA", "off")
+			t.Setenv("FLOW_RECORD_HYDRATION", "on")
+			t.Setenv("FLOW_RECORD_JOURNAL", "on")
+			if mode == "flags-off" {
+				t.Setenv("FLOW_RECORD_HYDRATION", "off")
+				t.Setenv("FLOW_RECORD_JOURNAL", "off")
+			}
+			config := platformDatabaseFixtureScaleDatabaseConfig(t)
+			config.MaxOpenConns = 1
+			repo, err := store.OpenDatabase(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = repo.Close() })
+			fixture := resourceAccessScaleFixture(t, repo)
+			key, user := fixture.data.Workspace.URLKey, fixture.data.Viewer
+			now := time.Now().UTC().Truncate(time.Minute).Add(5 * time.Second)
+			later := now.Add(time.Hour)
+			err = repo.MutateWorkspace(t.Context(), key, "test.delivery_scan", "", nil, func(data *domain.Bootstrap) error {
+				for i := range 100 {
+					data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{
+						ID: fmt.Sprintf("desktop-%03d", i), RecipientID: user.ID, Channel: "desktop", Status: "pending", CreatedAt: now, UpdatedAt: now,
+					})
+				}
+				for _, id := range []string{"minute-digest-a", "minute-digest-b", "immediate-email"} {
+					data.Notifications = append(data.Notifications, domain.Notification{
+						ID: id, RecipientID: user.ID, Title: id, Text: "Scheduler fixture", CreatedAt: now, UpdatedAt: now,
+					})
+					status := "digest"
+					if id == "immediate-email" {
+						status = "failed"
+					}
+					data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{
+						ID: id, NotificationID: id, RecipientID: user.ID, Channel: "email", Status: status, NextAttemptAt: &later, CreatedAt: now, UpdatedAt: now,
+					})
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := repo
+			if mode == "bounded" {
+				source, err = repo.BoundedMetadataViewForWorkspacesForTesting(t.Context(), key)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			mailer, sink := newSinkMailer(t)
+			s := &server{store: source, mailer: mailer}
+			tick := func(at time.Time) int64 {
+				t.Helper()
+				before := store.WorkspaceMetadataClonesForTesting()
+				if err := s.processDueDeliveries(t.Context(), at); err != nil {
+					t.Fatal(err)
+				}
+				return store.WorkspaceMetadataClonesForTesting() - before
+			}
+			for _, at := range []time.Time{now, now.Add(5 * time.Second)} {
+				clones := tick(at)
+				t.Logf("idle delivery tick cloned workspace metadata %d times", clones)
+				if clones != 0 {
+					t.Errorf("idle delivery tick cloned workspace metadata %d times, want 0", clones)
+				}
+			}
+			if messages := sink.take(); len(messages) != 0 {
+				t.Fatalf("idle tick sent %d messages", len(messages))
+			}
+			s.mailer = nil
+			if clones := tick(later); clones != 0 {
+				t.Fatalf("tick without mailer cloned workspace metadata %d times", clones)
+			}
+			effects := scaleHotDeliveryEffects(t, repo, key)
+			for _, id := range []string{"minute-digest-a", "minute-digest-b"} {
+				if row := effects[id].([]any); row[3] != "digest" || row[4] != 0 || row[8] != time.Hour {
+					t.Fatalf("digest without a mailer changed: %v", row)
+				}
+			}
+			s.mailer = mailer
+			tick(later.Add(5 * time.Second))
+			messages := sink.take()
+			if len(messages) != 2 {
+				t.Fatalf("tick with mailer sent %d messages, want one immediate and one digest", len(messages))
+			}
+			if mailSubject(t, messages[0]) != "immediate-email" || mailSubject(t, messages[1]) != "Flow: 2 notifications" ||
+				!strings.Contains(messages[1].text, "minute-digest-a") || !strings.Contains(messages[1].text, "minute-digest-b") {
+				t.Fatal("immediate email or grouped digest had unexpected content")
+			}
+			if clones := tick(later.Add(10 * time.Second)); clones != 0 {
+				t.Errorf("after delivery cloned workspace metadata %d times", clones)
+			}
+			if messages := sink.take(); len(messages) != 0 {
+				t.Fatalf("tick resent %d messages", len(messages))
+			}
+			effects = scaleHotDeliveryEffects(t, repo, key)
+			if row := effects["immediate-email"].([]any); row[3] != "delivered" || row[4] != 2 || row[6] != true || row[7] != false {
+				t.Fatalf("immediate retry not marked delivered: %v", row)
+			}
+			for _, id := range []string{"minute-digest-a", "minute-digest-b"} {
+				if row := effects[id].([]any); row[3] != "delivered" || row[4] != 1 || row[6] != true || row[7] != false {
+					t.Fatalf("digest not marked delivered: %v", row)
+				}
+			}
+			for i := range 100 {
+				if row := effects[fmt.Sprintf("desktop-%03d", i)].([]any); row[3] != "pending" || row[4] != 0 || row[7] != false {
+					t.Fatalf("desktop delivery no longer waiting for client: %v", row)
+				}
+			}
+		})
+	}
+}
 
 func TestDeliverySchedulerProcessesDueEmailAndHonorsBackoff(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))

@@ -105,15 +105,9 @@ func (s *SQLiteStore) persistLegacyActorImage(ctx context.Context, tx *sqlTx, wo
 	}
 	inline := false
 	if !metadataValueEqual(reflect.ValueOf(before.Users), reflect.ValueOf(next.Users)) {
-		beforeShape, err := legacyActorWriteShape(before.Users)
-		if err != nil {
-			return nil, err
-		}
-		afterShape, err := legacyActorWriteShape(next.Users)
-		if err != nil {
-			return nil, err
-		}
-		inline = rootShape != "array" || beforeShape != "array" && len(before.Users) != 0 || afterShape != "array"
+		inline = rootShape != "array" ||
+			len(before.Users) != 0 && !legacyActorWriteSplits(before.Users) ||
+			!legacyActorWriteSplits(next.Users)
 	}
 	if inline {
 		// Invalid/duplicate IDs cannot split. The literal writer needs every
@@ -250,20 +244,17 @@ func legacyActorWriteNodeWork(ctx context.Context, work *ResourceRead, node meta
 	return work.reserve(ctx, node.cost*copies+64<<10)
 }
 
-// Use the actual JSON splitter: escaping/invalid UTF-8 can change key identity
-// and duplicate detection as well as the nil/empty/inline shape decision.
-func legacyActorWriteShape(users []domain.User) (string, error) {
-	raw, err := json.Marshal(struct {
-		Users []domain.User `json:"users"`
-	}{Users: users})
-	if err != nil {
-		return "", err
+func legacyActorWriteSplits(users []domain.User) bool {
+	if users == nil {
+		return false
 	}
-	_, shapes, _, err := splitWorkspaceMetadata(raw)
-	if err != nil {
-		return "", err
+	seen := make(map[string]bool, len(users))
+	for _, user := range users {
+		if !addMetadataArrayID(seen, user.ID) {
+			return false
+		}
 	}
-	return shapes["users"], nil
+	return true
 }
 
 func (s *SQLiteStore) legacyActorWriteRootWork(ctx context.Context, tx *sqlTx, workspace string, work *ResourceRead) (string, error) {

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
+	"testing"
 	"time"
 
 	"flow/api/internal/domain"
@@ -339,7 +341,7 @@ func issueRecordStored(issue domain.Issue) domain.Issue {
 // issueRecordDetail is the data column issueRecordValues writes, without
 // the list projection.
 func issueRecordDetail(issue domain.Issue) ([]byte, error) {
-	raw, err := json.Marshal(issueRecordStored(issue))
+	raw, err := marshalMetadataJSON(issueRecordStored(issue))
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +352,7 @@ func issueRecordDetail(issue domain.Issue) ([]byte, error) {
 
 func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	issue = issueRecordStored(issue)
-	raw, err := json.Marshal(issue)
+	raw, err := marshalMetadataJSON(issue)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +376,7 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	if issue.ArchivedAt != nil {
 		archived = 1
 	}
-	list, err := json.Marshal(issueListProjection(issue))
+	list, err := marshalMetadataJSON(issueListProjection(issue))
 	if err != nil {
 		return nil, err
 	}
@@ -383,6 +385,12 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 }
 
 func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, metadata ...domain.Bootstrap) error {
+	admission := issueRecordWriteAdmission(ctx)
+	releaseColumns, err := reserveIssueRecordColumns(ctx, admission, issue)
+	if err != nil {
+		return err
+	}
+	defer releaseColumns()
 	values, err := s.issueRecordColumns(workspace, issue)
 	if err != nil {
 		return err
@@ -392,22 +400,49 @@ func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if equalIssueRecordData(raw, values[len(values)-1].([]byte)) {
+	next := values[len(values)-1].([]byte)
+	if bytes.Equal(raw, next) {
 		return nil
-	}
-	if len(raw) > 0 && len(metadata) > 0 && newIssueReferences(metadata[0]).equalOwned(raw, issue) {
-		return nil
-	}
-	if err := s.recordIssueFieldHistory(ctx, tx, workspace, []domain.Issue{issue}, map[string][]byte{issue.ID: raw}); err != nil {
-		return err
 	}
 	var old *issueStatsDimensions
 	if len(raw) > 0 {
+		release, err := reserveIssueRecordDecoding(ctx, admission, raw)
+		if err != nil {
+			return err
+		}
+		defer release()
 		var previous domain.Issue
 		if err := json.Unmarshal(raw, &previous); err != nil {
 			return err
 		}
+		// Both normalized encodings preserve the version. A real version
+		// change already proves that their data columns differ.
+		version := previous.Version
+		if version == 0 {
+			version = 1
+		}
+		if version == issue.Version || issue.Version == 0 {
+			compare := &issueRecordComparisonAdmission{ctx: ctx, store: admission}
+			defer compare.close()
+			if err := compare.encode(previous); err != nil {
+				return err
+			}
+			if equalDecodedIssueRecordData(previous, next) {
+				return nil
+			}
+			compare.endEncoding()
+			if len(metadata) > 0 {
+				equal, err := newIssueReferences(metadata[0]).equalDecodedOwned(previous, issue, compare)
+				if err != nil || equal {
+					return err
+				}
+			}
+			compare.close()
+		}
 		old = issueStatsOf(previous)
+	}
+	if err := s.recordIssueFieldHistory(ctx, tx, workspace, []domain.Issue{issue}, map[string][]byte{issue.ID: raw}); err != nil {
+		return err
 	}
 	delta := map[issueStatsKey]int64{}
 	addIssueStats(delta, old, -1)
@@ -763,6 +798,11 @@ func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int
 	return values, rows.Err()
 }
 
+var workspaceMetadataClones atomic.Int64
+
+// WorkspaceMetadataClonesForTesting counts full WorkspaceMetadata projections.
+func WorkspaceMetadataClonesForTesting() int64 { return workspaceMetadataClones.Load() }
+
 // WorkspaceMetadata does not load the issue collection. Query endpoints must use
 // this projection instead of the compatibility full-bootstrap API.
 func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, bool) {
@@ -798,6 +838,9 @@ func (s *SQLiteStore) WorkspaceMetadataForRead(ctx context.Context, workspace st
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
+	if testing.Testing() {
+		workspaceMetadataClones.Add(1)
+	}
 	clone := CloneHydratedReadSnapshot(ctx, data)
 	clone.Issues = []domain.Issue{}
 	clone.Activities = map[string][]domain.ActivityEvent{}

@@ -1,0 +1,27 @@
+apiVersion: 1
+datasources:
+  - name: Flow Metrics
+    uid: flow-metrics
+    type: prometheus
+    access: proxy
+    url: http://victoria:8428
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+  - name: Flow Traces
+    uid: flow-traces
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+  - name: Flow Events
+    uid: flow-events
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: Trace
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: flow-traces
+          url: '$${__value.raw}'

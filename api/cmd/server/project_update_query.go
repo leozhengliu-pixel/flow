@@ -97,7 +97,7 @@ func (s *server) scaleUpdatePage(w http.ResponseWriter, r *http.Request, kind st
 			writeSyncError(w, err)
 			return
 		}
-		writeSyncJSON(w, map[string]any{"schema": 1, "revision": revision, "authzEpoch": access.AuthzEpoch, "encoding": "base64-json", "data": base64.StdEncoding.EncodeToString(raw[offset:end]), "offset": offset, "hasMore": end < len(raw), "nextCursor": next}, store.MetadataRecordPageMaxBytes)
+		s.writeSyncJSON(w, r, map[string]any{"schema": 1, "revision": revision, "authzEpoch": access.AuthzEpoch, "encoding": "base64-json", "data": base64.StdEncoding.EncodeToString(raw[offset:end]), "offset": offset, "hasMore": end < len(raw), "nextCursor": next}, store.MetadataRecordPageMaxBytes)
 		return
 	}
 	limit, err := syncPageNumber(r.URL.Query().Get("limit"), 20, 1, 100)
@@ -148,7 +148,7 @@ func (s *server) scaleUpdatePage(w http.ResponseWriter, r *http.Request, kind st
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, page, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, page, store.MetadataRecordPageMaxBytes)
 }
 
 func scaleUpdateBinding(kind, id, revision string, records []scaleUpdateRecord) (string, error) {

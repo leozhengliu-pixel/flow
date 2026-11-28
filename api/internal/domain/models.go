@@ -554,6 +554,31 @@ type DocumentContent struct {
 	UpdatedAt    time.Time      `json:"updatedAt"`
 }
 
+type DocumentInput struct {
+	TemplateID    *string        `json:"templateId,omitempty"`
+	Title         *string        `json:"title,omitempty"`
+	Icon          *string        `json:"icon,omitempty"`
+	Color         *string        `json:"color,omitempty"`
+	Content       *string        `json:"content,omitempty"`
+	ContentState  *string        `json:"contentState,omitempty"`
+	ContentData   map[string]any `json:"contentData,omitempty"`
+	ProjectIDs    *[]string      `json:"projectIds,omitempty"`
+	TeamIDs       *[]string      `json:"teamIds,omitempty"`
+	IssueID       *string        `json:"issueId,omitempty"`
+	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
+	Favorite      *bool          `json:"favorite,omitempty"`
+	Archived      *bool          `json:"archived,omitempty"`
+	// ExpectedVersion rejects the write with 409 (and the current document)
+	// when the document changed since the caller read it.
+	ExpectedVersion *int64 `json:"expectedVersion,omitempty"`
+	// ExpectedContentVersion guards replacing contentState: the collaborative
+	// editor sends it with the Yjs update ids its snapshot includes, and the
+	// server prunes those ids from the update log after a successful write.
+	// A stale value keeps the content fields but skips contentState.
+	ExpectedContentVersion *int64   `json:"expectedContentVersion,omitempty"`
+	DocumentUpdateIDs      []string `json:"documentUpdateIds,omitempty"`
+}
+
 type Document struct {
 	ID            string         `json:"id"`
 	SlugID        string         `json:"slugId"`

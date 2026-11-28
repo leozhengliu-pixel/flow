@@ -19,6 +19,7 @@
  */
 
 import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/realtime-cache-limits'
+import { activeBrowserTelemetry } from './browser-telemetry'
 import { holdRealtimeLease, storageChannel } from './realtime-storage'
 
 export interface RealtimeMessage {
@@ -351,6 +352,7 @@ class SharedRealtime {
     }
     const fail = () => {
       if (this.stream !== stream) return
+      activeBrowserTelemetry()?.record({ kind: 'reconnect', status: 'events' })
       // Reconnect ourselves instead of relying on EventSource's automatic
       // retry: it resends a `connected_*` marker as Last-Event-ID (no replay)
       // and gives up for good on a non-2xx response.

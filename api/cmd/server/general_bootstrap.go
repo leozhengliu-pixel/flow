@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -88,6 +89,27 @@ func (s *server) generalBootstrapBounded(w http.ResponseWriter, r *http.Request)
 
 func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, read *store.GeneralBootstrapRead) {
 	ctx := hydratedSigningContext(r.Context(), w)
+	ctx = context.WithValue(ctx, bootstrapRecordEncodingKey{}, bootstrapRecordEncoder(read.EncodeRecordJSON))
+	encodePlain := func(buffer *bufio.Writer, value any) error {
+		raw, release, err := read.EncodeRecordJSON(ctx, value)
+		if err != nil {
+			return err
+		}
+		defer release()
+		if _, err := buffer.Write(raw); err != nil {
+			return err
+		}
+		return buffer.WriteByte('\n')
+	}
+	encode := func(buffer *bufio.Writer, value any) error {
+		if !store.RecordHydrationEnabled(ctx) {
+			return encodePlain(buffer, value)
+		}
+		if err := encodeHydratedJSON(ctx, buffer, reflect.ValueOf(value), 0); err != nil {
+			return err
+		}
+		return buffer.WriteByte('\n')
+	}
 	const mapLimit uint64 = 256 << 20
 	var mapWork uint64
 	reserve := func(bytes uint64) error {
@@ -214,7 +236,7 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 			outlines[issue.ID] = index
 		}
 	}
-	field := func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
+	field := func(field string, buffer *bufio.Writer, _ *json.Encoder) (bool, error) {
 		if lean {
 			switch field {
 			case "issues":
@@ -224,7 +246,7 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 					if i > 0 {
 						buffer.WriteByte(',')
 					}
-					if err := encodeBootstrapValue(ctx, buffer, encoder, leanIssueRecord(issue)); err != nil {
+					if err := encode(buffer, leanIssueRecord(issue)); err != nil {
 						return true, err
 					}
 				}
@@ -269,7 +291,7 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 				if count > 0 {
 					buffer.WriteByte(',')
 				}
-				if err := encodeBootstrapValue(ctx, buffer, encoder, issue); err != nil {
+				if err := encode(buffer, issue); err != nil {
 					return err
 				}
 				count++
@@ -372,7 +394,8 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 				if haveResource {
 					buffer.WriteString("],")
 				}
-				if err := encoder.Encode(resource); err != nil {
+				// Resource keys were always written without hydration.
+				if err := encodePlain(buffer, resource); err != nil {
 					return err
 				}
 				buffer.WriteString(":[")
@@ -384,7 +407,7 @@ func (s *server) writeGeneralBootstrapBounded(w http.ResponseWriter, r *http.Req
 				buffer.WriteByte(',')
 			}
 			count++
-			return encodeBootstrapValue(ctx, buffer, encoder, value)
+			return encode(buffer, value)
 		})
 		if err != nil {
 			return true, err

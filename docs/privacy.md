@@ -8,6 +8,35 @@ to the data. It is written for operators answering access, portability and
 erasure requests (GDPR Articles 15, 17 and 20; PIPL Articles 44–47); it is not
 legal advice.
 
+## Optional telemetry
+
+Backend and browser telemetry default to off. An operator can enable backend
+telemetry, optionally include browser measurements, and choose the collector. While
+enabled, Flow sends fixed route patterns, operational counts and sizes,
+timings, and memory diagnostics. Browser telemetry uses Flow's same-origin
+intake with the existing session cookie. Signed-out pages stay inactive. The
+server uses the cookie for authentication and excludes it from telemetry.
+Only the server has the collector credentials.
+
+Flow builds metrics, spans, and events from an allowlist of typed fields.
+It excludes names, contact details, user and workspace identifiers, work
+content, request URLs and bodies, network addresses, cookies, tokens,
+and SQL text. Exports may include a scrubbed, operator-configured deployment
+label, and timing spans may include a configured provider hostname. Browser
+error records contain a keyed error fingerprint and
+validated bundled-asset basenames and line numbers. The process rotates
+the fingerprint key on restart. Flow creates no telemetry identity for a
+person or device. The collector may see the API replica's network address as
+part of the network connection.
+
+The rolling snapshot and pending crash snapshots contain numeric diagnostics.
+Flow retains a pending crash snapshot until its event is acknowledged by the
+collector. Optional heap and goroutine profiles stay in a private local
+directory and are never exported.
+Treat profiles as operational artifacts and restrict access to them. For
+exported data, access, retention, and deletion are managed by the operator
+of the collector and storage. See [Telemetry](telemetry.md).
+
 ## Access and portability: download your data
 
 **Account › Security & access › Your data › Download your data** (or

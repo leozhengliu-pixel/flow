@@ -5,11 +5,11 @@
     "BeginIntegrationDeliveryRead": {
       "owner": "P21",
       "status": "reviewed",
-      "accessors": ["BeginInstalledMetadataRead"],
+      "accessors": ["resident-state", "BeginInstalledMetadataRead"],
       "temperature": "hot",
       "temperatureReason": "Delivery scheduler reads the selected delivery and connection on every worker tick.",
-      "callers": ["server/integration_delivery.go:processBoundedIntegrationDelivery"],
-      "reason": "Replaces the worker's entry WorkspaceMetadata snapshot (taken under context.Background) with one installed-source capture: workspace found, HIPAACompliance, then the first delivery occurrence by ID projected to ID/ConnectionID/Status/Attempts, and only when that occurrence is retryable the first connection occurrence by its ConnectionID projected to ID/Provider and the four delivery Config keys (deliveryURL, deliverySecret, deliverySecretEnv, deliveryTokenEnv), so an oversized irrelevant record cannot replace a literal refusal. Close is idempotent and drops the captured values. TestDeliveryOutcomesDifferential compares the retry route against the literal worker, warm and SQL-reloaded, with a workspace coordinator: missing workspace/delivery/connection, HIPAA, not retryable (delivered/delivering), retry limit, empty and unsupported endpoints, duplicate delivery and connection IDs (first occurrence wins; the duplicate's endpoint and secret are never used), captured endpoint/secret/token inputs and peer edits between this read and the claim. TestDeliveryWorkerNetworkAndCAS, delivery ownership near-limit and integration raw UTF8 raw UTF-8 keep the large and connection-move captures."
+      "callers": ["server/server.processIntegrationDelivery", "server/server.processBoundedIntegrationDelivery"],
+      "reason": "One installed-source capture checks HIPAACompliance, then reads the first delivery by ID. For retryable deliveries it selects the first matching connection and the four configuration keys used by the sender. Legacy mode copies these headers under the workspace lock and bounded mode holds them under a read owner. TestDeliveryOutcomesDifferential covers refusal order, duplicate IDs, endpoint and credential selection, and peer edits before claim."
     }
   }
 }

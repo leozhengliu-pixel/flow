@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 4194304
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 48
+
+exporters:
+  otlp_http/metrics:
+    metrics_endpoint: http://victoria:8428/opentelemetry/v1/metrics
+    sending_queue: &queue
+      queue_size: 12
+      num_consumers: 1
+    retry_on_failure: &retry
+      max_elapsed_time: 30s
+  otlp_http/traces:
+    endpoint: http://tempo:4318
+    sending_queue: *queue
+    retry_on_failure: *retry
+  otlp_http/logs:
+    endpoint: http://loki:3100/otlp
+    sending_queue: *queue
+    retry_on_failure: *retry
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlp_http/metrics]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlp_http/traces]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlp_http/logs]

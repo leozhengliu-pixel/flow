@@ -122,7 +122,7 @@ func fingerprintContent[T any](records map[contentRecordKey]recordFingerprint, i
 // contentRecordHash is a content record's id and the hash of the payload
 // syncContentRecords would write for it.
 func contentRecordHash[T any](value T) (string, [32]byte, error) {
-	raw, err := json.Marshal(value)
+	raw, err := marshalMetadataJSON(value)
 	if err != nil {
 		return "", [32]byte{}, err
 	}

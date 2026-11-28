@@ -35,9 +35,12 @@ func cacheableSyncPage(page store.CommittedPage) bool {
 	return true
 }
 
-func (s *server) sharedSyncPage(ctx context.Context, access store.EventAccess, page store.CommittedPage, after string, limit int, project func(context.Context) (syncV2ChangesResponse, error)) (syncV2ChangesResponse, error) {
+func (s *server) sharedSyncPage(ctx context.Context, access store.EventAccess, page store.CommittedPage, after string, limit int, encoding *realtimeJSONEncoding, project func(context.Context) (syncV2ChangesResponse, error)) (syncV2ChangesResponse, error) {
 	fingerprint := access.PermissionFingerprint()
-	pageInput, err := json.Marshal(page)
+	pageInput, release, err := s.marshalSyncJSON(ctx, page)
+	if release != nil {
+		defer release()
+	}
 	if err != nil || fingerprint == "" {
 		return project(ctx)
 	}
@@ -47,6 +50,13 @@ func (s *server) sharedSyncPage(ctx context.Context, access store.EventAccess, p
 		access.AuthzEpoch, access.PrincipalID, access.CredentialScope, fingerprint, after, strconv.Itoa(limit), string(pageInput))
 	var result syncV2ChangesResponse
 	computed := false
+	// The cache consumes the encoded page after its compute callback returns.
+	var releasePage func()
+	defer func() {
+		if releasePage != nil {
+			releasePage()
+		}
+	}()
 	raw, _, err := s.coordinator.SharedCacheDo(ctx, key, func(ctx context.Context) ([]byte, error) {
 		var err error
 		result, err = project(ctx)
@@ -61,7 +71,12 @@ func (s *server) sharedSyncPage(ctx context.Context, access store.EventAccess, p
 				return nil, errSyncPageUncacheable
 			}
 		}
-		return json.Marshal(result)
+		raw, release, err := s.marshalSyncJSON(ctx, result)
+		releasePage = release
+		if errors.Is(err, store.ErrMetadataWorkBudget) {
+			return nil, errSyncPageUncacheable
+		}
+		return raw, err
 	})
 	if errors.Is(err, errSyncPageUncacheable) {
 		if computed {
@@ -72,8 +87,22 @@ func (s *server) sharedSyncPage(ctx context.Context, access store.EventAccess, p
 	if err != nil {
 		return result, err
 	}
-	if !computed && json.Unmarshal(raw, &result) != nil {
-		return project(ctx)
+	if !computed {
+		if len(raw) > syncV2DeltaBytes {
+			return project(ctx)
+		}
+		if encoding.budget != nil {
+			work, err := store.MetadataJSONDecodeWork(ctx, raw)
+			if err != nil || !encoding.budget.acquire(int64(work)) {
+				return project(ctx)
+			}
+			encoding.held += int64(work)
+		}
+		if json.Unmarshal(raw, &result) != nil {
+			result = syncV2ChangesResponse{}
+			encoding.close()
+			return project(ctx)
+		}
 	}
 	// Check again at delivery, including after a leader's Redis write.
 	return result, s.store.ValidateEventAccess(ctx, access)

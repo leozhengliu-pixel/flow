@@ -10,6 +10,7 @@ package publicapi
 // here, so a new route is either given a contract or consciously declared
 // internal. Remove a line when the route gets an Operation.
 var InternalRoutes = []string{
+	"POST /api/telemetry",
 	// /.well-known
 	"GET /.well-known/oauth-app-manifest.schema.json",
 	"GET /.well-known/oauth-authorization-server",

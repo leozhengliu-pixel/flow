@@ -19,6 +19,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 
 	"github.com/coder/websocket"
 )
@@ -356,6 +357,9 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 				writeCtx, writeCancel := context.WithTimeout(ctx, 5*time.Second)
 				err := connection.Write(writeCtx, messageType, message.data)
 				writeCancel()
+				if err == nil && s.telemetry != nil {
+					telemetry.RealtimeMessage(s.telemetry, "collaboration_out", collaborationTelemetryKind(messageType, message.data), len(message.data))
+				}
 				message.release(client)
 				if message.sent != nil {
 					message.sent <- err
@@ -373,6 +377,9 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
+		if s.telemetry != nil {
+			telemetry.RealtimeMessage(s.telemetry, "collaboration_in", collaborationTelemetryKind(messageType, message), len(message))
+		}
 		err = func() error {
 			defer releaseInput()
 			return s.handleBudgetedCollaboration(ctx, r, client, messageType, message)
@@ -389,6 +396,31 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	cancel()
 	<-writerDone
+}
+
+func collaborationTelemetryKind(transport websocket.MessageType, body []byte) string {
+	if transport == websocket.MessageBinary {
+		if len(body) > 0 {
+			switch body[0] {
+			case collaborationUpdateFrame:
+				return "document.update"
+			case collaborationAwarenessFrame:
+				return "document.awareness"
+			}
+		}
+		return "binary"
+	}
+	// Match only the control envelope. Large DOM or binary state is never
+	// copied into the recorder, even when a client sends malformed input.
+	if len(body) <= 1024 {
+		var command struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(body, &command) == nil && command.Type != "" {
+			return command.Type
+		}
+	}
+	return "text"
 }
 
 func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSocketClient, raw []byte) error {
@@ -510,15 +542,13 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	bytes := len(contentState)
 	flush := func(more bool) error {
 		message.More = more
-		releaseEncode, err := acquireRealtimeWork(r.Context(), client.budget, collaborationSyncBytes(message)*2)
+		size := collaborationSyncBytes(message)
+		releaseEncode, err := acquireRealtimeWork(r.Context(), client.budget, (size+8191)&^8191+1024)
 		if err != nil {
 			return err
 		}
 		defer releaseEncode()
-		raw, err := json.Marshal(message)
-		if err != nil {
-			return err
-		}
+		raw := encodeCollaborationSync(message, size)
 		sent := make(chan error, 1)
 		if !client.enqueue(realtimeSocketMessage{data: raw, sent: sent, documentID: command.DocumentID}, false) {
 			return errors.New("collaboration queue exceeded")

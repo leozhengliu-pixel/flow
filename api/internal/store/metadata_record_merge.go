@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/jsonwire"
 )
 
 // Workspace metadata is stored one record per row (a project, a release, a
@@ -104,7 +105,7 @@ func unmarshalMetadataRecord(raw []byte, dst any) error {
 }
 
 func marshalMetadataRecord(value any) ([]byte, error) {
-	raw, err := json.Marshal(value)
+	raw, err := marshalMetadataJSON(value)
 	if err != nil {
 		return nil, &metadataRecordJSONError{message: "could not encode metadata record", cause: err}
 	}
@@ -319,7 +320,7 @@ func mergeMetadataObjects(base, ours, theirs json.RawMessage) (json.RawMessage, 
 		}
 		merged[key] = value
 	}
-	encoded, err := json.Marshal(merged)
+	encoded, err := marshalMetadataRawObject(merged)
 	return encoded, err == nil
 }
 
@@ -328,6 +329,10 @@ func mergeMetadataObjects(base, ours, theirs json.RawMessage) (json.RawMessage, 
 // Normalizations that need the rest of the workspace do not apply; the
 // result is only compared, never written.
 func normalizedMetadataRecord(field metadataField, key string, record reflect.Value) ([]byte, error) {
+	return marshalMetadataRecord(normalizedMetadataRecordValue(field, key, record).Interface())
+}
+
+func normalizedMetadataRecordValue(field metadataField, key string, record reflect.Value) reflect.Value {
 	var probe domain.Bootstrap
 	target := reflect.ValueOf(&probe).Elem().Field(field.index)
 	if target.Kind() == reflect.Map {
@@ -339,9 +344,9 @@ func normalizedMetadataRecord(field metadataField, key string, record reflect.Va
 	normalize(&probe)
 	collection := newMetadataCollection(field, reflect.ValueOf(&probe).Elem().Field(field.index))
 	if normalized, ok := collection.record(key); ok {
-		return marshalMetadataRecord(normalized.Interface())
+		return normalized
 	}
-	return marshalMetadataRecord(record.Interface())
+	return record
 }
 
 func setMember(fields map[string]json.RawMessage, name string, value json.RawMessage) {
@@ -475,7 +480,7 @@ func mergeMetadataLists(base, ours, theirs json.RawMessage) (json.RawMessage, bo
 		}
 		result = append(result, ourByID[id])
 	}
-	encoded, err := json.Marshal(result)
+	encoded, err := marshalMetadataRawList(result)
 	return encoded, err == nil
 }
 
@@ -642,6 +647,7 @@ func metadataFieldByName(name string) (metadataField, bool) {
 // It returns the fields whose collection it replaced in after, and whether
 // it changed before or after at all.
 func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace string, before, after *domain.Bootstrap, changed []metadataField, extra map[string][]string) ([]metadataField, bool, error) {
+	owner := legacyMetadataDeltaOwner(ctx)
 	if changed == nil {
 		changed = changedMetadataFields(*before, *after)
 	}
@@ -745,13 +751,19 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 			tx.rebasedMetadata[recordKey] = true
 			old, _ := previous.record(key)
 			mine, _ := next.record(key)
-			base, err := marshalMetadataRecord(old.Interface())
+			base, err := encodeRebaseMetadataRecord(ctx, owner, old)
 			if err != nil {
 				return nil, false, err
 			}
 			row, exists := stored[key]
-			if exists && storedRecordEqual(tx, *refs, name, row, base) {
-				continue
+			if exists {
+				equal, err := compareLegacyDeltaRecord(ctx, owner, tx, *refs, name, row, base)
+				if err != nil {
+					return nil, false, err
+				}
+				if equal {
+					continue
+				}
 			}
 			touched = true
 			if !clonedBefore {
@@ -773,11 +785,11 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 				replacedAfter = true
 				continue
 			}
-			ours, err := marshalMetadataRecord(mine.Interface())
+			ours, err := encodeRebaseMetadataRecord(ctx, owner, mine)
 			if err != nil {
 				return nil, false, err
 			}
-			result, err := mergeWithStoredRecord(*refs, field, kind, key, base, ours, row)
+			result, err := mergeWithStoredRecordOwned(ctx, owner, *refs, field, kind, key, base, ours, row)
 			if err != nil {
 				return nil, false, err
 			}
@@ -849,7 +861,15 @@ func updateMetadataField(name string) bool {
 
 // updateRecordKey is the row key of one update of parent.
 func updateRecordKey(parent, id string) string {
-	key, _ := json.Marshal([]string{parent, id})
+	var key []byte
+	if len(parent)+len(id) < metadataJSONLargeBody {
+		key, _ = json.Marshal([]string{parent, id})
+	} else {
+		key = make([]byte, 0, 3+jsonwire.StringBytes(parent)+jsonwire.StringBytes(id))
+		key = jsonwire.AppendString(append(key, '['), parent)
+		key = jsonwire.AppendString(append(key, ','), id)
+		key = append(key, ']')
+	}
 	return fmt.Sprintf("%x", sha256.Sum256(key))
 }
 
@@ -867,6 +887,7 @@ type updateRebase struct {
 // changes; an update deleted meanwhile is left out of both. Updates another
 // write added are rows the delta writer does not touch, so they are kept.
 func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, field metadataField, beforeValue, afterValue reflect.Value) (updateRebase, error) {
+	owner := legacyMetadataDeltaOwner(ctx)
 	var result updateRebase
 	if beforeValue.Kind() != reflect.Map || afterValue.Kind() != reflect.Map || beforeValue.IsNil() || afterValue.IsNil() {
 		return result, nil
@@ -964,27 +985,46 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 		if err := unmarshalMetadataRecord(row, &update); err != nil {
 			return result, err
 		}
-		base, err := marshalMetadataRecord(old.Interface())
+		base, err := encodeRebaseMetadataRecord(ctx, owner, old)
 		if err != nil {
 			return result, err
 		}
-		if len(update.Item) == 0 || refs.equalDisplayData(update.Item, base) {
+		if len(update.Item) == 0 {
+			continue
+		}
+		if owner != nil {
+			if err := reserveLegacyDisplayComparison(ctx, owner, field.name, update.Item, base); err != nil {
+				return result, err
+			}
+		}
+		if refs.equalDisplayData(update.Item, base) {
 			continue
 		}
 		storedValue, err := decodeMetadataRecord(kind, update.Item, old)
 		if err != nil {
 			return result, fmt.Errorf("rebase %s record: %w", field.name, err)
 		}
-		theirs, err := marshalMetadataRecord(storedValue.Interface())
+		theirs, err := encodeRebaseMetadataRecord(ctx, owner, storedValue)
 		if err != nil {
 			return result, err
 		}
 		if refs.equalDisplayData(refs.canonicalDisplayData(theirs), base) {
 			continue
 		}
-		ours, err := marshalMetadataRecord(mine.Interface())
+		ours, err := encodeRebaseMetadataRecord(ctx, owner, mine)
 		if err != nil {
 			return result, err
+		}
+		if owner != nil {
+			for _, raw := range [][]byte{base, ours, theirs} {
+				work, err := metadataOffloadAssemblyWork(ctx, raw, 6)
+				if err != nil {
+					return result, err
+				}
+				if err := owner.reserve(ctx, work); err != nil {
+					return result, err
+				}
+			}
 		}
 		merged, conflict, err := mergeMetadataRecord(base, ours, theirs, theirs)
 		if err != nil {
@@ -1032,6 +1072,13 @@ func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 	return result, nil
 }
 
+func encodeRebaseMetadataRecord(ctx context.Context, owner *ResourceRead, value reflect.Value) ([]byte, error) {
+	if owner != nil {
+		return encodeRetainedMetadataRecord(ctx, owner, value)
+	}
+	return marshalMetadataRecord(value.Interface())
+}
+
 // storedMerge is a writer's change merged onto a record as stored.
 type storedMerge struct {
 	// theirs is the stored record re-encoded from its type; merged is ours'
@@ -1047,25 +1094,62 @@ type storedMerge struct {
 // (the record the writer changed into ours) and, when another write changed
 // the row since, merges both changes (mergeMetadataRecord).
 func mergeWithStoredRecord(refs issueReferences, field metadataField, kind reflect.Type, key string, base, ours, row []byte) (storedMerge, error) {
-	resolved, err := resolveDocumentMarkers(field.name, row)
+	return mergeWithStoredRecordOwned(context.Background(), nil, refs, field, kind, key, base, ours, row)
+}
+
+func mergeWithStoredRecordOwned(ctx context.Context, owner *ResourceRead, refs issueReferences, field metadataField, kind reflect.Type, key string, base, ours, row []byte) (storedMerge, error) {
+	resolved, err := resolveDocumentMarkersOwned(ctx, owner, field.name, row)
 	if err != nil {
 		return storedMerge{}, err
+	}
+	if owner != nil {
+		cost, err := largeRowTypedJSONWork(ctx, owner, resolved, kind)
+		if err != nil {
+			return storedMerge{}, err
+		}
+		if err := owner.reserve(ctx, cost); err != nil {
+			return storedMerge{}, err
+		}
 	}
 	storedValue, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
 	if err != nil {
 		return storedMerge{}, fmt.Errorf("rebase %s record: %w", field.name, err)
 	}
-	theirs, err := marshalMetadataRecord(storedValue.Interface())
+	encode := func(value reflect.Value) ([]byte, error) {
+		if owner != nil {
+			return encodeRetainedMetadataRecord(ctx, owner, value)
+		}
+		return marshalMetadataRecord(value.Interface())
+	}
+	theirs, err := encode(storedValue)
 	if err != nil {
 		return storedMerge{}, err
 	}
-	loaded, err := normalizedMetadataRecord(field, key, storedValue)
+	loaded, err := encode(normalizedMetadataRecordValue(field, key, storedValue))
 	if err != nil {
+		return storedMerge{}, err
+	}
+	reserveAssembly := func(raw []byte, copies uint64) error {
+		if owner == nil {
+			return nil
+		}
+		work, err := metadataOffloadAssemblyWork(ctx, raw, copies)
+		if err != nil {
+			return err
+		}
+		return owner.reserve(ctx, work)
+	}
+	if err := reserveAssembly(loaded, 4); err != nil {
 		return storedMerge{}, err
 	}
 	loaded = refs.canonicalDisplayData(loaded)
 	if refs.equalDisplayData(loaded, base) {
 		return storedMerge{theirs: theirs, merged: ours, unchanged: true}, nil
+	}
+	for _, raw := range [][]byte{base, ours, theirs, loaded} {
+		if err := reserveAssembly(raw, 6); err != nil {
+			return storedMerge{}, err
+		}
 	}
 	merged, conflict, err := mergeMetadataRecord(base, ours, theirs, loaded)
 	if err != nil {
@@ -1421,6 +1505,7 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 			if number < attempts {
 				traceMark(ctx, "deadlock-retry")
 				if concurrentWriteBackoff(ctx, number) == nil {
+					recordTransactionConflict(ctx, "", err, true)
 					continue
 				}
 			}
@@ -1443,6 +1528,7 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 		if waitErr := concurrentWriteBackoff(ctx, number); waitErr != nil {
 			return err
 		}
+		recordTransactionConflict(ctx, "", err, true)
 	}
 }
 

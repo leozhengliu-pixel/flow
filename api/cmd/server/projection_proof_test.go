@@ -68,9 +68,14 @@ func TestScaleJournalFramesKeepTransactionsAtomicAndQueuesBounded(t *testing.T) 
 	for range 50 {
 		transaction.Upserts = append(transaction.Upserts, syncV2Upsert{Key: syncV2Key{Kind: "issues", ID: "issue"}, Version: "1", Data: json.RawMessage(`{"id":"issue","title":"` + strings.Repeat("x", 1000) + `"}`), Projection: "summary", DetailStale: true})
 	}
-	frame, err := syncTransactionFrame(transaction, "epoch")
+	budget := &realtimeBudget{limit: 1 << 20}
+	frame, err := syncTransactionFrame(t.Context(), budget, transaction, "epoch")
 	if err != nil {
 		t.Fatal(err)
+	}
+	defer frame.Close()
+	if budget.used.Load() < int64(frame.Size()) {
+		t.Fatal("journal frame lost its output lease")
 	}
 	if frame.Size()+len(frame.id)+128 > syncV2FrameBytes {
 		t.Fatal("stream transaction exceeded frame budget")
@@ -96,6 +101,24 @@ func TestScaleJournalFramesKeepTransactionsAtomicAndQueuesBounded(t *testing.T) 
 	w = httptest.NewRecorder()
 	if !frame.WriteSSE(w, "") || strings.HasPrefix(w.Body.String(), "id:") {
 		t.Fatal("business side channel advanced a transaction cursor")
+	}
+	frame.Close()
+	if budget.used.Load() != 0 {
+		t.Fatal("journal frame lease survived close")
+	}
+	transaction.Upserts = transaction.Upserts[:1]
+	pressure := &realtimeBudget{limit: 10 << 10}
+	refused, err := syncTransactionFrame(t.Context(), pressure, transaction, "epoch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer refused.Close()
+	if strings.Contains(string(refused.encoded), `"title"`) || !strings.Contains(string(refused.encoded), `"invalidations":["issues"]`) {
+		t.Fatal("journal frame failed to invalidate atomically under work pressure")
+	}
+	refused.Close()
+	if pressure.used.Load() != 0 {
+		t.Fatal("work refusal leaked the journal frame lease")
 	}
 	hub := newRealtimeHub()
 	subscriber, stop := hub.subscribeTransport("workspace", "", false)

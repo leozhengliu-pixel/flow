@@ -37,6 +37,13 @@ func legacyMetadataDeltaBudget(ctx context.Context) *legacyMetadataDeltaReadBudg
 	return budget
 }
 
+func legacyMetadataDeltaOwner(ctx context.Context) *ResourceRead {
+	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+		return budget.owner
+	}
+	return nil
+}
+
 func (b *legacyMetadataDeltaReadBudget) check(tx *sqlTx) error {
 	if b == nil || b.owner == nil || b.owner.store == nil || !b.owner.store.BoundedMetadataEnabled() ||
 		tx == nil || tx.database != b.owner.store.db {

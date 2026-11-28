@@ -272,7 +272,7 @@ func (s *server) buildPulseEventSource(ctx context.Context, workspace string, so
 	return chargeOwnedRules()
 }
 
-func (source *EventSource) pulseProjection(data domain.Bootstrap, query store.IssueRecordQuery) (domain.RealtimeEvent, bool) {
+func (source *EventSource) pulseProjection(data domain.Bootstrap, query store.IssueRecordQuery, encode func(any) json.RawMessage) (domain.RealtimeEvent, bool) {
 	event := source.event
 	viewer := newPulseViewerFrom(&store.PulseFeedSnapshot{Teams: data.Teams, TeamSettings: data.TeamSettings}, data.Viewer.ID, data.ViewerRole, data.TeamMembers, nil, query.AllowedTeamIDs)
 	scopeChanged := realtimeScopeChanged(event)
@@ -302,7 +302,7 @@ func (source *EventSource) pulseProjection(data domain.Bootstrap, query store.Is
 			}
 			extra["updates"] = updates
 		}
-		event.Payload = realtimeEntityPayload(event, view, extra)
+		event.Payload = encode(realtimeEntityPayloadValue(event, view, extra))
 		return event, true
 	}
 	initiative := source.rules.initiatives[event.AggregateID]
@@ -326,7 +326,7 @@ func (source *EventSource) pulseProjection(data domain.Bootstrap, query store.Is
 		}
 		extra["updates"] = updates
 	}
-	event.Payload = realtimeEntityPayload(event, view, extra)
+	event.Payload = encode(realtimeEntityPayloadValue(event, view, extra))
 	return event, true
 }
 

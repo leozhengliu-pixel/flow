@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,9 +28,15 @@ func syncResourceEvent(kind string) bool {
 	return syncCollection(kind) != "*"
 }
 
-func syncTransactionFrame(tx syncV2Transaction, epoch string) (EventFrame, error) {
+func syncTransactionFrame(ctx context.Context, budget *realtimeBudget, tx syncV2Transaction, epoch string) (_ EventFrame, err error) {
+	encoding := &realtimeJSONEncoding{ctx: ctx, budget: budget}
+	defer func() {
+		if err != nil {
+			encoding.close()
+		}
+	}()
 	encode := func() (json.RawMessage, error) {
-		payload, err := json.Marshal(struct {
+		payload, err := encoding.marshal(struct {
 			Schema      int               `json:"schema"`
 			AuthzEpoch  string            `json:"authzEpoch"`
 			Transaction syncV2Transaction `json:"transaction"`
@@ -37,13 +44,22 @@ func syncTransactionFrame(tx syncV2Transaction, epoch string) (EventFrame, error
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(domain.RealtimeEvent{ID: tx.TxID, Type: "sync.delta", Payload: payload})
+		return encoding.marshal(domain.RealtimeEvent{ID: tx.TxID, Type: "sync.delta", Payload: payload})
 	}
-	raw, err := encode()
+	size, err := tx.jsonBytes()
 	if err != nil {
 		return EventFrame{}, err
 	}
-	if len(raw)+len(tx.Seq)+128 > syncV2FrameBytes {
+	var raw json.RawMessage
+	if size <= syncV2FrameBytes {
+		raw, err = encode()
+		if err != nil && !errors.Is(err, store.ErrEventSourceBudget) {
+			return EventFrame{}, err
+		}
+	}
+	if raw == nil || len(raw)+len(tx.Seq)+128 > syncV2FrameBytes {
+		raw = nil
+		encoding.close()
 		change := store.CommittedChange{TxID: tx.TxID, Seq: tx.Seq, Invalidations: tx.Invalidations}
 		for _, item := range tx.Upserts {
 			change.Records = append(change.Records, store.RecordDelta{Key: store.RecordKey{Kind: item.Key.Kind}})
@@ -60,7 +76,7 @@ func syncTransactionFrame(tx syncV2Transaction, epoch string) (EventFrame, error
 	if len(raw)+len(tx.Seq)+128 > syncV2FrameBytes {
 		return EventFrame{}, store.ErrEventSourceBudget
 	}
-	return EventFrame{encoded: raw, id: tx.Seq, visible: true, durableCursor: true}, nil
+	return EventFrame{encoded: raw, id: tx.Seq, kind: "sync.delta", visible: true, durableCursor: true, release: encoding.close}, nil
 }
 
 func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, journal committedChangeReader, cursor int64) (int64, bool, bool) {
@@ -77,7 +93,9 @@ func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, jo
 	if state, ok := r.Context().Value(syncV2StreamKey{}).(*syncV2Stream); ok && state.workspaceID != access.WorkspaceID {
 		return cursor, false, false
 	}
-	page, err := s.collectSyncChanges(r, access, journal, strconv.FormatInt(cursor, 10), maxChangesLimit)
+	encoding := s.syncPageEncoding(r.Context())
+	defer encoding.close()
+	page, err := s.collectSyncChanges(r, access, journal, strconv.FormatInt(cursor, 10), maxChangesLimit, &encoding)
 	if err != nil {
 		writeRealtimeRetry(w, err)
 		return cursor, false, false
@@ -86,12 +104,14 @@ func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, jo
 		return cursor, false, writeSSE(w, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node) && flushRealtime(w)
 	}
 	for _, tx := range page.Transactions {
-		frame, err := syncTransactionFrame(tx, page.AuthzEpoch)
+		frame, err := syncTransactionFrame(r.Context(), s.realtime.budget, tx, page.AuthzEpoch)
 		if err != nil {
 			return cursor, false, false
 		}
 		frame.validate = access.Validate
-		if !frame.WriteSSE(w, s.realtime.node) || !flushRealtime(w) {
+		ok := frame.WriteSSE(w, s.realtime.node) && flushRealtime(w)
+		frame.Close()
+		if !ok {
 			return cursor, false, false
 		}
 	}

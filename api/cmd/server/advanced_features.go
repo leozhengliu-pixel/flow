@@ -23,32 +23,10 @@ import (
 	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
-type documentInput struct {
-	TemplateID    *string        `json:"templateId,omitempty"`
-	Title         *string        `json:"title,omitempty"`
-	Icon          *string        `json:"icon,omitempty"`
-	Color         *string        `json:"color,omitempty"`
-	Content       *string        `json:"content,omitempty"`
-	ContentState  *string        `json:"contentState,omitempty"`
-	ContentData   map[string]any `json:"contentData,omitempty"`
-	ProjectIDs    *[]string      `json:"projectIds,omitempty"`
-	TeamIDs       *[]string      `json:"teamIds,omitempty"`
-	IssueID       *string        `json:"issueId,omitempty"`
-	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
-	Favorite      *bool          `json:"favorite,omitempty"`
-	Archived      *bool          `json:"archived,omitempty"`
-	// ExpectedVersion rejects the write with 409 (and the current document)
-	// when the document changed since the caller read it.
-	ExpectedVersion *int64 `json:"expectedVersion,omitempty"`
-	// ExpectedContentVersion guards replacing contentState: the collaborative
-	// editor sends it with the Yjs update ids its snapshot includes, and the
-	// server prunes those ids from the update log after a successful write.
-	// A stale value keeps the content fields but skips contentState.
-	ExpectedContentVersion *int64   `json:"expectedContentVersion,omitempty"`
-	DocumentUpdateIDs      []string `json:"documentUpdateIds,omitempty"`
-}
+type documentInput = domain.DocumentInput
 
 // documentVisibleToViewer mirrors Flow's document access rule: an unscoped
 // document is workspace-visible, while a team document is visible only to a
@@ -471,10 +449,12 @@ func refreshProjectDocuments(data *domain.Bootstrap, projectID string) {
 }
 
 func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
+	defer telemetry.Begin(r.Context(), telemetry.DocumentSave).End()
 	var input documentInput
 	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
+	telemetry.RecordDocumentBody(r.Context())
 	var created domain.Document
 	var viewer templateAccess
 	if input.TemplateID != nil && *input.TemplateID != "" {
@@ -604,10 +584,12 @@ func (s *server) documentEditRefused(r *http.Request, ref string) bool {
 }
 
 func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
+	defer telemetry.Begin(r.Context(), telemetry.DocumentSave).End()
 	var input documentInput
 	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
+	telemetry.RecordDocumentBody(r.Context())
 	id := r.PathValue("id")
 	if s.documentEditRefused(r, id) {
 		// The same answer the write callback gives, without queueing for the
@@ -3624,6 +3606,8 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) commitImportSync(ctx context.Context, workspace, id string, input importCommitInput) {
+	ctx, timing := s.telemetry.BeginJob(ctx, "import")
+	defer timing.End()
 	err := s.store.MutateWorkspace(ctx, workspace, "import.committed", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if index < 0 {

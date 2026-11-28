@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -29,7 +30,11 @@ func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 	now := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
 	future := time.Now().UTC().Add(time.Hour)
 	for _, mode := range []string{"immediate", "digest"} {
-		for _, phase := range []string{"sent", "hipaa", "transport-error", "no-mailer"} {
+		phases := []string{"sent", "hipaa", "transport-error", "no-mailer"}
+		if mode == "digest" {
+			phases = append(phases, "cancel-after-send")
+		}
+		for _, phase := range phases {
 			var wantMail, wantEffects any
 			for _, bounded := range []bool{false, true} {
 				if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p21.hot_delivery_email_seed", "", nil, func(data *domain.Bootstrap) error {
@@ -58,10 +63,14 @@ func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 					}
 					data.NotificationDeliveries = append(data.NotificationDeliveries,
 						domain.NotificationDelivery{ID: "delivery-email-missing", NotificationID: "missing", RecipientID: data.Viewer.ID, Channel: "email", Status: status, CreatedAt: now, UpdatedAt: now},
-						domain.NotificationDelivery{ID: "delivery-email-recipient", NotificationID: data.Notifications[0].ID, RecipientID: "missing", Channel: "email", Status: status, CreatedAt: now, UpdatedAt: now},
 						domain.NotificationDelivery{ID: "delivery-email-chat", Channel: "chat", Status: "pending", CreatedAt: now, UpdatedAt: now},
 						domain.NotificationDelivery{ID: "delivery-email-future", Channel: "email", Status: "failed", NextAttemptAt: &future, CreatedAt: now, UpdatedAt: now},
 					)
+					if phase != "cancel-after-send" {
+						data.NotificationDeliveries = append(data.NotificationDeliveries, domain.NotificationDelivery{
+							ID: "delivery-email-recipient", NotificationID: data.Notifications[0].ID, RecipientID: "missing", Channel: "email", Status: status, CreatedAt: now, UpdatedAt: now,
+						})
+					}
 					return nil
 				}); err != nil {
 					t.Fatal(err)
@@ -74,7 +83,9 @@ func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 					}
 				}
 				mailer, sink := newSinkMailer(t)
-				if phase == "transport-error" {
+				ctx, cancel := context.WithCancel(t.Context())
+				switch phase {
+				case "transport-error":
 					send := mailer.transport
 					mailer.transport = func(envelope string, recipients []string, raw []byte) error {
 						if err := send(envelope, recipients, raw); err != nil {
@@ -82,20 +93,52 @@ func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 						}
 						return errors.New("delivery transport failed")
 					}
-				} else if phase == "no-mailer" {
+				case "no-mailer":
 					mailer = nil
+				case "cancel-after-send":
+					send := mailer.transport
+					mailer.transport = func(envelope string, recipients []string, raw []byte) error {
+						defer cancel()
+						return send(envelope, recipients, raw)
+					}
 				}
 				service := &server{store: source, mailer: mailer}
 				if mode == "digest" {
-					service.dispatchNotificationDigests(t.Context(), workspace, now)
+					service.dispatchNotificationDigests(ctx, workspace, now)
 				} else {
-					service.dispatchNotificationEmails(t.Context(), workspace)
+					service.dispatchNotificationEmails(ctx, workspace)
 				}
+				cancel()
 				messages := []any{}
 				for _, message := range sink.take() {
 					messages = append(messages, []any{message.header.Get("To"), mailSubject(t, message), message.text, message.html})
 				}
 				effects := scaleHotDeliveryEffects(t, repo, workspace)
+				if mode == "digest" && phase != "no-mailer" {
+					if phase == "cancel-after-send" {
+						for _, id := range []string{"delivery-email-0", "delivery-email-1", "delivery-email-2", "delivery-email-3", "delivery-email-4", "delivery-email-missing"} {
+							if row := effects[id].([]any); row[3] != "delivered" || row[4] != 1 || row[7] != false {
+								t.Fatalf("scheduler cancellation lost digest delivery result: %v", row)
+							}
+						}
+					} else {
+						missing := effects["delivery-email-recipient"].([]any)
+						if missing[3] != "digest" || missing[4] != 1 || missing[5] == "" || missing[8] != 2*time.Minute {
+							t.Fatalf("digest with no recipient did not back off: %v", missing)
+						}
+					}
+					if phase == "transport-error" {
+						retry := effects["delivery-email-0"].([]any)
+						if retry[3] != "digest" || retry[4] != 1 || retry[5] != "delivery transport failed" || retry[8] != 2*time.Minute {
+							t.Fatalf("digest transport backoff changed: %v", retry)
+						}
+					}
+					clones := store.WorkspaceMetadataClonesForTesting()
+					service.dispatchNotificationDigests(t.Context(), workspace, now.Add(5*time.Second))
+					if store.WorkspaceMetadataClonesForTesting() != clones || len(sink.take()) != 0 || !reflect.DeepEqual(effects, scaleHotDeliveryEffects(t, repo, workspace)) {
+						t.Fatal("delivered or backed-off digests were reconsidered on the next tick")
+					}
+				}
 				if !bounded {
 					wantMail, wantEffects = messages, effects
 				} else if !reflect.DeepEqual(messages, wantMail) || !reflect.DeepEqual(effects, wantEffects) {
@@ -118,7 +161,7 @@ func TestScaleHotDeliveryEmailDifferential(t *testing.T) {
 
 func scaleHotDeliveryEffects(t *testing.T, repo *store.SQLiteStore, workspace string) map[string]any {
 	t.Helper()
-	data, err := repo.NotificationDeliveries(t.Context(), workspace, []string{"pending", "pending-disabled", "delivering", "delivered", "failed", "digest"}, time.Now().UTC().Add(48*time.Hour))
+	data, err := repo.NotificationDeliveries(t.Context(), workspace, store.NotificationDeliverySelection{Statuses: []string{"pending", "pending-disabled", "delivering", "delivered", "failed", "digest"}}, time.Now().UTC().Add(48*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

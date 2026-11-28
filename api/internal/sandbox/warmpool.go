@@ -161,11 +161,15 @@ func (w *WarmPool) pass(ctx context.Context) error {
 		return err
 	}
 	targets := w.Targets()
+	available := 0
+	for key := range targets {
+		available += counts[key]
+	}
+	w.Metrics.warmPool(available)
 	created := 0
 	for _, key := range slices.Sorted(maps.Keys(targets)) {
 		size, region, _ := strings.Cut(key, "/")
 		have := counts[key]
-		w.Metrics.warmPool(size, region, have)
 		for i := have; i < targets[key]; i++ {
 			record := Record{
 				ID: NewID(now), Kind: KindWarm, Desired: DesiredRunning, Phase: PhasePending,

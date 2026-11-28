@@ -1,0 +1,25 @@
+telemetry:
+  enabled: true
+  endpoint: https://otel.example.org:4318/flow
+  environment: staging
+  interval: 12s
+  slowRequest: 500ms
+  sampleRate: 0.1
+  frontend:
+    enabled: true
+  diagnostics:
+    sampleInterval: 150ms
+    thresholds: [0.7, 0.85, 0.95]
+    snapshotDir: /app/data/telemetry
+    heapProfileDir: /app/data/telemetry/profiles
+    heapProfileMaxBytes: 4194304
+  existingSecret:
+    name: flow-collector-auth
+    headers:
+      Authorization: collector-token
+config:
+  file:
+    server:
+      telemetry:
+        frontend:
+          sampleRate: 0.2

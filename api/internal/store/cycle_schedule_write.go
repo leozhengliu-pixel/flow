@@ -593,10 +593,11 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		}
 		defer requested.Release()
 		traceMark(ctx, "image")
-		payloadRaw, err := json.Marshal(payload)
+		payloadRaw, releasePayload, err := s.encodeMetadataMutationPayload(ctx, payload)
 		if err != nil {
 			return err
 		}
+		attempt.owner.release = append(attempt.owner.release, releasePayload)
 		var previous json.RawMessage
 		if webhookEnabled {
 			publication, err := s.prepareMetadataAggregatePrevious(ctx, metadataAggregateImage{Source: beforeImage}, metadataAggregateImage{Source: requested}, aggregate)
@@ -709,7 +710,9 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 				return err
 			}
 		}
-		storedPrevious, err := storedEventPreviousValues(ctx, tx, workspace, event.Type, aggregate, previous)
+		eventScratch := &ResourceRead{store: s}
+		defer eventScratch.Close()
+		storedPrevious, err := storedEventPreviousValuesOwned(ctx, eventScratch, tx, workspace, event.Type, aggregate, previous)
 		if err != nil {
 			return err
 		}
@@ -720,6 +723,7 @@ func (s *SQLiteStore) mutateBoundedScopedImage(ctx context.Context, workspace, e
 		}); err != nil {
 			return err
 		}
+		eventScratch.Close()
 		if shadow := residentWriteShadowFrom(ctx); shadow != nil {
 			// The resident write's reference run ends here.
 			return shadow.capture(ctx, s, tx, workspace, previous, nextRealtime, candidate)
@@ -1037,10 +1041,11 @@ func (s *SQLiteStore) mutateBoundedScopedImageFull(ctx context.Context, workspac
 			return err
 		}
 		defer counted.Release()
-		payloadRaw, err := json.Marshal(payload)
+		payloadRaw, releasePayload, err := s.encodeMetadataMutationPayload(ctx, payload)
 		if err != nil {
 			return err
 		}
+		attempt.owner.release = append(attempt.owner.release, releasePayload)
 		eventPublication, err := s.prepareMetadataAggregatePublication(ctx, metadataAggregateImage{Source: beforeImage}, metadataAggregateImage{Source: counted}, aggregate, false, payloadRaw, eventType)
 		if err != nil {
 			return err
@@ -1124,7 +1129,9 @@ func (s *SQLiteStore) mutateBoundedScopedImageFull(ctx context.Context, workspac
 		if err := writeAccountMetadata(ctx, tx, workspace, viewerRaw); err != nil {
 			return err
 		}
-		storedPrevious, err := storedEventPreviousValues(ctx, tx, workspace, eventType, aggregate, previous)
+		eventScratch := &ResourceRead{store: s}
+		defer eventScratch.Close()
+		storedPrevious, err := storedEventPreviousValuesOwned(ctx, eventScratch, tx, workspace, eventType, aggregate, previous)
 		if err != nil {
 			return err
 		}
@@ -1135,6 +1142,7 @@ func (s *SQLiteStore) mutateBoundedScopedImageFull(ctx context.Context, workspac
 		}); err != nil {
 			return err
 		}
+		eventScratch.Close()
 		if err := tx.Commit(); err != nil {
 			return err
 		}

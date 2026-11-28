@@ -96,7 +96,7 @@ func syncCollection(eventType string) string {
 
 // Summaries are explicit partial records. Body/history/comment/ACL fields are
 // absent, so they can never clear a loaded detail when applied by a v2 client.
-func syncRecordSummary(kind string, raw json.RawMessage) (json.RawMessage, string, string, error) {
+func syncRecordSummary(kind string, raw json.RawMessage, encode func(any) ([]byte, error)) (json.RawMessage, string, string, error) {
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &record); err != nil {
 		return nil, "", "", err
@@ -121,7 +121,11 @@ func syncRecordSummary(kind string, raw json.RawMessage) (json.RawMessage, strin
 			}
 		}
 		if version != "" {
-			summary["version"], _ = json.Marshal(version)
+			encoded, err := encode(version)
+			if err != nil {
+				return nil, "", "", err
+			}
+			summary["version"] = encoded
 		}
 	}
 	if kind == "issues" {
@@ -130,14 +134,18 @@ func syncRecordSummary(kind string, raw json.RawMessage) (json.RawMessage, strin
 	if value := record["contentVersion"]; len(value) > 0 {
 		var number json.Number
 		if json.Unmarshal(value, &number) == nil {
-			summary["contentVersion"], _ = json.Marshal(number.String())
+			encoded, err := encode(number.String())
+			if err != nil {
+				return nil, "", "", err
+			}
+			summary["contentVersion"] = encoded
 		}
 	}
-	encoded, err := json.Marshal(summary)
+	encoded, err := encode(summary)
 	return encoded, id, version, err
 }
 
-func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
+func summarizeEventFrame(ctx context.Context, budget *realtimeBudget, frame EventFrame, epoch string) (_ EventFrame, err error) {
 	if !frame.visible {
 		return frame, nil
 	}
@@ -145,6 +153,12 @@ func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
 	if err != nil {
 		return EventFrame{}, err
 	}
+	encoding := &realtimeJSONEncoding{ctx: ctx, budget: budget}
+	defer func() {
+		if err != nil {
+			encoding.close()
+		}
+	}()
 	kind := syncCollection(event.Type)
 	tx := emptySyncTransaction(event.ID, frameSequence(event))
 	var payload struct {
@@ -160,8 +174,18 @@ func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
 	if len(payload.Entity) > 0 {
 		entities = append(entities, payload.Entity)
 	}
+	invalidated := false
+	invalidate := func() {
+		tx.Upserts, tx.Removals, tx.Invalidations = []syncV2Upsert{}, []syncV2Removal{}, []string{kind}
+		encoding.close()
+		invalidated = true
+	}
 	for _, raw := range entities {
-		data, id, version, err := syncRecordSummary(kind, raw)
+		data, id, version, err := syncRecordSummary(kind, raw, encoding.marshal)
+		if errors.Is(err, store.ErrEventSourceBudget) {
+			invalidate()
+			break
+		}
 		if err != nil {
 			return EventFrame{}, err
 		}
@@ -170,18 +194,20 @@ func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
 		}
 		tx.Upserts = append(tx.Upserts, syncV2Upsert{Key: syncV2Key{kind, id}, Version: version, Data: data, Projection: "summary", DetailStale: true})
 	}
-	removed := payload.Removed
-	if payload.Deleted {
-		removed = append(slices.Clone(removed), payload.IssueIDs...)
-	}
-	for _, id := range removed {
-		tx.Removals = append(tx.Removals, syncV2Removal{Key: syncV2Key{kind, id}, Version: tx.Seq})
-	}
-	if payload.ScopeChanged || len(tx.Upserts) == 0 && len(tx.Removals) == 0 {
-		tx.Invalidations = []string{kind}
+	if !invalidated {
+		removed := payload.Removed
+		if payload.Deleted {
+			removed = append(slices.Clone(removed), payload.IssueIDs...)
+		}
+		for _, id := range removed {
+			tx.Removals = append(tx.Removals, syncV2Removal{Key: syncV2Key{kind, id}, Version: tx.Seq})
+		}
+		if payload.ScopeChanged || len(tx.Upserts) == 0 && len(tx.Removals) == 0 {
+			tx.Invalidations = []string{kind}
+		}
 	}
 	encode := func() (json.RawMessage, error) {
-		payload, err := json.Marshal(struct {
+		payload, err := encoding.marshal(struct {
 			Schema      int               `json:"schema"`
 			AuthzEpoch  string            `json:"authzEpoch"`
 			Transaction syncV2Transaction `json:"transaction"`
@@ -191,20 +217,21 @@ func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
 		}
 		// v2 sequences are strings in the negotiated payload, including values
 		// larger than JavaScript's integer precision.
-		return json.Marshal(domain.RealtimeEvent{ID: event.ID, Type: "sync.delta", Payload: payload, CreatedAt: event.CreatedAt})
+		return encoding.marshal(domain.RealtimeEvent{ID: event.ID, Type: "sync.delta", Payload: payload, CreatedAt: event.CreatedAt})
 	}
 	raw, err := encode()
+	if !invalidated && (errors.Is(err, store.ErrEventSourceBudget) || err == nil && len(raw)+len(event.ID)+128 > syncV2FrameBytes) {
+		raw = nil
+		invalidate()
+		raw, err = encode()
+	}
 	if err != nil {
 		return EventFrame{}, err
 	}
 	if len(raw)+len(event.ID)+128 > syncV2FrameBytes {
-		tx.Upserts, tx.Removals, tx.Invalidations = []syncV2Upsert{}, []syncV2Removal{}, []string{kind}
-		raw, err = encode()
-	}
-	if len(raw)+len(event.ID)+128 > syncV2FrameBytes {
 		return EventFrame{}, store.ErrEventSourceBudget
 	}
-	return EventFrame{encoded: raw, id: event.ID, visible: true}, err
+	return EventFrame{encoded: raw, id: event.ID, kind: event.Type, visible: true, release: encoding.close}, nil
 }
 
 // syncChanges is registered by the HTTP route owner. A mixed deployment with
@@ -231,6 +258,8 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 	if value, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && value > 0 {
 		limit = min(value, maxChangesLimit)
 	}
+	encoding := s.syncPageEncoding(r.Context())
+	defer encoding.close()
 	var result syncV2ChangesResponse
 	for attempt := 1; ; attempt++ {
 		access, err := s.resolveSyncAccess(r)
@@ -250,10 +279,12 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 			// keeps the next cursor and hasMore tied to the complete transaction.
 			pageLimit = 1
 		}
-		result, err = s.collectSyncChanges(r, access, journal, after, pageLimit)
+		result, err = s.collectSyncChanges(r, access, journal, after, pageLimit, &encoding)
 		if err == nil {
 			break
 		}
+		result = syncV2ChangesResponse{}
+		encoding.close()
 		if attempt == syncChangesAttempts {
 			var ok bool
 			result, ok = s.syncChangesResyncAfterRace(r, access, journal, after, err)
@@ -281,7 +312,10 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	raw, err := json.Marshal(result)
+	raw, release, err := s.marshalSyncJSON(r.Context(), result)
+	if release != nil {
+		defer release()
+	}
 	if err != nil || len(raw) > syncV2DeltaBytes {
 		writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
 		return
@@ -461,7 +495,15 @@ func writeSyncChangesUnavailable(w http.ResponseWriter, r *http.Request, err err
 	writeError(w, http.StatusServiceUnavailable, "Changes are temporarily unavailable")
 }
 
-func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, limit int) (syncV2ChangesResponse, error) {
+func (s *server) syncPageEncoding(ctx context.Context) realtimeJSONEncoding {
+	encoding := realtimeJSONEncoding{ctx: ctx}
+	if s.realtime != nil {
+		encoding.budget = s.realtime.budget
+	}
+	return encoding
+}
+
+func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, limit int, encoding *realtimeJSONEncoding) (syncV2ChangesResponse, error) {
 	ctx, err := s.store.LiveEventContext(r.Context())
 	if err != nil {
 		return syncV2ChangesResponse{}, err
@@ -481,50 +523,54 @@ func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, j
 		return result, nil
 	}
 	project := func(ctx context.Context) (syncV2ChangesResponse, error) {
-		return s.projectSyncPage(r.WithContext(ctx), access, page, result)
+		return s.projectSyncPage(r.WithContext(ctx), access, page, result, encoding)
 	}
 	if journal == s.store && s.coordinator.SharedCacheSyncPageEnabled() && !s.authDisabled && cacheableSyncPage(page) {
-		result, err := s.sharedSyncPage(r.Context(), access, page, after, limit, project)
+		result, err := s.sharedSyncPage(r.Context(), access, page, after, limit, encoding, project)
 		return result, s.syncChangesProjectionError(r, access, err)
 	}
 	result, err = project(r.Context())
 	return result, s.syncChangesProjectionError(r, access, err)
 }
 
-func (s *server) projectSyncPage(r *http.Request, access store.EventAccess, page store.CommittedPage, result syncV2ChangesResponse) (syncV2ChangesResponse, error) {
+func (s *server) projectSyncPage(r *http.Request, access store.EventAccess, page store.CommittedPage, result syncV2ChangesResponse, encoding *realtimeJSONEncoding) (syncV2ChangesResponse, error) {
 	header := result
 	header.Next = page.Next
-	headerRaw, err := json.Marshal(header)
+	headerSize, err := header.jsonBytes()
 	if err != nil {
 		return result, err
 	}
-	used := len(headerRaw) + 64
+	used := headerSize + 64
 	for index, change := range page.Transactions {
-		tx, err := s.projectCommittedChange(r, access, change)
+		retained := encoding.held
+		tx, err := s.projectCommittedChange(r, access, change, encoding)
 		if err != nil {
 			return result, err
 		}
 		visible := len(tx.Upserts) > 0 || len(tx.Removals) > 0 || len(tx.Invalidations) > 0
-		var encoded []byte
 		if visible {
-			encoded, err = json.Marshal(tx)
+			size, err := tx.jsonBytes()
+			if err == nil && size+headerSize+64 > syncV2DeltaBytes {
+				tx = invalidateCommittedChange(change)
+				size, err = tx.jsonBytes()
+			}
 			if err != nil {
 				return result, err
 			}
-			if len(encoded)+len(headerRaw)+64 > syncV2DeltaBytes {
-				tx = invalidateCommittedChange(change)
-				encoded, err = json.Marshal(tx)
-				if err != nil {
-					return result, err
-				}
-			}
-			if used+len(encoded)+1 > syncV2DeltaBytes {
+			if used+size+1 > syncV2DeltaBytes {
+				encoding.releaseTo(retained)
 				result.HasMore = true
 				break
 			}
 			result.Transactions = append(result.Transactions, tx)
-			used += len(encoded) + 1
+			used += size + 1
+			for _, upsert := range tx.Upserts {
+				retained += int64(cap(upsert.Data))
+			}
 		}
+		// Keep summaries owned by the page through delivery, and release
+		// intermediate encodings and summaries discarded by invalidation.
+		encoding.releaseTo(retained)
 		result.Next = change.Seq
 		if index == len(page.Transactions)-1 {
 			result.Next = page.Next
@@ -539,8 +585,8 @@ func (s *server) projectSyncPage(r *http.Request, access store.EventAccess, page
 	if err := s.store.ValidateEventAccess(r.Context(), access); err != nil {
 		return result, err
 	}
-	raw, err := json.Marshal(result)
-	if err != nil || len(raw) > syncV2DeltaBytes {
+	size, err := result.jsonBytes()
+	if err != nil || size > syncV2DeltaBytes {
 		return result, store.ErrEventSourceBudget
 	}
 	return result, nil
@@ -581,7 +627,7 @@ func invalidateCommittedChange(change store.CommittedChange) syncV2Transaction {
 	return tx
 }
 
-func (s *server) projectCommittedChange(r *http.Request, access store.EventAccess, change store.CommittedChange) (syncV2Transaction, error) {
+func (s *server) projectCommittedChange(r *http.Request, access store.EventAccess, change store.CommittedChange, encoding *realtimeJSONEncoding) (syncV2Transaction, error) {
 	tx := emptySyncTransaction(change.TxID, change.Seq)
 	if len(change.Records) > 50 || len(change.Invalidations) > 32 {
 		return invalidateCommittedChange(change), nil
@@ -608,7 +654,13 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 	}
 	entities := map[string]json.RawMessage{}
 	if len(ids) > 0 {
-		payload, _ := json.Marshal(map[string]any{"issueIds": ids})
+		payload, err := encoding.marshal(map[string]any{"issueIds": ids})
+		if errors.Is(err, store.ErrEventSourceBudget) {
+			return invalidateCommittedChange(change), nil
+		}
+		if err != nil {
+			return tx, err
+		}
 		event := domain.RealtimeEvent{ID: change.TxID, Seq: seq, Type: "issue.batch_updated", Payload: payload}
 		source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, eventAuthority{access.SourceVersion(), access.AuthzEpoch})
 		if errors.Is(err, store.ErrEventSourceBudget) {
@@ -618,6 +670,9 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 			return tx, err
 		}
 		frame, err := ProjectEvent(r.Context(), source, access)
+		if errors.Is(err, store.ErrEventSourceBudget) {
+			return invalidateCommittedChange(change), nil
+		}
 		if err != nil {
 			return tx, err
 		}
@@ -664,7 +719,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 			if record.Deleted {
 				return invalidateCommittedChange(change), nil
 			}
-			upsert, visible, err := s.projectCommittedMetadata(r, access, change, record)
+			upsert, visible, err := s.projectCommittedMetadata(r, access, change, record, encoding.marshal)
 			if errors.Is(err, store.ErrEventSourceBudget) || errors.Is(err, errEventSourceUnsupported) {
 				return invalidateCommittedChange(change), nil
 			}
@@ -686,7 +741,10 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 		if !visible {
 			continue
 		}
-		data, id, version, err := syncRecordSummary("issues", raw)
+		data, id, version, err := syncRecordSummary("issues", raw, encoding.marshal)
+		if errors.Is(err, store.ErrEventSourceBudget) {
+			return invalidateCommittedChange(change), nil
+		}
 		if err != nil {
 			return tx, err
 		}
@@ -708,7 +766,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 	return tx, nil
 }
 
-func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAccess, change store.CommittedChange, record store.RecordDelta) (syncV2Upsert, bool, error) {
+func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAccess, change store.CommittedChange, record store.RecordDelta, encode func(any) ([]byte, error)) (syncV2Upsert, bool, error) {
 	kind := ""
 	switch record.Key.Kind {
 	case "projects":
@@ -764,7 +822,7 @@ func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAcc
 	if len(payload.Entity) == 0 {
 		return syncV2Upsert{}, false, errEventSourceUnsupported
 	}
-	data, id, _, err := syncRecordSummary(record.Key.Kind, payload.Entity)
+	data, id, _, err := syncRecordSummary(record.Key.Kind, payload.Entity, encode)
 	if err != nil {
 		return syncV2Upsert{}, false, err
 	}

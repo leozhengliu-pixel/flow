@@ -1,7 +1,7 @@
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test'
 
 export const desktopPerformanceSpecs = ['**/desktop-timeline-performance.spec.ts', '**/desktop-document-first-paint.spec.ts']
-const standaloneSpecs = ['**/security/**', '**/local-store/**', ...desktopPerformanceSpecs]
+const standaloneSpecs = ['**/security/**', '**/local-store/**', '**/telemetry/**', ...desktopPerformanceSpecs]
 const browserMode = process.env.FLOW_E2E_WEB_MODE === 'preview' ? 'preview' : 'dev'
 
 export function browserWebServers(

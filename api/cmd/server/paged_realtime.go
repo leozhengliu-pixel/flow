@@ -105,14 +105,17 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if err != nil {
 		return event, false, err
 	}
-	raw, err := json.Marshal(projected)
+	encoding := &realtimeJSONEncoding{ctx: r.Context(), budget: s.realtime.budget}
+	defer encoding.close()
+	raw, err := encoding.marshal(projected)
 	if err != nil {
 		return event, false, err
 	}
-	frame, err = summarizeEventFrame(EventFrame{encoded: raw, id: event.ID, visible: true}, access.AuthzEpoch)
+	frame, err = summarizeEventFrame(r.Context(), s.realtime.budget, EventFrame{encoded: raw, id: event.ID, visible: true}, access.AuthzEpoch)
 	if err != nil {
 		return event, false, err
 	}
+	defer frame.Close()
 	if err = access.Validate(r.Context()); err != nil {
 		return event, false, err
 	}
@@ -510,6 +513,11 @@ func visibleDeletedIssueIDs(event domain.RealtimeEvent, query store.IssueRecordQ
 // pagedIssueIDsEvent rebuilds an event with an ids-only payload: issueIds are
 // the issues it affects, removedIssueIds the ones the viewer must drop.
 func pagedIssueIDsEvent(event domain.RealtimeEvent, issueIDs, removed []string, extra map[string]any) domain.RealtimeEvent {
+	event.Payload, _ = json.Marshal(pagedIssueIDsPayload(issueIDs, removed, extra))
+	return event
+}
+
+func pagedIssueIDsPayload(issueIDs, removed []string, extra map[string]any) map[string]any {
 	payload := map[string]any{}
 	for key, value := range extra {
 		payload[key] = value
@@ -523,8 +531,7 @@ func pagedIssueIDsEvent(event domain.RealtimeEvent, issueIDs, removed []string, 
 			payload["issueIds"] = removed
 		}
 	}
-	event.Payload, _ = json.Marshal(payload)
-	return event
+	return payload
 }
 
 // pagedBatchEvent narrows a bulk update to the issues this viewer can see.

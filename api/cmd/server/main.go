@@ -33,6 +33,7 @@ import (
 	"flow/api/internal/outbound"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 	"flow/api/internal/websearch"
 )
 
@@ -43,9 +44,11 @@ var (
 )
 
 type server struct {
-	store          *store.SQLiteStore
-	backgroundOnce sync.Once
-	background     *serverBackground
+	store            *store.SQLiteStore
+	telemetry        *telemetry.Recorder
+	browserTelemetry *browserTelemetry
+	backgroundOnce   sync.Once
+	background       *serverBackground
 	// reloadWorkspaceFn is used by focused freshness tests to exercise the
 	// shared reload failure path without replacing the concrete store.
 	reloadWorkspaceFn func(context.Context, string) error
@@ -204,6 +207,20 @@ func main() {
 	for _, warning := range applicationConfig.Warnings {
 		log.Printf("WARNING: %s", warning)
 	}
+	recorder, err := configureTelemetry(applicationConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if recorder != nil {
+		recorder.InstallCompatibilityMetrics()
+		recorder.Start()
+		applicationConfig.Database.Telemetry = recorder
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			recorder.Close(ctx)
+		}()
+	}
 	if outboundPolicy, err = outbound.New(applicationConfig.Outbound); err != nil {
 		log.Fatal(err)
 	}
@@ -253,10 +270,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	shutdownTelemetry, err := configureTelemetry(context.Background(), applicationConfig.Telemetry)
-	if err != nil {
-		log.Fatal(err)
-	}
 	defer func() {
 		// The store waits on its own and the server's workers under one budget.
 		err := repository.Close()
@@ -266,9 +279,6 @@ func main() {
 		if redisCoordinator != nil {
 			_ = redisCoordinator.Close()
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = shutdownTelemetry(ctx)
 		// A surviving worker may still hold a spool file. After a timeout
 		// the next process's spool scavenger will clean up this directory.
 		if !errors.Is(err, context.DeadlineExceeded) {
@@ -280,6 +290,7 @@ func main() {
 		loopContractMigration:          true,
 		loopContractDebounce:           2 * time.Second,
 		store:                          repository,
+		telemetry:                      recorder,
 		uploadPath:                     applicationConfig.Storage.LocalPath,
 		objectStore:                    objects,
 		staticPath:                     applicationConfig.StaticPath,
@@ -304,11 +315,17 @@ func main() {
 		auditRetention:                 applicationConfig.Retention.AuditLog,
 		auditLogIP:                     applicationConfig.AuditLogIP,
 	}
+	if applicationConfig.Telemetry.Frontend && !s.authDisabled {
+		s.browserTelemetry = newBrowserTelemetry(applicationConfig.Telemetry.FrontendSampleRate)
+	}
 	// A workspace rename moves the coding harness state saved under its key.
 	repository.SetWorkspaceKeyObjects(codingHarnessKeyObjects{objects: objects})
 
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
+	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: newHandler(s), ReadHeaderTimeout: 5 * time.Second}
+	if recorder != nil {
+		recorder.SetSource(s.telemetryStats)
+	}
 	observeLoadRigGates(s.metadataGate, s.projectionGate)
 	s.initCoding(applicationConfig.Coding)
 	// coding sessions (track B): optional dedicated runtime listener (FLOW_CODING_RUNTIME_ADDR).
@@ -446,6 +463,7 @@ func newHandler(s *server) http.Handler {
 	s.startCoordination()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("POST /api/telemetry", s.ingestTelemetry)
 	mux.HandleFunc("POST /api/email-intake/{token}/receive", s.receiveEmailIntake)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)
@@ -1177,7 +1195,9 @@ func newHandler(s *server) http.Handler {
 	if s.securityHeaders != nil {
 		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
 	}
-	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(mux, s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(s.documentRequestBodies(stripQueryNUL(handler)))))))))))
+	handler = s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(s.documentRequestBodies(stripQueryNUL(handler)))))))
+	handler = withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(mux, s.routeBrowserTelemetry(mux, handler)))))
+	return telemetryHandler(s.telemetry, mux, handler, s.browserTelemetry != nil)
 }
 
 // serverRoute reports whether path is answered by the API rather than the
@@ -5290,7 +5310,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			before, _ := json.Marshal(issue)
+			before, _ := store.MarshalIssueComparisonJSON(issue)
 			if err := refuseNewFormerMemberDescriptionMentions(data, issue, input.Update); err != nil {
 				return err
 			}
@@ -5298,7 +5318,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			after, _ := json.Marshal(issue)
+			after, _ := store.MarshalIssueComparisonJSON(issue)
 			if bytes.Equal(before, after) {
 				updated = append(updated, *issue)
 				continue

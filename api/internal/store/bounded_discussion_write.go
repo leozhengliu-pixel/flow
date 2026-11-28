@@ -80,6 +80,10 @@ func (r *boundedDiscussionAttempt) reserveCallback(ctx context.Context, data dom
 	if err := r.reserveContent(ctx, data, payload); err != nil {
 		return err
 	}
+	return r.reserveCallbackNotifications(ctx, data, 1)
+}
+
+func (r *boundedDiscussionAttempt) reserveCallbackNotifications(ctx context.Context, data domain.Bootstrap, waves uint64) error {
 	recipients := uint64(len(data.Users)) + uint64(len(data.ThreadSubscriptions))
 	var issueBytes uint64
 	for _, issue := range data.Issues {
@@ -98,10 +102,12 @@ func (r *boundedDiscussionAttempt) reserveCallback(ctx context.Context, data dom
 		return ErrMetadataWorkBudget
 	}
 	fixed += issueBytes * 32
-	if recipients > (uint64(metadataWorkBytes())-(64<<10))/fixed {
+	limit := uint64(metadataWorkBytes())
+	if waves == 0 || waves > limit/(64<<10) ||
+		recipients > (limit/waves-(64<<10))/fixed {
 		return ErrMetadataWorkBudget
 	}
-	return r.owner.reserve(ctx, recipients*fixed+64<<10)
+	return r.owner.reserve(ctx, waves*(recipients*fixed+64<<10))
 }
 
 // mutateBoundedIssueDiscussion keeps the literal discussion callback and SQL
@@ -371,7 +377,9 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 		}
 		data.Viewer, data.ViewerRole = nativeViewer, nativeRole
 		metadataNext := domain.Bootstrap{Workspace: data.Workspace, Viewer: nativeViewer, ViewerRole: nativeRole, ThreadSubscriptions: data.ThreadSubscriptions}
-		scope, err := boundedDiscussionMetadataScope(metadataBefore, metadataNext)
+		diff := &ResourceRead{store: s}
+		scope, err := boundedDiscussionMetadataScope(ctx, diff, metadataBefore, metadataNext)
+		diff.Close()
 		if err != nil && discussionNeedsOrdinalScope(metadataBefore, metadataNext, ids[0], scope, err) {
 			ctx = context.WithValue(ctx, discussionThreadTargetKey{}, ids[0])
 			scope, err = MetadataRecordScope{}, nil
@@ -441,8 +449,8 @@ func (s *SQLiteStore) mutateBoundedIssueDiscussion(ctx context.Context, workspac
 	return nil
 }
 
-func boundedDiscussionMetadataScope(before, next domain.Bootstrap) (MetadataRecordScope, error) {
-	changes, _, err := scaleRecordChanges(before, next)
+func boundedDiscussionMetadataScope(ctx context.Context, owner *ResourceRead, before, next domain.Bootstrap) (MetadataRecordScope, error) {
+	changes, _, err := scaleRecordChanges(ctx, owner, before, next)
 	if err != nil {
 		return MetadataRecordScope{}, err
 	}

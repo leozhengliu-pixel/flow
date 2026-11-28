@@ -110,7 +110,7 @@ func projectRecordJournalSummary(raw []byte, row *recordJournalProjection) error
 					}
 					items = append(items, projected)
 				}
-				value, _ = json.Marshal(items)
+				value, _ = marshalMetadataRawObjects(items)
 			}
 			used += len(field) + len(value) + 4
 			fields[field] = value
@@ -132,7 +132,7 @@ func projectRecordJournalSummary(raw []byte, row *recordJournalProjection) error
 		id, _ := json.Marshal(row.ID)
 		fields = map[string]json.RawMessage{"id": id}
 	}
-	row.Summary, err = json.Marshal(fields)
+	row.Summary, err = marshalMetadataRawObject(fields)
 	if err != nil {
 		return err
 	}

@@ -22,9 +22,9 @@
     "dispatchAppAssignmentNotifications": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original issue/previous-assignee/delegate gates and off WorkspaceMetadataFields accessor remain unchanged. Bounded hook headers use BeginApplicationWebhookSweepRead with exact application-managed/Enabled/app_user_notifications eligibility, retaining AuditLog and empty URL, plus a proven applicationOutputContext owner around the unchanged ListApplications boundary. First active user installation/client match, field/change/hook order, independent issue/comment lookups and queue helper remain exact. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual function twice per warm/reloaded off/on mode, comparing five complete queued rows/payloads including assignment/delegate actions, audit/empty URL hooks and team rejection with zero full decodes/retained work. The shared Tier A reader passes persistent SQLite twice and race.",
+      "reason": "Original issue/previous-assignee/delegate gates remain unchanged. Both modes read hook headers with BeginApplicationWebhookSweepRead and exact application-managed/Enabled/app_user_notifications eligibility, retaining AuditLog and empty URL. Bounded mode retains applicationOutputContext around the ListApplications boundary. First active user installation/client match, field/change/hook order, independent issue/comment lookups and queue helper remain exact. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual function twice per warm/reloaded off/on mode, comparing five complete queued rows/payloads including assignment/delegate actions, audit/empty URL hooks and team rejection with zero full decodes/retained work.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "BeginApplicationWebhookSweepRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Assignment notification side effects on ordinary issue domain events.",
@@ -105,9 +105,9 @@
     "sweepAppUserNotifications": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded hook headers preserve exact application-managed/Enabled/app_user_notifications eligibility, including AuditLog and empty URL. The unchanged ListApplications boundary is retained through a proven application output owner; active client selection, notifications page/age/category/action behavior, independent issue/comment lookups and queue helper remain exact. The original WorkspaceMetadataFields accessor remains off mode. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual sweep twice per warm/reloaded off/on mode and compares thirteen complete queue rows/envelopes for recent/boundary/future/stale categories, missing issue/comment behavior, audit/empty URL hooks and team filters, with zero full decodes/retained work. Shared reader Tier A persistent SQLite twice and race pass.",
+      "reason": "Both modes select application-managed, enabled app_user_notifications hook headers, including AuditLog and empty URL. An application output owner covers ListApplications in bounded mode. Active client selection, notifications page/age/category/action behavior, independent issue/comment lookups and queue helper remain exact. The scheduler skips the unused unread count query. TestScaleApplicationWebhookSweepQueueDifferential invokes the actual sweep twice per warm/reloaded off/on mode and compares thirteen complete queue rows/envelopes for recent/boundary/future/stale categories, missing issue/comment behavior, audit/empty URL hooks and team filters, with zero full decodes/retained work.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "BeginApplicationWebhookSweepRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Delivery scheduler workspace tick and once-per-minute SLA notification sweep.",
@@ -119,9 +119,10 @@
     "sweepIssueSLAWebhooks": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Uses separate owned hook and SLA-event reads at the two original lookup boundaries; off mode retains both literal WorkspaceMetadataFields accessors. Hook !AuditLog/Enabled/issue_sla and selected-team rules, last-wins SLA index, original event then highRisk order, age/time/window-cap comparisons, missing SLA zero values and independent IssueRecord calls remain exact. TestScaleApplicationWebhookSweepQueueDifferential compares nine complete actual queued rows/payloads in warm/reloaded off/on modes with repeated idempotent calls and zero full decodes/retained work. Tier A native/header tests pass persistent SQLite twice and race, including duplicate/empty SLA IDs, custom-zone times, old pinned parent versus fresh second generation, cancellation/quota/concurrency and stable body10x admission.",
+      "reason": "Both modes use separate hook and SLA-event projections at the two original lookup boundaries. Hook !AuditLog/Enabled/issue_sla and selected-team rules, last-wins SLA index, original event then highRisk order, age/time/window-cap comparisons, missing SLA zero values and independent IssueRecord calls remain exact. TestScaleApplicationWebhookSweepQueueDifferential compares nine complete actual queued rows/payloads in warm/reloaded off/on modes with repeated idempotent calls and zero full decodes/retained work. Native/header tests cover duplicate/empty SLA IDs, custom-zone times, old pinned parent versus fresh second generation, cancellation/quota/concurrency and stable body10x admission.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "BeginApplicationWebhookSweepRead",
+        "BeginApplicationSLAEventRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Delivery scheduler workspace tick and once-per-minute SLA notification sweep.",

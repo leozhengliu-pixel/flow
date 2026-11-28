@@ -10,29 +10,70 @@ import (
 	"flow/api/internal/domain"
 )
 
-// NotificationDeliveries returns the due deliveries with the given statuses
-// and only the workspace record, for callers that do not render them.
-func (s *SQLiteStore) NotificationDeliveries(ctx context.Context, workspace string, statuses []string, now time.Time) (domain.Bootstrap, error) {
-	return s.notificationDeliverySnapshot(ctx, workspace, statuses, now, false)
+// NotificationDeliverySelection filters due deliveries before the batch limit.
+// An empty Channel selects across all channels.
+type NotificationDeliverySelection struct {
+	Statuses                []string
+	Channel                 string
+	ExcludeTerminalFailures bool
 }
 
-func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time) (domain.Bootstrap, error) {
-	return s.notificationDeliverySnapshot(ctx, workspace, statuses, now, true)
+func (s *SQLiteStore) dueNotificationDeliveryQuery(workspace string, selection NotificationDeliverySelection, now time.Time) (string, []any) {
+	status, statuses := bindList("status", selection.Statuses)
+	// An unset next-attempt is stored as ''. It sorts before UTC timestamps,
+	// so both kinds of due row fit one range on content_status_idx.
+	query := ` FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND ` + status + ` AND next_attempt_at<=?`
+	args := append(append([]any{workspace}, statuses...), now.UTC().Format(issueRecordTimestamp))
+	if selection.Channel != "" {
+		channel := s.jsonText("data", "channel")
+		if s.dialect == "mysql" {
+			// Match Go's exact channel comparison on older MySQL collations too.
+			channel = "CAST(" + channel + " AS BINARY)"
+		}
+		query += ` AND ` + channel + `=?`
+		args = append(args, selection.Channel)
+	}
+	if selection.ExcludeTerminalFailures {
+		query += ` AND (status<>'failed' OR next_attempt_at<>'')`
+	}
+	return query + ` ORDER BY next_attempt_at,id LIMIT 1000`, args
 }
 
-func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time, full bool) (domain.Bootstrap, error) {
+// NotificationDeliveries returns the selected due deliveries without their
+// rendering metadata. Unfiltered reads retain the legacy workspace settings.
+func (s *SQLiteStore) NotificationDeliveries(ctx context.Context, workspace string, selection NotificationDeliverySelection, now time.Time) (domain.Bootstrap, error) {
+	return s.notificationDeliverySnapshot(ctx, workspace, selection, now, false)
+}
+
+func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspace string, selection NotificationDeliverySelection, now time.Time) (domain.Bootstrap, error) {
+	return s.notificationDeliverySnapshot(ctx, workspace, selection, now, true)
+}
+
+func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspace string, selection NotificationDeliverySelection, now time.Time, full bool) (domain.Bootstrap, error) {
 	if s.BoundedMetadataEnabled() {
 		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
 	}
-	// The scheduler asks every few seconds and usually finds nothing due; only
-	// clone the workspace metadata when there is a delivery to process.
-	data, ok := s.WorkspaceSettingsMetadata(workspace)
+	var data domain.Bootstrap
+	var ok bool
+	if selection.Channel == "" {
+		data, ok = s.WorkspaceSettingsMetadata(workspace)
+	} else {
+		// Scheduler passes need only the installed workspace identity to query.
+		s.mu.RLock()
+		if workspace == "" {
+			workspace = s.lastWorkspaceKey
+		}
+		var source domain.Bootstrap
+		source, ok = s.workspaces[workspace]
+		data.Workspace = domain.Workspace{ID: source.Workspace.ID, URLKey: source.Workspace.URLKey}
+		s.mu.RUnlock()
+	}
 	if !ok {
 		return data, fmt.Errorf("workspace not found")
 	}
 	workspace = data.Workspace.URLKey
-	clause, args := bindList("status", statuses)
-	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND `+clause+` AND (next_attempt_at='' OR next_attempt_at<=?) ORDER BY next_attempt_at,id LIMIT 1000`, append(append([]any{workspace}, args...), now.UTC().Format(issueRecordTimestamp))...)
+	query, args := s.dueNotificationDeliveryQuery(workspace, selection, now)
+	rows, err := s.db.QueryContext(ctx, `SELECT data`+query, args...)
 	if err != nil {
 		return data, err
 	}
@@ -57,6 +98,7 @@ func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspac
 	if len(data.NotificationDeliveries) == 0 || !full {
 		return data, nil
 	}
+	// Only the matching due rows need email-rendering metadata.
 	deliveries := data.NotificationDeliveries
 	if data, ok = s.WorkspaceMetadata(workspace); !ok {
 		return data, fmt.Errorf("workspace not found")

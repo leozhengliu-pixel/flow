@@ -92,7 +92,7 @@ func (w *legacyArrayWrites) upsert(ctx context.Context, id string, value metadat
 	if err := w.flush(ctx); err != nil {
 		return err
 	}
-	return writeMetadataRecordRow(ctx, p.tx, p.workspace, metadataRecordKey{w.field, id}, value, previous)
+	return writeOwnedMetadataRecordRow(ctx, p.store, p.tx, p.workspace, metadataRecordKey{w.field, id}, value, previous)
 }
 
 func (w *legacyArrayWrites) flush(ctx context.Context) error {
@@ -319,7 +319,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 	if err != nil {
 		return err
 	}
-	raw, err := json.Marshal(next.Interface())
+	raw, err := encodeOwnedMetadataRecord(ctx, work, next)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (p *legacyMetadataWritePlan) writeArrayReorderRow(ctx context.Context, f *l
 		if err != nil {
 			return err
 		}
-		if previous, err = json.Marshal(old.Interface()); err != nil {
+		if previous, err = encodeOwnedMetadataRecord(ctx, work, old); err != nil {
 			return err
 		}
 	} else if present {
@@ -408,7 +408,7 @@ func (p *legacyMetadataWritePlan) writeArrayTransition(ctx context.Context, f *l
 		if err != nil {
 			return err
 		}
-		raw, err := json.Marshal(value.Interface())
+		raw, err := encodeOwnedMetadataRecord(ctx, work, value)
 		if err != nil {
 			return err
 		}

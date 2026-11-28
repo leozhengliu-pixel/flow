@@ -233,9 +233,34 @@ func TestScaleLegacyConnectionsAndTokens(t *testing.T) {
 
 func TestScaleSyncResponseBudget(t *testing.T) {
 	w := httptest.NewRecorder()
-	writeSyncJSON(w, map[string]string{"title": strings.Repeat("<>&", 50000)}, 256<<10)
+	(&server{}).writeSyncJSON(w, httptest.NewRequest(http.MethodGet, "/", nil), map[string]string{"title": strings.Repeat("<>&", 50000)}, 256<<10)
 	if w.Code != http.StatusServiceUnavailable || w.Body.Len() > 256<<10 {
 		t.Fatal("escaped JSON escaped the wire budget")
+	}
+}
+
+func TestScaleSyncResponseEncodingAdmission(t *testing.T) {
+	peers, _, _, _ := scaleActivationHTTPPeers(t, "current")
+	s := peers[0].service
+	body := map[string]string{"title": strings.Repeat("x", 128<<10)}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	inUse := s.store.MetadataWorkUsedForTesting()
+	release := holdLoadErrorsWork(t, s.store, 512<<10)
+	pressed := s.store.MetadataWorkUsedForTesting()
+	w := httptest.NewRecorder()
+	s.writeSyncJSON(w, request, body, 256<<10)
+	if w.Code != http.StatusServiceUnavailable || s.store.MetadataWorkUsedForTesting() != pressed {
+		t.Fatalf("response under work pressure: status=%d, work=%d", w.Code, s.store.MetadataWorkUsedForTesting()-pressed)
+	}
+	release()
+	w = httptest.NewRecorder()
+	s.writeSyncJSON(w, request, body, 256<<10)
+	want, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), append(want, '\n')) || s.store.MetadataWorkUsedForTesting() != inUse {
+		t.Fatalf("response after release: status=%d, work=%d", w.Code, s.store.MetadataWorkUsedForTesting()-inUse)
 	}
 }
 

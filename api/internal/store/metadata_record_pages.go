@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"flow/api/internal/jsonwire"
 )
 
 const (
@@ -46,6 +48,28 @@ type MetadataRecord struct {
 	Omitted bool            `json:"omitted,omitempty"`
 	Missing bool            `json:"missing,omitempty"`
 	Detail  *RecordKey      `json:"detail,omitempty"`
+}
+
+// recordJSONBytes measures the page envelope without copying its raw data.
+func (r MetadataRecord) recordJSONBytes() (int64, error) {
+	size := int64(len(`{"key":,"version":}`)) + recordKeyJSONBytes(r.Key) + jsonwire.StringBytes(r.Version)
+	if len(r.Data) > 0 {
+		if err := validateMetadataRawJSON(r.Data); err != nil {
+			return 0, err
+		}
+		body, _ := jsonwire.Compact(nil, r.Data)
+		size += int64(len(`,"data":`) + body)
+	}
+	if r.Omitted {
+		size += int64(len(`,"omitted":true`))
+	}
+	if r.Missing {
+		size += int64(len(`,"missing":true`))
+	}
+	if r.Detail != nil {
+		size += int64(len(`,"detail":`)) + recordKeyJSONBytes(*r.Detail)
+	}
+	return size, nil
 }
 
 type RecordPage struct {
@@ -126,10 +150,11 @@ func (s *SQLiteStore) readCanonicalRecords(ctx context.Context, tx *sqlTx, works
 	result := RecordBatch{Items: []MetadataRecord{}}
 	remaining := MetadataRecordPageMaxBytes - metadataPageOverhead
 	minimum, reserved := make([]int, len(keys)), 0
+	version := strings.Repeat("0", 64)
 	for i, key := range keys {
-		item := MetadataRecord{Key: key, Version: strings.Repeat("0", 64), Omitted: true, Detail: &key}
-		raw, _ := json.Marshal(item)
-		minimum[i] = len(raw) + 1
+		item := MetadataRecord{Key: key, Version: version, Omitted: true, Detail: &key}
+		size, _ := item.recordJSONBytes()
+		minimum[i] = int(size) + 1
 		reserved += minimum[i]
 	}
 	for i, key := range keys {
@@ -162,15 +187,15 @@ func (s *SQLiteStore) readCanonicalRecords(ctx context.Context, tx *sqlTx, works
 		if err := s.committedMetadataRecordVersion(ctx, tx, workspace, &item); err != nil {
 			return result, err
 		}
-		encoded, err := json.Marshal(item)
+		encoded, err := item.recordJSONBytes()
 		if err != nil {
 			return result, err
 		}
-		if len(encoded)+1 > available {
+		if encoded+1 > int64(available) {
 			item.Data, item.Omitted, item.Detail = nil, true, &key
-			encoded, _ = json.Marshal(item)
+			encoded, _ = item.recordJSONBytes()
 		}
-		remaining -= len(encoded) + 1
+		remaining -= int(encoded) + 1
 		if remaining < 0 {
 			return result, ErrMetadataPageBudget
 		}
@@ -242,19 +267,22 @@ func (s *SQLiteStore) ReadCanonicalRecordPage(ctx context.Context, workspace str
 		remaining := q.MaxBytes - metadataPageOverhead
 		for i := range page.Items {
 			item := &page.Items[i]
-			raw, _ := json.Marshal(item)
-			if len(raw)+1 > remaining {
-				item.Data, item.Omitted, item.Detail = nil, true, &item.Key
-				raw, _ = json.Marshal(item)
+			size, err := item.recordJSONBytes()
+			if err != nil {
+				return page, err
 			}
-			if len(raw)+1 > remaining {
+			if size+1 > int64(remaining) {
+				item.Data, item.Omitted, item.Detail = nil, true, &item.Key
+				size, _ = item.recordJSONBytes()
+			}
+			if size+1 > int64(remaining) {
 				if i == 0 {
 					return page, ErrMetadataPageBudget
 				}
 				page.Items, page.HasMore = page.Items[:i], true
 				break
 			}
-			remaining -= len(raw) + 1
+			remaining -= int(size) + 1
 		}
 	}
 	if page.HasMore && len(page.Items) > 0 {

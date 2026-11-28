@@ -865,19 +865,8 @@ func (s *server) startWorkflowScheduler() {
 				continue
 			}
 			for _, key := range s.store.WorkspaceKeys() {
-				data, ok := s.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
-				if !ok {
-					continue
-				}
-				for _, definition := range data.WorkflowDefinitions {
-					if definition.Enabled && definition.Trigger == "schedule" && definition.NextRunAt != nil && !definition.NextRunAt.After(now) {
-						_, _ = s.runWorkflow(ctx, key, definition.ID, "schedule", "", "", true)
-					}
-				}
-				for _, run := range data.WorkflowRuns {
-					if run.Status == "failed" && run.NextRetryAt != nil && !run.NextRetryAt.After(now) {
-						_, _ = s.runWorkflow(ctx, key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID, true)
-					}
+				for _, item := range s.store.DueWorkflowScheduleItems(key, now) {
+					_, _ = s.runWorkflow(ctx, key, item.WorkflowID, item.Trigger, item.ResourceType, item.ResourceID, true)
 				}
 			}
 		}

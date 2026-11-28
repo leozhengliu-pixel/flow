@@ -34,7 +34,21 @@ func TestScaleRealtimeBurstWaitsForProjectionBudget(t *testing.T) {
 			budget := source.budget
 			baseline := budget.used.Load()
 			scratch := int64(4<<10 + source.policy.Bytes())
-			room := scratch + int64(source.bytes*4+16<<10)
+			// Determine the room for one cold projection without filling
+			// the live frame cache or changing the shared transport budget.
+			probe := *source
+			probe.budget = &realtimeBudget{limit: budget.limit}
+			probe.frames = nil
+			access, err := repo.ResolveEventAccess(t.Context(), workspace, f.data.Viewer.ID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := ProjectEvent(t.Context(), &probe, access)
+			if err != nil || !frame.Visible() {
+				t.Fatalf("expected one cold projection: %v", err)
+			}
+			frame.Close()
+			room := probe.budget.peak.Load()
 			held := budget.limit - baseline - room
 			if !budget.acquire(held) {
 				t.Fatal("could not constrain the budget to one cold projection")

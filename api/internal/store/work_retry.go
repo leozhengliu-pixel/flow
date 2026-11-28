@@ -124,6 +124,8 @@ func (s *SQLiteStore) awaitMetadataWork(ctx context.Context, demand *metadataWor
 	if wait <= 0 {
 		return false
 	}
+	admission := budget.recorder.BeginAdmission(ctx)
+	defer func() { admission.End() }()
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	for {
@@ -138,6 +140,7 @@ func (s *SQLiteStore) awaitMetadataWork(ctx context.Context, demand *metadataWor
 		}
 		changed := budget.changed
 		budget.mu.Unlock()
+		admission.Wait()
 		select {
 		case <-ctx.Done():
 			return false

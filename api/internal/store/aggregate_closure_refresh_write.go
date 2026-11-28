@@ -232,11 +232,13 @@ func (s *SQLiteStore) metadataLogicalReferencesChanged(ctx context.Context, fiel
 		if err != nil {
 			return err
 		}
-		aRaw, err := json.Marshal(a.Interface())
+		owner := &ResourceRead{store: s}
+		defer owner.Close()
+		aRaw, err := encodeOwnedMetadataValue(ctx, owner, a.Interface())
 		if err != nil {
 			return err
 		}
-		bRaw, err := json.Marshal(b.Interface())
+		bRaw, err := encodeOwnedMetadataValue(ctx, owner, b.Interface())
 		if err != nil {
 			return err
 		}
@@ -303,20 +305,22 @@ func (s *SQLiteStore) persistMetadataLogicalRefreshRecord(ctx context.Context, t
 	if err != nil {
 		return err
 	}
-	oldRaw, err := json.Marshal(a.Interface())
+	owner := &ResourceRead{store: s}
+	defer owner.Close()
+	oldRaw, err := encodeOwnedMetadataValue(ctx, owner, a.Interface())
 	if err != nil {
 		return err
 	}
-	nextRaw, err := json.Marshal(b.Interface())
+	nextRaw, err := encodeOwnedMetadataValue(ctx, owner, b.Interface())
 	if err != nil {
 		return err
 	}
 	if updateMetadataField(field) {
-		oldRaw, err = json.Marshal(metadataUpdate{Parent: parent, Item: oldRaw})
+		oldRaw, err = encodeOwnedMetadataUpdate(ctx, owner, metadataUpdate{Parent: parent, Item: oldRaw})
 		if err != nil {
 			return err
 		}
-		nextRaw, err = json.Marshal(metadataUpdate{Parent: parent, Item: nextRaw})
+		nextRaw, err = encodeOwnedMetadataUpdate(ctx, owner, metadataUpdate{Parent: parent, Item: nextRaw})
 		if err != nil {
 			return err
 		}

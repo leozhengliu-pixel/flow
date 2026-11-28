@@ -27,6 +27,7 @@ import './styles/mobile-shell.css'
 import './components/ui/menu-highlight.css'
 import { RouteError } from './components/layout/route-error'
 import type { LocalStartup } from './lib/local-store-resume'
+import { onBrowserTelemetryStart } from './lib/browser-telemetry'
 
 export async function mountApp(prepared?: LocalStartup) {
   window.__flowMermaidPreview = renderMermaidPreview
@@ -41,6 +42,7 @@ export async function mountApp(prepared?: LocalStartup) {
       <DueDateDialogHost />
     </LightboxEditorProvider>
   ), errorElement: <RouteError /> }])
+  onBrowserTelemetryStart(client => router.subscribe(state => client.navigate(state.location.pathname)))
   const root = createRoot(document.getElementById('root')!)
   const render = () => root.render(
     <StrictMode>

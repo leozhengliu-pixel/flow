@@ -1,5 +1,6 @@
 import { SnapshotUnconfirmedError, snapshotWriteGate } from '@/lib/snapshot-write-gate'
 import { invalidateLocalStoreResponse } from '@/lib/local-store-db'
+import { activeBrowserTelemetry, configureBrowserTelemetry, stopBrowserTelemetry } from './browser-telemetry'
 const pageRealtimeClientId = crypto.randomUUID()
 
 export class ApiError<T = unknown> extends Error {
@@ -120,7 +121,10 @@ function sendWithProgress(url: string, init: RequestInit, headers: Headers, onPr
     request.onload = () => {
       init.signal?.removeEventListener('abort', abort)
       const status = request.status
-      resolve(new Response(status === 204 || status === 205 ? null : request.responseText, { status, headers: { 'Content-Type': request.getResponseHeader('Content-Type') ?? 'application/json' } }))
+      const responseHeaders: Record<string, string> = { 'Content-Type': request.getResponseHeader('Content-Type') ?? 'application/json' }
+      const telemetryRoute = activeBrowserTelemetry() && request.getResponseHeader('Flow-Telemetry-Route')
+      if (telemetryRoute) responseHeaders['Flow-Telemetry-Route'] = telemetryRoute
+      resolve(new Response(status === 204 || status === 205 ? null : request.responseText, { status, headers: responseHeaders }))
     }
     request.onerror = () => { init.signal?.removeEventListener('abort', abort); reject(new TypeError('Network request failed')) }
     request.onabort = () => reject(init.signal?.reason ?? new DOMException('Aborted', 'AbortError'))
@@ -133,11 +137,20 @@ function sendWithProgress(url: string, init: RequestInit, headers: Headers, onPr
 function send(url: string, init: RequestInit, headers: Headers, quiet: boolean | undefined, workspaceKey: string, onUploadProgress?: (fraction: number) => void) {
 	const sent = onUploadProgress && typeof XMLHttpRequest !== 'undefined' ? sendWithProgress(url, init, headers, onUploadProgress) : fetch(url, { ...init, headers, credentials: 'same-origin' })
 	return sent.then(async response => {
+    if (url === '/api/auth/session' || url === '/api/auth/login' || url === '/api/auth/token-login') {
+      configureBrowserTelemetry(response)
+    } else if (url === '/api/auth/logout' && response.ok) {
+      stopBrowserTelemetry()
+    }
+    activeBrowserTelemetry()?.api(response, init.method)
     if(response.status===403 && !quiet) {
       const payload=await response.clone().json().catch(()=>null)
       if(payload?.code==='mfa_required'||payload?.code==='authentication_method_required') window.dispatchEvent(new CustomEvent('flow:authentication-policy',{detail:{code:payload.code,workspaceKey:headers.get('X-Workspace-Key') ?? workspaceKey}}))
     }
     return response
+  }, (error: unknown) => {
+    if (!init.signal?.aborted) activeBrowserTelemetry()?.api(undefined, init.method)
+    throw error
   })
 }
 

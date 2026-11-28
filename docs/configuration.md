@@ -593,12 +593,6 @@ server:
 | `storage.s3.prefix` | `FLOW_S3_PREFIX` | text |
 | `storage.s3.region` | `FLOW_S3_REGION` | text |
 | `storage.s3.validateOnStart` | `FLOW_S3_VALIDATE_ON_START` | boolean |
-| `telemetry.enabled` | `FLOW_TELEMETRY_ENABLED` | boolean |
-| `telemetry.endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | text |
-| `telemetry.environment` | `FLOW_ENVIRONMENT` | text |
-| `telemetry.metricsEndpoint` | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | text |
-| `telemetry.serviceName` | `OTEL_SERVICE_NAME` | text |
-| `telemetry.tracesEndpoint` | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | text |
 | `tts.baseUrl` | `FLOW_TTS_BASE_URL` | text |
 | `tts.enabled` | `FLOW_TTS_ENABLED` | boolean |
 | `tts.model` | `FLOW_TTS_MODEL` | text |
@@ -754,8 +748,9 @@ registered route pattern for method-qualified routes.
 
 This follows the deployment model used by [Plane](https://developers.plane.so/self-hosting/govern/environment-variables),
 [Outline](https://docs.getoutline.com/s/hosting/doc/docker-7pfeLP5a8t), and
-[authentik](https://docs.goauthentik.io/install-config/configuration/). OTLP
-settings use the standard [OpenTelemetry environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
+[authentik](https://docs.goauthentik.io/install-config/configuration/).
+Configure OTLP in the [Telemetry](#telemetry) YAML section, which also
+describes the transition from existing environment variables.
 
 ## Database
 
@@ -1990,20 +1985,43 @@ FLOW_TTS_VOICE=alloy
 
 ## Telemetry
 
-Telemetry is opt-in. When enabled, Flow exports HTTP traces and request metrics through OTLP/HTTP.
-The exporter honors standard `OTEL_EXPORTER_OTLP_*` endpoint, header, TLS,
-compression, and timeout variables.
+Configure telemetry under `server.telemetry` in YAML. Backend and browser
+telemetry both default to off. Flow sends OTLP/HTTP protobuf to your collector.
+The Helm chart mirrors the same keys at `telemetry`.
+With `config.fileConfigMap`, set `server.telemetry` in the external file.
 
-```dotenv
-FLOW_TELEMETRY_ENABLED=true
-FLOW_ENVIRONMENT=production
-OTEL_SERVICE_NAME=flow-api
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.example:4318
-OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer%20secret
-```
+| YAML key under `server.telemetry` | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Enable backend telemetry. |
+| `endpoint` | unset | Collector base URL. Flow appends `/v1/metrics`, `/v1/traces`, and `/v1/logs`. |
+| `metricsEndpoint`, `tracesEndpoint`, `logsEndpoint` | unset | Full URL for one signal. |
+| `allowHttp` | `false` | Allow plaintext HTTP to non-loopback hosts. HTTP to localhost or a loopback IP is accepted. Collector URLs and this policy are validated only when telemetry is enabled. |
+| `environment` | unset (`production` for legacy opt-in) | Short deployment label, such as `staging`. Flow accepts up to 40 ASCII letters, digits, hyphens or underscores, starting with a letter. The privacy scrubber drops values that look like sensitive data. |
+| `headers` | `{}` | Map up to eight collector header names to absolute paths of files containing their values. In Helm, set `telemetry.existingSecret.name` and `telemetry.existingSecret.headers` (header names to Secret keys). |
+| `tls.caFile`, `tls.certificateFile`, `tls.keyFile` | unset | Optional custom CA and mTLS certificate/key files. Configure the client certificate and key together. |
+| `compression` | `none` | `none` or `gzip`. |
+| `timeout` | `5s` | Timeout per export request, up to `1m`. |
+| `sampleRate` | `0.1` | Fraction of requests and jobs traced, between `0` and `1`. Slow requests and HTTP 5xx responses also qualify within the queue limit. Metrics aggregate whenever telemetry is enabled. |
+| `interval` | `15s` | Regular export interval, between `1s` and `5m`. A filling trace queue or a memory diagnostic event can trigger an earlier flush. |
+| `slowRequest` | `1s` | Threshold for the slow-request event and trace, up to `10m`. Streaming connection lifetimes are excluded. |
+| `frontend.enabled` | `false` | Advertise opt-in to signed-in browsers and enable authenticated same-origin intake. Requires backend telemetry and session authentication. |
+| `frontend.sampleRate` | `0.1` | Fraction of page loads that collect browser measurements. |
+| `diagnostics.sampleInterval` | `200ms` | Memory sampling interval, between `100ms` and `250ms`. |
+| `diagnostics.thresholds` | `[0.70, 0.85, 0.95]` | Three increasing memory pressure ratios greater than `0.05` and at most `1`. |
+| `diagnostics.highWater` | `0.8` | Metadata work pressure threshold, between `0.01` and `1`. |
+| `diagnostics.snapshotDir` | `telemetry/` beside the configured database path | Absolute local directory for the rolling snapshot and unacknowledged crash snapshots. An explicit empty string disables persistence. Each replica needs its own directory. |
+| `diagnostics.heapProfileDir` | unset | Absolute local directory for optional heap and goroutine profiles. |
+| `diagnostics.heapProfileMaxBytes` | `8388608` | Per-file profile limit, between 1 and 64 MiB. |
 
-Set `OTEL_SDK_DISABLED=true` or `FLOW_TELEMETRY_ENABLED=false` for a no-op SDK.
-No default Flow or vendor endpoint is configured.
+During the deprecation window, existing telemetry variables continue to work
+and produce one startup warning naming the settings. YAML choices take
+precedence. Move `FLOW_TELEMETRY_ENABLED` and `OTEL_SDK_DISABLED` to `enabled`,
+the shared `OTEL_EXPORTER_OTLP_ENDPOINT` to `endpoint`, and signal-specific
+endpoints to `metricsEndpoint` or `tracesEndpoint`. When switching to a YAML
+endpoint, configure header files and TLS alongside it. Legacy endpoints
+continue to serve metrics and traces only. Set a YAML base or `logsEndpoint`
+to send events. Migrate `FLOW_ENVIRONMENT` to `environment`. The migration table,
+exported data, and deployment example are in [Telemetry](telemetry.md).
 
 ## GitHub/GitLab review webhooks
 

@@ -316,11 +316,8 @@ func largeRowNormalized(owner *ResourceRead, ctx context.Context, field metadata
 				target.SetString(placeholder)
 			}
 		}
-		encoded, err := normalizedMetadataRecord(field, key, value)
+		encoded, err := encodeRetainedMetadataRecord(ctx, owner, normalizedMetadataRecordValue(field, key, value))
 		if err != nil {
-			return nil, false, err
-		}
-		if err := owner.reserve(ctx, uint64(len(encoded))*2+1024); err != nil {
 			return nil, false, err
 		}
 		outputs[index] = encoded
@@ -328,6 +325,9 @@ func largeRowNormalized(owner *ResourceRead, ctx context.Context, field metadata
 	quoted := [2][]byte{}
 	for index, placeholder := range largeRowPlaceholders {
 		quoted[index], _ = json.Marshal(placeholder)
+	}
+	if err := owner.reserve(ctx, uint64(len(outputs[1]))+8192); err != nil {
+		return nil, false, err
 	}
 	if !bytes.Equal(bytes.ReplaceAll(outputs[1], quoted[1], quoted[0]), outputs[0]) ||
 		bytes.Count(outputs[0], quoted[0]) != bytes.Count(outputs[1], quoted[1]) {
@@ -377,12 +377,12 @@ func largeRowDisplayMember(ctx context.Context, owner *ResourceRead, directory *
 			return nil, false, err
 		}
 		if found {
-			if raw, err = json.Marshal(current); err != nil {
+			if raw, err = encodeOwnedMetadataRecord(ctx, owner, reflect.ValueOf(current)); err != nil {
 				return nil, false, err
 			}
 		}
 	}
-	compact, err := json.Marshal(json.RawMessage(raw))
+	compact, err := encodeOwnedMetadataRecord(ctx, owner, reflect.ValueOf(json.RawMessage(raw)))
 	return compact, err == nil, err
 }
 

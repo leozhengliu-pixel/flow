@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
 const httpDrainTimeout = 15 * time.Second
@@ -41,7 +42,11 @@ func (s *server) startBackgroundWorkers() {
 
 func (s *server) backgroundWork() *serverBackground {
 	s.backgroundOnce.Do(func() {
-		ctx, cancel := context.WithCancelCause(context.Background())
+		parent := context.Background()
+		if s.telemetry != nil {
+			parent = telemetry.WithWork(telemetry.WithRecorder(parent, s.telemetry), telemetry.WorkBackground)
+		}
+		ctx, cancel := context.WithCancelCause(parent)
 		serving, cancelServing := context.WithCancel(ctx)
 		b := &serverBackground{ctx: ctx, cancel: cancel, serving: serving, cancelServing: cancelServing, done: make(chan struct{})}
 		// A server can share a store with other servers. Closing the store

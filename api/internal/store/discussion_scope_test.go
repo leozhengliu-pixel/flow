@@ -104,7 +104,7 @@ func TestDiscussionOrdinalScopeDifferential(t *testing.T) {
 								t.Fatalf("selected subscription count=%d want=%d", changed, want)
 							}
 							metadataNext := domain.Bootstrap{ThreadSubscriptions: data.ThreadSubscriptions}
-							scope, scopeErr := boundedDiscussionMetadataScope(metadataBefore, metadataNext)
+							scope, scopeErr := boundedDiscussionMetadataScope(ctx, nil, metadataBefore, metadataNext)
 							if shape != "empty-id" && (scopeErr == nil || !discussionNeedsOrdinalScope(metadataBefore, metadataNext, issue.ID, scope, scopeErr)) {
 								t.Fatal("fixture did not require the ordinal fallback", scopeErr)
 							}

@@ -109,6 +109,63 @@
         }
       }
     },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": { "type": "string" },
+        "environment": { "type": "string" },
+        "metricsEndpoint": { "type": "string" },
+        "tracesEndpoint": { "type": "string" },
+        "logsEndpoint": { "type": "string" },
+        "compression": { "enum": ["none", "gzip"] },
+        "allowHttp": { "type": "boolean" },
+        "interval": { "type": "string" },
+        "slowRequest": { "type": "string" },
+        "timeout": { "type": "string" },
+        "sampleRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "headers": { "type": "object", "maxProperties": 8, "additionalProperties": { "type": "string", "pattern": "^/" } },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "caFile": { "type": "string" },
+            "certificateFile": { "type": "string" },
+            "keyFile": { "type": "string" }
+          }
+        },
+        "frontend": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "sampleRate": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "highWater": { "type": "number", "minimum": 0.01, "maximum": 1 },
+            "sampleInterval": { "type": "string" },
+            "thresholds": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number", "exclusiveMinimum": 0.05, "maximum": 1 } },
+            "snapshotDir": { "type": "string" },
+            "heapProfileDir": { "type": "string" },
+            "heapProfileMaxBytes": { "type": "integer", "minimum": 1048576, "maximum": 67108864 }
+          }
+        },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "headers"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "headers": { "type": "object", "minProperties": 1, "maxProperties": 8, "additionalProperties": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } }
+          }
+        }
+      }
+    },
     "config": {
       "type": "object",
       "properties": {

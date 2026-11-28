@@ -215,9 +215,9 @@
     "startWorkflowScheduler": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded mode dispatches each 15-second tick to boundedWorkflowScheduleTick before the literal WorkspaceMetadataFields loop, which stays the unchanged off branch (workflow tick close pins the dispatch order and the literal loop copy used by the differentials). workflow tick close compares the literal loop with the bounded tick on warm and SQL-reloaded sources at Sunday 10:00 UTC and Monday 10:00 UTC: exact due boundaries, one-nanosecond-late definitions, weekday/Sunday cron and @daily/@hourly/@weekly rules, disabled and manual definitions with due NextRunAt, duplicate definition IDs, due/stale/superseded/disabled/missing retry targets, a failing scheduled run with retry history, run order, rows, events and publication, plus a canceled tick that changes nothing. workflow tick remains.",
+      "reason": "Bounded mode dispatches each 15-second tick to boundedWorkflowScheduleTick. Off mode uses DueWorkflowScheduleItems to retain only due inputs in the original order. TestWorkflowSchedulerDispatchGuard pins both dispatch paths and the legacy loop used by the differential. TestWorkflowDueSchedulerWeekdayAndSunday compares warm and SQL-reloaded sources at exact and one-nanosecond-late schedule boundaries, disabled and manual definitions, duplicate IDs and stale retries, including run order, rows, events and publication.",
       "accessors": [
-        "WorkspaceMetadataFields"
+        "DueWorkflowScheduleItems"
       ],
       "temperature": "hot",
       "temperatureReason": "15-second workflow ticker reads definitions/runs and executes due or retried work; setup CRUD remains cold.",

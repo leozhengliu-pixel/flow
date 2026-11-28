@@ -12,7 +12,7 @@ import (
 
 // Dedicated complete inline-field writes own their full dynamically admitted
 // inputs. Keep the generic page/record contract for every other declaration.
-func validateDiscussionInlineSelection(data domain.Bootstrap, scope MetadataRecordScope, inline []string) error {
+func (s *SQLiteStore) validateDiscussionInlineSelection(ctx context.Context, data domain.Bootstrap, scope MetadataRecordScope, inline []string) error {
 	validation := data
 	selected := scope
 	selected.Fields = slices.Clone(scope.Fields)
@@ -31,7 +31,7 @@ func validateDiscussionInlineSelection(data domain.Bootstrap, scope MetadataReco
 	selected.Fields = slices.DeleteFunc(selected.Fields, func(name string) bool { return slices.Contains(complete, name) })
 	selected.Read = slices.DeleteFunc(slices.Clone(scope.Read), func(key RecordKey) bool { return slices.Contains(complete, key.Kind) })
 	selected.Write = slices.DeleteFunc(slices.Clone(scope.Write), func(key RecordKey) bool { return slices.Contains(complete, key.Kind) })
-	return validateMetadataLogicalSelection(validation, selected)
+	return s.validateMetadataLogicalSelection(ctx, validation, selected)
 }
 
 // Inline settings have no canonical cursor row. Read their complete JSON

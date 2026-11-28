@@ -75,9 +75,10 @@
     "dispatchNotificationEmails": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Bounded mailer rendering uses the owned NotificationDeliveryContextRead and retains it through all unchanged claims, SMTP calls and result writes. No-mailer scheduling retains BeginDueNotificationDeliveryRead; off-mode method-value selection/call/context is literal original code. The shared context pins installed M recipients/review headers/HIPAA and native display fields rather than hydrating unrelated metadata. Native MutateNotificationDelivery now separately admits row transfer, structural decode and callback-output encoding inside its original locked transaction. TestScaleHotDeliveryEmailDifferential compares actual immediate and digest SMTP messages and canonical claims/status/attempt/error/backoff for success, HIPAA, transport failure, no mailer, source/recipient failures, review precedence and future/non-email rows with pool size one; store source/count-bound/rollback tests and existing notification read/native transaction/scheduler tests pass persistent SQLite count2. This direct consumer is certified; desktop acknowledgement, cycle maintenance, by-value compatibility and other dispatch dependencies retain independent migration status.",
+      "reason": "Both representations select due pending email rows before loading rendering metadata. Bounded mailer rendering uses NotificationDeliveryContextRead and retains it through claims, SMTP calls and result writes. Without a mailer the dispatcher selects only the delivery rows. The shared context pins installed recipients, review headers, HIPAA and native display fields. TestScaleHotDeliveryEmailDifferential compares immediate and digest SMTP messages and delivery state for success, HIPAA, transport failure, no mailer, missing sources, review precedence and future/non-email rows.",
       "accessors": [
-        "BeginDueNotificationDeliveryRead"
+        "BeginDueNotificationDeliveryRead",
+        "BeginNotificationDeliveryContextRead"
       ],
       "temperature": "hot",
       "temperatureReason": "Delivery tick and ordinary issue/comment/project/document writes synchronously invoke notification delivery.",

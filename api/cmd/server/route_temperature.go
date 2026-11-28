@@ -792,6 +792,7 @@ var scaleRouteTemperature = map[string]string{
 	"POST /api/teams/{id}/templates":                                             "cold: server/server.createIssueTemplate",
 	"POST /api/teams/{id}/triage-responsibilities":                               "cold: server/server.createTriageResponsibility",
 	"POST /api/teams/{id}/triage-rules":                                          "cold: server/server.createTriageRule",
+	"POST /api/telemetry":                                                        "hot",
 	"POST /api/trash/{id}/restore":                                               "cold: server/server.restoreTrashEntry",
 	"POST /api/views":                                                            "hot",
 	"POST /api/views/{id}/share":                                                 "cold: server/server.shareSavedView",

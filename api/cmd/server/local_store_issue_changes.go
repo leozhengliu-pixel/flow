@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -50,7 +49,7 @@ func (s *server) localStoreIssueManifest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.Header().Set("Cache-Control", "private, no-store")
-	writeSyncJSON(w, struct {
+	s.writeSyncJSON(w, r, struct {
 		localStoreStamp
 		localStoreIssueCheckpoint
 		Schema       int      `json:"schema"`
@@ -80,7 +79,7 @@ func (s *server) localStoreIssueChanges(w http.ResponseWriter, r *http.Request, 
 		}
 		result, err := s.readLocalStoreIssueChanges(r, journal, access, workspaceID, q.Get("authzEpoch"), after, limit)
 		if err == nil {
-			writeSyncJSON(w, result, syncV2DeltaBytes)
+			s.writeSyncJSON(w, r, result, syncV2DeltaBytes)
 			return
 		}
 		if attempt == syncChangesAttempts || !errors.Is(err, store.ErrMetadataCursor) {
@@ -114,18 +113,18 @@ func (s *server) readLocalStoreIssueChanges(r *http.Request, journal committedCh
 		result.ResyncRequired = true
 		return result, nil
 	}
-	used := 2048
+	used := int64(2048)
 	for _, change := range page.Transactions {
 		tx, err := s.projectLocalStoreChange(r, access, change)
 		if err != nil {
 			return result, err
 		}
 		if len(tx.Upserts)+len(tx.Removals)+len(tx.Invalidations) > 0 {
-			raw, err := json.Marshal(tx)
+			size, err := tx.jsonBytes()
 			if err != nil {
 				return result, err
 			}
-			if used+len(raw)+1 > syncV2DeltaBytes {
+			if used+size+1 > syncV2DeltaBytes {
 				if result.Next == after {
 					// No partial transaction can be committed by the client.
 					result.ResyncRequired = true
@@ -134,7 +133,7 @@ func (s *server) readLocalStoreIssueChanges(r *http.Request, journal committedCh
 				}
 				return result, s.validateLocalStoreIssueRead(r, access)
 			}
-			used += len(raw) + 1
+			used += size + 1
 			result.Transactions = append(result.Transactions, tx)
 		}
 		result.Next = change.Seq

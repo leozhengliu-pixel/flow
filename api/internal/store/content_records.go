@@ -165,31 +165,47 @@ func (s *SQLiteStore) ensureContentRecords(ctx context.Context) error {
 	return nil
 }
 
-func contentRecordIdentity[T any](item T) (string, string, error) {
-	raw, err := json.Marshal(item)
-	if err != nil {
-		return "", "", err
-	}
+func encodedContentRecordIdentity(raw []byte) (string, string, error) {
 	var identity struct {
 		ID        string `json:"id"`
 		CreatedAt string `json:"createdAt"`
 	}
-	err = json.Unmarshal(raw, &identity)
+	err := json.Unmarshal(raw, &identity)
 	return identity.ID, identity.CreatedAt, err
 }
 
 func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, resource string, item T) error {
-	raw, err := json.Marshal(item)
+	var owner *ResourceRead
+	if store := issueRecordWriteAdmission(ctx); store != nil {
+		owner = &ResourceRead{store: store}
+		defer owner.Close()
+		ctx = context.WithValue(ctx, legacyContentWriteBudgetKey{}, store)
+	}
+	raw, err := encodeOwnedMetadataValue(ctx, owner, item)
 	if err != nil {
 		return err
 	}
+	if owner != nil {
+		work, err := metadataOffloadAssemblyWork(ctx, raw, 4)
+		if err != nil {
+			return err
+		}
+		if err := owner.reserve(ctx, work); err != nil {
+			return err
+		}
+	}
+	id, _, err := encodedContentRecordIdentity(raw)
+	if err != nil {
+		return err
+	}
+	return writeEncodedContentRecord(ctx, tx, workspace, kind, resource, id, raw)
+}
+
+func writeEncodedContentRecord(ctx context.Context, tx *sqlTx, workspace, kind, resource, id string, raw []byte) error {
 	raw = StripJSONNUL(raw) // as stored (buildContentRecordRow), for the comparison below
-	id, _, err := contentRecordIdentity(item)
-	if err != nil {
-		return err
-	}
 	var previous []byte
 	var version int
+	var err error
 	if budgetStore, ok := ctx.Value(legacyContentWriteBudgetKey{}).(*SQLiteStore); ok {
 		var release func()
 		previous, version, release, err = readLegacyContentBefore(ctx, tx, workspace, kind, resource, id, budgetStore)
@@ -391,7 +407,7 @@ func syncActivityCycleRefRows(ctx context.Context, tx *sqlTx, rows []contentReco
 // unchanged check, for rows known to need rewriting.
 // contentRecordRowFor encodes item as a content record row for writeContentRecordRows.
 func contentRecordRowFor[T any](workspace, kind, resource string, item T) (contentRecordRow, error) {
-	raw, err := json.Marshal(item)
+	raw, err := marshalMetadataJSON(item)
 	if err != nil {
 		return contentRecordRow{}, err
 	}
@@ -545,11 +561,11 @@ func syncContentRecordsFrom[T any](ctx context.Context, tx *sqlTx, workspace, ki
 	rows.Close()
 	for resource, values := range items {
 		for _, value := range values {
-			id, _, err := contentRecordIdentity(value)
+			raw, err := marshalMetadataJSON(value)
 			if err != nil {
 				return err
 			}
-			raw, err := json.Marshal(value)
+			id, _, err := encodedContentRecordIdentity(raw)
 			if err != nil {
 				return err
 			}
@@ -577,7 +593,7 @@ func syncContentRecordsFrom[T any](ctx context.Context, tx *sqlTx, workspace, ki
 					delete(previous, k)
 					continue
 				}
-				if err := writeContentRecord(ctx, tx, workspace, kind, resource, value); err != nil {
+				if err := writeEncodedContentRecord(ctx, tx, workspace, kind, resource, id, raw); err != nil {
 					return err
 				}
 			}

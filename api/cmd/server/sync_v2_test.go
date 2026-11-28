@@ -5,14 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+
+	"github.com/alicebob/miniredis/v2"
 )
 
 type scaleJournalFunc func(context.Context, string, string, int, int) (store.CommittedPage, error)
@@ -59,9 +65,14 @@ func TestScaleSummaryBoundsAndPartialRecordContract(t *testing.T) {
 			for _, title := range []string{"Small title", strings.Repeat("quoted \" < > ", 5000)} {
 				payload := mustJSON(t, map[string]any{"entity": map[string]any{"id": "record", "version": json.Number("9007199254740993"), "contentVersion": json.Number("9007199254740994"), "title": title, "description": strings.Repeat("secret body", 20000), "content": "editor body", "revisions": []string{"history"}, "permissions": []string{"hidden subject"}}})
 				event := domain.RealtimeEvent{ID: "event", Seq: 9007199254740993, Type: kind, AggregateID: "record", ActorID: "actor", Payload: payload}
-				frame, err := summarizeEventFrame(EventFrame{encoded: mustJSON(t, event), id: event.ID, visible: true}, "epoch")
+				budget := &realtimeBudget{limit: 1 << 20}
+				frame, err := summarizeEventFrame(t.Context(), budget, EventFrame{encoded: mustJSON(t, event), id: event.ID, visible: true}, "epoch")
 				if err != nil {
 					t.Fatal(err)
+				}
+				defer frame.Close()
+				if budget.used.Load() < int64(frame.Size()) {
+					t.Fatal("summary frame lost its output lease")
 				}
 				if frame.Size()+len(frame.id)+128 > syncV2FrameBytes {
 					t.Fatalf("ordinary frame exceeds 16 KiB: %d", frame.Size())
@@ -92,8 +103,39 @@ func TestScaleSummaryBoundsAndPartialRecordContract(t *testing.T) {
 				} else if len(payloadView.Transaction.Upserts) != 0 || len(payloadView.Transaction.Invalidations) != 1 {
 					t.Fatal("oversized transaction was partially applied")
 				}
+				frame.Close()
+				if budget.used.Load() != 0 {
+					t.Fatal("summary frame lease survived close")
+				}
 			}
 		})
+	}
+}
+
+func TestScaleSyncV2JSONSizes(t *testing.T) {
+	key := syncV2Key{Kind: "issues", ID: "<&\u2028\xff"}
+	tx := emptySyncTransaction("tx", "9007199254740993")
+	tx.Upserts = append(tx.Upserts, syncV2Upsert{
+		Key: key, Version: "1", Data: json.RawMessage(` { "title" : "<&" } `), Projection: "summary", DetailStale: true,
+	}, syncV2Upsert{Key: key})
+	tx.Removals = append(tx.Removals, syncV2Removal{Key: key, Version: "2"})
+	tx.Invalidations = append(tx.Invalidations, "projects", "<")
+	for _, page := range []syncV2ChangesResponse{
+		{},
+		{Transactions: []syncV2Transaction{}},
+		{Next: "2", Head: "3", AuthzEpoch: "<&", Transactions: []syncV2Transaction{tx, {}}, HasMore: true, ResyncRequired: true},
+	} {
+		raw, err := json.Marshal(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size, err := page.jsonBytes(); err != nil || size != int64(len(raw)) {
+			t.Fatalf("page size %d, want %d, err=%v", size, len(raw), err)
+		}
+	}
+	tx.Upserts[0].Data = json.RawMessage{}
+	if _, err := tx.jsonBytes(); err == nil {
+		t.Fatal("invalid raw JSON accepted")
 	}
 }
 
@@ -118,18 +160,7 @@ func TestScaleSparseInvisibleChangesAdvanceScannedCursor(t *testing.T) {
 func TestScaleDeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 	for _, repo := range scaleServerTestStores(t) {
 		f := newScaleFixture(t, repo)
-		issue, err := repo.IssueRecord(t.Context(), f.data.Workspace.URLKey, f.open.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		record := store.RecordDelta{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}
-		if repo.RecordJournalReady() {
-			version, deleted, err := repo.RecordVersion(t.Context(), f.data.Workspace.URLKey, record.Key)
-			if err != nil || deleted || version == "" {
-				t.Fatalf("fixture has no committed record version: %s %t %v", version, deleted, err)
-			}
-			record.Version = version
-		}
+		record := syncV2ScaleIssueDelta(t, f)
 		_, normal := syncV2ScaleChanges(t, f, f.principals[0], []store.CommittedChange{{TxID: "small", Seq: "1", Records: []store.RecordDelta{record}}}, "1", false)
 		if len(normal.Transactions) != 1 || len(normal.Transactions[0].Upserts) != 1 {
 			t.Fatal("small delta did not upsert its summary")
@@ -150,6 +181,224 @@ func TestScaleDeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 		if len(result.Transactions) != 1 || len(result.Transactions[0].Upserts) != 0 || len(result.Transactions[0].Invalidations) == 0 {
 			t.Fatal("transaction mixed stale and current versions")
 		}
+	}
+}
+
+func syncV2ScaleIssueDelta(t *testing.T, f eventSourceScaleFixture) store.RecordDelta {
+	t.Helper()
+	workspace := f.data.Workspace.URLKey
+	issue, err := f.repository.IssueRecord(t.Context(), workspace, f.open.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := store.RecordDelta{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}
+	if f.repository.RecordJournalReady() {
+		version, deleted, err := f.repository.RecordVersion(t.Context(), workspace, record.Key)
+		if err != nil || deleted || version == "" {
+			t.Fatalf("fixture has no committed record version: %s %t %v", version, deleted, err)
+		}
+		record.Version = version
+	}
+	return record
+}
+
+func TestScaleSyncIssueProjectionBudgetInvalidatesTransaction(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			f := newScaleFixture(t, repo)
+			workspace, principal := f.data.Workspace.URLKey, f.principals[0]
+			record := syncV2ScaleIssueDelta(t, f)
+			access, err := repo.ResolveEventAccess(t.Context(), workspace, principal.user.ID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before := store.CommittedChange{TxID: "before-budget", Seq: "10", Records: []store.RecordDelta{record}}
+			blocked := store.CommittedChange{TxID: "over-budget", Seq: "11", Records: []store.RecordDelta{record}, Invalidations: []string{"documents"}}
+			after := store.CommittedChange{TxID: "after-budget", Seq: "12", Records: []store.RecordDelta{record}}
+			event := domain.RealtimeEvent{ID: blocked.TxID, Seq: 11, Type: "issue.batch_updated",
+				Payload: mustJSON(t, map[string]any{"issueIds": []string{record.Key.ID}})}
+			source, err := f.service.eventSourceForAuthority(t.Context(), workspace, event, eventAuthority{access.SourceVersion(), access.AuthzEpoch})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Only this source has a small projection budget. Access, source
+			// selection, neighboring transactions and page encoding can succeed.
+			source.budget = &realtimeBudget{limit: int64(4<<10 + source.policy.Bytes())}
+			frame, err := ProjectEvent(t.Context(), source, access)
+			frame.Close()
+			if !errors.Is(err, store.ErrEventSourceBudget) || source.budget.peak.Load() == 0 {
+				t.Fatalf("expected budget exhaustion inside issue projection, got %v", err)
+			}
+
+			journal := scaleJournalFunc(func(_ context.Context, workspace, cursor string, limit, maxBytes int) (store.CommittedPage, error) {
+				if workspace != access.WorkspaceID || limit != 2 || maxBytes != syncV2DeltaBytes {
+					t.Fatal("journal request escaped its scope or budget")
+				}
+				page := store.CommittedPage{Head: after.Seq, AuthzEpoch: access.AuthzEpoch}
+				switch cursor {
+				case "9":
+					page.Next, page.HasMore, page.Transactions = blocked.Seq, true, []store.CommittedChange{before, blocked}
+				case blocked.Seq:
+					page.Next, page.Transactions = after.Seq, []store.CommittedChange{after}
+				default:
+					t.Fatalf("unexpected journal cursor %q", cursor)
+				}
+				return page, nil
+			})
+			read := func(cursor string) syncV2ChangesResponse {
+				t.Helper()
+				r := principal.request(workspace)
+				query := r.URL.Query()
+				query.Set("after", cursor)
+				query.Set("limit", "2")
+				r.URL.RawQuery = query.Encode()
+				w := httptest.NewRecorder()
+				f.service.syncChangesWithJournal(w, r, journal)
+				var result syncV2ChangesResponse
+				if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil {
+					t.Fatalf("changes from %s: %d %s", cursor, w.Code, w.Body)
+				}
+				return result
+			}
+			first := read("9")
+			if first.Next != blocked.Seq || first.Head != after.Seq || !first.HasMore || first.ResyncRequired || len(first.Transactions) != 2 {
+				t.Fatalf("projection budget changed the page boundary: %+v", first)
+			}
+			normal, invalidated := first.Transactions[0], first.Transactions[1]
+			if normal.TxID != before.TxID || len(normal.Upserts) != 1 || invalidated.TxID != blocked.TxID || invalidated.Seq != blocked.Seq ||
+				len(invalidated.Upserts) != 0 || len(invalidated.Removals) != 0 || !slices.Equal(invalidated.Invalidations, []string{"documents", "issues"}) {
+				t.Fatalf("expected complete transactions and an atomic invalidation: %+v", first.Transactions)
+			}
+			next := read(first.Next)
+			if next.Next != after.Seq || next.HasMore || next.ResyncRequired || len(next.Transactions) != 1 ||
+				next.Transactions[0].TxID != after.TxID || len(next.Transactions[0].Upserts) != 1 {
+				t.Fatalf("next page skipped an undelivered transaction: %+v", next)
+			}
+			if used := source.budget.used.Load(); used != 0 {
+				t.Fatalf("failed projection leaked %d bytes", used)
+			}
+		})
+	}
+}
+
+type syncV2WriteObserver struct {
+	*httptest.ResponseRecorder
+	observe func([]byte)
+	err     error
+}
+
+func (w *syncV2WriteObserver) Write(raw []byte) (int, error) {
+	w.observe(raw)
+	if w.err != nil {
+		return 0, w.err
+	}
+	return w.ResponseRecorder.Write(raw)
+}
+
+func TestScaleSyncPageKeepsSummariesChargedThroughWrite(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			f := newScaleFixture(t, repo)
+			workspace, principal := f.data.Workspace.URLKey, f.principals[0]
+			record := syncV2ScaleIssueDelta(t, f)
+			access, err := repo.ResolveEventAccess(t.Context(), workspace, principal.user.ID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page := store.CommittedPage{Next: "2", Head: "2", AuthzEpoch: access.AuthzEpoch, Transactions: []store.CommittedChange{
+				{TxID: "retained-1", Seq: "1", Records: []store.RecordDelta{record}},
+				{TxID: "retained-2", Seq: "2", Records: []store.RecordDelta{record}},
+			}}
+			journal := scaleJournalFunc(func(context.Context, string, string, int, int) (store.CommittedPage, error) {
+				return page, nil
+			})
+			budget := f.service.realtime.budget
+			baseline := budget.used.Load()
+			for _, tc := range []struct {
+				name string
+				err  error
+			}{{"success", nil}, {"write-error", io.ErrClosedPipe}} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := principal.request(workspace)
+					query := r.URL.Query()
+					query.Set("after", "0")
+					r.URL.RawQuery = query.Encode()
+					writes := 0
+					w := &syncV2WriteObserver{ResponseRecorder: httptest.NewRecorder(), err: tc.err, observe: func(raw []byte) {
+						writes++
+						var result syncV2ChangesResponse
+						if err := json.Unmarshal(raw, &result); err != nil || result.Next != "2" || len(result.Transactions) != 2 {
+							t.Fatalf("expected two projected transactions: %s (%v)", raw, err)
+						}
+						var bytes int64
+						for _, tx := range result.Transactions {
+							if len(tx.Upserts) != 1 {
+								t.Fatalf("expected a summary: %s", raw)
+							}
+							bytes += int64(len(tx.Upserts[0].Data))
+						}
+						if held := budget.used.Load() - baseline; held < bytes {
+							t.Errorf("write held %d realtime bytes for %d live summary bytes", held, bytes)
+						}
+					}}
+					f.service.syncChangesWithJournal(w, r, journal)
+					if writes != 1 || w.Header().Get("X-Flow-Sync") != "delta" {
+						t.Fatalf("expected one delta write, got %d", writes)
+					}
+					if used := budget.used.Load(); used != baseline {
+						t.Fatalf("write leaked reservations: got %d, started at %d", used, baseline)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestScaleSyncSharedPageKeepsSummariesCharged(t *testing.T) {
+	for driver, repo := range scaleServerTestStores(t) {
+		t.Run(driver, func(t *testing.T) {
+			f := newScaleFixture(t, repo)
+			workspace, principal := f.data.Workspace.URLKey, f.principals[0]
+			access, err := repo.ResolveEventAccess(t.Context(), workspace, principal.user.ID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			redis := miniredis.RunT(t)
+			coordinator, err := coordination.Open(t.Context(), coordination.Config{Mode: "standalone", Addrs: []string{redis.Addr()}, Prefix: "sync-page-work",
+				Cache: coordination.SharedCacheConfig{SyncPage: true, OpTimeout: time.Second}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer coordinator.Close()
+			service := &server{store: repo, coordinator: coordinator, realtime: newRealtimeHub()}
+			page := store.CommittedPage{Next: "1", Head: "1", AuthzEpoch: access.AuthzEpoch, Transactions: []store.CommittedChange{
+				{TxID: "shared-summary", Seq: "1", Records: []store.RecordDelta{syncV2ScaleIssueDelta(t, f)}},
+			}}
+			r := principal.request(workspace)
+			for _, phase := range []string{"compute", "cache-hit"} {
+				t.Run(phase, func(t *testing.T) {
+					encoding := service.syncPageEncoding(t.Context())
+					defer encoding.close()
+					computed := false
+					project := func(ctx context.Context) (syncV2ChangesResponse, error) {
+						computed = true
+						result := syncV2ChangesResponse{Next: "0", Head: page.Head, AuthzEpoch: page.AuthzEpoch, Transactions: []syncV2Transaction{}}
+						return service.projectSyncPage(r.WithContext(ctx), access, page, result, &encoding)
+					}
+					result, err := service.sharedSyncPage(t.Context(), access, page, "0", 1, &encoding, project)
+					if err != nil || computed != (phase == "compute") || len(result.Transactions) != 1 || len(result.Transactions[0].Upserts) != 1 {
+						t.Fatalf("expected a summary at %s, computed=%t result=%+v err=%v", phase, computed, result, err)
+					}
+					if held, want := service.realtime.budget.used.Load(), int64(cap(result.Transactions[0].Upserts[0].Data)); held < want {
+						t.Fatalf("held %d realtime bytes for %d live summary bytes", held, want)
+					}
+					encoding.close()
+					if used := service.realtime.budget.used.Load(); used != 0 {
+						t.Fatalf("shared page leaked %d bytes", used)
+					}
+				})
+			}
+		})
 	}
 }
 

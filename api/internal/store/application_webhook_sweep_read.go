@@ -17,6 +17,30 @@ func (s *SQLiteStore) BeginApplicationWebhookSweepRead(ctx context.Context, work
 	if resource != "app_user_notifications" && resource != "issue_sla" {
 		return nil, false, ErrMetadataRecordQuery
 	}
+	if !s.BoundedMetadataEnabled() {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		if workspace == "" {
+			workspace = s.lastWorkspaceKey
+		}
+		data, found := s.workspaces[workspace]
+		if !found {
+			return nil, false, nil
+		}
+		read := &WebhookDeliveryRead{Data: domain.Bootstrap{Workspace: domain.Workspace{ID: data.Workspace.ID, URLKey: data.Workspace.URLKey}}}
+		for _, hook := range data.Webhooks {
+			if !hook.Enabled || !slices.Contains(hook.ResourceTypes, resource) ||
+				resource == "app_user_notifications" && hook.ManagedBy != "application" || resource == "issue_sla" && hook.AuditLog {
+				continue
+			}
+			read.Data.Webhooks = append(read.Data.Webhooks, domain.Webhook{
+				ID: hook.ID, URL: hook.URL, TeamIDs: slices.Clone(hook.TeamIDs), TeamRestriction: hook.TeamRestriction,
+				Enabled: hook.Enabled, AuditLog: hook.AuditLog, ManagedBy: hook.ManagedBy, ApplicationClientID: hook.ApplicationClientID,
+				ResourceTypes: []string{resource},
+			})
+		}
+		return read, true, nil
+	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
 	read, found, err := s.BeginWebhookDeliveryRead(ctx, workspace, false)
 	if err != nil || !found {
@@ -130,6 +154,9 @@ func applicationSLAWebhookProject(ctx context.Context, owner *WebhookDeliveryRea
 }
 
 func (s *SQLiteStore) BeginApplicationSLAEventRead(ctx context.Context, workspace string, now time.Time) (_ *ApplicationSLAEventRead, found bool, err error) {
+	if !s.BoundedMetadataEnabled() {
+		return s.legacyApplicationSLAEvents(workspace, now)
+	}
 	ctx = context.WithValue(metadataLogicalUnpinnedContext(ctx), metadataWorkLeaseKey{}, nil)
 	owner, found, err := s.BeginWebhookDeliveryRead(ctx, workspace, false)
 	if err != nil || !found {
@@ -153,18 +180,11 @@ func (s *SQLiteStore) BeginApplicationSLAEventRead(ctx context.Context, workspac
 			return err
 		}
 		slas[sla.ID] = sla
-		if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
-			return nil
-		}
-		window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
-		if sla.DueAt.Sub(now) <= window {
+		if applicationSLAHighRisk(sla, now) {
 			if err := owner.reserve(ctx, 1024+uint64(len(sla.ID))*8); err != nil {
 				return err
 			}
-			highRisk = append(highRisk, ApplicationSLAWebhookEvent{
-				Key:    sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339),
-				Action: "highRisk", IssueID: sla.IssueID, SLA: sla, At: now,
-			})
+			highRisk = append(highRisk, applicationSLAHighRiskEvent(sla, now))
 		}
 		return nil
 	})
@@ -176,10 +196,7 @@ func (s *SQLiteStore) BeginApplicationSLAEventRead(ctx context.Context, workspac
 		if err := applicationSLAWebhookProject(ctx, owner, record, reflect.ValueOf(&event).Elem(), []string{"Type", "CreatedAt"}); err != nil {
 			return err
 		}
-		if now.Sub(event.CreatedAt) > 15*time.Minute {
-			return nil
-		}
-		action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
+		action := recentApplicationSLAAction(event, now)
 		if action == "" {
 			return nil
 		}
@@ -203,4 +220,77 @@ func (s *SQLiteStore) BeginApplicationSLAEventRead(ctx context.Context, workspac
 	}
 	read.Events = slices.Concat(read.Events, highRisk)
 	return read, true, ctx.Err()
+}
+
+func recentApplicationSLAAction(event domain.SLAEvent, now time.Time) string {
+	if now.Sub(event.CreatedAt) > 15*time.Minute {
+		return ""
+	}
+	switch event.Type {
+	case "started":
+		return "set"
+	case "breached":
+		return "breached"
+	default:
+		return ""
+	}
+}
+
+func applicationSLAHighRisk(sla domain.IssueSLA, now time.Time) bool {
+	if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
+		return false
+	}
+	window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
+	return sla.DueAt.Sub(now) <= window
+}
+
+func applicationSLAHighRiskEvent(sla domain.IssueSLA, now time.Time) ApplicationSLAWebhookEvent {
+	return ApplicationSLAWebhookEvent{
+		Key:    sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339),
+		Action: "highRisk", IssueID: sla.IssueID, SLA: sla, At: now,
+	}
+}
+
+func (s *SQLiteStore) legacyApplicationSLAEvents(workspace string, now time.Time) (*ApplicationSLAEventRead, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, found := s.workspaces[workspace]
+	if !found {
+		return nil, false, nil
+	}
+	read := &ApplicationSLAEventRead{}
+	needed := map[string]domain.IssueSLA{}
+	var eventSLAIDs []string
+	for _, event := range data.SLAEvents {
+		if action := recentApplicationSLAAction(event, now); action != "" {
+			read.Events = append(read.Events, ApplicationSLAWebhookEvent{Key: event.ID, Action: action, IssueID: event.IssueID, At: event.CreatedAt})
+			eventSLAIDs = append(eventSLAIDs, event.SLAID)
+			needed[event.SLAID] = domain.IssueSLA{}
+		}
+	}
+	for _, sla := range data.IssueSLAs {
+		_, wanted := needed[sla.ID]
+		risky := applicationSLAHighRisk(sla, now)
+		if !wanted && !risky {
+			continue
+		}
+		selected := domain.IssueSLA{ID: sla.ID, IssueID: sla.IssueID, RuleID: sla.RuleID, Status: sla.Status, StartedAt: sla.StartedAt, DueAt: sla.DueAt}
+		if sla.BreachedAt != nil {
+			at := *sla.BreachedAt
+			selected.BreachedAt = &at
+		}
+		if wanted {
+			needed[sla.ID] = selected
+		}
+		if risky {
+			read.Events = append(read.Events, applicationSLAHighRiskEvent(selected, now))
+		}
+	}
+	for i, id := range eventSLAIDs {
+		read.Events[i].SLA = needed[id]
+	}
+	return read, true, nil
 }

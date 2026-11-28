@@ -17,6 +17,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 
 	"github.com/coder/websocket"
 )
@@ -326,12 +327,17 @@ func (h *realtimeHub) subscribeTransport(workspace, since string, durable bool) 
 // middleware, so the deadline covers a blocked socket flush as well.
 type realtimeBudgetWriter struct {
 	http.ResponseWriter
-	budget       *realtimeBudget
-	frames       []realtimeEventKey
-	encodedBytes int64
+	budget     *realtimeBudget
+	telemetry  *telemetry.Recorder
+	frames     []realtimeEventKey
+	frameBytes int64
 }
 
 func (w *realtimeBudgetWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *realtimeBudgetWriter) recordFrame(transport, kind string, bytes int) {
+	telemetry.RealtimeMessage(w.telemetry, transport, kind, bytes)
+}
+
 func (w *realtimeBudgetWriter) Flush() {
 	_ = w.FlushError()
 }
@@ -345,14 +351,22 @@ func (w *realtimeBudgetWriter) releaseFrames() {
 		w.budget.releaseEvent(key)
 	}
 	w.frames = nil
-	w.budget.release(w.encodedBytes)
-	w.encodedBytes = 0
+	w.budget.release(w.frameBytes)
+	w.frameBytes = 0
 }
-func (w *realtimeBudgetWriter) reserveEncoding(bytes int64) bool {
-	if !w.budget.acquire(bytes) {
+
+func (w *realtimeBudgetWriter) retainFrame(event domain.RealtimeEvent) bool {
+	// Include the growth history of the slice of keys held through Flush.
+	const entryWork = 384
+	if !w.budget.acquire(entryWork) {
 		return false
 	}
-	w.encodedBytes += bytes
+	if !w.budget.retainEvent(event) {
+		w.budget.release(entryWork)
+		return false
+	}
+	w.frameBytes += entryWork
+	w.frames = append(w.frames, eventKey(event))
 	return true
 }
 
@@ -392,6 +406,7 @@ func (s *server) writeRealtimeBatch(w http.ResponseWriter, r *http.Request, subs
 }
 
 func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, event domain.RealtimeEvent) bool {
+	defer telemetry.Begin(r.Context(), telemetry.Realtime).End()
 	if handled, ok := s.writeSharedEventFrame(w, r, event); handled {
 		return ok
 	}
@@ -412,15 +427,7 @@ func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, 
 		projected = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
 	}
 	if sidechannel, _ := r.Context().Value(syncV2SidechannelKey{}).(bool); sidechannel {
-		if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(realtimeEventBytes(projected)*2+1024)) {
-			return false
-		}
-		raw, err := json.Marshal(projected)
-		if err != nil {
-			return false
-		}
-		frame := EventFrame{encoded: raw, id: projected.ID, visible: true, noCursor: true}
-		return frame.WriteSSE(w, s.realtime.node) && flushRealtime(w)
+		return writeRealtimeSSE(w, projected, s.realtime.node, true) && flushRealtime(w)
 	}
 	return writeSSE(w, projected, s.realtime.node) && flushRealtime(w)
 }
@@ -581,6 +588,44 @@ func (s *server) socketMessageAccessError(client *realtimeSocketClient, message 
 }
 
 var errRealtimeBudget = errors.New("realtime transport budget exceeded")
+
+type realtimeJSONEncoding struct {
+	ctx    context.Context
+	budget *realtimeBudget
+	held   int64
+}
+
+func (e *realtimeJSONEncoding) marshal(value any) ([]byte, error) {
+	if e.budget == nil {
+		return json.Marshal(value)
+	}
+	work, err := store.MetadataJSONEncodingWork(e.ctx, value)
+	if errors.Is(err, store.ErrMetadataWorkBudget) {
+		return nil, store.ErrEventSourceBudget
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !e.budget.acquire(int64(work)) {
+		return nil, store.ErrEventSourceBudget
+	}
+	raw, err := json.Marshal(value)
+	retained := int64(cap(raw))
+	e.held += retained
+	e.budget.release(int64(work) - retained)
+	return raw, err
+}
+
+func (e *realtimeJSONEncoding) close() {
+	e.releaseTo(0)
+}
+
+func (e *realtimeJSONEncoding) releaseTo(retained int64) {
+	if excess := e.held - retained; excess > 0 {
+		e.held = retained
+		e.budget.release(excess)
+	}
+}
 
 func acquireRealtimeWork(ctx context.Context, budget *realtimeBudget, size int64) (func(), error) {
 	if ctx.Err() != nil {

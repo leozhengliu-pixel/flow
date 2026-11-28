@@ -57,19 +57,18 @@ func (r *boundedDiscussionAttempt) reserveIssueCreateCallback(ctx context.Contex
 // the creation in the same request (triage suggestions) without the room
 // the creation no longer uses.
 func (r *boundedDiscussionAttempt) reserveIssueCreateEvent(ctx context.Context, payload any, entity domain.Issue) (func(), error) {
-	input, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(payload), 0)
+	input, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(payload))
 	if err != nil {
 		return nil, err
 	}
-	output, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(entity), 0)
+	output, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(entity))
 	if err != nil {
 		return nil, err
 	}
-	// The literal event retains the encoded input. Realtime decodes that
-	// input and encodes it again alongside the created entity. Two input
-	// encoding allowances cover the retained raw bytes and decoded tree as
-	// well as that input's part of the enriched encoding; the entity owns
-	// the other part of the encoding.
+	// The event keeps the encoded input. Realtime decodes that input,
+	// encodes its members and the created entity, then assembles the
+	// envelope in a single allocation. Each record allowance covers
+	// copies into the envelope. The second input allowance covers decode.
 	if uint64(output) > uint64(metadataWorkBytes())-(64<<10) || uint64(input) > (uint64(metadataWorkBytes())-uint64(output)-(64<<10))/2 {
 		return nil, ErrMetadataWorkBudget
 	}

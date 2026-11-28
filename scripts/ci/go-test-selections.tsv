@@ -183,6 +183,7 @@ dialect	./cmd/server	TestDefaultColdRouteTable
 dialect	./cmd/server	TestDefaultViewerAuthenticationDifferential
 dialect	./cmd/server	TestDeferredAuditsDifferential
 dialect	./cmd/server	TestDeliveryAuditDifferential
+dialect	./cmd/server	TestDeliverySchedulerIdleClonesAndEmailDigests
 dialect	./cmd/server	TestDeliveryOutcomesDifferential
 dialect	./cmd/server	TestDeliveryWorkerNetworkAndCAS
 dialect	./cmd/server	TestDesktopAcknowledgementRoutesDifferential

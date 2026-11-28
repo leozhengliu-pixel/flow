@@ -92,9 +92,7 @@ func (p *legacyMetadataWritePlan) writeLargeRow(ctx context.Context, f *legacyMe
 		}
 		stored := raw
 		if offloadFields[name] && p.tx.database != nil && p.tx.database.content != nil {
-			// Offload rewrites version bodies against the record's own
-			// content; it decodes the member map and the versions.
-			if err := scratch.reserve(ctx, uint64(len(raw))*3+4096); err != nil {
+			if err := reserveOffloadRecordWork(ctx, scratch, name, raw); err != nil {
 				return err
 			}
 			if stored, err = offloadRecord(ctx, p.tx, p.workspace, name, raw); err != nil {

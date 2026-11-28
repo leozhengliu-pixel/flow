@@ -32,7 +32,7 @@ func TestScaleLogicalPublication(t *testing.T) {
 			}
 			next := cloneBootstrap(before)
 			next.IntegrationConnections[0].Status = "publication-updated"
-			changes, _, err := scaleRecordChanges(before, next)
+			changes, _, err := scaleRecordChanges(t.Context(), nil, before, next)
 			if err != nil {
 				t.Fatal(err)
 			}

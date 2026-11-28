@@ -195,7 +195,7 @@ func TestNotificationPointDifferential(t *testing.T) {
 					case "personal-worker":
 						raw, _ := json.Marshal(chatPersonalJob{DeliveryID: deliveryID, NotificationID: notificationID, UserID: actor.ID, OpenID: identity.OpenID})
 						err = service.processChatPersonalNotification(t.Context(), record, domain.ChatJob{DedupKey: "sw42-notification-dedup", Payload: raw})
-						deliveries, lookup := repo.NotificationDeliveries(t.Context(), workspace, []string{"delivering", "delivered", "failed"}, time.Now().Add(time.Hour))
+						deliveries, lookup := repo.NotificationDeliveries(t.Context(), workspace, store.NotificationDeliverySelection{Statuses: []string{"delivering", "delivered", "failed"}}, time.Now().Add(time.Hour))
 						if lookup != nil {
 							t.Fatal(lookup)
 						}

@@ -27,6 +27,8 @@ func (c *dueSwitchContext) Err() error {
 	return c.Context.Err()
 }
 
+var pendingDeliverySelection = NotificationDeliverySelection{Statuses: []string{"pending"}}
+
 func dueFixture(t *testing.T) (scaleFixture, *SQLiteStore, time.Time) {
 	t.Helper()
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
@@ -65,13 +67,14 @@ func TestNotificationReadDueDifferential(t *testing.T) {
 	f, view, now := dueFixture(t)
 	workspace := f.data.Workspace.URLKey
 	for _, statuses := range [][]string{{"pending"}, {"failed"}, {"pending", "failed"}, {"missing"}, {}} {
-		expected, err := f.NotificationDeliveries(t.Context(), workspace, statuses, now)
+		selection := NotificationDeliverySelection{Statuses: statuses}
+		expected, err := f.NotificationDeliveries(t.Context(), workspace, selection, now)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, source := range []*SQLiteStore{f.SQLiteStore, view} {
 			for _, key := range []string{workspace, ""} {
-				read, err := source.BeginDueNotificationDeliveryRead(t.Context(), key, statuses, now)
+				read, err := source.BeginDueNotificationDeliveryRead(t.Context(), key, selection, now)
 				if err != nil || !reflect.DeepEqual(read.Deliveries, expected.NotificationDeliveries) {
 					t.Fatal("due delivery selection/order/typed fields changed", err)
 				}
@@ -84,8 +87,8 @@ func TestNotificationReadDueDifferential(t *testing.T) {
 		}
 	}
 	for _, key := range []string{"missing", workspace + "\x00", strings.ToUpper(workspace)} {
-		_, expectedErr := f.NotificationDeliveries(t.Context(), key, []string{"pending"}, now)
-		if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), key, []string{"pending"}, now); read != nil || err == nil || err.Error() != expectedErr.Error() {
+		_, expectedErr := f.NotificationDeliveries(t.Context(), key, pendingDeliverySelection, now)
+		if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), key, pendingDeliverySelection, now); read != nil || err == nil || err.Error() != expectedErr.Error() {
 			t.Fatal("physical installed lookup changed", key, err, expectedErr)
 		}
 	}
@@ -93,12 +96,12 @@ func TestNotificationReadDueDifferential(t *testing.T) {
 		t.Fatal("native due selection decoded metadata")
 	}
 	before := testing.AllocsPerRun(3, func() {
-		if _, err := f.NotificationDeliveries(t.Context(), workspace, []string{"pending"}, now); err != nil {
+		if _, err := f.NotificationDeliveries(t.Context(), workspace, pendingDeliverySelection, now); err != nil {
 			t.Fatal(err)
 		}
 	})
 	after := testing.AllocsPerRun(3, func() {
-		read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{"pending"}, now)
+		read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, pendingDeliverySelection, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +117,7 @@ func TestNotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, err := view.BeginDueNotificationDeliveryRead(parent, workspace, []string{"pending"}, now)
+	read, err := view.BeginDueNotificationDeliveryRead(parent, workspace, pendingDeliverySelection, now)
 	if err != nil {
 		releaseParent()
 		t.Fatal(err)
@@ -137,13 +140,13 @@ func TestNotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	if read, err := view.BeginDueNotificationDeliveryRead(cancelled, "missing", []string{"pending"}, now); read != nil || err == nil || err.Error() != "workspace not found" {
+	if read, err := view.BeginDueNotificationDeliveryRead(cancelled, "missing", pendingDeliverySelection, now); read != nil || err == nil || err.Error() != "workspace not found" {
 		t.Fatal("missing workspace lost source-first error precedence", err)
 	}
-	if read, err := view.BeginDueNotificationDeliveryRead(cancelled, workspace, []string{"pending"}, now); read != nil || !errors.Is(err, context.Canceled) {
+	if read, err := view.BeginDueNotificationDeliveryRead(cancelled, workspace, pendingDeliverySelection, now); read != nil || !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled reader acquired output", err)
 	}
-	if _, err := view.NotificationDeliveries(t.Context(), workspace, []string{"pending"}, now); !errors.Is(err, ErrBoundedMetadataCoverage) {
+	if _, err := view.NotificationDeliveries(t.Context(), workspace, pendingDeliverySelection, now); !errors.Is(err, ErrBoundedMetadataCoverage) {
 		t.Fatal("unowned compatibility API remained available bounded", err)
 	}
 	if _, err := view.IntegrationConnections(t.Context(), workspace, "gitlab"); !errors.Is(err, ErrBoundedMetadataCoverage) {
@@ -153,24 +156,28 @@ func TestNotificationReadDueOwnershipErrorsAndBounds(t *testing.T) {
 	originalLimit := view.metadataResidency.work.limit
 	view.metadataResidency.work.limit = dueDeliveryWork - 1
 	view.metadataResidency.work.mu.Unlock()
-	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), "missing", []string{"pending"}, now); read != nil || err == nil || err.Error() != "workspace not found" {
+	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), "missing", pendingDeliverySelection, now); read != nil || err == nil || err.Error() != "workspace not found" {
 		t.Fatal("missing workspace lost precedence over work saturation", err)
 	}
-	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{"pending"}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
+	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, pendingDeliverySelection, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("saturated work acquired due output", err)
 	}
 	view.metadataResidency.work.mu.Lock()
 	view.metadataResidency.work.limit = originalLimit
 	view.metadataResidency.work.mu.Unlock()
-	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{strings.Repeat("x", dueDeliveryWork/33+1)}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
+	oversized := strings.Repeat("x", dueDeliveryWork/33+1)
+	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, NotificationDeliverySelection{Statuses: []string{oversized}}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("status arguments escaped pre-bind budget", err)
+	}
+	if read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, NotificationDeliverySelection{Channel: oversized}, now); read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
+		t.Fatal("channel argument escaped pre-bind budget", err)
 	}
 	for _, raw := range []string{"", `{"id":7}`, `{"id":"oversized","error":"` + strings.Repeat("x", MetadataRecordPageMaxBytes) + `"}`} {
 		if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_content_records SET data=? WHERE workspace_key=? AND kind='delivery' AND id=?`, []byte(raw), workspace, "sw15-delivery-a"); err != nil {
 			t.Fatal(err)
 		}
-		_, legacyErr := f.NotificationDeliveries(t.Context(), workspace, []string{"pending"}, now)
-		read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{"pending"}, now)
+		_, legacyErr := f.NotificationDeliveries(t.Context(), workspace, pendingDeliverySelection, now)
+		read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, pendingDeliverySelection, now)
 		if len(raw) > MetadataRecordPageMaxBytes {
 			if read != nil || !errors.Is(err, ErrMetadataWorkBudget) {
 				t.Fatal("large due row cloned instead of bounded refusal", err)
@@ -194,23 +201,69 @@ func TestNotificationReadDueLimitAndOffConnections(t *testing.T) {
 	defer tx.Rollback()
 	for index := range 1005 {
 		if err := writeContentRecord(t.Context(), tx, workspace, "delivery", "", domain.NotificationDelivery{
-			ID: fmt.Sprintf("sw15-limit-%04d", index), Status: "pending", Channel: "email", CreatedAt: now, UpdatedAt: now,
+			ID: fmt.Sprintf("sw15-limit-%04d", index), Status: "pending", Channel: "desktop", CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := writeContentRecord(t.Context(), tx, workspace, "delivery", "", domain.NotificationDelivery{
+		ID: "sw15-other-channel", Status: "pending", Channel: "email ", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeContentRecord(t.Context(), tx, workspace, "delivery", "", domain.NotificationDelivery{
+		ID: "sw15-terminal-failure", Status: "failed", Channel: "email", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	expected, err := f.NotificationDeliveries(t.Context(), workspace, []string{"pending"}, now)
+	expected, err := f.NotificationDeliveries(t.Context(), workspace, pendingDeliverySelection, now)
 	if err != nil || len(expected.NotificationDeliveries) != 1000 {
 		t.Fatal("legacy due-limit fixture failed", err)
 	}
-	read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, []string{"pending"}, now)
+	read, err := view.BeginDueNotificationDeliveryRead(t.Context(), workspace, pendingDeliverySelection, now)
 	if err != nil || !reflect.DeepEqual(read.Deliveries, expected.NotificationDeliveries) {
 		t.Fatal("due 1000-row limit or ordering changed", err)
 	}
 	read.Close()
+	pendingEmail := NotificationDeliverySelection{Statuses: []string{"pending"}, Channel: "email"}
+	for _, source := range []*SQLiteStore{f.SQLiteStore, view} {
+		for _, check := range []struct {
+			selection NotificationDeliverySelection
+			want      []string
+		}{
+			{pendingEmail, []string{"sw15-delivery-a", "sw15-delivery-b"}},
+			{NotificationDeliverySelection{Statuses: []string{"failed", "pending-disabled"}, Channel: "email", ExcludeTerminalFailures: true}, []string{"sw15-delivery-failed"}},
+			{NotificationDeliverySelection{Statuses: []string{"pending"}, Channel: "chat"}, []string{"sw15-delivery-c"}},
+		} {
+			selected, err := source.BeginDueNotificationDeliveryRead(t.Context(), workspace, check.selection, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ids []string
+			for _, row := range selected.Deliveries {
+				ids = append(ids, row.ID)
+			}
+			selected.Close()
+			if !reflect.DeepEqual(ids, check.want) {
+				t.Fatalf("selection %+v got %v, want %v", check.selection, ids, check.want)
+			}
+		}
+	}
+	if f.dialect == "sqlite" {
+		query, args := f.dueNotificationDeliveryQuery(workspace, pendingEmail, now)
+		var id, parent, unused int
+		var plan string
+		if err := f.db.QueryRowContext(t.Context(), "EXPLAIN QUERY PLAN SELECT data"+query, args...).Scan(&id, &parent, &unused, &plan); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("email selection plan: %s", plan)
+		if !strings.Contains(plan, "content_status_idx") || !strings.Contains(plan, "next_attempt_at<") {
+			t.Fatalf("email selection lost the indexed due range: %s", plan)
+		}
+	}
 	legacy := &SQLiteStore{workspaces: map[string]domain.Bootstrap{"physical": {IntegrationConnections: []domain.IntegrationConnection{
 		{ID: "first", Provider: "GitLab", SecretHash: "not-public", Config: map[string]string{"key": "value"}},
 		{ID: "other", Provider: "slack"}, {ID: "duplicate", Provider: "gitlab"},
@@ -246,12 +299,12 @@ func TestNotificationReadDefaultSwitch(t *testing.T) {
 		view.lastWorkspaceKey = "new-physical"
 		view.mu.Unlock()
 	}}
-	read, err := view.BeginDueNotificationDeliveryRead(ctx, "", []string{"pending"}, now)
+	read, err := view.BeginDueNotificationDeliveryRead(ctx, "", pendingDeliverySelection, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer read.Close()
-	expected, err := f.NotificationDeliveries(t.Context(), workspace, []string{"pending"}, now)
+	expected, err := f.NotificationDeliveries(t.Context(), workspace, pendingDeliverySelection, now)
 	if err != nil || !reflect.DeepEqual(read.Deliveries, expected.NotificationDeliveries) {
 		t.Fatal("default/key source was not re-resolved atomically after admission", err)
 	}

@@ -53,6 +53,7 @@ wins over the chart's value. Empty when there is no file to render.
   storage.uploadMaxBytes -> server.storage.uploadMaxBytes
   database.recordJournalCapture -> server.database.recordJournalCapture
   documents.requestBodyMaxBytes -> server.documents.requestBodyMaxBytes
+  telemetry -> server.telemetry, with Secret keys projected as header files
 */ -}}
 {{- define "flow.config.file" -}}
 {{- $file := deepCopy (default dict .Values.config.file) -}}
@@ -82,6 +83,23 @@ wins over the chart's value. Empty when there is no file to render.
 {{- end -}}
 {{- $_ := set $server "documents" $documents -}}
 {{- $_ := set $file "server" $server -}}
+{{- end -}}
+{{- if not .Values.config.fileConfigMap.name -}}
+{{- with .Values.telemetry -}}
+{{- $server := default dict $file.server -}}
+{{- $telemetry := omit . "existingSecret" -}}
+{{- with .existingSecret -}}
+{{- if and .name .headers -}}
+{{- $headers := deepCopy (default dict $telemetry.headers) -}}
+{{- range $header, $key := .headers -}}
+{{- $_ := set $headers $header (printf "/var/run/flow/telemetry/%s" $key) -}}
+{{- end -}}
+{{- $_ := set $telemetry "headers" $headers -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $server "telemetry" (mergeOverwrite $telemetry (default dict $server.telemetry)) -}}
+{{- $_ := set $file "server" $server -}}
+{{- end -}}
 {{- end -}}
 {{- if $file -}}
 {{- toYaml $file -}}

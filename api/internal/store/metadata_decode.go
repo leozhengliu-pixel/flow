@@ -12,11 +12,13 @@ import (
 	"sync"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/telemetry"
 )
 
 // Decode split metadata records directly into their typed destinations. Do not
 // rebuild a second giant JSON blob just to parse it again during startup/reload.
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
+	defer telemetry.Begin(ctx, telemetry.MetadataHydrate).End()
 	var data domain.Bootstrap
 	scope, scoped := metadataRecordScopeFromContext(s.ContextWithDatabaseFeatures(ctx))
 	if s.metadataResidency != nil && !scoped {

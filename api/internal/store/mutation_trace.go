@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"flow/api/internal/telemetry"
 )
 
 // Slow workspace writes are logged with their stage timings so a regression
@@ -36,6 +38,7 @@ type mutationStage struct {
 type mutationTrace struct {
 	mu       sync.Mutex
 	path     string
+	ctx      context.Context
 	start    time.Time
 	last     time.Time
 	locked   time.Time
@@ -46,6 +49,9 @@ type mutationTrace struct {
 func startMutationTrace(ctx context.Context) (context.Context, *mutationTrace) {
 	now := time.Now()
 	trace := &mutationTrace{start: now, last: now}
+	if telemetry.Enabled() {
+		trace.ctx = ctx
+	}
 	return context.WithValue(ctx, mutationTraceKey{}, trace), trace
 }
 
@@ -100,6 +106,15 @@ func (t *mutationTrace) mark(stage string) {
 }
 
 func (t *mutationTrace) report(workspace, eventType string, err error) {
+	if t.ctx != nil {
+		t.mu.Lock()
+		at := t.start
+		for _, stage := range t.stages {
+			telemetry.MutationStage(t.ctx, stage.name, eventType, at, stage.duration)
+			at = at.Add(stage.duration)
+		}
+		t.mu.Unlock()
+	}
 	threshold := slowMutationThreshold()
 	if threshold <= 0 {
 		return

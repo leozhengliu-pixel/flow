@@ -5,8 +5,8 @@
     "BeginApplicationWebhookSweepRead": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Reuses the proven installed WebhookDeliveryRead owner with routing=false and dynamically admitted consumed hook fields. App notification selection retains exactly ManagedBy/application, Enabled and resource membership, including AuditLog and empty URL; SLA selection retains !AuditLog, Enabled and issue_sla, including empty URL. Native order/duplicates/empty IDs, client/organization strings and team filters remain exact; unrelated hook bodies and resource-type strings do not materialize. TestScaleApplicationWebhookSweepNative/CapturedAndFailure/WarmReloadBodyBound pass persistent SQLite twice and race for default/physical sources, native NUL/custom-zone headers, independent captured generations, cancellation/quota/concurrent ownership and body10x with identical344552-byte admission, SQL0, decode0 and final work0. Actual three-adapter queue table compares full stored rows/payloads in warm/reloaded off/on modes. No capacity claim.",
-      "accessors": ["BeginWebhookDeliveryRead"],
+      "reason": "Legacy mode projects eligible hook headers under the read lock. Bounded mode reuses the installed WebhookDeliveryRead owner with routing=false and dynamically admitted consumed hook fields. App notification selection retains exactly ManagedBy/application, Enabled and resource membership, including AuditLog and empty URL. SLA selection retains !AuditLog, Enabled and issue_sla, including empty URL. Native order/duplicates/empty IDs, client/organization strings and team filters remain exact. TestScaleApplicationWebhookSweepNative/CapturedAndFailure/WarmReloadBodyBound cover default/physical sources, native NUL/custom-zone headers, independent captured generations, cancellation/quota/concurrent ownership and body10x with identical344552-byte admission, SQL0, decode0 and final work0. The queue differential compares full stored rows/payloads in warm/reloaded off/on modes.",
+      "accessors": ["resident-state", "BeginWebhookDeliveryRead"],
       "temperature": "hot",
       "temperatureReason": "App inbox and SLA sweep delivery scheduler metadata input.",
       "callers": ["server/server.sweepAppUserNotifications", "server/server.dispatchAppAssignmentNotifications", "server/server.sweepIssueSLAWebhooks"]
@@ -19,6 +19,14 @@
       "temperature": "hot",
       "temperatureReason": "Issue SLA recent-event and high-risk delivery scheduler sweep.",
       "callers": ["server/server.sweepIssueSLAWebhooks"]
+    },
+    "legacyApplicationSLAEvents": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Reads the installed SLA and event lists under the read lock. It retains only recent started/breached events and high-risk SLAs, projecting the fields used by the webhook envelope in the original order.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "callers": ["store/SQLiteStore.BeginApplicationSLAEventRead"]
     }
   }
 }

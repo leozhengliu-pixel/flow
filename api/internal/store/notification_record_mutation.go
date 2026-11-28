@@ -61,6 +61,12 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 	var result domain.Notification
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	var output *ResourceRead
+	if s.BoundedMetadataEnabled() {
+		output = &ResourceRead{store: s}
+		defer output.Close()
+		ctx = withIssueRecordWriteAdmission(ctx, s)
+	}
 	err := func() error {
 		tx, err := s.lockWorkspaceWritesTx(ctx)
 		if err != nil {
@@ -83,7 +89,12 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		if result.RecipientID != userID {
 			return sql.ErrNoRows
 		}
-		previous, err := json.Marshal(result)
+		var comparison *ResourceRead
+		if output != nil {
+			comparison = &ResourceRead{store: s}
+			defer comparison.Close()
+		}
+		previous, err := encodeOwnedMetadataValue(ctx, comparison, result)
 		if err != nil {
 			return err
 		}
@@ -91,16 +102,23 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		mutate(&result)
 		unstamped := result
 		unstamped.UpdatedAt = stamped
-		if next, err := json.Marshal(unstamped); err == nil && bytes.Equal(previous, next) {
+		next, err := encodeOwnedMetadataValue(ctx, comparison, unstamped)
+		if errors.Is(err, ErrMetadataWorkBudget) {
+			return err
+		}
+		if err == nil && bytes.Equal(previous, next) {
 			// An update to the current values (its updatedAt aside) writes
 			// nothing and keeps the stored record.
 			result = unstamped
 			return ErrNoMutation
 		}
+		if comparison != nil {
+			comparison.Close()
+		}
 		if err := writeContentRecord(ctx, tx, workspace, "notification", resource, result); err != nil {
 			return err
 		}
-		payload, err := json.Marshal(input)
+		payload, err := encodeOwnedMetadataValue(ctx, output, input)
 		if err != nil {
 			return err
 		}
@@ -108,7 +126,14 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceKey: workspace}); err != nil {
 			return err
 		}
-		realtime = enrichRealtimePayload(payload, result, eventType)
+		if output != nil {
+			realtime, err = s.encodeMetadataRealtimePayload(ctx, output, payload, result, eventType)
+			if err != nil {
+				return err
+			}
+		} else {
+			realtime = enrichMetadataRealtimePayload(payload, result, eventType)
+		}
 		return tx.Commit()
 	}()
 	if errors.Is(err, ErrNoMutation) {

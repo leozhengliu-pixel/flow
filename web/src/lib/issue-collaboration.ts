@@ -2,6 +2,7 @@ import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwareness
 import { applyUpdate, encodeStateAsUpdate, encodeStateVector, parseUpdateMeta, type Doc } from 'yjs'
 import { realtimeClientId } from '@/lib/api'
 import type { User } from '@/types/flow'
+import { activeBrowserTelemetry } from './browser-telemetry'
 
 /** How long a tab may stay hidden before its collaboration socket is released. */
 const hiddenSuspendMs = 20_000
@@ -211,6 +212,7 @@ export class IssueCollaborationProvider {
       removeAwarenessStates(this.awareness, [...this.awareness.getStates().keys()].filter(id => id !== this.document.clientID), this)
       this.emit('disconnected')
       if (!this.destroyed && this.started && !this.suspended) {
+        activeBrowserTelemetry()?.record({ kind: 'reconnect', status: 'collaboration' })
         const delay = Math.min(10_000, 400 * 2 ** this.retry++)
         this.reconnectTimer = window.setTimeout(this.connect, delay)
       }

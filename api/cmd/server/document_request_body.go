@@ -18,6 +18,7 @@ import (
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
 // Document request bodies (#264 follow-up).
@@ -197,6 +198,7 @@ func (s *server) decodeRequestDocumentBody(w http.ResponseWriter, r *http.Reques
 		*r = *withDocumentRequestBody(s, w, r)
 		body = requestDocumentBody(r)
 	}
+	defer telemetry.Begin(r.Context(), telemetry.AuthorizationBody).End()
 	if err := body.decode(r.Context()); err != nil {
 		writeDocumentBodyError(w, err)
 		return false

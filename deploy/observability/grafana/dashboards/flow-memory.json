@@ -1,0 +1,59 @@
+{
+  "uid": "flow-memory",
+  "title": "Flow Memory",
+  "schemaVersion": 39,
+  "tags": ["flow"],
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Heap and container peaks by replica",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 9},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [
+        {"refId": "A", "expr": "flow_process_heap_inuse_bytes_max", "legendFormat": "Heap peak {{service_instance_id}}"},
+        {"refId": "B", "expr": "flow_cgroup_memory_peak_bytes", "legendFormat": "Kernel peak {{service_instance_id}}"},
+        {"refId": "C", "expr": "flow_cgroup_memory_current_bytes", "legendFormat": "Cgroup now {{service_instance_id}}"},
+        {"refId": "D", "expr": "flow_cgroup_memory_max_bytes", "legendFormat": "Cgroup cap {{service_instance_id}}"},
+        {"refId": "E", "expr": "flow_process_go_limit_bytes", "legendFormat": "Go limit {{service_instance_id}}"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Metadata budget and request bodies",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 9},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [
+        {"refId": "A", "expr": "flow_metadata_work_used_bytes_max", "legendFormat": "Work peak {{service_instance_id}}"},
+        {"refId": "B", "expr": "flow_metadata_work_limit_bytes", "legendFormat": "Work limit {{service_instance_id}}"},
+        {"refId": "C", "expr": "flow_http_server_body_in_flight_bytes_max", "legendFormat": "Body bytes peak {{service_instance_id}}"},
+        {"refId": "D", "expr": "flow_memory_budget_used_bytes", "legendFormat": "{{flow_kind}} {{service_instance_id}}"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Cgroup pressure and OOMs",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 9, "w": 12, "h": 8},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "increase(flow_cgroup_memory_events_oom_kill_total[5m])", "legendFormat": "OOM kills {{service_instance_id}}"},
+        {"refId": "B", "expr": "increase(flow_cgroup_memory_events_max_total[5m])", "legendFormat": "Max events {{service_instance_id}}"},
+        {"refId": "C", "expr": "flow_cgroup_memory_psi_full_avg10_percent", "legendFormat": "Full stall % {{service_instance_id}}"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Memory diagnostic events",
+      "type": "logs",
+      "gridPos": {"x": 12, "y": 9, "w": 12, "h": 8},
+      "datasource": {"uid": "flow-events", "type": "loki"},
+      "targets": [{"refId": "A", "expr": "{service_name=\"flow-api\"} |= \"flow.memory.\""}]
+    }
+  ]
+}

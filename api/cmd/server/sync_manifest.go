@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -93,7 +94,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("surface") == "local-store" {
 		if !syncFlagEnabled("FLOW_SYNC_MANIFEST") {
-			writeSyncJSON(w, struct {
+			s.writeSyncJSON(w, r, struct {
 				Schema       int      `json:"schema"`
 				Capabilities []string `json:"capabilities"`
 			}{Schema: 2, Capabilities: []string{}}, 4096)
@@ -166,11 +167,35 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, result, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, result, store.MetadataRecordPageMaxBytes)
 }
 
-func writeSyncJSON(w http.ResponseWriter, value any, budget int) {
+func (s *server) marshalSyncJSON(ctx context.Context, value any) ([]byte, func(), error) {
+	if s.store == nil || !s.store.BoundedMetadataEnabled() {
+		raw, err := json.Marshal(value)
+		return raw, func() {}, err
+	}
+	read, err := s.store.BeginMetadataJSONRead(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := read.ReserveEncoding(ctx, value); err != nil {
+		read.Close()
+		return nil, nil, err
+	}
 	raw, err := json.Marshal(value)
+	if err != nil {
+		read.Close()
+		return nil, nil, err
+	}
+	return raw, read.Close, nil
+}
+
+func (s *server) writeSyncJSON(w http.ResponseWriter, r *http.Request, value any, budget int) {
+	raw, release, err := s.marshalSyncJSON(r.Context(), value)
+	if release != nil {
+		defer release()
+	}
 	if err != nil || len(raw)+1 > budget {
 		writeError(w, http.StatusServiceUnavailable, "Sync response exceeds the page budget")
 		return
@@ -178,7 +203,9 @@ func writeSyncJSON(w http.ResponseWriter, value any, budget int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(append(raw, '\n'))
+	if _, err := w.Write(raw); err == nil {
+		_, _ = io.WriteString(w, "\n")
+	}
 }
 
 func writeSyncError(w http.ResponseWriter, err error) {

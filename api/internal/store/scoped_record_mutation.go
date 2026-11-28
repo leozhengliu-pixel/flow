@@ -160,7 +160,7 @@ func (s *SQLiteStore) mutateProjectRecordSelection(ctx context.Context, workspac
 				}
 			}
 		}
-		changes, root, err := scaleRecordChanges(before, next)
+		changes, root, err := scaleRecordChanges(ctx, nil, before, next)
 		if err != nil {
 			return err
 		}
@@ -410,20 +410,12 @@ func scaleLoadResourceContent(ctx context.Context, tx *sqlTx, workspace string, 
 
 // Split only the owned working set; never build an index of the resident
 // collection. The canonical writers retain merging, search and journal hooks.
-func scaleRecordChanges(before, after domain.Bootstrap) ([]metadataRecordChange, map[string]json.RawMessage, error) {
-	a, err := json.Marshal(collectionMetadata(before))
+func scaleRecordChanges(ctx context.Context, owner *ResourceRead, before, after domain.Bootstrap) ([]metadataRecordChange, map[string]json.RawMessage, error) {
+	aRoot, _, old, err := splitMetadataImage(ctx, owner, reflect.ValueOf(collectionMetadata(before)), false)
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := json.Marshal(collectionMetadata(after))
-	if err != nil {
-		return nil, nil, err
-	}
-	aRoot, _, old, err := splitWorkspaceMetadata(a)
-	if err != nil {
-		return nil, nil, err
-	}
-	bRoot, _, next, err := splitWorkspaceMetadata(b)
+	bRoot, _, next, err := splitMetadataImage(ctx, owner, reflect.ValueOf(collectionMetadata(after)), false)
 	if err != nil {
 		return nil, nil, err
 	}

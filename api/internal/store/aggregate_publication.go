@@ -58,6 +58,19 @@ func (s *SQLiteStore) prepareMetadataAggregatePrevious(
 func (s *SQLiteStore) prepareMetadataAggregateOutputs(
 	ctx context.Context, before, after metadataAggregateImage, id string,
 	previous bool, payload json.RawMessage, eventType string, realtime bool,
+) (*metadataAggregatePublication, error) {
+	resolve := func(prior bool) (metadataAggregateNode, error) {
+		if prior {
+			return metadataAggregateResolve(ctx, before, id)
+		}
+		return metadataAggregateResolve(ctx, after, id)
+	}
+	return s.prepareMetadataAggregateResolvedOutputs(ctx, resolve, id, previous, payload, eventType, realtime)
+}
+
+func (s *SQLiteStore) prepareMetadataAggregateResolvedOutputs(
+	ctx context.Context, resolve func(prior bool) (metadataAggregateNode, error), id string,
+	previous bool, payload json.RawMessage, eventType string, realtime bool,
 ) (publication *metadataAggregatePublication, err error) {
 	publication = &metadataAggregatePublication{}
 	owner := publication
@@ -77,7 +90,7 @@ func (s *SQLiteStore) prepareMetadataAggregateOutputs(
 	var oldValue any
 	releaseOld := func() {}
 	if previous && strings.TrimSpace(id) != "" {
-		node, err := metadataAggregateResolve(ctx, before, id)
+		node, err := resolve(true)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +100,7 @@ func (s *SQLiteStore) prepareMetadataAggregateOutputs(
 		}
 		defer releaseOld()
 	}
-	node, err := metadataAggregateResolve(ctx, after, id)
+	node, err := resolve(false)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +155,19 @@ func (s *SQLiteStore) metadataAggregateNormalizeOwned(ctx context.Context, node 
 	if node == nil {
 		return nil, func() {}, ctx.Err()
 	}
-	raw, releaseRaw, err := s.metadataAggregateEncodeOwned(ctx, node)
+	var raw json.RawMessage
+	var releaseRaw func()
+	var err error
+	if native, ok := node.(metadataAggregateNativeNode); ok {
+		if _, bodies := metadataJSONLargeBodies(native.value); bodies != 0 || metadataJSONLargeRevisions(native.value) {
+			raw, releaseRaw, err = s.encodeMetadataMutationPayload(ctx, native.value.Interface())
+		}
+	}
+	if releaseRaw == nil {
+		// The logical walk classifies invalid wire values the same way
+		// for stored frames and native values.
+		raw, releaseRaw, err = s.metadataAggregateEncodeOwned(ctx, node)
+	}
 	if err != nil {
 		var syntax *json.SyntaxError
 		var unsupportedType *json.UnsupportedTypeError
@@ -417,25 +442,22 @@ func (s *SQLiteStore) metadataAggregateEncodeNormalizedOwned(ctx context.Context
 	if depth < metadataLogicalDepth/2-4 {
 		return s.metadataAggregateEncodeOwned(ctx, metadataAggregateNativeNode{value: reflect.ValueOf(value)})
 	}
-	// Marshal's string append may hold an old buffer and a replacement, its
-	// encodeState may simultaneously hold an old buffer and a replacement,
-	// and Marshal returns one independent copy. Six rounded encoded widths
-	// cover those five allocations plus their capacity slack. Map sorting
-	// adds one string/reflect-value pair per entry; 64 bytes per entry cover
-	// those slots and allocation rounding. The traversal owner retains its
-	// sizing stack high-water through Marshal; decoded graphs own no scratch.
+	// These JSON-only graphs cannot call custom marshalers. Charge the full
+	// ordinary encoder growth history and the map sort slots. The traversal
+	// owner keeps its stack allowance through Marshal.
 	if err := work.encoding(depth); err != nil {
 		return nil, nil, err
 	}
 	width := (size + 8191) &^ uint64(8191)
-	if width > uint64(metadataWorkBytes())/6 || entries > (uint64(metadataWorkBytes())-width*6)/64 {
+	if width > uint64(metadataWorkBytes())/metadataJSONEscapedCopies ||
+		entries > (uint64(metadataWorkBytes())-width*metadataJSONEscapedCopies)/64 {
 		return nil, nil, ErrMetadataWorkBudget
 	}
 	_, retain, err := s.tryAdmitAdditionalMetadataWork(ctx, int(width+64))
 	if err != nil {
 		return nil, nil, err
 	}
-	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(width*5+entries*64+(64<<10)))
+	_, release, err := s.tryAdmitAdditionalMetadataWork(ctx, int(width*(metadataJSONEscapedCopies-1)+entries*64+(64<<10)))
 	if err != nil {
 		retain()
 		return nil, nil, err

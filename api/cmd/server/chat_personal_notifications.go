@@ -55,17 +55,19 @@ func chatPersonalProviders() []string {
 // dispatchChatNotifications hands pending personal chat deliveries to the
 // chat outbox.
 func (s *server) dispatchChatNotifications(ctx context.Context, key string) {
+	selection := store.NotificationDeliverySelection{Channel: "chat", Statuses: []string{"pending"}}
+	now := time.Now().UTC()
 	var pending domain.Bootstrap
 	var err error
 	if s.store.BoundedMetadataEnabled() {
-		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
+		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, selection, now)
 		if readErr != nil {
 			return
 		}
 		defer read.Close()
 		pending.NotificationDeliveries = read.Deliveries
 	} else {
-		pending, err = s.store.NotificationDeliveries(ctx, key, []string{"pending"}, time.Now().UTC())
+		pending, err = s.store.NotificationDeliveries(ctx, key, selection, now)
 	}
 	if err != nil {
 		return

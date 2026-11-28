@@ -15,6 +15,95 @@ import (
 	"flow/api/internal/idgen"
 )
 
+func TestScaleApplicationTaskContextReadContentProducerDifferential(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	f := journalScaleDatabase(t)
+	view, err := f.BoundedMetadataViewForWorkspacesForTesting(t.Context(), f.data.Workspace.URLKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.releaseMetadataLogicalSources()
+	at := time.Date(2026, 11, 27, 1, 2, 3, 4, time.FixedZone("offset", 3600))
+	body := strings.Repeat("<>&\x00\xff\u2028\\u0000 ", metadataJSONLargeBody/8)
+	owner := f.data.Viewer
+	parent := "parent-comment"
+	checkTaskContentProducer(t, f, view, "comment", domain.Comment{
+		ID: "producer-comment", Body: body, BodyData: map[string]any{"raw": json.RawMessage(`{ "text": "<>&" }`)},
+		ParentID: &parent, Reactions: map[string][]string{"ok": {owner.ID}}, CreatedAt: at, User: owner,
+	})
+	checkTaskContentProducer(t, f, view, "activity", domain.ActivityEvent{
+		ID: "producer-activity", Actor: owner, CreatedAt: at,
+		Metadata: domain.ActivityMetadata{"cycle": "cycle-after", "cycleBefore": "cycle-before", "detail": body},
+	})
+	checkTaskContentProducer(t, f, view, "notification", domain.Notification{
+		ID: "producer-notification", RecipientID: owner.ID, Text: body, ReadAt: &at, SnoozedUntil: &at, CreatedAt: at,
+	})
+	checkTaskContentProducer(t, f, view, "delivery", domain.NotificationDelivery{
+		ID: "producer-delivery", RecipientID: owner.ID, NotificationID: "producer-notification",
+		Status: "pending", NextAttemptAt: &at, CreatedAt: at, Error: body,
+	})
+	if work := view.MetadataWorkUsedForTesting(); work != 0 {
+		t.Fatalf("content producers left %d bytes of work", work)
+	}
+}
+
+func checkTaskContentProducer[T any](t *testing.T, f scaleFixture, view *SQLiteStore, kind string, value T) {
+	t.Helper()
+	t.Run(kind, func(t *testing.T) {
+		ctx := t.Context()
+		workspace := f.data.Workspace.URLKey
+		tx, err := f.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, producer := range []struct {
+			name  string
+			write func(string) error
+		}{
+			{"point", func(resource string) error {
+				return writeContentRecord(withIssueRecordWriteAdmission(ctx, view), tx, workspace, kind, resource, value)
+			}},
+			{"batch", func(resource string) error {
+				row, err := contentRecordRowFor(workspace, kind, resource, value)
+				if err != nil {
+					return err
+				}
+				return writeContentRecordRows(ctx, tx, []contentRecordRow{row})
+			}},
+			{"sync", func(resource string) error {
+				return syncContentRecordsFrom(ctx, tx, workspace, kind, map[string][]T{resource: {value}}, f.data, nil, []string{resource})
+			}},
+		} {
+			resource := "producer-" + producer.name
+			want, err := buildContentRecordRow(workspace, kind, resource, raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := producer.write(resource); err != nil {
+				t.Fatalf("%s write: %v", producer.name, err)
+			}
+			var got contentRecordRow
+			var version int
+			err = tx.QueryRowContext(ctx, `SELECT id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version
+				FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=?`, workspace, kind, resource).
+				Scan(&got.id, &got.created, &got.raw, &got.owner, &got.parent, &got.status, &got.nextAttempt, &version)
+			if err != nil {
+				t.Fatalf("%s read: %v", producer.name, err)
+			}
+			if version != 1 || !bytes.Equal(got.raw, want.raw) || got.id != want.id || got.created != want.created ||
+				got.owner != want.owner || got.parent != want.parent || got.status != want.status || got.nextAttempt != want.nextAttempt {
+				t.Fatalf("%s stored JSON or index columns differ from json.Marshal", producer.name)
+			}
+		}
+	})
+}
+
 func TestScaleApplicationTaskContextReadRawBatches(t *testing.T) {
 	t.Setenv("FLOW_BOUNDED_METADATA", "off")
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")

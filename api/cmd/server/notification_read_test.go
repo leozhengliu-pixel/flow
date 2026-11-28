@@ -42,7 +42,7 @@ func TestNotificationReadCallerEffects(t *testing.T) {
 				}
 				service.dispatchNotificationEmails(t.Context(), workspace)
 				service.dispatchChatNotifications(t.Context(), workspace)
-				result, err := repo.NotificationDeliveries(t.Context(), workspace, []string{"pending", "failed", "pending-disabled"}, future.Add(time.Hour))
+				result, err := repo.NotificationDeliveries(t.Context(), workspace, store.NotificationDeliverySelection{Statuses: []string{"pending", "failed", "pending-disabled"}}, future.Add(time.Hour))
 				if err != nil {
 					t.Fatal(err)
 				}

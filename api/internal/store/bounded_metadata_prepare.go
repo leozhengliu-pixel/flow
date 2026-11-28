@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"flow/api/internal/telemetry"
 )
 
 func metadataCatalogAutoEnabled(bounded bool) bool {
@@ -51,6 +53,13 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 		// Admission must still account for every workspace and its viewer.
 		s.workspaces, s.copyRevisions = nil, nil
 		s.metadataResidency = newMetadataResidency()
+		budget := s.metadataResidency.work
+		if recorder := telemetry.FromContext(ctx); recorder != nil {
+			budget.recorder = recorder
+			recorder.SetSource(func(bool) telemetry.LocalStats {
+				return telemetry.LocalStats{Work: budget.telemetryStats()}
+			})
+		}
 		// One operation (and one record) may use the whole work budget.
 		setMetadataOperationWork(s.metadataResidency.work.limit)
 		err := s.loadOrSeed(ctx)
@@ -64,6 +73,9 @@ func (s *SQLiteStore) loadStartupMetadata(ctx context.Context, bounded, prepare 
 		}
 		s.releaseMetadataLogicalSources()
 		s.metadataResidency = nil
+		if budget.recorder != nil {
+			budget.recorder.SetSource(nil)
+		}
 		setMetadataOperationWork(0)
 		boundedAdmissionFailure("startup metadata: bounded workspace admission failed; using legacy reads", err)
 	}

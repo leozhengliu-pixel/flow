@@ -18,6 +18,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
 const sessionCookieName = "flow_clone_session"
@@ -132,18 +133,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 				}
 				return
 			}
-			cookie, err := r.Cookie(sessionCookieName)
-			if err != nil || cookie.Value == "" {
-				writeError(w, http.StatusUnauthorized, "Sign in required")
-				return
-			}
-			user, err = s.store.AuthenticateSession(r.Context(), cookie.Value)
-			if err != nil {
-				if writeAuthCheckFailure(w, err) {
-					return
-				}
-				clearSessionCookie(w, r)
-				writeError(w, http.StatusUnauthorized, "Your session has expired")
+			var ok bool
+			user, ok = s.authenticateSession(w, r)
+			if !ok {
 				return
 			}
 		}
@@ -192,6 +184,25 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 	})
 }
 
+func (s *server) authenticateSession(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
+	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil || cookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, "Sign in required")
+		return domain.User{}, false
+	}
+	timing := telemetry.Begin(r.Context(), telemetry.Authentication)
+	user, err := s.store.AuthenticateSession(telemetry.WithWork(r.Context(), telemetry.WorkAuth), cookie.Value)
+	timing.End()
+	if err != nil {
+		if !writeAuthCheckFailure(w, err) {
+			clearSessionCookie(w, r)
+			writeError(w, http.StatusUnauthorized, "Your session has expired")
+		}
+		return domain.User{}, false
+	}
+	return user, true
+}
+
 func apiKeyRestrictedPersonalPath(path string) bool {
 	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") || strings.HasPrefix(path, "/api/oauth/authorized-applications/") {
 		return true
@@ -218,6 +229,7 @@ func writeAuthCheckFailure(w http.ResponseWriter, err error) bool {
 }
 
 func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKey, string, error) {
+	defer telemetry.Begin(r.Context(), telemetry.Authentication).End()
 	user, key, workspace, err := s.apiKeyForRequest(r)
 	if err == nil {
 		_ = s.store.RecordAPIKeyUse(r.Context(), workspace, key.ID, key.AuthorizationID)
@@ -605,6 +617,7 @@ func accountScopedPath(r *http.Request) bool {
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
+	defer telemetry.Begin(r.Context(), telemetry.Authorization).End()
 	if oauthAuthorizationEndpoint(r) {
 		// Consent may select a different workspace than the browser header. Its
 		// handler checks that selection; revocation checks only its target scope.
@@ -2250,6 +2263,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
+	defer telemetry.Begin(r.Context(), telemetry.Authentication).End()
 	started := time.Now()
 	if s.authDisabled {
 		var account domain.AccountBootstrap
@@ -2282,6 +2296,7 @@ func (s *server) authSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "Your session has expired")
 		return
 	}
+	s.advertiseBrowserTelemetry(w)
 	writeJSON(w, http.StatusOK, session)
 }
 

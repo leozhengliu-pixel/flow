@@ -1,0 +1,12 @@
+{
+  "source": "server/sync_manifest.go",
+  "unmigrated": 0,
+  "consumers": {
+    "marshalSyncJSON": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginMetadataJSONRead"],
+      "reason": "Encodes an already projected response or cache value under an independent metadata JSON allowance. The caller owns the output through delivery."
+    }
+  }
+}

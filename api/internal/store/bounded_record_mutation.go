@@ -60,6 +60,8 @@ func (s *SQLiteStore) mutateResidentRecords(ctx context.Context, workspace, even
 	}
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	var publication *ResourceRead
+	defer func() { publication.Close() }()
 	webhookEnabled := false
 	if s.webhookConfigured() {
 		webhookEnabled, err = s.residentWebhookNeeded(ctx, workspace)
@@ -127,24 +129,47 @@ func (s *SQLiteStore) mutateResidentRecords(ctx context.Context, workspace, even
 		if err := validateResidentRecordChanges(before, next, scope); err != nil {
 			return err
 		}
-		payloadRaw, err := json.Marshal(payload)
+		output := &ResourceRead{store: s}
+		defer func() {
+			if publication != output {
+				output.Close()
+			}
+		}()
+		payloadRaw, err := encodeOwnedMetadataValue(ctx, output, payload)
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
-		if webhookEnabled {
-			event.PreviousValues = aggregatePreviousValues(before, next, aggregate)
+		resolve := func(prior bool) (metadataAggregateNode, error) {
+			data := next
+			if prior {
+				data = before
+			}
+			if entity := nativeAggregateEntity(data, aggregate); entity != nil {
+				return metadataAggregateNativeNode{value: reflect.ValueOf(entity)}, nil
+			}
+			return nil, ctx.Err()
 		}
-		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregate), eventType)
+		encoded, err := s.prepareMetadataAggregateResolvedOutputs(ctx, resolve, aggregate, webhookEnabled, payloadRaw, eventType, true)
+		if err != nil {
+			return err
+		}
+		output.release = append(output.release, encoded.Close)
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw,
+			PreviousValues: encoded.PreviousValues, CreatedAt: time.Now().UTC()}
+		realtime = encoded.RealtimePayload
 		if len(realtime) > MetadataRecordPageMaxBytes {
 			return ErrMetadataPageBudget
 		}
-		if err := s.persistWorkspaceTx(ctx, tx, workspace, &before, &next, nil, &event, nil); err != nil {
+		delta := &ResourceRead{store: s}
+		defer delta.Close()
+		if err := s.persistWorkspaceTx(withLegacyMetadataDeltaReadBudget(ctx, delta), tx, workspace, &before, &next, nil, &event, nil); err != nil {
 			return err
 		}
+		delta.Close()
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		publication = output
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)
 		s.mu.Unlock()

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/idgen"
+	"flow/api/internal/jsonwire"
 )
 
 const recordJournalMaxBytes = 64 << 10
@@ -49,6 +50,40 @@ type CommittedPage struct {
 	Transactions   []CommittedChange `json:"transactions"`
 	HasMore        bool              `json:"hasMore"`
 	ResyncRequired bool              `json:"resyncRequired"`
+}
+
+func recordKeyJSONBytes(key RecordKey) int64 {
+	return int64(len(`{"Kind":,"ID":}`)) + jsonwire.StringBytes(key.Kind) + jsonwire.StringBytes(key.ID)
+}
+
+func recordDeltaJSONBytes(delta RecordDelta) int64 {
+	boolean := int64(len("false"))
+	if delta.Deleted {
+		boolean = int64(len("true"))
+	}
+	return int64(len(`{"key":,"version":,"deleted":}`)) + recordKeyJSONBytes(delta.Key) + jsonwire.StringBytes(delta.Version) + boolean
+}
+
+func committedChangeJSONBytes(change CommittedChange) int64 {
+	size := int64(len(`{"txId":,"seq":,"authzEpoch":,"records":,"invalidations":}`)) +
+		jsonwire.StringBytes(change.TxID) + jsonwire.StringBytes(change.Seq) + jsonwire.StringBytes(change.AuthzEpoch)
+	if change.Records == nil {
+		size += int64(len("null"))
+	} else {
+		size += int64(2 + max(0, len(change.Records)-1))
+		for _, record := range change.Records {
+			size += recordDeltaJSONBytes(record)
+		}
+	}
+	if change.Invalidations == nil {
+		size += int64(len("null"))
+	} else {
+		size += int64(2 + max(0, len(change.Invalidations)-1))
+		for _, invalidation := range change.Invalidations {
+			size += jsonwire.StringBytes(invalidation)
+		}
+	}
+	return size
 }
 
 func journalDatabaseReady(db domainEventExecer) bool {
@@ -227,14 +262,14 @@ func (pending *pendingRecordJournal) add(delta RecordDelta) {
 	if pending.oversize {
 		return
 	}
-	raw, _ := json.Marshal(delta)
-	pending.bytes += len(raw) + 1
-	if pending.bytes > recordJournalMaxBytes-1024 {
+	size := recordDeltaJSONBytes(delta) + 1
+	if size > int64(recordJournalMaxBytes-1024-pending.bytes) {
 		pending.change.Records = []RecordDelta{}
 		pending.change.Invalidations = []string{"workspace"}
 		pending.oversize = true
 		return
 	}
+	pending.bytes += int(size)
 	pending.change.Records = append(pending.change.Records, delta)
 }
 
@@ -988,12 +1023,12 @@ func (s *SQLiteStore) ReadCommittedChanges(ctx context.Context, workspaceID, aft
 			}
 			change.Seq = strconv.FormatInt(seq, 10)
 		}
-		encoded, _ := json.Marshal(change)
-		if used+len(encoded) > maxBytes {
+		encoded := committedChangeJSONBytes(change)
+		if encoded > int64(maxBytes-used) {
 			page.HasMore = true
 			break
 		}
-		used += len(encoded)
+		used += int(encoded)
 		page.Transactions = append(page.Transactions, change)
 		page.Next = change.Seq
 	}

@@ -117,14 +117,12 @@ func (p *documentUpdateImageProfile) image(ctx context.Context, owner *ResourceR
 
 func (*documentUpdateImageProfile) reserveCallback(ctx context.Context, owner *ResourceRead, data domain.Bootstrap, payload any) error {
 	budget := &boundedDiscussionAttempt{owner: owner}
+	if err := budget.reserveContent(ctx, data, payload); err != nil {
+		return err
+	}
 	// Changes, mentions, moves and added/removed subscriptions can notify
 	// the same audience in one callback, with four delivery channels each.
-	for range 4 {
-		if err := budget.reserveCallback(ctx, data, payload); err != nil {
-			return err
-		}
-	}
-	return nil
+	return budget.reserveCallbackNotifications(ctx, data, 4)
 }
 
 type documentUpdateAttempt struct {

@@ -3,6 +3,9 @@
 {{- $rwo := and (eq $v.storage.driver "local") $v.storage.persistence.enabled (not (has "ReadWriteMany" $v.storage.persistence.accessModes)) -}}
 {{- $sqlite := eq $v.database.driver "sqlite" -}}
 {{- $configFile := include "flow.config.file" . -}}
+{{- $telemetrySecret := default dict (default dict $v.telemetry).existingSecret -}}
+{{- $telemetryEnabled := coalesce (include "flow.config.lookup" (list $v.config.file "server" "telemetry" "enabled")) (include "flow.config.lookup" (list $v.telemetry "enabled")) -}}
+{{- $mountTelemetrySecret := and (ne $telemetryEnabled "[false]") $telemetrySecret.name $telemetrySecret.headers -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -197,6 +200,11 @@ spec:
               mountPath: /etc/flow
               readOnly: true
             {{- end }}
+            {{- if $mountTelemetrySecret }}
+            - name: telemetry-headers
+              mountPath: /var/run/flow/telemetry
+              readOnly: true
+            {{- end }}
             {{- if $v.assets.shared.enabled }}
             - name: assets-shared
               mountPath: /app/assets-shared
@@ -238,8 +246,18 @@ spec:
           configMap:
             name: {{ default (printf "%s-config" (include "flow.fullname" .)) $v.config.fileConfigMap.name }}
             items:
-              - key: {{ if $configFile }}config.yaml{{ else }}{{ $v.config.fileConfigMap.key }}{{ end }}
+              - key: {{ if $v.config.fileConfigMap.name }}{{ $v.config.fileConfigMap.key }}{{ else }}config.yaml{{ end }}
                 path: config.yaml
+        {{- end }}
+        {{- if $mountTelemetrySecret }}
+        - name: telemetry-headers
+          secret:
+            secretName: {{ $telemetrySecret.name | quote }}
+            items:
+            {{- range (values $telemetrySecret.headers | uniq | sortAlpha) }}
+              - key: {{ . | quote }}
+                path: {{ . | quote }}
+            {{- end }}
         {{- end }}
         {{- if $v.assets.shared.enabled }}
         - name: assets-shared

@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"math"
+
+	"flow/api/internal/telemetry"
 )
 
 // Request bodies larger than the general JSON limit (document content) are
@@ -36,7 +38,7 @@ func (s *SQLiteStore) AdmitRequestBodyWork(ctx context.Context, bytes int64) (fu
 	}
 	// The context the budget returns carries the lease; it is dropped so a
 	// later operation of this request is not nested under the body's lease.
-	_, release, err := s.metadataResidency.work.acquire(ctx, int(bytes))
+	_, release, err := s.metadataResidency.work.acquire(telemetry.WithWork(ctx, telemetry.WorkDocumentBody), int(bytes))
 	if err != nil {
 		return nil, err
 	}

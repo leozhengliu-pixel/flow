@@ -386,6 +386,15 @@ if volumes.get("config-file", {}).get("configMap") != {"name": "flow-config", "i
     fail("config-file", f"config file volume {volumes.get('config-file')!r}")
 if not deployment["spec"]["template"]["metadata"]["annotations"].get("checksum/config-file"):
     fail("config-file", "pods must roll when the config file changes (checksum/config-file)")
+
+docs = load("telemetry-disabled-external-config")
+pod = find(docs, "Deployment", "flow")[0]["spec"]["template"]
+volumes = {v["name"]: v for v in pod["spec"]["volumes"]}
+mounts = {m["name"] for m in pod["spec"]["containers"][0]["volumeMounts"]}
+if volumes.get("config-file", {}).get("configMap") != {"name": "external-flow-config", "items": [{"key": "alternate.yaml", "path": "config.yaml"}]}:
+    fail("telemetry-disabled-external-config", "the external config map and key must be preserved")
+if find(docs, "ConfigMap", "flow-config") or "telemetry-headers" in volumes or "telemetry-headers" in mounts:
+    fail("telemetry-disabled-external-config", "disabled telemetry must not create a config map or mount a collector Secret")
 for name in ("default",):
     docs = load(name)
     pod = find(docs, "Deployment", "flow")[0]["spec"]["template"]

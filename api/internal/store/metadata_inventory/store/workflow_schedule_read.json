@@ -2,6 +2,14 @@
   "source": "store/workflow_schedule_read.go",
   "unmigrated": 0,
   "consumers": {
+    "DueWorkflowScheduleItems": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "The legacy tick reads installed definitions and runs under the read lock. It copies only due workflow IDs, triggers and resource IDs, in definition order followed by run order, before releasing the lock for execution.",
+      "accessors": ["resident-state"],
+      "temperature": "hot",
+      "callers": ["server/server.startWorkflowScheduler"]
+    },
     "BeginWorkflowScheduleRead": {
       "owner": "P21",
       "status": "reviewed",

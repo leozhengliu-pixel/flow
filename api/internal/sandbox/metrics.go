@@ -41,7 +41,7 @@ func NewMetrics(meter metric.Meter) *Metrics {
 	m := &Metrics{}
 	m.startSeconds, _ = meter.Float64Histogram("flow_coding_sandbox_start_seconds", metric.WithUnit("s"), metric.WithDescription("Time from sandbox record creation to a running runner"))
 	m.sandboxes, _ = meter.Int64Gauge("flow_coding_sandboxes", metric.WithDescription("Sandboxes by kind and observed phase"))
-	m.warmAvailable, _ = meter.Int64Gauge("flow_coding_warm_pool_available", metric.WithDescription("Unbound warm sandboxes by size and region"))
+	m.warmAvailable, _ = meter.Int64Gauge("flow_coding_warm_pool_available", metric.WithDescription("Unbound warm sandboxes"))
 	m.reconcileSeconds, _ = meter.Float64Histogram("flow_coding_reconcile_seconds", metric.WithUnit("s"), metric.WithDescription("Duration of one reconcile pass"))
 	m.providerErrors, _ = meter.Int64Counter("flow_coding_provider_errors_total", metric.WithDescription("Sandbox provider errors by operation"))
 	m.orphansDeleted, _ = meter.Int64Counter("flow_coding_orphans_deleted_total", metric.WithDescription("Orphaned provider objects deleted by GC"))
@@ -63,11 +63,11 @@ func (m *Metrics) sandboxCount(kind Kind, phase Phase, n int) {
 	m.sandboxes.Record(context.Background(), int64(n), metric.WithAttributes(attribute.String("kind", string(kind)), attribute.String("phase", string(phase))))
 }
 
-func (m *Metrics) warmPool(size, region string, n int) {
+func (m *Metrics) warmPool(n int) {
 	if m == nil || m.warmAvailable == nil {
 		return
 	}
-	m.warmAvailable.Record(context.Background(), int64(n), metric.WithAttributes(attribute.String("size", size), attribute.String("region", region)))
+	m.warmAvailable.Record(context.Background(), int64(n))
 }
 
 func (m *Metrics) reconciled(loop string, started time.Time) {
