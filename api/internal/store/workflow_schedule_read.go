@@ -18,6 +18,11 @@ type WorkflowScheduleItem struct {
 // DueWorkflowScheduleItems is the legacy scheduler's installed due list.
 // Only the inputs to the workflow runner survive the read lock.
 func (s *SQLiteStore) DueWorkflowScheduleItems(workspace string, now time.Time) []WorkflowScheduleItem {
+	if s.BoundedMetadataEnabled() {
+		// A bounded image holds no workflow collections; bounded ticks read
+		// the installed logical source (BeginWorkflowScheduleRead).
+		return nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {

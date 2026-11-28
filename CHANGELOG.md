@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Guard legacy Pulse and workflow schedule reads so bounded stores use their installed metadata source.
 - Reduce idle delivery scheduler work by selecting due notifications for each channel before loading email-rendering data. Email digests now back off when a recipient or a document access check is temporarily unavailable, and record successful sends even when the scheduler is shutting down.
 - Fix deleting an issue leaving its nested sub-issues behind: only the direct sub-issues went to the trash, and deeper ones stayed with a parent that was deleted. Deleting an issue now trashes its whole sub-issue family, deepest first, and restoring the issue brings the family back. A family of more than 1,000 issues, counted across every level, is still refused. `?subIssues=keep` still detaches the direct sub-issues instead.
 - Fix issues with very long descriptions, such as one that escapes to about 13 MB of JSON, not getting triage suggestions and not being editable with bounded metadata on: rewriting such an issue reserved over 400 MB of metadata work and was refused. A rewrite now decodes the stored issue once for its comparisons and statistics, reserves each encoding while it is made, and charges the decode by what it can allocate, so it fits the default work budget with the same memory bounds.

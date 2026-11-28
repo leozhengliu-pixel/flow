@@ -229,6 +229,10 @@ func (r *PulseRead) LoadSchedule(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) legacyPulseSchedule(workspace string, settings bool) (*PulseFeedSnapshot, bool) {
+	if s.BoundedMetadataEnabled() {
+		// Off-mode only: a bounded image holds no settings collections.
+		return nil, false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {
