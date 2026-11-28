@@ -4,7 +4,8 @@
 #   go-test-resume.sh PACKAGE NAMES_FILE TIMEOUT [go test flags...]
 #
 # Runs `go test -v` on the tests named in NAMES_FILE (one per line) with
-# -timeout TIMEOUT. When go test's timeout fires, the test that was running is
+# -timeout TIMEOUT. When GO_TEST_BINARY names a precompiled test binary, that
+# binary is run instead. When a timeout fires, the test that was running is
 # reported as failed and the tests that had not started yet run in a further
 # invocation, until every listed test has run. Exits non-zero if any invocation
 # failed. Run it from the Go module root (api/).
@@ -19,7 +20,25 @@ status=0 round=1
 while [ -s "$work/remaining" ]; do
   pattern=$(printf '^(%s)$' "$(paste -sd'|' "$work/remaining")")
   echo "::group::go test $package, round $round: $(wc -l < "$work/remaining" | tr -d ' ') tests"
-  go test "$package" -run "$pattern" -count=1 -timeout "$timeout" -v "$@" 2>&1 | tee "$work/log"
+  if [ -n "${GO_TEST_BINARY:-}" ]; then
+    (
+      cd "$package"
+      args=(
+        -test.run "$pattern"
+        -test.count=1
+        -test.timeout="$timeout"
+        -test.v
+        "$@"
+      )
+      if command -v timeout >/dev/null 2>&1; then
+        timeout --foreground "$timeout" "$GO_TEST_BINARY" "${args[@]}"
+      else
+        "$GO_TEST_BINARY" "${args[@]}"
+      fi
+    ) 2>&1 | tee "$work/log"
+  else
+    go test "$package" -run "$pattern" -count=1 -timeout "$timeout" -v "$@" 2>&1 | tee "$work/log"
+  fi
   code=${PIPESTATUS[0]}
   echo "::endgroup::"
   [ "$code" -eq 0 ] && break

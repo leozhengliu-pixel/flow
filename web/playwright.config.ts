@@ -2,6 +2,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
 
 export const desktopPerformanceSpecs = ['**/desktop-timeline-performance.spec.ts', '**/desktop-document-first-paint.spec.ts']
 const standaloneSpecs = ['**/security/**', '**/local-store/**', ...desktopPerformanceSpecs]
+const browserMode = process.env.FLOW_E2E_WEB_MODE === 'preview' ? 'preview' : 'dev'
 
 export function browserWebServers(
   ports: { web: number; api: number; provider: number },
@@ -50,8 +51,8 @@ export default defineConfig({
   testDir: './e2e',
   testIgnore: standaloneSpecs,
   timeout: 30_000,
-  // CI serves the app from the Vite dev server: every page.goto refetches about
-  // 1,100 modules, which takes 4-5 s on a loaded hosted runner before any data.
+  // Local runs use Vite's dev server. CI sets FLOW_E2E_WEB_MODE=preview after
+  // the shared production bundle has been downloaded.
   expect: { timeout: process.env.CI ? 10_000 : 5_000 },
   fullyParallel: false,
   workers: 1,
@@ -71,5 +72,5 @@ export default defineConfig({
     // Exclude them before sharding so skipped tests do not skew shard sizes.
     { name: 'mobile-chromium', testIgnore: [...standaloneSpecs, '**/desktop-*.spec.ts', '**/keyboard-shortcuts.spec.ts', '**/loops-output-contract.spec.ts'], use: { ...devices['Pixel 7'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
   ],
-  webServer: browserWebServers({ web: 4173, api: 4180, provider: 4190 }, 'dev'),
+  webServer: browserWebServers({ web: 4173, api: 4180, provider: 4190 }, browserMode),
 })

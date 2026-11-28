@@ -3,7 +3,8 @@ import base, { browserWebServers, desktopPerformanceSpecs } from './playwright.c
 
 const ports = { web: 4575, api: 4582, provider: 4591 }
 
-// npm run test:e2e:performance builds the bundle before starting these servers.
+// The production bundle is built by npm locally or supplied by the CI browser
+// build job before these servers start.
 export default defineConfig({
   ...base,
   testIgnore: [],
