@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -143,6 +144,53 @@ type payloadMarshalProbe struct {
 func (p payloadMarshalProbe) MarshalJSON() ([]byte, error) {
 	*p.calls++
 	return []byte(`{"ok":true}`), nil
+}
+
+type payloadTextMarshalProbe struct{ calls *int }
+
+func (p *payloadTextMarshalProbe) MarshalText() ([]byte, error) {
+	*p.calls++
+	return []byte("ok"), nil
+}
+
+func TestPayloadWorkShapeCompatibility(t *testing.T) {
+	calls := 0
+	for _, value := range []any{
+		payloadMarshalProbe{calls: &calls},
+		map[string]any{"nested": []any{&payloadTextMarshalProbe{calls: &calls}}},
+		map[time.Time]string{time.Unix(0, 0).UTC(): "text key"},
+	} {
+		if _, err := MetadataJSONEncodingWork(t.Context(), value); !errors.Is(err, ErrMetadataWorkBudget) {
+			t.Errorf("%T returned %v, want ErrMetadataWorkBudget", value, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatal("preflight ran an unsupported encoder")
+	}
+	for _, value := range []any{
+		map[int]string{1: "integer key"},
+		map[string]any{"at": time.Unix(0, 0).UTC(), "number": json.Number("1.25")},
+		domain.OptionalInt{Set: true},
+		domain.ActivityMetadata{"addedLabelIds": `["a"]`},
+		domain.AgentToolCall{Result: json.RawMessage(`"ok"`)},
+	} {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		work, err := MetadataJSONEncodingWork(t.Context(), value)
+		if err != nil || work < len(raw) {
+			t.Errorf("%T cost %d for %d encoded bytes: %v", value, work, len(raw), err)
+		}
+	}
+	for _, value := range []any{(func())(nil), (chan int)(nil), complex(1, 2), map[bool]string{true: "invalid key"}} {
+		if _, err := MetadataJSONEncodingWork(t.Context(), value); err != nil {
+			t.Errorf("%T should reach the encoder: %v", value, err)
+		}
+		if _, err := json.Marshal(value); err == nil {
+			t.Errorf("%T should fail at encoding", value)
+		}
+	}
 }
 
 func TestPayloadWorkPreflight(t *testing.T) {
