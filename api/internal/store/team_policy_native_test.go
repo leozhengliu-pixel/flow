@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -220,5 +221,99 @@ func TestTeamPolicyNativeSingleConnectionSnapshot(t *testing.T) {
 	}
 	if view.metadataResidency.work.used != 0 {
 		t.Fatal("snapshot error or success leaked work")
+	}
+}
+
+func TestTeamPolicyNativePagesUsePerPageBudget(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("FLOW_METADATA_WORK_BYTES", strconv.FormatInt(2<<30, 10))
+	f := journalScaleDatabase(t)
+	workspace := f.data.Workspace.URLKey
+	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}
+	view.metadataResidency.requireCoverage = false
+
+	type scenario struct {
+		name      string
+		count     int
+		rowWidth  int
+		wantError error
+	}
+	for _, test := range []scenario{
+		{name: "many-pages-fit", count: 1100, rowWidth: 0},
+		{name: "aggregate-does-not-fit", count: 2600, rowWidth: 16, wantError: ErrMetadataWorkBudget},
+		{name: "single-row-does-not-fit", count: 1, rowWidth: 300000, wantError: ErrMetadataWorkBudget},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			previousPolicyLimit := view.metadataResidency.policyLimit
+			if test.wantError != nil {
+				view.metadataResidency.policyLimit = 1 << 20
+			}
+			t.Cleanup(func() {
+				view.metadataResidency.policyLimit = previousPolicyLimit
+			})
+			seed, err := f.db.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := seed.ExecContext(t.Context(), `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('teams','teamSettings')`, workspace); err != nil {
+				t.Fatal(err)
+			}
+			rows := make([]teamPolicyTransportRow, test.count)
+			for index := range rows {
+				id := fmt.Sprintf("%s-%04d", strings.Repeat("team", test.rowWidth/4), index)
+				raw := []byte(fmt.Sprintf(`{"id":%q,"key":%q,"private":false}`, id, id))
+				if test.rowWidth > 1000 {
+					raw = []byte(`{"id":"` + strings.Repeat("<", test.rowWidth) + `","key":"large","private":false}`)
+				}
+				rows[index] = teamPolicyTransportRow{
+					key:   fmt.Sprintf("physical-%04d", index),
+					order: index,
+					raw:   raw,
+				}
+			}
+			teamPolicyTransportSeed(t, seed, workspace, rows)
+			if err := seed.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			tx, err := f.db.BeginTx(t.Context(), metadataReadOptions(f.dialect))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			ctx := context.WithValue(t.Context(), workspaceReadKey{}, workspaceRead{database: f.db, workspace: workspace, reader: tx})
+			if test.wantError == nil {
+				rows, rowsErr := view.readTeamPolicyRows(ctx, tx, workspace)
+				if rowsErr != nil {
+					t.Fatalf("direct team policy read: %v", rowsErr)
+				}
+				if len(rows.rows) != test.count {
+					t.Fatal("many-page policy read returned empty encoded rows")
+				}
+				rows.Close()
+			}
+			got, err := view.readResidentResourcePolicy(ctx, workspace, f.data.Workspace.ID)
+			if test.wantError != nil {
+				if !reflect.DeepEqual(got, domain.Bootstrap{}) || !errors.Is(err, test.wantError) {
+					t.Fatalf("policy aggregate result=%+v error=%v, want %v", got, err, test.wantError)
+				}
+				if view.metadataResidency.work.used != 0 {
+					t.Fatal("budget refusal leaked metadata work")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Teams) != test.count {
+				t.Fatalf("decoded %d teams, want %d", len(got.Teams), test.count)
+			}
+			if got.Teams[0].ID == "" || got.Teams[len(got.Teams)-1].ID == "" {
+				t.Fatal("policy projection lost team identity")
+			}
+			if view.metadataResidency.work.used != 0 {
+				t.Fatal("successful policy read leaked metadata work")
+			}
+		})
 	}
 }

@@ -75,8 +75,6 @@ func (s *SQLiteStore) readTeamPolicyRows(ctx context.Context, tx *sqlTx, workspa
 		return nil, check
 	}
 	last, lastOrder, started := any(""), 0, false
-	used := metadataPageOverhead
-	budget := newMetadataHydrationBudget()
 	for {
 		where := "workspace_key=? AND field='teams'"
 		args = []any{workspace}
@@ -119,6 +117,8 @@ func (s *SQLiteStore) readTeamPolicyRows(ctx context.Context, tx *sqlTx, workspa
 		if len(page) == 0 {
 			return result, nil
 		}
+		used := metadataPageOverhead
+		budget := newMetadataHydrationBudget()
 		for _, item := range page {
 			var input io.ReaderAt = &teamPolicyReaderAt{
 				ctx: ctx, tx: tx, workspace: workspace, key: item.key,

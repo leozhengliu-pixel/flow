@@ -39,14 +39,29 @@ func (s *SQLiteStore) readLegacyEventPolicyRecords(ctx context.Context, workspac
 		Workspace:    domain.Workspace{ID: workspaceID, URLKey: workspace},
 		TeamSettings: map[string]domain.TeamSettings{},
 	}
-	budget := newMetadataHydrationBudget()
+	policyLimit := metadataPolicyBytes
+	if s.metadataResidency != nil {
+		policyLimit = s.metadataResidency.policyLimit
+	}
+	policyCost := 0
+	consumePolicyRow := func(row metadataCacheRow) error {
+		rowCost, err := metadataResidentCost(row.Data)
+		if err != nil {
+			return err
+		}
+		if rowCost > policyLimit-policyCost {
+			return ErrMetadataWorkBudget
+		}
+		policyCost += rowCost
+		return nil
+	}
 	teams, err := s.readTeamPolicyRows(ctx, tx, workspace)
 	if err != nil {
 		return data, err
 	}
 	defer teams.Close()
 	for _, row := range teams.rows {
-		if err := budget.consume(row.Data); err != nil {
+		if err := consumePolicyRow(row); err != nil {
 			return data, err
 		}
 		if err := appendResidentMetadataRow(&data, row, "array"); err != nil {
@@ -55,7 +70,7 @@ func (s *SQLiteStore) readLegacyEventPolicyRecords(ctx context.Context, workspac
 	}
 	err = s.scanResourcePolicyHeaders(ctx, workspace, "teamSettings", func(rows []metadataCacheRow) error {
 		for _, row := range rows {
-			if err := budget.consume(row.Data); err != nil {
+			if err := consumePolicyRow(row); err != nil {
 				return err
 			}
 			if err := appendResidentMetadataRow(&data, row, "map"); err != nil {
