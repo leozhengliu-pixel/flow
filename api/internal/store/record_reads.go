@@ -231,15 +231,15 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 				continue
 			}
 		}
-		raw, err := json.Marshal(redacted)
+		size, err := redacted.recordJSONBytes()
 		if err != nil {
 			return RecordPage{}, err
 		}
-		if len(raw)+1 > remaining {
+		if size+1 > int64(remaining) {
 			redacted.Data, redacted.Omitted, redacted.Detail = nil, true, &redacted.Key
-			raw, _ = json.Marshal(redacted)
+			size, _ = redacted.recordJSONBytes()
 		}
-		remaining -= len(raw) + 1
+		remaining -= int(size) + 1
 		if remaining < 0 {
 			return RecordPage{}, ErrMetadataPageBudget
 		}
@@ -361,15 +361,15 @@ func (s *SQLiteStore) readAccessRecords(ctx context.Context, access AccessContex
 	remaining := MetadataRecordPageMaxBytes - metadataPageOverhead
 	for i := range batch.Items {
 		item := &batch.Items[i]
-		raw, err := json.Marshal(item)
+		size, err := item.recordJSONBytes()
 		if err != nil {
 			return RecordBatch{}, err
 		}
-		if len(raw)+1 > remaining {
+		if size+1 > int64(remaining) {
 			item.Data, item.Omitted, item.Detail = nil, true, &item.Key
-			raw, _ = json.Marshal(item)
+			size, _ = item.recordJSONBytes()
 		}
-		remaining -= len(raw) + 1
+		remaining -= int(size) + 1
 		if remaining < 0 {
 			return RecordBatch{}, ErrMetadataPageBudget
 		}

@@ -722,7 +722,9 @@ func (s *SQLiteStore) MutateFailingWebhookDisable(ctx context.Context, workspace
 			return err
 		}
 		scope := MetadataRecordScope{Write: []RecordKey{{Kind: "webhooks", ID: webhookID}}}
-		changes, _, err := scaleRecordChanges(domain.Bootstrap{Webhooks: []domain.Webhook{hook}}, domain.Bootstrap{Webhooks: input.Webhooks})
+		diff := &ResourceRead{store: s}
+		defer diff.Close()
+		changes, _, err := scaleRecordChanges(ctx, diff, domain.Bootstrap{Webhooks: []domain.Webhook{hook}}, domain.Bootstrap{Webhooks: input.Webhooks})
 		if err != nil {
 			return err
 		}

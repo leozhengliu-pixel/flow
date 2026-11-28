@@ -146,7 +146,7 @@ func (r issueReferences) canonicalDisplayData(raw []byte) []byte {
 	if _, wrapped := fields["parent"]; wrapped && len(fields["item"]) > 0 {
 		fields["item"] = r.canonicalDisplayData(fields["item"])
 	}
-	out, err := json.Marshal(fields)
+	out, err := marshalMetadataRawObject(fields)
 	if err != nil {
 		return raw
 	}

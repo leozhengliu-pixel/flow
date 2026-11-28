@@ -98,5 +98,5 @@ func (s *server) manifestScaleManifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "Query window core exceeds its budget")
 		return
 	}
-	writeSyncJSON(w, result, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, result, store.MetadataRecordPageMaxBytes)
 }

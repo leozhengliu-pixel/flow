@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 )
@@ -32,14 +33,53 @@ type metadataUpdate struct {
 	Null   bool            `json:"null,omitempty"`
 }
 
+func addMetadataArrayID(seen map[string]bool, id string) bool {
+	if id == "" || len(id) > 191 {
+		return false
+	}
+	if !utf8.ValidString(id) {
+		// encoding/json replaces each invalid byte with U+FFFD, which
+		// can expand the key or make it collide with another ID.
+		id = string([]rune(id))
+	}
+	if len(id) > 191 || seen[id] {
+		return false
+	}
+	seen[id] = true
+	return true
+}
+
 func splitUpdateMetadata(field string, items map[string]json.RawMessage) (map[metadataRecordKey]metadataRecord, bool) {
+	records, ok, _ := splitUpdateMetadataOwned(context.Background(), nil, field, items)
+	return records, ok
+}
+
+func splitUpdateMetadataOwned(ctx context.Context, owner *ResourceRead, field string, items map[string]json.RawMessage) (map[metadataRecordKey]metadataRecord, bool, error) {
 	result := map[metadataRecordKey]metadataRecord{}
 	for parent, raw := range items {
 		var updates []json.RawMessage
 		if json.Unmarshal(raw, &updates) != nil {
-			return nil, false
+			return nil, false, nil
 		}
-		marker, _ := json.Marshal(metadataUpdate{Parent: parent, Null: bytes.Equal(raw, []byte("null"))})
+		if owner != nil {
+			// A parent name is stored once in the source map but appears
+			// again in each wrapper and each hashed key.
+			work, err := metadataStandardStringEncodingWork(ctx, parent)
+			if err != nil {
+				return nil, false, err
+			}
+			count := uint64(len(updates)) + 1
+			if work > uint64(metadataWorkBytes())/count/2 {
+				return nil, false, ErrMetadataWorkBudget
+			}
+			if err := owner.reserve(ctx, work*count*2); err != nil {
+				return nil, false, err
+			}
+		}
+		marker, err := marshalMetadataUpdate(metadataUpdate{Parent: parent, Null: bytes.Equal(raw, []byte("null"))})
+		if err != nil {
+			return nil, false, err
+		}
 		result[metadataRecordKey{field, fmt.Sprintf("%x", sha256.Sum256([]byte("parent:"+parent)))}] = metadataRecord{marker, 0}
 		seen := map[string]bool{}
 		for index, update := range updates {
@@ -47,15 +87,17 @@ func splitUpdateMetadata(field string, items map[string]json.RawMessage) (map[me
 				ID string `json:"id"`
 			}
 			if json.Unmarshal(update, &identity) != nil || identity.ID == "" || seen[identity.ID] {
-				return nil, false
+				return nil, false, nil
 			}
 			seen[identity.ID] = true
-			key, _ := json.Marshal([]string{parent, identity.ID})
-			value, _ := json.Marshal(metadataUpdate{Parent: parent, Item: update})
-			result[metadataRecordKey{field, fmt.Sprintf("%x", sha256.Sum256(key))}] = metadataRecord{value, index}
+			value, err := marshalMetadataUpdate(metadataUpdate{Parent: parent, Item: update})
+			if err != nil {
+				return nil, false, err
+			}
+			result[metadataRecordKey{field, updateRecordKey(parent, identity.ID)}] = metadataRecord{value, index}
 		}
 	}
-	return result, true
+	return result, true, nil
 }
 
 func (s *SQLiteStore) migrateWorkspaceMetadataRecords(ctx context.Context) error {
@@ -106,6 +148,10 @@ func (s *SQLiteStore) ensureWorkspaceMetadataRecords(ctx context.Context) error 
 // Arrays of entities and dictionaries are stored per entry. The small root
 // carries scalars and collection shapes so nil, empty, order and map keys survive.
 func splitWorkspaceMetadata(raw []byte) (map[string]json.RawMessage, map[string]string, map[metadataRecordKey]metadataRecord, error) {
+	return splitWorkspaceMetadataOwned(context.Background(), nil, raw)
+}
+
+func splitWorkspaceMetadataOwned(ctx context.Context, owner *ResourceRead, raw []byte) (map[string]json.RawMessage, map[string]string, map[metadataRecordKey]metadataRecord, error) {
 	root := map[string]json.RawMessage{}
 	shapes := map[string]string{}
 	records := map[metadataRecordKey]metadataRecord{}
@@ -153,7 +199,11 @@ func splitWorkspaceMetadata(raw []byte) (map[string]json.RawMessage, map[string]
 				return nil, nil, nil, err
 			}
 			if field == "projectUpdates" || field == "initiativeUpdates" {
-				if updates, ok := splitUpdateMetadata(field, items); ok {
+				updates, ok, err := splitUpdateMetadataOwned(ctx, owner, field, items)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				if ok {
 					shapes[field] = "updates"
 					root[field] = json.RawMessage(`{}`)
 					for key, value := range updates {
@@ -327,6 +377,7 @@ func metadataUpdateParent(data []byte) (string, bool) {
 // no longer stored was deleted by one and is not written again, and a record
 // whose data the writer did not change gets only its new position.
 func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted, previous, known map[metadataRecordKey]metadataRecord) error {
+	budget := legacyMetadataDeltaBudget(ctx)
 	groups := map[string][]metadataRecordKey{}
 	for key, value := range wanted {
 		if name := metadataRecordGroup(shapes, key, value.data); name != "" {
@@ -375,7 +426,21 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 				continue
 			}
 		}
-		if exists && storedRecordEqual(tx, refs, key.field, old.data, value.data) {
+		equal := false
+		if exists {
+			if budget == nil {
+				equal = storedRecordEqual(tx, refs, key.field, old.data, value.data)
+			} else {
+				scratch := &ResourceRead{store: budget.owner.store}
+				var err error
+				equal, err = compareLegacyDeltaRecord(ctx, scratch, tx, refs, key.field, old.data, value.data)
+				scratch.Close()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if equal {
 			if old.order == value.order {
 				continue
 			}
@@ -387,7 +452,13 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 				continue
 			}
 		}
-		if err := writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data); err != nil {
+		var err error
+		if budget != nil {
+			err = writeOwnedMetadataRecordRow(ctx, budget.owner.store, tx, workspace, key, value, old.data)
+		} else {
+			err = writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -398,6 +469,36 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 			}
 		}
 		if err := deleteMetadataRecordRow(ctx, tx, workspace, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compareLegacyDeltaRecord(ctx context.Context, owner *ResourceRead, tx *sqlTx, refs issueReferences, field string, old, raw []byte) (bool, error) {
+	if owner == nil {
+		return storedRecordEqual(tx, refs, field, old, raw), nil
+	}
+	if err := reserveLegacyDisplayComparison(ctx, owner, field, old, raw); err != nil {
+		return false, err
+	}
+	return storedRecordEqualOwned(ctx, owner, tx, refs, field, old, raw)
+}
+
+func reserveLegacyDisplayComparison(ctx context.Context, owner *ResourceRead, field string, old, raw []byte) error {
+	if len(old) == 0 || bytes.Equal(old, raw) {
+		return nil
+	}
+	copies := uint64(3)
+	if updateMetadataField(field) {
+		copies = 6
+	}
+	for _, value := range [][]byte{old, raw} {
+		work, err := metadataOffloadAssemblyWork(ctx, value, copies)
+		if err != nil {
+			return err
+		}
+		if err := owner.reserve(ctx, work); err != nil {
 			return err
 		}
 	}
@@ -444,6 +545,18 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 		return err
 	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
+}
+
+func writeOwnedMetadataRecordRow(ctx context.Context, s *SQLiteStore, tx *sqlTx, workspace string, key metadataRecordKey, value metadataRecord, previous []byte) error {
+	if s.metadataResidency == nil || tx.database == nil || tx.database.content == nil || !offloadFields[key.field] {
+		return writeMetadataRecordRow(ctx, tx, workspace, key, value, previous)
+	}
+	return largeRowPhase(ctx, s, func(scratch *ResourceRead) error {
+		if err := reserveOffloadRecordWork(ctx, scratch, key.field, value.data); err != nil {
+			return err
+		}
+		return writeMetadataRecordRow(ctx, tx, workspace, key, value, previous)
+	})
 }
 
 // syncProjectUpdateMentions starts the mention sessions of the comments a

@@ -124,11 +124,7 @@ func (s *SQLiteStore) persistLegacyResourceCounts(ctx context.Context, tx *sqlTx
 		if err := field.readHeaders(ctx, work); err != nil {
 			return nil, err
 		}
-		shape, err := field.shape()
-		if err != nil {
-			return nil, err
-		}
-		field.full = shapes[field.name] != "array" || shape != "array"
+		field.full = shapes[field.name] != "array" || !field.splits()
 		err = s.legacyCountWriteRebase(ctx, tx, workspace, directory, field, frames, work)
 		if keys, ok := conflictedMetadataKeys(err); ok {
 			conflicts = append(conflicts, keys...)
@@ -146,11 +142,7 @@ func (s *SQLiteStore) persistLegacyResourceCounts(ctx context.Context, tx *sqlTx
 		if !field.changed || field.full {
 			continue
 		}
-		shape, err := field.shape()
-		if err != nil {
-			return nil, err
-		}
-		if shape != "array" {
+		if !field.splits() {
 			left, err := frames.writeAggregateNode(legacyCountWriteCollection{base: field.before, headers: field.headers}, 0)
 			if err != nil {
 				return nil, err
@@ -271,13 +263,14 @@ func (f *legacyCountWriteField) skeleton() reflect.Value {
 	return value
 }
 
-func (f *legacyCountWriteField) shape() (string, error) {
-	raw, err := json.Marshal(map[string]any{f.name: f.skeleton().Interface()})
-	if err != nil {
-		return "", err
+func (f *legacyCountWriteField) splits() bool {
+	seen := make(map[string]bool, len(f.headers))
+	for _, header := range f.headers {
+		if !header.deleted && !addMetadataArrayID(seen, header.id) {
+			return false
+		}
 	}
-	_, shapes, _, err := splitWorkspaceMetadata(raw)
-	return shapes[f.name], err
+	return true
 }
 
 func (s *SQLiteStore) legacyCountWriteRebase(ctx context.Context, tx *sqlTx, workspace string, directory *metadataLogicalSource, field *legacyCountWriteField, frames *metadataLogicalBuilder, headers *ResourceRead) error {

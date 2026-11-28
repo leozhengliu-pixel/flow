@@ -57,7 +57,7 @@ func TestIssueRecordRewriteWorkCoversAllocation(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	encodeWork, err := metadataAggregatePayloadEncodingWork(t.Context(), reflect.ValueOf(issueRecordStored(next)), 0)
+	encodeWork, err := metadataRecordEncodingWork(t.Context(), reflect.ValueOf(issueRecordStored(next)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,17 +67,13 @@ func TestIssueRecordRewriteWorkCoversAllocation(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	// The decode charge covers every byte the typed decode allocates,
-	// garbage included. An encoding's work is a bound on its live buffers
-	// (growth, replacement and the returned copy), not on the garbage its
-	// growth leaves, so only its retained result is checked: a comparison
-	// keeps an encoding charged by that capacity.
+	// Both charges include allocations that become garbage during the call.
 	t.Logf("stored=%d decode alloc=%d charge=%d; encode alloc=%d (garbage included) work=%d retained=%d", len(stored), decodeAlloc, decodeWork, encodeAlloc, encodeWork, cap(encoded))
 	if decodeAlloc > decodeWork {
 		t.Fatal("the decode charge is below the decode's allocation")
 	}
-	if uint64(cap(encoded)) > uint64(encodeWork)/3 {
-		t.Fatal("a retained encoding exceeds a third of its encoding work")
+	if encodeAlloc > uint64(encodeWork) {
+		t.Fatal("the encode charge is below the encoding's allocation")
 	}
 
 	view := &SQLiteStore{db: f.db, dialect: f.dialect, metadataResidency: newMetadataResidency()}

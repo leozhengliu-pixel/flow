@@ -102,27 +102,22 @@ func (frame EventFrame) WriteSSE(w http.ResponseWriter, node string) bool {
 		return false
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
+	if bounded, ok := w.(*realtimeBudgetWriter); ok {
+		scratch := int64((len(frame.id)+len(node))*4 + 256)
+		if !bounded.budget.acquire(scratch) {
+			return false
+		}
+		defer bounded.budget.release(scratch)
+		lease := domain.RealtimeEvent{ID: frame.id, Type: "sync.frame", Payload: frame.encoded}
+		if !bounded.retainFrame(lease) {
+			return false
+		}
+	}
 	id := frame.id
-	if node != "" && !frame.durableCursor && !strings.HasPrefix(id, "connected_") {
+	if !frame.noCursor && node != "" && !frame.durableCursor && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
 	}
-	if bounded, ok := w.(*realtimeBudgetWriter); ok {
-		lease := domain.RealtimeEvent{ID: frame.id, Type: "sync.frame", Payload: frame.encoded}
-		if !bounded.budget.retainEvent(lease) {
-			return false
-		}
-		bounded.frames = append(bounded.frames, eventKey(lease))
-		if !bounded.reserveEncoding(int64(len(id) + 128)) {
-			return false
-		}
-	}
-	var err error
-	if frame.noCursor {
-		_, err = fmt.Fprintf(w, "data: %s\n\n", frame.encoded)
-	} else {
-		_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, frame.encoded)
-	}
-	return err == nil
+	return writeSSEParts(w, id, frame.noCursor, frame.encoded)
 }
 
 // BuildEventSource performs the source reads once. Delivery uses a versioned
@@ -337,7 +332,7 @@ func ProjectEvent(ctx context.Context, source *EventSource, access store.EventAc
 		return EventFrame{}, store.ErrAuthForbidden
 	}
 	if source.budget == nil {
-		return source.projectEvent(access, 0, 0)
+		return source.projectEvent(ctx, access, 0, 0)
 	}
 	work := int64(4 << 10)
 	if source.policy != nil {
@@ -359,7 +354,7 @@ func ProjectEvent(ctx context.Context, source *EventSource, access store.EventAc
 			}
 			return EventFrame{}, store.ErrEventSourceBudget
 		}
-		frame, err := source.projectEvent(access, work, reserved)
+		frame, err := source.projectEvent(ctx, access, work, reserved)
 		shortfall, retry := err.(projectionBudgetShortfall)
 		if !retry {
 			return frame, err
@@ -374,7 +369,7 @@ type projectionBudgetShortfall int64
 
 func (projectionBudgetShortfall) Error() string { return store.ErrEventSourceBudget.Error() }
 
-func (source *EventSource) projectEvent(access store.EventAccess, work, reserved int64) (EventFrame, error) {
+func (source *EventSource) projectEvent(ctx context.Context, access store.EventAccess, work, reserved int64) (EventFrame, error) {
 	defer func() {
 		if reserved != 0 {
 			source.budget.release(reserved)
@@ -403,6 +398,45 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 	}
 	// The source id binds mutation-input shape as well as entity versions.
 	cacheKey := source.cacheKey() + "|" + key
+	admit := func(total int64) error {
+		if source.budget == nil {
+			return nil
+		}
+		if total > source.budget.limit {
+			return store.ErrEventSourceBudget
+		}
+		// A cache builder never waits while its viewers hold scratch.
+		if extra := total - reserved; extra > 0 {
+			if !source.budget.acquire(extra) {
+				return projectionBudgetShortfall(total)
+			}
+			reserved += extra
+		}
+		return nil
+	}
+	projectionWork := work + int64(source.bytes*4+16<<10)
+	encodingWork := projectionWork
+	marshal := func(value any) (raw json.RawMessage) {
+		if buildErr != nil {
+			return nil
+		}
+		if source.budget != nil {
+			size, err := store.MetadataJSONEncodingWork(ctx, value)
+			if errors.Is(err, store.ErrMetadataWorkBudget) {
+				err = store.ErrEventSourceBudget
+			}
+			if err != nil {
+				buildErr = err
+				return nil
+			}
+			encodingWork += int64(size)
+			if buildErr = admit(encodingWork); buildErr != nil {
+				return nil
+			}
+		}
+		raw, buildErr = json.Marshal(value)
+		return raw
+	}
 	build := func() json.RawMessage {
 		switch source.kind {
 		case "policy":
@@ -413,7 +447,7 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 			}
 		case "pulse":
 			var visible bool
-			projected, visible = source.pulseProjection(data, query)
+			projected, visible = source.pulseProjection(data, query, marshal)
 			if !visible {
 				return nil
 			}
@@ -424,7 +458,8 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 			if len(ids) == 0 {
 				return nil
 			}
-			projected = pagedIssueIDsEvent(event, ids, nil, map[string]any{"deleted": true})
+			projected = event
+			projected.Payload = marshal(pagedIssueIDsPayload(ids, nil, map[string]any{"deleted": true}))
 		case "issue", "batch":
 			shown, hidden := []string{}, []string{}
 			for _, id := range source.issueIDs {
@@ -444,12 +479,14 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 					}
 					extra["issues"] = issues
 				}
-				projected = pagedIssueIDsEvent(event, shown, hidden, extra)
+				projected = event
+				projected.Payload = marshal(pagedIssueIDsPayload(shown, hidden, extra))
 			} else if len(shown) == 0 {
 				if !pagedIssuePermissionEvent(event.Type) {
 					return nil
 				}
-				projected = pagedIssueIDsEvent(event, nil, source.issueIDs, nil)
+				projected = event
+				projected.Payload = marshal(pagedIssueIDsPayload(nil, source.issueIDs, nil))
 			} else if event.Type == "agent_task.replied" {
 				projected = event
 			} else {
@@ -474,7 +511,7 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 					payload["issue"] = issues[0]
 				}
 				projected = event
-				projected.Payload, _ = json.Marshal(payload)
+				projected.Payload = marshal(payload)
 			}
 		case "document":
 			author := event.ActorID != "" && event.ActorID == data.Viewer.ID
@@ -513,16 +550,14 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 				extra["comments"] = source.comments
 			}
 			projected = event
-			projected.Payload = realtimeEntityPayload(event, document, extra)
+			projected.Payload = marshal(realtimeEntityPayloadValue(event, document, extra))
 		default:
 			return nil
 		}
-		raw, err := json.Marshal(projected)
-		if err != nil {
-			buildErr = err
+		if buildErr != nil {
 			return nil
 		}
-		return raw
+		return marshal(projected)
 	}
 	// Deleted grants and document ACLs depend on principal identity, not just
 	// the set of visible issue references.
@@ -531,19 +566,10 @@ func (source *EventSource) projectEvent(access store.EventAccess, work, reserved
 	}
 	var raw json.RawMessage
 	encode := func() (json.RawMessage, error) {
-		if source.budget != nil {
-			total := work + int64(source.bytes*4+16<<10)
-			if total > source.budget.limit {
-				return nil, store.ErrEventSourceBudget
-			}
-			// A cache builder never waits for budget while the viewers
-			// waiting on its result still hold principal scratch.
-			if extra := total - reserved; extra > 0 {
-				if !source.budget.acquire(extra) {
-					return nil, projectionBudgetShortfall(total)
-				}
-				reserved += extra
-			}
+		// Materializing the viewer-specific payload uses source-sized
+		// scratch. Each Marshal also preflights its actual value above.
+		if err := admit(projectionWork); err != nil {
+			return nil, err
 		}
 		raw := build()
 		return raw, buildErr
@@ -780,7 +806,7 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 		}
 		frame = EventFrame{encoded: raw, id: fallback.ID, visible: true, noCursor: !summaryRequest}
 		if summaryRequest {
-			frame, encodeErr = summarizeEventFrame(frame, access.AuthzEpoch)
+			frame, encodeErr = summarizeEventFrame(r.Context(), s.realtime.budget, frame, access.AuthzEpoch)
 		}
 		frame.validate = access.Validate
 		if encodeErr == nil {
@@ -794,13 +820,18 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if err != nil {
 		return EventFrame{}, true, err
 	}
-	if summaryRequest && event.Type != "agent_task.replied" && event.Type != "workspace.resync_required" && event.Type != "connected" {
-		summary, summaryErr := summarizeEventFrame(frame, access.AuthzEpoch)
+	if summaryRequest && frame.Visible() && event.Type != "agent_task.replied" && event.Type != "workspace.resync_required" && event.Type != "connected" {
+		summary, summaryErr := summarizeEventFrame(r.Context(), s.realtime.budget, frame, access.AuthzEpoch)
 		if summaryErr != nil {
 			frame.Close()
 			return EventFrame{}, true, summaryErr
 		}
-		summary.release = frame.release
+		releaseSummary := summary.release
+		sourceFrame := frame
+		summary.release = func() {
+			releaseSummary()
+			sourceFrame.Close()
+		}
 		summary.validate = frame.validate
 		frame = summary
 	}

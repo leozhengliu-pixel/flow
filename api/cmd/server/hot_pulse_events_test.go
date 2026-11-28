@@ -104,8 +104,9 @@ func TestScaleHotPulseEventsDifferential(t *testing.T) {
 					if b.bytes == 0 || b.bytes > eventSourceCacheBytes {
 						t.Fatal("owned event source did not account for its complete rule graph", b.bytes)
 					}
-					want, wantVisible = a.pulseProjection(data, query)
-					got, visible = b.pulseProjection(data, query)
+					encode := func(value any) json.RawMessage { return mustJSON(t, value) }
+					want, wantVisible = a.pulseProjection(data, query, encode)
+					got, visible = b.pulseProjection(data, query, encode)
 					if visible != wantVisible || !reflect.DeepEqual(normalizePolicyJSON(t, want, false), normalizePolicyJSON(t, got, false)) {
 						t.Fatalf("owned source projection changed: %s", policyFirstDifference(want, got))
 					}

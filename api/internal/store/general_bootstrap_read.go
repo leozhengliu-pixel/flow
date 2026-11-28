@@ -63,6 +63,28 @@ func (r *GeneralBootstrapRead) ReserveOutputWork(ctx context.Context, bytes uint
 	return r.owner.reserve(context.WithValue(ctx, metadataWorkLeaseKey{}, nil), bytes)
 }
 
+// EncodeRecordJSON admits one record while the field visitor owns its input.
+// The caller releases the encoding after writing it to the stream.
+func (r *GeneralBootstrapRead) EncodeRecordJSON(ctx context.Context, value any) ([]byte, func(), error) {
+	if r == nil || r.IssueBootstrapRead == nil || r.owner == nil || r.tx == nil {
+		return nil, nil, ErrBoundedMetadataCoverage
+	}
+	work, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(value))
+	if err != nil {
+		return nil, nil, err
+	}
+	_, release, err := r.owner.store.tryAdmitAdditionalMetadataWork(ctx, max(work, 64<<10))
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, err := marshalMetadataJSON(value)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return raw, release, nil
+}
+
 func (r *GeneralBootstrapRead) WalkIssueRecords(ctx context.Context, q IssueRecordQuery, visit func(domain.Issue) error) error {
 	if r == nil || r.IssueBootstrapRead == nil || r.owner == nil || r.tx == nil || q.Workspace != r.workspace {
 		return ErrBoundedMetadataCoverage

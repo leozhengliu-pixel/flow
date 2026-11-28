@@ -1264,7 +1264,9 @@ func (p *legacyMetadataWritePlan) references(ctx context.Context, directory *met
 				}
 				return nil
 			}
-			raw, err := json.Marshal(value.Interface())
+			scratch := &ResourceRead{store: work.store}
+			defer scratch.Close()
+			raw, err := encodeOwnedMetadataRecord(ctx, scratch, value)
 			if err != nil {
 				return err
 			}
@@ -1355,20 +1357,6 @@ func (p *legacyMetadataWritePlan) materializeField(ctx context.Context, f *legac
 	b, err := right.Value(ctx, metadataWorkBytes())
 	if err != nil {
 		return reflect.Value{}, reflect.Value{}, err
-	}
-	for _, value := range []reflect.Value{a, b} {
-		encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
-		if err != nil {
-			return reflect.Value{}, reflect.Value{}, err
-		}
-		// The slow writer keeps both marshal results and split raw JSON,
-		// while rebasing may encode a before/after record pair.
-		if encoding > (metadataWorkBytes()-(64<<10))/2 {
-			return reflect.Value{}, reflect.Value{}, ErrMetadataWorkBudget
-		}
-		if err := work.reserve(ctx, uint64(encoding)*2+64<<10); err != nil {
-			return reflect.Value{}, reflect.Value{}, err
-		}
 	}
 	return a, b, nil
 }
@@ -1601,7 +1589,7 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 		if err != nil {
 			return err
 		}
-		raw, err := json.Marshal(next.Interface())
+		raw, err := encodeOwnedMetadataRecord(ctx, work, next)
 		if err != nil {
 			return err
 		}
@@ -1614,7 +1602,7 @@ func (p *legacyMetadataWritePlan) writeArray(ctx context.Context, f *legacyMetad
 			if err != nil {
 				return err
 			}
-			previous, err = json.Marshal(old.Interface())
+			previous, err = encodeOwnedMetadataRecord(ctx, work, old)
 			if err != nil {
 				return err
 			}

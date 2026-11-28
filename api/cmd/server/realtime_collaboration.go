@@ -510,15 +510,13 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	bytes := len(contentState)
 	flush := func(more bool) error {
 		message.More = more
-		releaseEncode, err := acquireRealtimeWork(r.Context(), client.budget, collaborationSyncBytes(message)*2)
+		size := collaborationSyncBytes(message)
+		releaseEncode, err := acquireRealtimeWork(r.Context(), client.budget, (size+8191)&^8191+1024)
 		if err != nil {
 			return err
 		}
 		defer releaseEncode()
-		raw, err := json.Marshal(message)
-		if err != nil {
-			return err
-		}
+		raw := encodeCollaborationSync(message, size)
 		sent := make(chan error, 1)
 		if !client.enqueue(realtimeSocketMessage{data: raw, sent: sent, documentID: command.DocumentID}, false) {
 			return errors.New("collaboration queue exceeded")

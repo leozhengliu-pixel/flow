@@ -116,7 +116,7 @@ func (s *SQLiteStore) scaleRunCascade(ctx context.Context, tx *sqlTx, workspace 
 		if err := plan.Apply(source, &page); err != nil {
 			return err
 		}
-		changes, root, err := scaleRecordChanges(before, page)
+		changes, root, err := scaleRecordChanges(ctx, nil, before, page)
 		if err != nil {
 			return err
 		}

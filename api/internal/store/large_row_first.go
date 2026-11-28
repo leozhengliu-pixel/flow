@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 )
@@ -163,7 +162,7 @@ func (p *legacyMetadataWritePlan) writeLargeRowFirstRecords(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			raw, err := json.Marshal(next.Interface())
+			raw, err := marshalMetadataJSON(next.Interface())
 			if err != nil {
 				return err
 			}

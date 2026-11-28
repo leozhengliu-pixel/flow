@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -134,9 +133,12 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 				if err != nil {
 					return err
 				}
-				encoded, err := largeRowPartBytes(ctx, scratch, legacySessionSpoolPart(base), 4)
+				encoded, err := largeRowPartBytes(ctx, scratch, legacySessionSpoolPart(base), 2)
 				if err != nil {
 					return err
+				}
+				if err := reserveOffloadRecordWork(ctx, scratch, name, encoded); err != nil {
+					return fmt.Errorf("compare offloaded %s: %w", name, err)
 				}
 				refs, err := p.references(ctx, p.requested, scratch, nil, nil, stored, encoded)
 				if err != nil {
@@ -169,15 +171,11 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 			if err != nil {
 				return err
 			}
-			expanded := uint64(bytes.Count(stored, documentMarkerBytes)+1) * uint64(len(stored))
-			if expanded > uint64(metadataWorkBytes())/4 {
-				return ErrMetadataWorkBudget
-			}
-			if err := scratch.reserve(ctx, expanded*2+4096); err != nil {
-				return err
-			}
-			resolved, err := resolveDocumentMarkers(name, stored)
+			resolved, err := resolveDocumentMarkersOwned(ctx, scratch, name, stored)
 			if err != nil {
+				if errors.Is(err, ErrMetadataWorkBudget) || errors.Is(err, errMetadataWorkContended) || ctx.Err() != nil {
+					return err
+				}
 				return nil
 			}
 			typed, err := largeRowTypedJSONWork(ctx, scratch, resolved, kind)
@@ -191,9 +189,9 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 			if err != nil {
 				return nil
 			}
-			loaded, err := normalizedMetadataRecord(f.field, row.id, value)
+			loaded, err := encodeRetainedMetadataRecord(ctx, scratch, normalizedMetadataRecordValue(f.field, row.id, value))
 			if err != nil {
-				return nil
+				return fmt.Errorf("encode loaded %s: %w", name, err)
 			}
 			refs, err := p.references(ctx, p.requested, scratch, nil, nil, stored, encoded)
 			if err != nil {
@@ -243,16 +241,9 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 	// and its result: four copies of each encoding beyond the encodings.
 	baseRaw, ours := []byte(nil), []byte(nil)
 	for index, value := range []reflect.Value{left, right} {
-		encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+		encoded, err := encodeRetainedMetadataRecord(ctx, owner, value)
 		if err != nil {
-			return true, err
-		}
-		if err := owner.reserve(ctx, uint64(encoding)+64<<10); err != nil {
-			return true, err
-		}
-		encoded, err := marshalMetadataRecord(value.Interface())
-		if err != nil {
-			return true, err
+			return true, fmt.Errorf("encode %s rebase input: %w", name, err)
 		}
 		if index == 0 {
 			baseRaw = encoded
@@ -278,7 +269,7 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 		mark()
 		return true, nil
 	}
-	resolved, err := resolveDocumentMarkers(name, raw)
+	resolved, err := resolveDocumentMarkersOwned(ctx, owner, name, raw)
 	if err != nil {
 		return true, err
 	}
@@ -289,9 +280,9 @@ func (p *legacyMetadataWritePlan) rebaseLargeRow(ctx context.Context, f *legacyM
 	if err != nil {
 		return true, fmt.Errorf("rebase %s record: %w", name, err)
 	}
-	theirs, err := marshalMetadataRecord(stored.Interface())
+	theirs, err := encodeRetainedMetadataRecord(ctx, owner, stored)
 	if err != nil {
-		return true, err
+		return true, fmt.Errorf("encode canonical %s: %w", name, err)
 	}
 	loaded, normalized, err := largeRowNormalized(owner, ctx, f.field, row.id, stored, bodies)
 	if err != nil {

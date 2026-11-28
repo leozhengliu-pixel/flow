@@ -126,22 +126,7 @@ func (s *SQLiteStore) readScopedMetadataResult(ctx context.Context, workspace st
 		return domain.Bootstrap{}, ErrMetadataPageBudget
 	}
 	if err == nil {
-		cost, costErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
-		if costErr != nil {
-			return domain.Bootstrap{}, costErr
-		}
-		encodingWork := cost*8 + 64<<10
-		if encodingWork > uint64(metadataWorkBytes()) {
-			return domain.Bootstrap{}, ErrMetadataPageBudget
-		}
-		if encodingWork > 2<<20 {
-			_, releaseEncoding, admitErr := s.tryAdmitAdditionalMetadataWork(ctx, int(encodingWork)-(2<<20))
-			if admitErr != nil {
-				return domain.Bootstrap{}, admitErr
-			}
-			defer releaseEncoding()
-		}
-		err = validateMetadataLogicalSelection(data, scope)
+		err = s.validateMetadataLogicalSelection(ctx, data, scope)
 	}
 	return data, err
 }
@@ -582,24 +567,9 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			if err := validateScopedInlineMetadataChanges(ctx, validationBefore, next, writeScope, inlineFields, appendOrders); err != nil {
 				return err
 			}
-			if streamedScoped {
-				_, releaseOutput, err := s.reserveMetadataAggregatePayload(ctx, next)
-				if err != nil {
-					return err
-				}
-				defer releaseOutput()
-			}
-			encoded, err := json.Marshal(next)
-			if err != nil {
-				return err
-			}
-			if !streamedScoped {
-				budget := newMetadataHydrationBudget()
-				if err := budget.consume(encoded); err != nil {
-					return err
-				}
-			}
-			root, shapes, _, err := splitWorkspaceMetadata(encoded)
+			output := &ResourceRead{store: s}
+			defer output.Close()
+			root, shapes, _, err := splitMetadataImage(ctx, output, reflect.ValueOf(next), !streamedScoped)
 			if err != nil {
 				return err
 			}
@@ -612,7 +582,8 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 					streamedScoped = true
 				}
 			}
-			_, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
+			output.Close()
+			payloadRaw, releasePayload, err := s.encodeMetadataMutationPayload(ctx, payload)
 			if err != nil {
 				return err
 			}
@@ -621,10 +592,6 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 					releasePayload()
 				}
 			}()
-			payloadRaw, err := json.Marshal(payload)
-			if err != nil {
-				return err
-			}
 			committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 			beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
 			afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
@@ -683,7 +650,9 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
 				return err
 			}
-			changes, _, err := scaleRecordChanges(before, next)
+			diff := &ResourceRead{store: s}
+			defer diff.Close()
+			changes, _, err := scaleRecordChanges(ctx, diff, before, next)
 			if err != nil {
 				return err
 			}

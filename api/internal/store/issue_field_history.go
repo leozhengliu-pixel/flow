@@ -7,6 +7,7 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -70,19 +71,18 @@ func issueCASFields(payload any) ([]string, bool) {
 	if !ok {
 		return nil, false
 	}
-	raw, err := json.Marshal(input)
-	if err != nil {
-		return nil, false
-	}
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil {
-		return nil, false
-	}
 	names := map[string]bool{}
 	if input.DescriptionData != nil || len(input.DocumentUpdateIDs) > 0 {
 		names["description"] = true
 	}
-	for field := range fields {
+	// Field CAS only needs member presence. Use the input's JSON field
+	// rules without allocating an encoding of its potentially large body.
+	value := reflect.ValueOf(input)
+	for _, plan := range metadataJSONWorkFields(value.Type()) {
+		if plan.omitEmpty && metadataJSONEmpty(value.Field(plan.index)) {
+			continue
+		}
+		field, _, _ := strings.Cut(value.Type().Field(plan.index).Tag.Get("json"), ",")
 		switch field {
 		case "expectedVersion", "expectedDocumentVersion", "documentUpdateIds":
 			continue

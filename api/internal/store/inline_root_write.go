@@ -538,19 +538,11 @@ func (s *SQLiteStore) writeStreamedMetadataSlowFieldsRoot(ctx context.Context, t
 		prior.Field(field.index).Set(original.Field(field.index))
 		selected[name] = true
 	}
-	encoded, err := json.Marshal(partial.Interface())
+	partRoot, partShapes, partRecords, err := splitMetadataImage(ctx, owner, partial, false)
 	if err != nil {
 		return err
 	}
-	partRoot, partShapes, partRecords, err := splitWorkspaceMetadata(encoded)
-	if err != nil {
-		return err
-	}
-	encodedBefore, err := json.Marshal(prior.Interface())
-	if err != nil {
-		return err
-	}
-	_, _, knownRecords, err := splitWorkspaceMetadata(encodedBefore)
+	_, _, knownRecords, err := splitMetadataImage(ctx, owner, prior, false)
 	if err != nil {
 		return err
 	}
@@ -574,7 +566,7 @@ func (s *SQLiteStore) writeStreamedMetadataSlowFieldsRoot(ctx context.Context, t
 	if err := syncMetadataRecords(withLegacyMetadataDeltaReadBudget(ctx, owner), tx, workspace, refs, selectedShapes, syncWanted, syncNames, knownRecords); err != nil {
 		return err
 	}
-	manifest, err := json.Marshal(shapes)
+	manifest, err := encodeOwnedMetadataRecord(ctx, owner, reflect.ValueOf(shapes))
 	if err != nil {
 		return err
 	}

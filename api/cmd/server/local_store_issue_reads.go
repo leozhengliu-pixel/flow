@@ -146,7 +146,7 @@ func (s *server) localStoreIssuePage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(raw)+1 <= budget || limit == 1 {
-			writeSyncJSON(w, result, budget)
+			s.writeSyncJSON(w, r, result, budget)
 			return
 		}
 		limit = max(1, len(items)/2)
@@ -199,5 +199,5 @@ func (s *server) localStoreIssueBatch(w http.ResponseWriter, r *http.Request, ke
 			result.Items = append(result.Items, store.MetadataRecord{Key: key, Missing: true})
 		}
 	}
-	writeSyncJSON(w, result, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, result, store.MetadataRecordPageMaxBytes)
 }

@@ -583,11 +583,11 @@ func (p *legacyMetadataWritePlan) rebaseProjectProgressRow(ctx context.Context, 
 	if err != nil {
 		return true, err
 	}
-	theirs, err := json.Marshal(stored.Interface())
+	theirs, err := encodeOwnedMetadataRecord(ctx, owner, stored)
 	if err != nil {
 		return true, err
 	}
-	loaded, err := normalizedMetadataRecord(f.field, row.id, stored)
+	loaded, err := encodeOwnedMetadataRecord(ctx, owner, normalizedMetadataRecordValue(f.field, row.id, stored))
 	if err != nil {
 		return true, err
 	}
@@ -655,14 +655,14 @@ func (p *legacyMetadataWritePlan) markProjectRebased(key metadataRecordKey) {
 }
 
 func legacyProjectMarshalHeader(ctx context.Context, owner *ResourceRead, value reflect.Value) ([]byte, error) {
-	encoding, err := metadataAggregatePayloadEncodingWork(ctx, value, 0)
+	encoding, err := metadataRecordEncodingWork(ctx, value)
 	if err != nil {
 		return nil, err
 	}
 	if err := owner.reserve(ctx, uint64(encoding)*4+64<<10); err != nil {
 		return nil, err
 	}
-	return json.Marshal(value.Interface())
+	return marshalMetadataJSON(value.Interface())
 }
 
 // Strip exactly the same JSON string escape as StripJSONNUL, including when

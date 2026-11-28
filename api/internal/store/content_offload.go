@@ -15,13 +15,13 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/objectstore"
@@ -147,7 +147,7 @@ func (c *contentOffload) storedForm(field string, raw []byte) ([]byte, []content
 			return raw, nil, nil
 		}
 		if changed, err = offloadDocument(document, &blobs); changed && err == nil {
-			record["payload"], err = json.Marshal(document)
+			record["payload"], err = marshalMetadataRawObject(document)
 		}
 	case "agentSessions":
 		changed, err = c.offloadTranscript(record, &blobs)
@@ -155,7 +155,7 @@ func (c *contentOffload) storedForm(field string, raw []byte) ([]byte, []content
 	if err != nil || !changed {
 		return raw, nil, err
 	}
-	stored, err := json.Marshal(record)
+	stored, err := marshalMetadataRawObject(record)
 	return stored, blobs, err
 }
 
@@ -207,7 +207,7 @@ func offloadDocument(document map[string]json.RawMessage, blobs *[]contentBlob) 
 		case same:
 			marker = map[string]string{"body": "document"}
 		case index > 0 && size >= revisionOffloadMinBytes:
-			encoded, err := json.Marshal(body)
+			encoded, err := marshalMetadataRawObject(body)
 			if err != nil {
 				return false, err
 			}
@@ -230,7 +230,7 @@ func offloadDocument(document map[string]json.RawMessage, blobs *[]contentBlob) 
 	if !changed {
 		return false, nil
 	}
-	encoded, err := json.Marshal(revisions)
+	encoded, err := marshalMetadataRawObjects(revisions)
 	document["revisions"] = encoded
 	return true, err
 }
@@ -309,12 +309,12 @@ func (c *contentOffload) offloadTranscript(session map[string]json.RawMessage, b
 				}
 				var call map[string]json.RawMessage
 				if json.Unmarshal(part["toolCall"], &call) == nil && (offload(call, "result") || call != nil && call[offloadMarker] != nil) {
-					part["toolCall"], _ = json.Marshal(call)
+					part["toolCall"], _ = marshalMetadataRawObject(call)
 					partsChanged = true
 				}
 			}
 			if partsChanged {
-				message["parts"], _ = json.Marshal(parts)
+				message["parts"], _ = marshalMetadataRawObjects(parts)
 				changed = true
 			}
 		}
@@ -325,7 +325,7 @@ func (c *contentOffload) offloadTranscript(session map[string]json.RawMessage, b
 	if !changed {
 		return false, nil
 	}
-	encoded, err := json.Marshal(messages)
+	encoded, err := marshalMetadataRawObjects(messages)
 	session["messages"] = encoded
 	return true, err
 }
@@ -368,15 +368,20 @@ func contentHash(body []byte) string {
 }
 
 func offloadSummary(value json.RawMessage) string {
-	text := string(value)
-	var decoded string
-	if json.Unmarshal(value, &decoded) == nil {
-		text = decoded
+	var text string
+	if json.Unmarshal(value, &text) != nil {
+		text = string(value)
 	}
-	if utf8.RuneCountInString(text) <= offloadSummaryChars {
-		return text
+	count := 0
+	for offset := range text {
+		if count == offloadSummaryChars {
+			// The rune conversion preserves the old invalid UTF-8 handling
+			// while bounding the conversion to the retained prefix.
+			return string([]rune(text[:offset])) + "…"
+		}
+		count++
 	}
-	return string([]rune(text)[:offloadSummaryChars]) + "…"
+	return text
 }
 
 func jsonString(raw json.RawMessage) string {
@@ -390,8 +395,25 @@ func jsonString(raw json.RawMessage) string {
 // resolveDocumentMarkers fills the versions that refer to their document
 // (no body is read); offloaded versions keep their references.
 func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
+	return resolveDocumentMarkersOwned(context.Background(), nil, field, raw)
+}
+
+func resolveDocumentMarkersOwned(ctx context.Context, owner *ResourceRead, field string, raw []byte) ([]byte, error) {
 	if (field != "documents" && field != "trash") || !bytes.Contains(raw, documentMarkerBytes) {
 		return raw, nil
+	}
+	if owner != nil {
+		copies := uint64(4)
+		if field == "trash" {
+			copies += 2
+		}
+		work, err := metadataOffloadAssemblyWork(ctx, raw, copies)
+		if err != nil {
+			return nil, err
+		}
+		if err := owner.reserve(ctx, work); err != nil {
+			return nil, err
+		}
 	}
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &record); err != nil {
@@ -403,6 +425,7 @@ func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
 			return false, nil
 		}
 		changed := false
+		var bodyWidth uint64
 		for _, revision := range revisions {
 			if revision == nil || revision[offloadMarker] == nil {
 				continue
@@ -414,6 +437,26 @@ func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
 			if jsonString(refs["body"]) != "document" {
 				continue
 			}
+			if owner != nil {
+				if !changed {
+					for _, name := range revisionBodyFields {
+						width, expansion, _, _, err := metadataRawJSONSize(ctx, document[name])
+						if err != nil {
+							return false, err
+						}
+						bodyWidth += width + expansion
+					}
+				}
+				// The added body is encoded into both the revisions list
+				// and the document. Trash also copies it into the outer row.
+				copies := uint64(2)
+				if field == "trash" {
+					copies++
+				}
+				if err := owner.reserve(ctx, bodyWidth*copies+1024); err != nil {
+					return false, err
+				}
+			}
 			for _, name := range revisionBodyFields {
 				if value, ok := document[name]; ok {
 					revision[name] = value
@@ -423,7 +466,7 @@ func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
 			changed = true
 		}
 		if changed {
-			encoded, err := json.Marshal(revisions)
+			encoded, err := marshalMetadataRawObjects(revisions)
 			if err != nil {
 				return false, err
 			}
@@ -435,7 +478,7 @@ func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
 		if _, err := resolve(record); err != nil {
 			return raw, err
 		}
-		return json.Marshal(record)
+		return marshalMetadataRawObject(record)
 	}
 	var document map[string]json.RawMessage
 	if json.Unmarshal(record["payload"], &document) != nil || document == nil {
@@ -447,18 +490,32 @@ func resolveDocumentMarkers(field string, raw []byte) ([]byte, error) {
 	}
 	// The payload is served as raw JSON: re-encode it as a document so its
 	// fields keep the order they were deleted with.
-	encoded, err := json.Marshal(document)
+	encoded, err := marshalMetadataRawObject(document)
 	if err != nil {
 		return raw, err
 	}
 	var restored domain.Document
+	if owner != nil {
+		work, err := largeRowTypedJSONWork(ctx, owner, encoded, reflect.TypeFor[domain.Document]())
+		if err != nil {
+			return nil, err
+		}
+		if err := owner.reserve(ctx, work); err != nil {
+			return nil, err
+		}
+	}
 	if err := json.Unmarshal(encoded, &restored); err != nil {
 		return raw, err
 	}
-	if record["payload"], err = json.Marshal(restored); err != nil {
+	if owner != nil {
+		record["payload"], err = encodeRetainedMetadataRecord(ctx, owner, reflect.ValueOf(restored))
+	} else {
+		record["payload"], err = marshalMetadataJSON(restored)
+	}
+	if err != nil {
 		return raw, err
 	}
-	return json.Marshal(record)
+	return marshalMetadataRawObject(record)
 }
 
 // offloadedKeys lists the body keys a stored record refers to.
@@ -742,7 +799,7 @@ func inlineOffloadedJSON(raw json.RawMessage, bodies map[string][]byte) json.Raw
 		for index := range items {
 			items[index] = inlineOffloadedJSON(items[index], bodies)
 		}
-		encoded, err := json.Marshal(items)
+		encoded, err := marshalMetadataRawList(items)
 		if err != nil {
 			return raw
 		}
@@ -785,7 +842,7 @@ func inlineOffloadedJSON(raw json.RawMessage, bodies map[string][]byte) json.Raw
 				}
 			}
 		}
-		encoded, err := json.Marshal(object)
+		encoded, err := marshalMetadataRawObject(object)
 		if err != nil {
 			return raw
 		}
@@ -990,6 +1047,37 @@ func gunzipBody(data []byte) ([]byte, error) {
 
 // ---------------------------------------------------------------- writing
 
+// Offload walks a fixed number of raw-member layers. At each layer it can
+// copy the input when decoding and allocate a compact output. Also charge
+// container and marker allocations so short members cannot exhaust the bound.
+func metadataOffloadAssemblyWork(ctx context.Context, raw []byte, copies uint64) (uint64, error) {
+	width, expansion, scanner, structure, err := metadataRawJSONSize(ctx, raw)
+	if err != nil {
+		return 0, err
+	}
+	fixed := scanner + structure + 64<<10
+	limit := uint64(metadataWorkBytes())
+	if fixed > limit || width+expansion > (limit-fixed)/copies {
+		return 0, ErrMetadataWorkBudget
+	}
+	return (width+expansion)*copies + fixed, nil
+}
+
+func reserveOffloadRecordWork(ctx context.Context, owner *ResourceRead, field string, raw []byte) error {
+	copies := uint64(6)
+	switch field {
+	case "trash":
+		copies = 8 // the document payload has another decode/encode layer
+	case "agentSessions":
+		copies = 12 // messages, parts, tool calls, summary and their output
+	}
+	work, err := metadataOffloadAssemblyWork(ctx, raw, copies)
+	if err != nil {
+		return err
+	}
+	return owner.reserve(ctx, work)
+}
+
 // offloadRecord saves raw's offloadable bodies and returns the record as it
 // is stored. It runs inside the transaction that writes the record row.
 func offloadRecord(ctx context.Context, tx *sqlTx, workspace, field string, raw []byte) ([]byte, error) {
@@ -1015,7 +1103,7 @@ func offloadRecord(ctx context.Context, tx *sqlTx, workspace, field string, raw 
 // webhooks, loops and other sinks get the in-memory event, which is never
 // changed.
 func storedEventPreviousValues(ctx context.Context, tx *sqlTx, workspace, eventType, documentID string, previous []byte) ([]byte, error) {
-	if tx.database == nil || tx.database.content == nil || !strings.HasPrefix(eventType, "document.") || !bytes.Contains(previous, []byte(`"revisions"`)) {
+	if !offloadEventRevisions(tx, eventType, previous) {
 		return previous, nil
 	}
 	var values map[string]json.RawMessage
@@ -1044,7 +1132,7 @@ func storedEventPreviousValues(ctx context.Context, tx *sqlTx, workspace, eventT
 		if size < revisionOffloadMinBytes {
 			continue
 		}
-		encoded, err := json.Marshal(body)
+		encoded, err := marshalMetadataRawObject(body)
 		if err != nil {
 			return nil, err
 		}
@@ -1061,25 +1149,50 @@ func storedEventPreviousValues(ctx context.Context, tx *sqlTx, workspace, eventT
 	if err := tx.database.content.save(ctx, tx, workspace, blobs); err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(revisions)
+	encoded, err := marshalMetadataRawObjects(revisions)
 	if err != nil {
 		return nil, err
 	}
 	values["revisions"] = encoded
-	return json.Marshal(values)
+	return marshalMetadataRawObject(values)
+}
+
+func offloadEventRevisions(tx *sqlTx, eventType string, previous []byte) bool {
+	return tx.database != nil && tx.database.content != nil && strings.HasPrefix(eventType, "document.") &&
+		bytes.Contains(previous, []byte(`"revisions"`))
+}
+
+func storedEventPreviousValuesOwned(ctx context.Context, owner *ResourceRead, tx *sqlTx, workspace, eventType, documentID string, previous []byte) ([]byte, error) {
+	if !offloadEventRevisions(tx, eventType, previous) {
+		return previous, nil
+	}
+	if err := reserveOffloadRecordWork(ctx, owner, "documents", previous); err != nil {
+		return nil, err
+	}
+	return storedEventPreviousValues(ctx, tx, workspace, eventType, documentID, previous)
 }
 
 // storedRecordEqual reports whether stored (a row as read from the database)
 // is how raw would be stored, so an unchanged record is not rewritten.
 func storedRecordEqual(tx *sqlTx, refs issueReferences, field string, stored, raw []byte) bool {
+	equal, _ := storedRecordEqualOwned(context.Background(), nil, tx, refs, field, stored, raw)
+	return equal
+}
+
+func storedRecordEqualOwned(ctx context.Context, owner *ResourceRead, tx *sqlTx, refs issueReferences, field string, stored, raw []byte) (bool, error) {
 	if refs.equalDisplayData(stored, raw) {
-		return true
+		return true, nil
 	}
 	if tx.database == nil || tx.database.content == nil || !offloadFields[field] || !bytes.Contains(stored, offloadMarkerBytes) {
-		return false
+		return false, nil
+	}
+	if owner != nil {
+		if err := reserveOffloadRecordWork(ctx, owner, field, raw); err != nil {
+			return false, err
+		}
 	}
 	form, _, err := tx.database.content.storedForm(field, raw)
-	return err == nil && refs.equalDisplayData(stored, form)
+	return err == nil && refs.equalDisplayData(stored, form), nil
 }
 
 // save stores the bodies the database does not already hold. A body already

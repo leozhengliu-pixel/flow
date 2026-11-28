@@ -134,7 +134,9 @@ func (s *SQLiteStore) writeMetadataLogicalInlineField(ctx context.Context, tx *s
 	nextData := oldData
 	reflect.ValueOf(&oldData).Elem().Field(field.index).Set(oldValue)
 	reflect.ValueOf(&nextData).Elem().Field(field.index).Set(nextValue)
-	_, err = s.writeWorkspaceMetadataDelta(ctx, tx, workspace, oldData, &nextData)
+	work := &ResourceRead{store: s}
+	defer work.Close()
+	_, err = s.writeWorkspaceMetadataDelta(withLegacyMetadataDeltaReadBudget(ctx, work), tx, workspace, oldData, &nextData)
 	if err == nil && prepared != nil {
 		err = prepared(nextData)
 	}

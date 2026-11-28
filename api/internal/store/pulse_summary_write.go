@@ -291,16 +291,9 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 			return ErrNoMutation
 		}
 		next.Settings["pulseDeliveryCursors"] = current
-		for _, value := range []any{before, next.Settings} {
-			encoding, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(value), 0)
-			if err != nil {
-				return err
-			}
-			if err := owned.reserve(uint64(encoding)); err != nil {
-				return err
-			}
-		}
-		changes, _, err := scaleRecordChanges(before, next)
+		diff := &ResourceRead{store: s}
+		defer diff.Close()
+		changes, _, err := scaleRecordChanges(ctx, diff, before, next)
 		if err != nil {
 			return err
 		}

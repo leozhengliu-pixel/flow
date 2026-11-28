@@ -74,11 +74,10 @@ func TestPayloadWorkProducerDifferential(t *testing.T) {
 		map[string]any{"escaped": strings.Repeat("\x00", 128000)},
 		json.RawMessage(densePayload(10000)),
 	} {
-		inputWork, err := metadataAggregatePayloadEncodingWork(t.Context(), reflect.ValueOf(payload), 0)
+		inputJSON, err := json.Marshal(payload)
 		if err != nil {
 			t.Fatal(err)
 		}
-		inputWork = max(inputWork, 128<<10)
 		f := journalScaleDatabase(t)
 		workspace := f.data.Workspace.URLKey
 		type outcome struct {
@@ -103,7 +102,7 @@ func TestPayloadWorkProducerDifferential(t *testing.T) {
 			repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
 				got.previous, got.snapshot = event.PreviousValues, event.Snapshot
 				if bounded {
-					required := inputWork + len(event.PreviousValues) + len(event.Snapshot)
+					required := len(inputJSON) + len(event.PreviousValues) + len(event.Snapshot)
 					if held() < required {
 						t.Errorf("webhook lacks input and output ownership: held=%d required=%d", held(), required)
 					}
@@ -112,7 +111,7 @@ func TestPayloadWorkProducerDifferential(t *testing.T) {
 			repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
 				got.realtime = event.Payload
 				if bounded {
-					required := inputWork + len(got.previous) + len(event.Payload)
+					required := len(inputJSON) + len(got.previous) + len(event.Payload)
 					if held() < required {
 						t.Errorf("realtime lacks input and output ownership: held=%d required=%d", held(), required)
 					}

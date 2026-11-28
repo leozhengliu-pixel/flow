@@ -196,7 +196,7 @@ func (r *InstalledMetadataRead) Select(ctx context.Context, scope MetadataRecord
 		err = ErrMetadataPageBudget
 	}
 	if err == nil {
-		err = validateMetadataLogicalSelection(data, scope)
+		err = r.store.validateMetadataLogicalSelection(work, data, scope)
 	}
 	if err == nil {
 		err = ctx.Err()

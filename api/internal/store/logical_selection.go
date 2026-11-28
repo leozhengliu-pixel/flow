@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"slices"
@@ -10,17 +11,11 @@ import (
 
 // The logical representation changes the source, not the generic adapter's
 // input contract. Large/full scans use its explicitly owned streaming API.
-func validateMetadataLogicalSelection(data domain.Bootstrap, scope MetadataRecordScope) error {
+func (s *SQLiteStore) validateMetadataLogicalSelection(ctx context.Context, data domain.Bootstrap, scope MetadataRecordScope) error {
+	work := &ResourceRead{store: s}
+	defer work.Close()
 	count := 0
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	budget := newMetadataHydrationBudget()
-	if err := budget.consume(raw); err != nil {
-		return err
-	}
-	_, shapes, records, err := splitWorkspaceMetadata(raw)
+	_, shapes, records, err := splitMetadataImage(ctx, work, reflect.ValueOf(data), true)
 	if err != nil {
 		return err
 	}
@@ -46,8 +41,11 @@ func validateMetadataLogicalSelection(data domain.Bootstrap, scope MetadataRecor
 			if name == "workspaceSettings" {
 				if slices.Contains(scope.Fields, name) {
 					var object map[string]json.RawMessage
-					encoded, err := json.Marshal(items.Interface())
+					encoded, err := encodeOwnedMetadataRecord(ctx, work, items)
 					if err != nil {
+						return err
+					}
+					if err := reserveLegacyMetadataSplit(ctx, work, encoded); err != nil {
 						return err
 					}
 					if err := json.Unmarshal(encoded, &object); err != nil {

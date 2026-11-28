@@ -59,15 +59,7 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 		custom = true
 	}
 	if custom || depth > 1000 {
-		raw, err := json.Marshal(value.Interface())
-		if err != nil {
-			return err
-		}
-		if handled, err := encodeHydratedSignedRaw(ctx, buffer, raw); handled {
-			return err
-		}
-		_, err = buffer.Write(raw)
-		return err
+		return encodeHydratedFallback(ctx, buffer, value.Interface())
 	}
 	switch value.Kind() {
 	case reflect.Interface, reflect.Pointer:
@@ -162,7 +154,24 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 		}
 		return buffer.WriteByte('}')
 	}
-	raw, err := json.Marshal(value.Interface())
+	return encodeHydratedFallback(ctx, buffer, value.Interface())
+}
+
+type bootstrapRecordEncodingKey struct{}
+type bootstrapRecordEncoder func(context.Context, any) ([]byte, func(), error)
+
+func encodeHydratedFallback(ctx context.Context, buffer *bufio.Writer, value any) error {
+	var raw []byte
+	var err error
+	if encode, ok := ctx.Value(bootstrapRecordEncodingKey{}).(bootstrapRecordEncoder); ok {
+		var release func()
+		raw, release, err = encode(ctx, value)
+		if release != nil {
+			defer release()
+		}
+	} else {
+		raw, err = json.Marshal(value)
+	}
 	if err != nil {
 		return err
 	}

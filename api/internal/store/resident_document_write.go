@@ -251,6 +251,11 @@ func (s *SQLiteStore) writeResidentDocumentOnce(ctx context.Context, workspace, 
 	defer edit.release()
 	traceStart(ctx, "resident")
 	err = edit.prepare(ctx, payload, mutate, webhookEnabled)
+	if errors.Is(err, ErrMetadataWorkBudget) {
+		// The scoped writer can stream records the in-memory edit cannot
+		// admit. Nothing has reached the write transaction yet.
+		err = residentFallback("output work budget")
+	}
 	if err == nil {
 		traceMark(ctx, "prepare")
 		if residentWriteVerify.Load() {
@@ -542,16 +547,12 @@ func (e *residentDocumentEdit) outputs(ctx context.Context, payload any, actor d
 	if len(e.changes) == 0 {
 		return residentFallback("no record changed")
 	}
-	var err error
-	if e.payload, err = json.Marshal(payload); err != nil {
+	raw, release, err := e.store.encodeMetadataMutationPayload(ctx, payload)
+	if err != nil {
 		return err
 	}
-	for index := range e.changes {
-		change := &e.changes[index]
-		if err := e.owner.reserve(ctx, residentRecordWork(change.before)+residentRecordWork(change.after)); err != nil {
-			return err
-		}
-	}
+	e.payload = raw
+	e.owner.release = append(e.owner.release, release)
 	// The aggregate's previous values and realtime entity, as flag-off
 	// computes them: before is the stored generation with the loaded
 	// content, after is the written generation with the callback's.
@@ -566,10 +567,22 @@ func (e *residentDocumentEdit) outputs(ctx context.Context, payload any, actor d
 	}
 	afterImage.Issues, afterImage.Comments, afterImage.Activities = after.Issues, after.Comments, after.Activities
 	afterImage.Notifications, afterImage.NotificationDeliveries = after.Notifications, after.NotificationDeliveries
-	if webhookEnabled {
-		e.previous = aggregatePreviousValues(beforeImage, afterImage, e.aggregate)
+	resolve := func(prior bool) (metadataAggregateNode, error) {
+		data := afterImage
+		if prior {
+			data = beforeImage
+		}
+		if entity := nativeAggregateEntity(data, e.aggregate); entity != nil {
+			return metadataAggregateNativeNode{value: reflect.ValueOf(entity)}, nil
+		}
+		return nil, ctx.Err()
 	}
-	e.realtime = enrichRealtimePayload(e.payload, aggregateJSONValue(afterImage, e.aggregate), e.eventType)
+	publication, err := e.store.prepareMetadataAggregateResolvedOutputs(ctx, resolve, e.aggregate, webhookEnabled, e.payload, e.eventType, true)
+	if err != nil {
+		return err
+	}
+	e.previous, e.realtime = publication.PreviousValues, publication.RealtimePayload
+	e.owner.release = append(e.owner.release, publication.Close)
 	// The rows: each record rebased onto its stored row as the scoped
 	// writer rebases it under its lock (rebaseMetadata). The stored rows are
 	// read at the pinned generation's stamp; the commit proves the stamp
@@ -775,56 +788,119 @@ func (e *residentDocumentEdit) rebase(ctx context.Context) error {
 	}
 	refs := newIssueReferences(domain.Bootstrap{Users: e.users})
 	for index := range e.changes {
-		change := &e.changes[index]
-		field, kind, ok := metadataRecordType(change.field)
-		if !ok || !utf8.ValidString(change.id) {
-			return residentFallback("record not rebased by row")
+		if err := e.rebaseRecord(ctx, reader, refs, &e.changes[index]); err != nil {
+			return err
 		}
-		var row []byte
-		err := reader.QueryRowContext(ctx, `SELECT data,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`,
-			e.workspace, change.field, change.id).Scan(&row, &change.order)
-		if errors.Is(err, sql.ErrNoRows) {
-			return residentFallback("record row missing")
+	}
+	return nil
+}
+
+func (e *residentDocumentEdit) rebaseRecord(ctx context.Context, reader *sqlTx, refs issueReferences, change *residentRecordChange) error {
+	field, kind, ok := metadataRecordType(change.field)
+	if !ok || !utf8.ValidString(change.id) {
+		return residentFallback("record not rebased by row")
+	}
+	work := &ResourceRead{store: e.store}
+	defer work.Close()
+	length := work.byteLength("data")
+	const from = ` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`
+	var size int64
+	if err := reader.QueryRowContext(ctx, "SELECT "+length+from, e.workspace, change.field, change.id).Scan(&size); errors.Is(err, sql.ErrNoRows) {
+		return residentFallback("record row missing")
+	} else if err != nil {
+		return err
+	}
+	if size < 0 || size > int64(metadataWorkBytes()/3) {
+		return ErrMetadataWorkBudget
+	}
+	if err := work.reserve(ctx, uint64(size)*3+4096); err != nil {
+		return err
+	}
+	var row []byte
+	if err := reader.QueryRowContext(ctx, "SELECT CASE WHEN "+length+"<=? THEN data ELSE NULL END,collection_order"+from,
+		size, e.workspace, change.field, change.id).Scan(&row, &change.order); err != nil {
+		return err
+	}
+	if row == nil || int64(len(row)) != size {
+		return residentFallback("stored stamp moved before the rebase")
+	}
+	base, releaseBase, err := e.store.encodeMetadataMutationPayload(ctx, change.before)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if releaseBase != nil {
+			releaseBase()
 		}
+	}()
+	ours, releaseOurs, err := e.store.encodeMetadataMutationPayload(ctx, change.after)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if releaseOurs != nil {
+			releaseOurs()
+		}
+	}()
+	// Display comparison parses member maps and may encode display-stripped
+	// copies. The canonical read and the two typed encodings already own
+	// their output buffers.
+	if err := work.reserve(ctx, uint64(len(base)+len(ours))*8+uint64(size)*5+64<<10); err != nil {
+		return err
+	}
+	same, err := storedRecordEqualOwned(ctx, work, reader, refs, change.field, row, base)
+	if err != nil {
+		return err
+	}
+	if !same {
+		result, err := mergeWithStoredRecordOwned(ctx, work, refs, field, kind, change.id, base, ours, row)
 		if err != nil {
 			return err
 		}
-		base, err := json.Marshal(change.before)
-		if err != nil {
-			return err
+		if result.conflict {
+			return residentFallback("record conflicts with its stored row")
 		}
-		ours, err := json.Marshal(change.after)
-		if err != nil {
-			return err
-		}
-		if !storedRecordEqual(reader, refs, change.field, row, base) {
-			result, err := mergeWithStoredRecord(refs, field, kind, change.id, base, ours, row)
+		if !result.unchanged {
+			if err := e.adoptRebasedRecord(ctx, work, change, kind, result); err != nil {
+				return err
+			}
+			releaseBase()
+			releaseOurs()
+			releaseBase, releaseOurs = nil, nil
+			base, releaseBase, err = e.store.encodeMetadataMutationPayload(ctx, change.before)
 			if err != nil {
 				return err
 			}
-			if result.conflict {
-				return residentFallback("record conflicts with its stored row")
-			}
-			if !result.unchanged {
-				theirs, err := decodeMetadataRecord(kind, result.theirs, reflect.ValueOf(change.before))
-				if err != nil {
-					return err
-				}
-				merged, err := decodeMetadataRecord(kind, result.merged, reflect.ValueOf(change.after))
-				if err != nil {
-					return err
-				}
-				change.before, change.after = theirs.Interface(), merged.Interface()
-				if base, err = json.Marshal(change.before); err != nil {
-					return err
-				}
-				if ours, err = json.Marshal(change.after); err != nil {
-					return err
-				}
+			ours, releaseOurs, err = e.store.encodeMetadataMutationPayload(ctx, change.after)
+			if err != nil {
+				return err
 			}
 		}
-		change.previous, change.raw = base, ours
-		change.displayOnly = refs.equalDisplayData(change.previous, change.raw)
+	}
+	change.displayOnly = refs.equalDisplayData(base, ours)
+	change.previous, change.raw = base, ours
+	e.owner.release = append(e.owner.release, releaseBase, releaseOurs)
+	releaseBase, releaseOurs = nil, nil
+	return nil
+}
+
+func (e *residentDocumentEdit) adoptRebasedRecord(ctx context.Context, work *ResourceRead, change *residentRecordChange, kind reflect.Type, result storedMerge) error {
+	for _, record := range []struct {
+		raw    []byte
+		target *any
+	}{{result.theirs, &change.before}, {result.merged, &change.after}} {
+		cost, err := largeRowTypedJSONWork(ctx, work, record.raw, kind)
+		if err != nil {
+			return err
+		}
+		if err := e.owner.reserve(ctx, cost); err != nil {
+			return err
+		}
+		value, err := decodeMetadataRecord(kind, record.raw, reflect.ValueOf(*record.target))
+		if err != nil {
+			return err
+		}
+		*record.target = value.Interface()
 	}
 	return nil
 }
@@ -837,7 +913,7 @@ func (e *residentDocumentEdit) writeRows(ctx context.Context, tx *sqlTx) error {
 		if change.displayOnly {
 			continue
 		}
-		if err := writeMetadataRecordRow(ctx, tx, e.workspace, metadataRecordKey{change.field, change.id}, metadataRecord{data: change.raw, order: change.order}, change.previous); err != nil {
+		if err := writeOwnedMetadataRecordRow(ctx, e.store, tx, e.workspace, metadataRecordKey{change.field, change.id}, metadataRecord{data: change.raw, order: change.order}, change.previous); err != nil {
 			return err
 		}
 	}
@@ -859,8 +935,15 @@ func (e *residentDocumentEdit) writeViewer(ctx context.Context, tx *sqlTx) error
 
 func (e *residentDocumentEdit) writeEvent(ctx context.Context, tx *sqlTx, baseStamp copyStamp, outcome *residentWriteOutcome) error {
 	s := e.store
+	budget := &boundedDiscussionAttempt{owner: e.owner}
+	if err := budget.reserveValue(ctx, s.viewer); err != nil {
+		return err
+	}
 	viewerRaw, _ := json.Marshal(s.viewer)
 	if len(viewerRaw) == 0 || string(viewerRaw) == "{}" {
+		if err := budget.reserveValue(ctx, e.data.Viewer); err != nil {
+			return err
+		}
 		viewerRaw, _ = json.Marshal(e.data.Viewer)
 	}
 	if err := writeAccountMetadata(ctx, tx, e.workspace, viewerRaw); err != nil {
@@ -868,7 +951,9 @@ func (e *residentDocumentEdit) writeEvent(ctx context.Context, tx *sqlTx, baseSt
 	}
 	event := domain.DomainEvent{ID: idgen.New("evt_"), Type: e.eventType, AggregateID: e.aggregate,
 		Payload: e.payload, PreviousValues: e.previous, CreatedAt: time.Now().UTC()}
-	storedPrevious, err := storedEventPreviousValues(ctx, tx, e.workspace, event.Type, e.aggregate, e.previous)
+	scratch := &ResourceRead{store: s}
+	defer scratch.Close()
+	storedPrevious, err := storedEventPreviousValuesOwned(ctx, scratch, tx, e.workspace, event.Type, e.aggregate, e.previous)
 	if err != nil {
 		return err
 	}
@@ -1039,13 +1124,4 @@ func residentContentCopy(loaded domain.Bootstrap) domain.Bootstrap {
 	content := domain.Bootstrap{Comments: loaded.Comments, Activities: loaded.Activities,
 		Notifications: loaded.Notifications, NotificationDeliveries: loaded.NotificationDeliveries}
 	return exactCopyValue(reflect.ValueOf(content)).Interface().(domain.Bootstrap)
-}
-
-// residentRecordWork is the work a record's encoding is admitted for.
-func residentRecordWork(value any) uint64 {
-	cost, err := metadataAggregatePayloadEncodingWork(context.Background(), reflect.ValueOf(value), 0)
-	if err != nil || cost < 0 {
-		return uint64(metadataWorkBytes())
-	}
-	return uint64(cost)*2 + 4096
 }

@@ -2050,6 +2050,15 @@ func (s *SQLiteStore) publishMutation(ctx context.Context, workspaceKey string, 
 // realtime event. Domain event payloads and webhooks continue to contain the
 // original mutation input so existing consumers remain compatible.
 func enrichRealtimePayload(payload json.RawMessage, entity any, eventType string) json.RawMessage {
+	fields := realtimePayloadFields(payload, entity, eventType)
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return payload
+	}
+	return encoded
+}
+
+func realtimePayloadFields(payload json.RawMessage, entity any, eventType string) map[string]any {
 	var fields map[string]any
 	if len(payload) > 0 && json.Unmarshal(payload, &fields) != nil {
 		var input any
@@ -2066,11 +2075,7 @@ func enrichRealtimePayload(payload json.RawMessage, entity any, eventType string
 	if strings.HasSuffix(eventType, ".deleted") {
 		fields["deleted"] = true
 	}
-	encoded, err := json.Marshal(fields)
-	if err != nil {
-		return payload
-	}
-	return encoded
+	return fields
 }
 
 func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string) json.RawMessage {
@@ -2106,11 +2111,7 @@ func aggregatePreviousValues(previous, next domain.Bootstrap, aggregateID string
 }
 
 func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
-	data = compactImportInputs(data)
-	entity, found := aggregateEntityByID(data, aggregateID)
-	if !found {
-		entity = findAggregateValue(reflect.ValueOf(data), aggregateID)
-	}
+	entity := nativeAggregateEntity(data, aggregateID)
 	if entity == nil {
 		return nil
 	}
@@ -2123,6 +2124,15 @@ func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 		return nil
 	}
 	return value
+}
+
+func nativeAggregateEntity(data domain.Bootstrap, aggregateID string) any {
+	data = compactImportInputs(data)
+	entity, found := aggregateEntityByID(data, aggregateID)
+	if !found {
+		entity = findAggregateValue(reflect.ValueOf(data), aggregateID)
+	}
+	return entity
 }
 
 // Team metadata writes know the aggregate type from the ID prefix. Scanning

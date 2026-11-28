@@ -86,17 +86,7 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 		return nil, err
 	}
 	for _, data := range []domain.Bootstrap{before, next} {
-		cost, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(data), 0)
-		if err != nil {
-			return nil, err
-		}
-		if uint64(cost) > (uint64(metadataWorkBytes())-(64<<10))/4 {
-			return nil, ErrMetadataWorkBudget
-		}
-		if err := work.reserve(ctx, uint64(cost)*4+64<<10); err != nil {
-			return nil, err
-		}
-		if err := validateDiscussionInlineSelection(data, scope, inlineFields); err != nil {
+		if err := s.validateDiscussionInlineSelection(ctx, data, scope, inlineFields); err != nil {
 			return nil, err
 		}
 	}
@@ -110,11 +100,9 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 	if err := validateScopedMetadataChanges(nativeBefore, nativeNext, writeScope); err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(nativeNext)
-	if err != nil {
-		return nil, err
-	}
-	root, shapes, _, err := splitWorkspaceMetadata(encoded)
+	output := &ResourceRead{store: s}
+	defer output.Close()
+	root, shapes, _, err := splitMetadataImage(ctx, output, reflect.ValueOf(nativeNext), false)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +115,8 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 			return nil, fmt.Errorf("%w: unsplittable discussion metadata %s", ErrMetadataRecordQuery, name)
 		}
 	}
-	changes, _, err := scaleRecordChanges(nativeBefore, nativeNext)
+	output.Close()
+	changes, _, err := scaleRecordChanges(ctx, work, nativeBefore, nativeNext)
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +143,18 @@ func (s *SQLiteStore) persistDiscussionMetadata(ctx context.Context, tx *sqlTx, 
 	if err := s.discussionMetadataWriteWork(ctx, tx, workspace, work, completeFields, changes); err != nil {
 		return nil, err
 	}
-	complete := cloneBootstrap(nativeNext)
+	var complete domain.Bootstrap
 	if len(completeFields) != 0 {
+		for _, data := range []domain.Bootstrap{nativeBefore, nativeNext} {
+			cost, err := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
+			if err != nil {
+				return nil, err
+			}
+			if err := work.reserve(ctx, cost); err != nil {
+				return nil, err
+			}
+		}
+		complete = cloneBootstrap(nativeNext)
 		canonicalBefore := cloneBootstrap(nativeBefore)
 		left, right := reflect.ValueOf(&canonicalBefore).Elem(), reflect.ValueOf(&complete).Elem()
 		for _, field := range persistedMetadataFields() {

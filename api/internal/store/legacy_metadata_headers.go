@@ -25,17 +25,19 @@ func (p *legacyMetadataWritePlan) headerID(ctx context.Context, work *ResourceRe
 		return "", "", false, err
 	}
 	id := value.String()
-	encoding, err := metadataAggregateStringEncodingWork(ctx, id)
+	encoding, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(id))
 	if err != nil {
 		return "", "", false, err
 	}
-	// Marshal owns its encoder/replacement/output buffers; Unmarshal owns
-	// the normalized string plus an unquote scratch buffer of encoded width.
-	if err := work.reserve(ctx, encoding+encoding/4+uint64(len(id))+128); err != nil {
+	if err := work.reserve(ctx, uint64(encoding)); err != nil {
 		return "", "", false, err
 	}
-	encoded, err := json.Marshal(id)
+	encoded, err := marshalMetadataJSON(id)
 	if err != nil {
+		return "", "", false, err
+	}
+	// Unmarshal owns the normalized string and an unquote scratch buffer.
+	if err := work.reserve(ctx, uint64(len(encoded))+uint64(len(id))+128); err != nil {
 		return "", "", false, err
 	}
 	var normalized string
@@ -45,13 +47,13 @@ func (p *legacyMetadataWritePlan) headerID(ctx context.Context, work *ResourceRe
 	full := id == "" || len(id) > 191 || normalized != id
 	key := id
 	if update {
-		parentEncoding, err := metadataAggregateStringEncodingWork(ctx, parent)
+		cost, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf([2]string{parent, id}), 0)
 		if err != nil {
 			return "", "", false, err
 		}
 		// updateRecordKey marshals two strings, hashes that output and
 		// formats the fixed 32-byte digest into its 64-byte key.
-		if err := work.reserve(ctx, parentEncoding+encoding+2*uint64(reflect.TypeFor[string]().Size())+512); err != nil {
+		if err := work.reserve(ctx, uint64(cost)+512); err != nil {
 			return "", "", false, err
 		}
 		key = updateRecordKey(parent, id)

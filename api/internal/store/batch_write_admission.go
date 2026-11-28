@@ -16,11 +16,11 @@ func reserveIssueRecordColumns(ctx context.Context, s *SQLiteStore, issue domain
 		return func() {}, nil
 	}
 	stored := issueRecordStored(issue)
-	detail, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(stored), 0)
+	detail, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(stored))
 	if err != nil {
 		return nil, err
 	}
-	list, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(issueListProjection(stored)), 0)
+	list, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(issueListProjection(stored)))
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (a *issueRecordComparisonAdmission) encode(issue domain.Issue) error {
 		return nil
 	}
 	a.endEncoding()
-	work, err := metadataAggregatePayloadEncodingWork(a.ctx, reflect.ValueOf(issueRecordStored(issue)), 0)
+	work, err := metadataRecordEncodingWork(a.ctx, reflect.ValueOf(issueRecordStored(issue)))
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func reserveIssueRecordEncodingEnvelope(ctx context.Context, s *SQLiteStore, iss
 	if s == nil {
 		return func() {}, nil
 	}
-	work, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(issue), 0)
+	work, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(issue))
 	if err != nil {
 		return nil, err
 	}
@@ -224,13 +224,13 @@ func reserveIssueRecordEncodingEnvelope(ctx context.Context, s *SQLiteStore, iss
 // mutable containers are already owned by the callback reservation; encoding
 // the whole issue slice here would retain every issue's temporary buffers.
 func reserveIssueBatchCallbackEncoding(ctx context.Context, s *SQLiteStore, data domain.Bootstrap, payload any) (func(), error) {
-	payloadWork, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(payload), 0)
+	payloadWork, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(payload))
 	if err != nil {
 		return nil, err
 	}
 	maximum := uint64(0)
 	for _, issue := range data.Issues {
-		work, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(issue), 0)
+		work, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(issue))
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +249,7 @@ func reserveIssueBatchCallbackEncoding(ctx context.Context, s *SQLiteStore, data
 func reserveIssueBatchContentEncoding(ctx context.Context, s *SQLiteStore, data domain.Bootstrap) (func(), error) {
 	maximum := 0
 	visit := func(value any) error {
-		work, err := metadataAggregatePayloadEncodingWork(ctx, reflect.ValueOf(value), 0)
+		work, err := metadataRecordEncodingWork(ctx, reflect.ValueOf(value))
 		if err == nil {
 			maximum = max(maximum, work)
 		}

@@ -146,33 +146,27 @@ func (b *legacyRecordBase) FingerprintLoaded(ctx context.Context, source *metada
 		return err
 	}
 	defer source.Release()
-	visit := func(kind, resource string, _ int, value reflect.Value, _ *ResourceRead) error {
+	visit := func(kind, resource string, _ int, value reflect.Value, work *ResourceRead) error {
 		if !b.loaded[kind] {
 			return nil
 		}
-		var id string
-		var raw []byte
-		var err error
+		id := ""
 		if kind == "issue" {
-			item := value.Interface().(domain.Issue)
-			id = item.ID
-			values, err := issueRecordValues("", item)
-			if err != nil {
-				return err
-			}
-			raw = values[len(values)-1].([]byte)
+			issue := value.Interface().(domain.Issue)
+			id = issue.ID
+			value = reflect.ValueOf(issueRecordStored(issue))
+		}
+		raw, err := encodeOwnedMetadataRecord(ctx, work, value)
+		if err != nil {
+			return err
+		}
+		if kind == "issue" {
+			raw = StripJSONNUL(raw)
 		} else {
-			raw, err = json.Marshal(value.Interface())
+			id, _, err = encodedContentRecordIdentity(raw)
 			if err != nil {
 				return err
 			}
-			var identity struct {
-				ID string `json:"id"`
-			}
-			if err = json.Unmarshal(raw, &identity); err != nil {
-				return err
-			}
-			id = identity.ID
 		}
 		hash := sha256.Sum256(raw)
 		_, err = b.stage.exec(ctx, int64(len(id)+len(resource)+256),
@@ -539,11 +533,11 @@ func (b *legacyRecordBase) persistContent(ctx context.Context, tx *sqlTx, worksp
 		if recordKind != kind {
 			return nil
 		}
-		raw, err := json.Marshal(value.Interface())
+		raw, err := encodeOwnedMetadataRecord(ctx, work, value)
 		if err != nil {
 			return err
 		}
-		id, _, err := contentRecordIdentity(value.Interface())
+		id, _, err := encodedContentRecordIdentity(raw)
 		if err != nil {
 			return err
 		}
@@ -581,7 +575,7 @@ func (b *legacyRecordBase) persistContent(ctx context.Context, tx *sqlTx, worksp
 				return err
 			}
 			if !refs.equalDisplayData(previous, raw) {
-				if err := b.writeContent(ctx, tx, workspace, kind, resource, value); err != nil {
+				if err := b.writeContent(ctx, tx, workspace, kind, resource, id, raw, value); err != nil {
 					return err
 				}
 			}
@@ -705,7 +699,7 @@ func (b *legacyRecordBase) recordIssueRowReferences(ctx context.Context, target 
 	return plan.references(ctx, target, work, nil, nil, raws...)
 }
 
-func (b *legacyRecordBase) writeContent(ctx context.Context, tx *sqlTx, workspace, kind, resource string, value reflect.Value) error {
+func (b *legacyRecordBase) writeContent(ctx context.Context, tx *sqlTx, workspace, kind, resource, id string, raw []byte, value reflect.Value) error {
 	// Supplied nonnil collections do not take loaded-family row locks. The
 	// opt-in original-writer hook independently guards its second previous read.
 	ctx = context.WithValue(ctx, legacyContentWriteBudgetKey{}, b.store)
@@ -723,7 +717,7 @@ func (b *legacyRecordBase) writeContent(ctx context.Context, tx *sqlTx, workspac
 			return err
 		}
 	}
-	err := writeContentRecord(ctx, tx, workspace, kind, resource, value.Interface())
+	err := writeEncodedContentRecord(ctx, tx, workspace, kind, resource, id, raw)
 	if release != nil {
 		if len(tx.signals) > start {
 			// Keep every appended occurrence charged, including duplicate IDs:

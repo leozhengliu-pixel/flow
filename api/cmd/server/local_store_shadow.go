@@ -99,7 +99,7 @@ func (s *server) localStoreManifest(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	writeSyncJSON(w, struct {
+	s.writeSyncJSON(w, r, struct {
 		localStoreStamp
 		Schema       int      `json:"schema"`
 		Capabilities []string `json:"capabilities"`

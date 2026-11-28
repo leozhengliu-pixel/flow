@@ -211,7 +211,7 @@ func (s *server) scaleWindow(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, page, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, page, store.MetadataRecordPageMaxBytes)
 }
 
 func scalePageCount(page scaleWindowPage) int {

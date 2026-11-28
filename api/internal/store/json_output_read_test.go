@@ -115,6 +115,28 @@ func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
 	}
 }
 
+func TestScaleJSONOutputEncodedGrowthAllocation(t *testing.T) {
+	view := scaleHotLogoStore(t, nil)
+	read := scaleJSONOwner(t, view, t.Context())
+	base := view.MetadataWorkUsedForTesting()
+	var buffer bytes.Buffer
+	var chunk [4093]byte
+	total := allocatedBy(func() {
+		for buffer.Len() < 4<<20 {
+			part := chunk[:min(len(chunk), (4<<20)-buffer.Len())]
+			if err := read.ReserveEncoded(t.Context(), buffer.Len()+len(part)); err != nil {
+				t.Fatal(err)
+			}
+			buffer.Write(part)
+		}
+	})
+	work := view.MetadataWorkUsedForTesting() - base
+	t.Logf("encoded=%d charge=%d total=%d retained=%d", buffer.Len(), work, total, buffer.Cap())
+	if total > uint64(work) {
+		t.Fatalf("recorder allocated %d with a %d byte charge", total, work)
+	}
+}
+
 func TestScaleJSONOutputLargePlainAndDenseContainers(t *testing.T) {
 	view := scaleHotLogoStore(t, nil)
 	plain := strings.Repeat("p", 1<<20)

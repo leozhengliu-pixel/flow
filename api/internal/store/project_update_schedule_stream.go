@@ -245,7 +245,7 @@ func (p *legacyMetadataWritePlan) rebaseProjectUpdateScheduleRow(ctx context.Con
 }
 
 func legacyScheduleUpdateStream(ctx context.Context, owner *ResourceRead, parent string, item metadataLogicalNode, output io.Writer) error {
-	encoded, err := json.Marshal(parent)
+	encoded, err := encodeOwnedMetadataValue(ctx, owner, parent)
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func (p *legacyMetadataWritePlan) writeProjectUpdateScheduleRow(ctx context.Cont
 	}
 	var wrapped [2][]byte
 	for index, value := range values {
-		wrapped[index], err = json.Marshal(metadataUpdate{Parent: row.parent, Item: value})
+		wrapped[index], err = encodeOwnedMetadataUpdate(ctx, owner, metadataUpdate{Parent: row.parent, Item: value})
 		if err != nil {
 			return true, err
 		}

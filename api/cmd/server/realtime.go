@@ -18,6 +18,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/jsonwire"
 	"flow/api/internal/store"
 )
 
@@ -958,47 +959,82 @@ func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bo
 // id is "<event id>~<node>": clients resume with it, and only this instance
 // can resume it (see realtimeHub.node).
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bool {
+	return writeRealtimeSSE(w, event, node, false)
+}
+
+func writeRealtimeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string, noCursor bool) bool {
 	controller := http.NewResponseController(w)
 	_ = controller.SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
+	payload := event.Payload
+	event.Payload = nil
 	if bounded, ok := w.(*realtimeBudgetWriter); ok {
-		if !bounded.budget.retainEvent(event) {
+		// The envelope, the validator's nesting stack and the frame entry
+		// have separate lifetimes. Keep only the input lease through Flush.
+		headWork, err := store.MetadataJSONEncodingWork(context.Background(), event)
+		scanner := min(len(payload), 10000)*64 + 512
+		scratch := int64(headWork + scanner + (len(event.ID)+len(node))*4 + 256)
+		if err != nil || !bounded.budget.acquire(scratch) {
 			return false
 		}
-		bounded.frames = append(bounded.frames, eventKey(event))
+		defer bounded.budget.release(scratch)
+		leased := event
+		leased.Payload = payload
+		if !bounded.retainFrame(leased) {
+			return false
+		}
 	}
 	id := event.ID
-	if node != "" && !strings.HasPrefix(id, "connected_") {
+	if noCursor {
+		id = ""
+	} else if node != "" && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
 	}
-	// The payload (shared between streams, often a whole document) is written as it is instead of being
-	// re-encoded into a copy per stream; only the small envelope is encoded here. A payload that is not one
-	// line of valid JSON goes the encoding way.
-	payload := event.Payload
-	if len(payload) == 0 || bytes.ContainsAny(payload, "\r\n") || !json.Valid(payload) {
-		if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(realtimeEventBytes(event)*2+1024)) {
-			return false
-		}
-		raw, err := json.Marshal(event)
-		if err != nil {
-			return false
-		}
-		_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, raw)
-		return err == nil
-	}
-	event.Payload = nil
 	head, err := json.Marshal(event)
 	if err != nil {
 		return false
 	}
-	if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(cap(head)+len(id)+256)) {
+	if len(payload) == 0 {
+		return writeSSEParts(w, id, noCursor, head)
+	}
+	if !json.Valid(payload) {
 		return false
 	}
-	for _, part := range [][]byte{[]byte("id: " + id + "\ndata: "), head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}\n\n")} {
+	if noCursor || bytes.ContainsAny(payload, "\r\n") {
+		// These paths used Marshal's compacted RawMessage before. Keep the
+		// same spelling and member order with one pre-sized payload copy.
+		size, _ := jsonwire.Compact(nil, payload)
+		if bounded, ok := w.(*realtimeBudgetWriter); ok {
+			cost := int64((size + 8191) &^ 8191)
+			if !bounded.budget.acquire(cost) {
+				return false
+			}
+			defer bounded.budget.release(cost)
+		}
+		_, payload = jsonwire.Compact(make([]byte, 0, size), payload)
+		at := bytes.LastIndex(head, []byte(`,"createdAt":`))
+		if at < 0 {
+			return false
+		}
+		return writeSSEParts(w, id, noCursor, head[:at], []byte(`,"payload":`), payload, head[at:])
+	}
+	return writeSSEParts(w, id, noCursor, head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}"))
+}
+
+func writeSSEParts(w http.ResponseWriter, id string, noCursor bool, data ...[]byte) bool {
+	prefix := "data: "
+	if !noCursor {
+		prefix = "id: " + id + "\ndata: "
+	}
+	if _, err := w.Write([]byte(prefix)); err != nil {
+		return false
+	}
+	for _, part := range data {
 		if _, err := w.Write(part); err != nil {
 			return false
 		}
 	}
-	return true
+	_, err := w.Write([]byte("\n\n"))
+	return err == nil
 }
 
 // localCursor returns the event id of a stream cursor this instance wrote. A

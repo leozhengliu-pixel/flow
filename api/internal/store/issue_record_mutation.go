@@ -98,6 +98,8 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	var result domain.Issue
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	var publicationWork *ResourceRead
+	defer func() { publicationWork.Close() }()
 	var progressMetadata *domain.Bootstrap
 	metadataWritten := false
 	// written: the issues this write changed (the target and its family).
@@ -458,9 +460,13 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		target.Version = original.Version + 1
 		target.UpdatedAt = time.Now().UTC()
 		result = *target
+		writeCtx := ctx
+		if s.BoundedMetadataEnabled() {
+			writeCtx = withIssueRecordWriteAdmission(ctx, s)
+		}
 		for _, issue := range metadata.Issues {
 			if !reflect.DeepEqual(previous[issue.ID], issue) {
-				if err := s.writeIssueRecord(ctx, tx, workspace, issue, metadata); err != nil {
+				if err := s.writeIssueRecord(writeCtx, tx, workspace, issue, metadata); err != nil {
 					return err
 				}
 				written = append(written, issue.ID)
@@ -482,7 +488,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 						continue
 					}
 				}
-				if err := writeContentRecord(ctx, tx, workspace, "activity", resource, item); err != nil {
+				if err := writeContentRecord(writeCtx, tx, workspace, "activity", resource, item); err != nil {
 					return err
 				}
 			}
@@ -500,13 +506,13 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		metadata.ActivityHistoryHeads = nil
 		for resource, items := range notificationRecords(metadata.Notifications) {
 			for _, item := range items {
-				if err := writeContentRecord(ctx, tx, workspace, "notification", resource, item); err != nil {
+				if err := writeContentRecord(writeCtx, tx, workspace, "notification", resource, item); err != nil {
 					return err
 				}
 			}
 		}
 		for _, delivery := range metadata.NotificationDeliveries {
-			if err := writeContentRecord(ctx, tx, workspace, "delivery", "", delivery); err != nil {
+			if err := writeContentRecord(writeCtx, tx, workspace, "delivery", "", delivery); err != nil {
 				return err
 			}
 		}
@@ -535,40 +541,31 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		metadataWritten = tx.metadataWritten
-		oldRaw, _ := json.Marshal(original)
-		newRaw, _ := json.Marshal(result)
-		var oldFields, newFields map[string]json.RawMessage
-		_ = json.Unmarshal(oldRaw, &oldFields)
-		_ = json.Unmarshal(newRaw, &newFields)
-		changed, previousFields := map[string]json.RawMessage{}, map[string]json.RawMessage{}
-		for field, value := range newFields {
-			if !bytes.Equal(value, oldFields[field]) {
-				changed[field] = value
-				previousFields[field] = oldFields[field]
-			}
+		var output *ResourceRead
+		if s.BoundedMetadataEnabled() {
+			output = &ResourceRead{store: s}
 		}
-		for field, value := range oldFields {
-			if _, exists := newFields[field]; !exists {
-				changed[field] = json.RawMessage("null")
-				previousFields[field] = value
+		defer func() {
+			if publicationWork != output {
+				output.Close()
 			}
+		}()
+		payload, before, err := issueUpdateEventFields(ctx, output, original, result, scope.Payload, webhookEnabled)
+		if err != nil {
+			return err
 		}
-		payload, _ := json.Marshal(changed)
-		if scope.Payload != nil {
-			payload, err = json.Marshal(scope.Payload)
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
+		if output != nil {
+			realtime, err = s.encodeMetadataRealtimePayload(ctx, output, payload, result, "issue.updated")
 			if err != nil {
 				return err
 			}
+		} else {
+			realtime = enrichMetadataRealtimePayload(payload, result, event.Type)
 		}
-		var before []byte
-		if webhookEnabled {
-			before, _ = json.Marshal(previousFields)
-		}
-		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID, WorkspaceKey: workspace}); err != nil {
 			return err
 		}
-		realtime = enrichRealtimePayload(payload, result, event.Type)
 		if mutationKey != "" {
 			if scope.RebaseVersion != nil && expected != nil && *expected == original.Version {
 				receipt.rebaseVersion = result.Version
@@ -580,6 +577,8 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		publicationWork.Close()
+		publicationWork = output
 		if scope.RebaseVersion != nil {
 			*scope.RebaseVersion = receipt.rebaseVersion
 		}
@@ -620,4 +619,67 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		sink(workspace, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: id, Payload: realtime, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), CreatedAt: event.CreatedAt})
 	}
 	return result, nil
+}
+
+func issueUpdateEventFields(ctx context.Context, owner *ResourceRead, original, updated domain.Issue, input any, previous bool) (payload, before []byte, err error) {
+	if input != nil {
+		payload, err = encodeOwnedMetadataValue(ctx, owner, input)
+		if err != nil || !previous {
+			return payload, nil, err
+		}
+	}
+	var scratch *ResourceRead
+	if owner != nil {
+		scratch = &ResourceRead{store: owner.store}
+		defer scratch.Close()
+	}
+	readFields := func(issue domain.Issue) (map[string]json.RawMessage, error) {
+		raw, err := encodeOwnedMetadataValue(ctx, scratch, issue)
+		if err != nil {
+			return nil, err
+		}
+		if scratch != nil {
+			work, err := issueRecordDecodeWork(ctx, raw)
+			if err != nil {
+				return nil, err
+			}
+			if err := scratch.reserve(ctx, work); err != nil {
+				return nil, err
+			}
+		}
+		var fields map[string]json.RawMessage
+		err = json.Unmarshal(raw, &fields)
+		return fields, err
+	}
+	old, err := readFields(original)
+	if err != nil {
+		return nil, nil, err
+	}
+	next, err := readFields(updated)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed, previousFields := map[string]json.RawMessage{}, map[string]json.RawMessage{}
+	for field, value := range next {
+		if !bytes.Equal(value, old[field]) {
+			changed[field] = value
+			previousFields[field] = old[field]
+		}
+	}
+	for field, value := range old {
+		if _, exists := next[field]; !exists {
+			changed[field] = json.RawMessage("null")
+			previousFields[field] = value
+		}
+	}
+	if input == nil {
+		payload, err = encodeOwnedMetadataValue(ctx, owner, changed)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if previous {
+		before, err = encodeOwnedMetadataValue(ctx, owner, previousFields)
+	}
+	return payload, before, err
 }

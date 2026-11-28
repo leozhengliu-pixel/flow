@@ -76,13 +76,20 @@ func projectCatalogRecord(ctx context.Context, r *canonicalMetadataReader) (meta
 			var raw []byte
 			if field == "milestones" && iter.WhatIsNext() == jsoniter.ArrayValue {
 				items := []map[string]json.RawMessage{}
+				minimum := 2
 				for iter.ReadArray() && iter.Error == nil {
-					items = append(items, projectObject(true))
-					if used > metadataSummaryMaxBytes {
-						break
+					item := projectObject(true)
+					minimum += 2 // Even an entirely redacted milestone encodes as {}.
+					if len(items) > 0 {
+						minimum++
 					}
+					if row.omitted || used+len(field)+minimum+4 > metadataSummaryMaxBytes {
+						row.omitted = true
+						return result
+					}
+					items = append(items, item)
 				}
-				raw, _ = json.Marshal(items)
+				raw, _ = marshalMetadataRawObjects(items)
 			} else {
 				r.boundedCapture, r.captureLeft = true, metadataSummaryMaxBytes-used
 				raw = iter.SkipAndReturnBytes()
@@ -128,7 +135,7 @@ func projectCatalogRecord(ctx context.Context, r *canonicalMetadataReader) (meta
 		summary["id"] = id
 	}
 	var err error
-	row.summary, err = json.Marshal(summary)
+	row.summary, err = marshalMetadataRawObject(summary)
 	if err != nil {
 		return row, err
 	}
@@ -470,22 +477,22 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 		if item.Omitted {
 			item.Detail = &item.Key
 		}
-		encoded, err := json.Marshal(item)
+		encoded, err := item.recordJSONBytes()
 		if err != nil {
 			return page, err
 		}
-		if len(page.Items) >= limit || len(encoded)+1 > remaining && len(page.Items) > 0 {
+		if len(page.Items) >= limit || encoded+1 > int64(remaining) && len(page.Items) > 0 {
 			page.HasMore = true
 			break
 		}
-		if len(encoded)+1 > remaining {
+		if encoded+1 > int64(remaining) {
 			item.Data, item.Omitted, item.Detail = nil, true, &item.Key
-			encoded, _ = json.Marshal(item)
-			if len(encoded)+1 > remaining {
+			encoded, _ = item.recordJSONBytes()
+			if encoded+1 > int64(remaining) {
 				return page, ErrMetadataPageBudget
 			}
 		}
-		remaining -= len(encoded) + 1
+		remaining -= int(encoded) + 1
 		page.Items = append(page.Items, item)
 		last = position
 	}

@@ -118,7 +118,7 @@ func (s *server) resourceReadsScaleManifest(w http.ResponseWriter, r *http.Reque
 		scaleReadError(w, store.ErrMetadataPageBudget)
 		return true
 	}
-	writeSyncJSON(w, result, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, result, store.MetadataRecordPageMaxBytes)
 	return true
 }
 
@@ -220,7 +220,7 @@ func (s *server) scalePage(w http.ResponseWriter, r *http.Request, kind string) 
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, page, q.MaxBytes)
+	s.writeSyncJSON(w, r, page, q.MaxBytes)
 }
 
 func (s *server) scaleRecords(w http.ResponseWriter, r *http.Request) bool {
@@ -516,7 +516,7 @@ func (s *server) scaleBatch(w http.ResponseWriter, r *http.Request, keys []store
 		writeSyncError(w, store.ErrMetadataCursor)
 		return true
 	}
-	writeSyncJSON(w, batch, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, batch, store.MetadataRecordPageMaxBytes)
 	return true
 }
 
@@ -561,6 +561,6 @@ func (s *server) resourceReadsScaleChanges(w http.ResponseWriter, r *http.Reques
 		writeSyncError(w, err)
 		return true
 	}
-	writeSyncJSON(w, syncV2ChangesResponse{Next: strconv.FormatInt(head, 10), Head: strconv.FormatInt(head, 10), AuthzEpoch: access.AuthzEpoch, Transactions: []syncV2Transaction{}, ResyncRequired: after != head}, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, syncV2ChangesResponse{Next: strconv.FormatInt(head, 10), Head: strconv.FormatInt(head, 10), AuthzEpoch: access.AuthzEpoch, Transactions: []syncV2Transaction{}, ResyncRequired: after != head}, store.MetadataRecordPageMaxBytes)
 	return true
 }

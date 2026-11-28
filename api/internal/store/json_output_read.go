@@ -119,8 +119,10 @@ func (r *MetadataJSONRead) ReserveEncoding(ctx context.Context, value any) error
 	return r.reserve(ctx, uint64(cost)+(64<<10))
 }
 
-// ReserveEncoded grows a byte-buffer allowance before copying bytes. Four
-// copies cover buffer capacity growth and transient copies; decode is separate.
+// ReserveEncoded grows a byte-buffer allowance before copying bytes. An
+// append-only bytes.Buffer at least doubles on each allocation. Its last
+// capacity is at most twice the rounded length, and previous capacities sum
+// to less than the last one. The decoder has a separate allowance.
 func (r *MetadataJSONRead) ReserveEncoded(ctx context.Context, size int) error {
 	if r == nil {
 		return ErrBoundedMetadataCoverage
@@ -158,13 +160,26 @@ func (r *MetadataJSONRead) ReserveEncoded(ctx context.Context, size int) error {
 	return nil
 }
 
+// MetadataJSONDecodeWork estimates one encoding/json Unmarshal into a fresh value.
+func MetadataJSONDecodeWork(ctx context.Context, raw []byte) (int, error) {
+	cost, err := metadataAggregatePayloadJSONWork(ctx, raw)
+	if err != nil {
+		return 0, err
+	}
+	const scratch = 64 << 10
+	if cost > uint64(metadataWorkBytes()-scratch) {
+		return 0, ErrMetadataWorkBudget
+	}
+	return int(cost) + scratch, nil
+}
+
 // ReserveDecode precedes Unmarshal into the original destination. Its existing
 // graph is retained too, since absent JSON fields and map members can survive.
 func (r *MetadataJSONRead) ReserveDecode(ctx context.Context, raw []byte, previous any) error {
 	if err := r.check(ctx); err != nil {
 		return err
 	}
-	cost, err := metadataAggregatePayloadJSONWork(ctx, raw)
+	cost, err := MetadataJSONDecodeWork(ctx, raw)
 	if err != nil {
 		return r.fail(err)
 	}
@@ -173,15 +188,12 @@ func (r *MetadataJSONRead) ReserveDecode(ctx context.Context, raw []byte, previo
 		if err != nil {
 			return r.fail(err)
 		}
-		if retained > uint64(metadataWorkBytes())-cost {
+		if retained > uint64(metadataWorkBytes()-cost) {
 			return r.fail(ErrMetadataWorkBudget)
 		}
-		cost += retained
+		cost += int(retained)
 	}
-	if cost > uint64(metadataWorkBytes())-(64<<10) {
-		return r.fail(ErrMetadataWorkBudget)
-	}
-	return r.reserve(ctx, cost+(64<<10))
+	return r.reserve(ctx, uint64(cost))
 }
 
 func (r *MetadataJSONRead) Err() error {

@@ -23,8 +23,12 @@ func stringWidth(t *testing.T, value string) uint64 {
 		t.Fatalf("string encoding width: bytes=%d got=%d want=%d err=%v", len(value), got, want, err)
 	}
 	work, err := metadataAggregatePayloadEncodingWork(t.Context(), reflect.ValueOf(value), 0)
-	if err != nil || uint64(work) != want+128 {
-		t.Fatalf("payload lost scalar overhead or string buffers: got=%d want=%d err=%v", work, want+128, err)
+	copies := uint64(metadataJSONPlainCopies)
+	if len(raw) != len(value)+2 {
+		copies = metadataJSONEscapedCopies
+	}
+	if charge := uint64(len(raw))*copies + 1152; err != nil || uint64(work) != charge {
+		t.Fatalf("payload lost scalar overhead or string buffers: got=%d want=%d err=%v", work, charge, err)
 	}
 	return got
 }

@@ -47,7 +47,7 @@ func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, page, budget)
+	s.writeSyncJSON(w, r, page, budget)
 }
 
 func syncPageNumber(raw string, fallback, low, high int) (int, error) {
@@ -95,5 +95,5 @@ func (s *server) syncBatch(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
-	writeSyncJSON(w, batch, store.MetadataRecordPageMaxBytes)
+	s.writeSyncJSON(w, r, batch, store.MetadataRecordPageMaxBytes)
 }

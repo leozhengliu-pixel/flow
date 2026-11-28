@@ -5290,7 +5290,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			before, _ := json.Marshal(issue)
+			before, _ := store.MarshalIssueComparisonJSON(issue)
 			if err := refuseNewFormerMemberDescriptionMentions(data, issue, input.Update); err != nil {
 				return err
 			}
@@ -5298,7 +5298,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			after, _ := json.Marshal(issue)
+			after, _ := store.MarshalIssueComparisonJSON(issue)
 			if bytes.Equal(before, after) {
 				updated = append(updated, *issue)
 				continue

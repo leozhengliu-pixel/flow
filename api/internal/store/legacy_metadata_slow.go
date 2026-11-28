@@ -101,19 +101,11 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 		prior.Field(field.index).Set(original.Field(field.index))
 		selected[name] = true
 	}
-	encoded, err := json.Marshal(partial.Interface())
+	partRoot, partShapes, partRecords, err := splitMetadataImage(ctx, work, partial, false)
 	if err != nil {
 		return false, err
 	}
-	partRoot, partShapes, partRecords, err := splitWorkspaceMetadata(encoded)
-	if err != nil {
-		return false, err
-	}
-	encodedBefore, err := json.Marshal(prior.Interface())
-	if err != nil {
-		return false, err
-	}
-	_, _, knownRecords, err := splitWorkspaceMetadata(encodedBefore)
+	_, _, knownRecords, err := splitMetadataImage(ctx, work, prior, false)
 	if err != nil {
 		return false, err
 	}
@@ -146,18 +138,7 @@ func (s *SQLiteStore) writeLegacyMetadataSlowFields(ctx context.Context, tx *sql
 				delete(storedShapes, name)
 			}
 		}
-		manifest, err := json.Marshal(storedShapes)
-		if err != nil {
-			return nil, err
-		}
-		root[metadataCollectionsKey] = manifest
-		// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000: as in
-		// writeWorkspaceMetadata, NUL is dropped.
-		encoded, err := json.Marshal(root)
-		if err != nil {
-			return nil, err
-		}
-		return StripJSONNUL(encoded), nil
+		return encodeLegacyMetadataRoot(ctx, work, root, storedShapes)
 	}
 	raw, err := patch(root, storedShapes)
 	if err != nil {

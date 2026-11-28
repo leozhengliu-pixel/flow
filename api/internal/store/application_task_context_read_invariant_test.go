@@ -8,22 +8,26 @@ import (
 	"testing"
 )
 
-// Task contexts omit unrelated discussion/delivery/import bodies. Their normal
-// producers serialize typed values; raw SQL corruption is not a write API.
+// Task contexts can omit unrelated discussion/delivery/import bodies because
+// their producers encode typed values. The reviewed metadata encoders match
+// json.Marshal, including custom codecs. Point and sync lookups derive identity
+// from those bytes, and all three writers use the existing StripJSONNUL pass
+// to derive the stored JSON and index columns. See
+// TestScaleApplicationTaskContextReadContentProducerDifferential.
 func TestScaleApplicationTaskContextReadContentProducerGuard(t *testing.T) {
 	for _, fixture := range []struct {
-		file, function string
+		file, function, encoder string
 	}{
-		{"content_records.go", "writeContentRecord"},
-		{"content_records.go", "contentRecordRowFor"},
-		{"content_records.go", "syncContentRecordsFrom"},
-		{"content_record_migration.go", "migrateContentIndexes"},
+		{"content_records.go", "writeContentRecord", "encodeOwnedMetadataValue"},
+		{"content_records.go", "contentRecordRowFor", "marshalMetadataJSON"},
+		{"content_records.go", "syncContentRecordsFrom", "marshalMetadataJSON"},
+		{"content_record_migration.go", "migrateContentIndexes", "json.Marshal"},
 	} {
 		parsed, err := parser.ParseFile(token.NewFileSet(), fixture.file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		found, marshals := false, false
+		found, encodes := false, false
 		for _, declaration := range parsed.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
 			if !ok || function.Name.Name != fixture.function {
@@ -35,15 +39,17 @@ func TestScaleApplicationTaskContextReadContentProducerGuard(t *testing.T) {
 				if !ok {
 					return true
 				}
-				selector, ok := call.Fun.(*ast.SelectorExpr)
-				if ok {
-					pkg, ok := selector.X.(*ast.Ident)
-					marshals = marshals || ok && pkg.Name == "json" && selector.Sel.Name == "Marshal"
+				switch callee := call.Fun.(type) {
+				case *ast.Ident:
+					encodes = encodes || callee.Name == fixture.encoder
+				case *ast.SelectorExpr:
+					pkg, ok := callee.X.(*ast.Ident)
+					encodes = encodes || ok && pkg.Name+"."+callee.Sel.Name == fixture.encoder
 				}
 				return true
 			})
 		}
-		if !found || !marshals {
+		if !found || !encodes {
 			t.Fatal("task content producer serialization requires review", fixture)
 		}
 	}

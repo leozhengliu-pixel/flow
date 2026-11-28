@@ -354,7 +354,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		if err != nil {
 			return err
 		}
-		raw, err := json.Marshal(payload)
+		raw, err := marshalMetadataJSON(payload)
 		if err != nil {
 			eventWork()
 			return err
@@ -364,7 +364,7 @@ func (s *SQLiteStore) createBoundedIssueRecords(ctx context.Context, workspace s
 		previousEvent := releaseEvent
 		releaseEvent = eventWork
 		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
-		realtime = enrichRealtimePayload(raw, created, event.Type)
+		realtime = enrichMetadataRealtimePayload(raw, created, event.Type)
 		previousEvent()
 		candidate, err := metadataLogicalInstalledCandidate(ctx, merged)
 		if err != nil {

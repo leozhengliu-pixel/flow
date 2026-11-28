@@ -215,6 +215,7 @@ func metadataValueEqual(a, b reflect.Value) bool {
 // target then holds the merged record. It reports whether anything was
 // written.
 func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx, workspace string, before domain.Bootstrap, target *domain.Bootstrap) (bool, error) {
+	owner := legacyMetadataDeltaOwner(ctx)
 	before, after := compactImportInputs(collectionMetadata(before)), compactImportInputs(collectionMetadata(*target))
 	changed := changedMetadataFields(before, after)
 	if len(changed) > 0 {
@@ -302,21 +303,13 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 		prior.Field(field.index).Set(original.Field(field.index))
 		names = append(names, field.name)
 	}
-	encoded, err := json.Marshal(partial.Interface())
-	if err != nil {
-		return false, err
-	}
-	partRoot, partShapes, partRecords, err := splitWorkspaceMetadata(encoded)
+	partRoot, partShapes, partRecords, err := splitMetadataImage(ctx, owner, partial, false)
 	if err != nil {
 		return false, err
 	}
 	// The stored rows of these fields are the before snapshot's records, so
 	// the database only needs to supply keys and orders.
-	encodedBefore, err := json.Marshal(prior.Interface())
-	if err != nil {
-		return false, err
-	}
-	_, _, knownRecords, err := splitWorkspaceMetadata(encodedBefore)
+	_, _, knownRecords, err := splitMetadataImage(ctx, owner, prior, false)
 	if err != nil {
 		return false, err
 	}
@@ -352,18 +345,7 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 				delete(storedShapes, name)
 			}
 		}
-		manifest, err := json.Marshal(storedShapes)
-		if err != nil {
-			return nil, err
-		}
-		root[metadataCollectionsKey] = manifest
-		// The root JSON is parsed in SQL, where PostgreSQL refuses \u0000: as in
-		// writeWorkspaceMetadata, NUL is dropped.
-		encoded, err := json.Marshal(root)
-		if err != nil {
-			return nil, err
-		}
-		return StripJSONNUL(encoded), nil
+		return encodeLegacyMetadataRoot(ctx, owner, root, storedShapes)
 	}
 	raw, err := patchRoot(root, storedShapes)
 	if err != nil {
@@ -403,6 +385,64 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 	tx.metadataWritten = true
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`, after.Workspace.ID, raw, formatStoredTime(time.Now()), workspace)
 	return true, err
+}
+
+func splitMetadataImage(ctx context.Context, owner *ResourceRead, value reflect.Value, pageLimited bool) (map[string]json.RawMessage, map[string]string, map[metadataRecordKey]metadataRecord, error) {
+	raw, release, err := encodeLegacyDeltaJSON(ctx, owner, value)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer release()
+	if pageLimited {
+		budget := newMetadataHydrationBudget()
+		if err := budget.consume(raw); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	if err := reserveLegacyMetadataSplit(ctx, owner, raw); err != nil {
+		return nil, nil, nil, err
+	}
+	return splitWorkspaceMetadataOwned(ctx, owner, raw)
+}
+
+func reserveLegacyMetadataSplit(ctx context.Context, owner *ResourceRead, raw []byte) error {
+	if owner == nil {
+		return nil
+	}
+	// Splitting can copy root members, parent lists and their items, then
+	// put each item in a separately encoded update row.
+	work, err := metadataOffloadAssemblyWork(ctx, raw, 5)
+	if err != nil {
+		return err
+	}
+	return owner.reserve(ctx, work)
+}
+
+func encodeLegacyDeltaJSON(ctx context.Context, owner *ResourceRead, value reflect.Value) ([]byte, func(), error) {
+	if owner != nil {
+		return owner.store.encodeMetadataMutationPayload(ctx, value.Interface())
+	}
+	raw, err := json.Marshal(value.Interface())
+	return raw, func() {}, err
+}
+
+func encodeLegacyMetadataRoot(ctx context.Context, owner *ResourceRead, root map[string]json.RawMessage, shapes map[string]string) ([]byte, error) {
+	encode := func(value any) ([]byte, error) {
+		if owner != nil {
+			return encodeOwnedMetadataRecord(ctx, owner, reflect.ValueOf(value))
+		}
+		return json.Marshal(value)
+	}
+	manifest, err := encode(shapes)
+	if err != nil {
+		return nil, err
+	}
+	root[metadataCollectionsKey] = manifest
+	raw, err := encode(root)
+	if err != nil {
+		return nil, err
+	}
+	return StripJSONNUL(raw), nil
 }
 
 // setRebasedField sets a target's field to its rebased (compacted) value.
@@ -536,7 +576,8 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 		lookup = append(lookup, item.key.key)
 	}
 	orders := map[string]int{}
-	if budget := legacyMetadataDeltaBudget(ctx); budget != nil {
+	budget := legacyMetadataDeltaBudget(ctx)
+	if budget != nil {
 		selected, err := budget.arrayOrders(ctx, tx, workspace, field.name, lookup)
 		if err != nil {
 			return false, err
@@ -570,15 +611,28 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 		}
 	}
 	firstOrder, lastOrder := orders[idOf(after, first)], orders[idOf(after, last)]
+	owner := legacyMetadataDeltaOwner(ctx)
 	write := func(i, order int, previous []byte) error {
-		raw, err := json.Marshal(after.Index(i).Interface())
+		raw, release, err := encodeLegacyDeltaJSON(ctx, owner, after.Index(i))
 		if err != nil {
 			return err
+		}
+		defer release()
+		if owner != nil {
+			scratch := &ResourceRead{store: owner.store}
+			defer scratch.Close()
+			if err := reserveLegacyDisplayComparison(ctx, scratch, field.name, previous, raw); err != nil {
+				return err
+			}
 		}
 		if previous != nil && refs.equalDisplayData(previous, raw) {
 			return nil
 		}
-		return writeMetadataRecordRow(ctx, tx, workspace, metadataRecordKey{field.name, idOf(after, i)}, metadataRecord{data: raw, order: order}, previous)
+		key, record := metadataRecordKey{field.name, idOf(after, i)}, metadataRecord{data: raw, order: order}
+		if owner != nil {
+			return writeOwnedMetadataRecordRow(ctx, owner.store, tx, workspace, key, record, previous)
+		}
+		return writeMetadataRecordRow(ctx, tx, workspace, key, record, previous)
 	}
 	for i := 0; i < first; i++ {
 		if err := write(i, firstOrder-first+i, nil); err != nil {
@@ -591,11 +645,15 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 		}
 	}
 	for _, item := range changed {
-		previous, err := json.Marshal(before.Index(positions[item.key.key]).Interface())
+		err := func() error {
+			previous, release, err := encodeLegacyDeltaJSON(ctx, owner, before.Index(positions[item.key.key]))
+			if err != nil {
+				return err
+			}
+			defer release()
+			return write(item.index, orders[item.key.key], previous)
+		}()
 		if err != nil {
-			return false, err
-		}
-		if err := write(item.index, orders[item.key.key], previous); err != nil {
 			return false, err
 		}
 	}
@@ -657,17 +715,21 @@ func writeUpdatesFieldDelta(ctx context.Context, tx *sqlTx, workspace string, re
 	if changed == 0 {
 		return true, nil
 	}
+	owner := legacyMetadataDeltaOwner(ctx)
 	split := func(value reflect.Value) (map[metadataRecordKey]metadataRecord, bool, error) {
-		raw, err := json.Marshal(value.Interface())
+		raw, release, err := encodeLegacyDeltaJSON(ctx, owner, value)
 		if err != nil {
+			return nil, false, err
+		}
+		defer release()
+		if err := reserveLegacyMetadataSplit(ctx, owner, raw); err != nil {
 			return nil, false, err
 		}
 		var items map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &items); err != nil {
 			return nil, false, err
 		}
-		records, ok := splitUpdateMetadata(field.name, items)
-		return records, ok, nil
+		return splitUpdateMetadataOwned(ctx, owner, field.name, items)
 	}
 	wanted, ok, err := split(partialAfter)
 	if err != nil || !ok {

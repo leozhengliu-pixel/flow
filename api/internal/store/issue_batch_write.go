@@ -615,9 +615,6 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 		attempt.lookups.allowDocuments(targets)
 		attempt.lookups.liveMembers = renumber && hasActor
 		traceMark(ctx, "batch-inputs")
-		if err := attempt.reserveValue(ctx, payload); err != nil {
-			return err
-		}
 		releaseCallbackEncoding, err := reserveIssueBatchCallbackEncoding(ctx, s, data, payload)
 		if err != nil {
 			return err
@@ -821,7 +818,7 @@ func (s *SQLiteStore) mutateBoundedIssueBatch(ctx context.Context, workspace, ev
 			return err
 		}
 		defer merged.Release()
-		payloadRaw, err := json.Marshal(payload)
+		payloadRaw, err := encodeOwnedMetadataValue(ctx, attempt.owner, payload)
 		if err != nil {
 			return err
 		}

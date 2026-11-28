@@ -59,6 +59,11 @@ func realtimeScopeChanged(event domain.RealtimeEvent) bool {
 
 // realtimeEntityPayload builds {entity, kept input fields, extra}.
 func realtimeEntityPayload(event domain.RealtimeEvent, entity any, extra map[string]any) json.RawMessage {
+	encoded, _ := json.Marshal(realtimeEntityPayloadValue(event, entity, extra))
+	return encoded
+}
+
+func realtimeEntityPayloadValue(event domain.RealtimeEvent, entity any, extra map[string]any) map[string]any {
 	var input map[string]json.RawMessage
 	_ = json.Unmarshal(event.Payload, &input)
 	payload := map[string]any{}
@@ -73,8 +78,7 @@ func realtimeEntityPayload(event domain.RealtimeEvent, entity any, extra map[str
 	if entity != nil {
 		payload["entity"] = entity
 	}
-	encoded, _ := json.Marshal(payload)
-	return encoded
+	return payload
 }
 
 // bareRealtimeEvent keeps only the event's identity and the given payload.

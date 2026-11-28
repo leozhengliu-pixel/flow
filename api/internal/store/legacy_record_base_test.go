@@ -485,11 +485,18 @@ func TestLegacyRecordNotificationSignalWork(t *testing.T) {
 	base := &legacyRecordBase{store: view, owner: &ResourceRead{store: view}}
 	defer base.Close()
 	start := len(tx.signals)
+	write := func(notification domain.Notification) error {
+		raw, err := json.Marshal(notification)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return base.writeContent(ctx, tx, data.Workspace.URLKey, "notification", notification.IssueID, notification.ID, raw, reflect.ValueOf(notification))
+	}
 	for i := range 32 {
 		notification := data.Notifications[0]
 		notification.ID = idgen.New("sw93_signal_")
 		notification.RecipientID = data.Viewer.ID
-		if err := base.writeContent(ctx, tx, data.Workspace.URLKey, "notification", notification.IssueID, reflect.ValueOf(notification)); err != nil {
+		if err := write(notification); err != nil {
 			t.Fatal(i, err)
 		}
 	}
@@ -504,7 +511,7 @@ func TestLegacyRecordNotificationSignalWork(t *testing.T) {
 	view.metadataResidency.work.limit = before + 1
 	notification := data.Notifications[0]
 	notification.ID = idgen.New("sw93_signal_refused_")
-	err := base.writeContent(ctx, tx, data.Workspace.URLKey, "notification", notification.IssueID, reflect.ValueOf(notification))
+	err := write(notification)
 	view.metadataResidency.work.limit = limit
 	if !errors.Is(err, ErrMetadataWorkBudget) {
 		t.Fatal("signal admission refusal lost", err)
