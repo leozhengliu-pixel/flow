@@ -347,7 +347,7 @@ func metadataGenericJSONDecodeError(ctx context.Context, store *SQLiteStore, par
 				if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 					return ErrMetadataWorkBudget
 				}
-				if err := owner.ReserveEncoded(ctx, int(part.size)); err != nil {
+				if err := owner.ReserveEncodedCopies(ctx, int(part.size)); err != nil {
 					return err
 				}
 				raw := make([]byte, int(part.size))
@@ -384,7 +384,7 @@ func (b *metadataLogicalBuilder) writeGenericJSON(ctx context.Context, s *SQLite
 	if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 		return metadataLogicalNode{}, ErrMetadataWorkBudget
 	}
-	if err := input.ReserveEncoded(ctx, int(part.size)); err != nil {
+	if err := input.ReserveEncodedCopies(ctx, int(part.size)); err != nil {
 		return metadataLogicalNode{}, err
 	}
 	raw := make([]byte, int(part.size))
@@ -486,7 +486,7 @@ func (n metadataLogicalNode) genericValue(ctx context.Context) (reflect.Value, e
 	if part.size < 0 || part.size > int64(metadataWorkBytes())/4 {
 		return reflect.Value{}, ErrMetadataWorkBudget
 	}
-	if err := input.ReserveEncoded(ctx, int(part.size)); err != nil {
+	if err := input.ReserveEncodedCopies(ctx, int(part.size)); err != nil {
 		return reflect.Value{}, err
 	}
 	raw := make([]byte, int(part.size))

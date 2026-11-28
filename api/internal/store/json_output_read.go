@@ -9,15 +9,22 @@ import (
 // MetadataJSONRead owns encoding, buffered bytes and a decoded JSON result.
 // Close belongs to the containing operation, including response-derived errors.
 type MetadataJSONRead struct {
-	store    *SQLiteStore
-	mu       sync.Mutex
-	releases []func()
-	children []func()
-	output   *metadataOutputOwner
-	encoded  int
-	err      error
-	closed   bool
+	store       *SQLiteStore
+	mu          sync.Mutex
+	releases    []func()
+	children    []func()
+	output      *metadataOutputOwner
+	encodedWork int
+	err         error
+	closed      bool
 }
+
+const (
+	metadataJSONEncodedPage = 64 << 10
+	// Each admitted page can add a lease, context, release callback and
+	// a share of the release slice's growth.
+	metadataJSONBufferPageWork = metadataJSONBufferGrowthMultiplier*metadataJSONEncodedPage + 512
+)
 
 func (s *SQLiteStore) BeginMetadataJSONRead(ctx context.Context) (*MetadataJSONRead, error) {
 	if !s.BoundedMetadataEnabled() {
@@ -119,19 +126,36 @@ func (r *MetadataJSONRead) ReserveEncoding(ctx context.Context, value any) error
 	return r.reserve(ctx, uint64(cost)+(64<<10))
 }
 
-// ReserveEncoded grows a byte-buffer allowance before copying bytes. An
-// append-only bytes.Buffer at least doubles on each allocation. Its last
-// capacity is at most twice the rounded length, and previous capacities sum
-// to less than the last one. The decoder has a separate allowance.
+// ReserveEncoded admits the next absolute size of an append-only bytes.Buffer.
+// Capacity at least doubles at each growth, so total capacity is less than
+// twice the final capacity, which is at most twice the rounded length.
+// The build-specific multiplier accounts for any temporary growth slices.
+// The decoder has a separate allowance.
 func (r *MetadataJSONRead) ReserveEncoded(ctx context.Context, size int) error {
+	return r.reserveEncoded(ctx, size, metadataJSONBufferPageWork)
+}
+
+// ReserveEncodedCopies uses the same output allowance to admit a fixed-size
+// payload and its transport copies at four rounded widths.
+func (r *MetadataJSONRead) ReserveEncodedCopies(ctx context.Context, size int) error {
+	return r.reserveEncoded(ctx, size, 4*metadataJSONEncodedPage)
+}
+
+func (r *MetadataJSONRead) reserveEncoded(ctx context.Context, size, pageWork int) error {
 	if r == nil {
 		return ErrBoundedMetadataCoverage
 	}
-	if size < 0 || size > metadataWorkBytes()/4 {
+	if size < 0 {
 		return r.fail(ErrMetadataWorkBudget)
 	}
-	const page = 64 << 10
-	capacity := (size + page - 1) / page * page
+	pages := size / metadataJSONEncodedPage
+	if size%metadataJSONEncodedPage != 0 {
+		pages++
+	}
+	if pages > metadataWorkBytes()/pageWork {
+		return r.fail(ErrMetadataWorkBudget)
+	}
+	work := pages * pageWork
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
@@ -147,15 +171,15 @@ func (r *MetadataJSONRead) ReserveEncoded(ctx context.Context, size int) error {
 		r.err = err
 		return err
 	}
-	if capacity <= r.encoded {
+	if work <= r.encodedWork {
 		return nil
 	}
-	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, (capacity-r.encoded)*4)
+	_, release, err := r.store.tryAdmitAdditionalMetadataWork(ctx, work-r.encodedWork)
 	if err != nil {
 		r.err = err
 		return err
 	}
-	r.encoded = capacity
+	r.encodedWork = work
 	r.releases = append(r.releases, release)
 	return nil
 }

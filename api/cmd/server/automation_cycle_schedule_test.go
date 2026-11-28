@@ -620,7 +620,7 @@ func automationCycleScheduleTick(t *testing.T, f automationCycleScheduleFixture,
 		}
 		defer budget.Close()
 		// Admission only: no 64 MiB byte buffer is allocated by this call.
-		if err := budget.ReserveEncoded(t.Context(), (64<<20)-(64<<10)); err != nil {
+		if err := budget.ReserveEncodedCopies(t.Context(), (64<<20)-(64<<10)); err != nil {
 			t.Fatal("could not hold the declared aggregate work budget", err)
 		}
 		heldBefore = source.MetadataWorkUsedForTesting()

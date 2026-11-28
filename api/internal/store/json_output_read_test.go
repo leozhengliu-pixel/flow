@@ -75,6 +75,10 @@ func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
 	view := scaleHotLogoStore(t, nil)
 	read := scaleJSONOwner(t, view, t.Context())
 	const page = 64 << 10
+	pageWork := 4*page + 512
+	if raceDetector {
+		pageWork = 8*page + 512
+	}
 	for _, step := range []struct {
 		size, pages int
 	}{
@@ -84,13 +88,13 @@ func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
 		if err := read.ReserveEncoded(t.Context(), step.size); err != nil {
 			t.Fatal(step, err)
 		}
-		want := 128<<10 + 4*page*step.pages
+		want := 128<<10 + pageWork*step.pages
 		if got := view.MetadataWorkUsedForTesting(); got != want {
 			t.Fatal("absolute-size admission duplicated or lost a buffer page", step, got, want)
 		}
 	}
 	held := view.MetadataWorkUsedForTesting()
-	view.metadataResidency.work.limit = held + 4*page - 1
+	view.metadataResidency.work.limit = held + pageWork - 1
 	if err := read.ReserveEncoded(t.Context(), 3*page+1); !errors.Is(err, ErrMetadataWorkBudget) ||
 		!errors.Is(read.Err(), ErrMetadataWorkBudget) || view.MetadataWorkUsedForTesting() != held {
 		t.Fatal("growth failure lost the existing admitted buffer", err, read.Err(), view.MetadataWorkUsedForTesting())
@@ -102,7 +106,7 @@ func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
 	if view.MetadataWorkUsedForTesting() != 0 {
 		t.Fatal("failed growth owner leaked old buffer work")
 	}
-	for _, size := range []int{-1, metadataWorkBytes()/4 + 1} {
+	for _, size := range []int{-1, metadataWorkBytes()/pageWork*page + 1} {
 		view.metadataResidency.work.limit = metadataWorkBytes()
 		read := scaleJSONOwner(t, view, t.Context())
 		if err := read.ReserveEncoded(t.Context(), size); !errors.Is(err, ErrMetadataWorkBudget) || !errors.Is(read.Err(), err) {
@@ -116,24 +120,34 @@ func TestScaleJSONOutputEncodedGrowth(t *testing.T) {
 }
 
 func TestScaleJSONOutputEncodedGrowthAllocation(t *testing.T) {
-	view := scaleHotLogoStore(t, nil)
-	read := scaleJSONOwner(t, view, t.Context())
-	base := view.MetadataWorkUsedForTesting()
-	var buffer bytes.Buffer
-	var chunk [4093]byte
-	total := allocatedBy(func() {
-		for buffer.Len() < 4<<20 {
-			part := chunk[:min(len(chunk), (4<<20)-buffer.Len())]
-			if err := read.ReserveEncoded(t.Context(), buffer.Len()+len(part)); err != nil {
-				t.Fatal(err)
+	for _, test := range []struct {
+		name string
+		size int
+	}{
+		{"full-capacity", 4 << 20},
+		{"just-after-growth", (2 << 20) + 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			view := scaleHotLogoStore(t, nil)
+			read := scaleJSONOwner(t, view, t.Context())
+			base := view.MetadataWorkUsedForTesting()
+			var buffer bytes.Buffer
+			var chunk [4093]byte
+			total := allocatedBy(func() {
+				for buffer.Len() < test.size {
+					part := chunk[:min(len(chunk), test.size-buffer.Len())]
+					if err := read.ReserveEncoded(t.Context(), buffer.Len()+len(part)); err != nil {
+						t.Fatal(err)
+					}
+					buffer.Write(part)
+				}
+			})
+			work := view.MetadataWorkUsedForTesting() - base
+			t.Logf("encoded=%d charge=%d total=%d retained=%d", buffer.Len(), work, total, buffer.Cap())
+			if total > uint64(work) {
+				t.Fatalf("recorder allocated %d with a %d byte charge", total, work)
 			}
-			buffer.Write(part)
-		}
-	})
-	work := view.MetadataWorkUsedForTesting() - base
-	t.Logf("encoded=%d charge=%d total=%d retained=%d", buffer.Len(), work, total, buffer.Cap())
-	if total > uint64(work) {
-		t.Fatalf("recorder allocated %d with a %d byte charge", total, work)
+		})
 	}
 }
 
@@ -374,7 +388,7 @@ func TestScaleJSONOutputErrorLatchAndIndependentOwners(t *testing.T) {
 		t.Fatal("first subordinate failure or independent owner isolation changed", first.Err(), second.Err())
 	}
 	first.Close()
-	if firstCloses != 1 || secondCloses != 0 || view.MetadataWorkUsedForTesting() != 128<<10+2*65536*4 {
+	if firstCloses != 1 || secondCloses != 0 || view.MetadataWorkUsedForTesting() != 128<<10+2*metadataJSONBufferPageWork {
 		t.Fatal("one output owner released another owner's work", firstCloses, secondCloses, view.MetadataWorkUsedForTesting())
 	}
 	lateClosed := 0
@@ -409,7 +423,7 @@ func TestScaleJSONOutputConcurrentGrowthAndClose(t *testing.T) {
 	for err := range failures {
 		t.Error("concurrent absolute growth failed", err)
 	}
-	if got, want := view.MetadataWorkUsedForTesting(), 128<<10+4*256<<10; got != want {
+	if got, want := view.MetadataWorkUsedForTesting(), 128<<10+4*metadataJSONBufferPageWork; got != want {
 		t.Fatal("concurrent growth was double admitted", got, want)
 	}
 

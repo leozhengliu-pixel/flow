@@ -29,7 +29,7 @@ func holdBudget(t *testing.T, source *store.SQLiteStore) func() {
 		if err != nil {
 			break
 		}
-		if err := hold.ReserveEncoded(context.Background(), size); err != nil {
+		if err := hold.ReserveEncodedCopies(context.Background(), size); err != nil {
 			hold.Close()
 			size /= 2
 			continue

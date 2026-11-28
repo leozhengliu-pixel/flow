@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Account for bounded JSON response capture bookkeeping in all builds and temporary buffer allocations in race builds.
 - Guard bounded JSON writes and publication against unsupported payload types. Cover milestone and update mutations on all three databases and check webhook and realtime wire bytes. [JSON payload audit](docs/audits/metadata-json-payloads.md)
 - Fix 503 responses when writing milestones, project updates, or initiative updates with bounded metadata enabled.
 - Fix MySQL startup hanging with a one-connection pool when recording a full-text index rebuild.
