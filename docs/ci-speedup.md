@@ -42,10 +42,10 @@ The slowest completed test observations were these.
 | `./internal/store` | `TestAggregatePublicationDifferential` | 827.94 |
 
 The refreshed `scripts/ci/go-test-timings.json` uses the median of the newest
-three timing artifacts. The active SQLite plans now pack to 67,700 seconds for
-`./cmd/server` and 28,505 seconds for `./internal/store`. The selected plans
+three timing artifacts. The active SQLite plans now pack to 67,710 seconds for
+`./cmd/server` and 28,547 seconds for `./internal/store`. The selected plans
 use 28 server shards with a predicted maximum of 2,419 seconds and 14 store
-shards with a predicted maximum of 2,036 seconds. PostgreSQL and MySQL use 12
+shards with a predicted maximum of 2,039 seconds. PostgreSQL and MySQL use 12
 server shards at 1,621 seconds maximum and 4 store shards at 1,283 seconds
 maximum.
 
