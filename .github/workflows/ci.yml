@@ -1184,7 +1184,6 @@ jobs:
       SHARD: ${{ matrix.shard }}
       SHARDS: ${{ matrix.shards }}
       BINARY_NAME: flow-scale-${{ matrix.package == './cmd/server' && 'server' || 'store' }}.test
-      GO_TEST_BINARY: ${{ runner.temp }}/go-scale-test-bin/flow-scale-${{ matrix.package == './cmd/server' && 'server' || 'store' }}.test
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -1246,6 +1245,8 @@ jobs:
 
       - name: Run scale differentials
         working-directory: api
+        env:
+          GO_TEST_BINARY: ${{ runner.temp }}/go-scale-test-bin/flow-scale-${{ matrix.package == './cmd/server' && 'server' || 'store' }}.test
         # A shard is bounded below the job timeout. The resume helper starts
         # tests that were not reached after a timeout, so one hang cannot hide
         # the rest of the selected suite.
@@ -1253,8 +1254,7 @@ jobs:
           set -euo pipefail
           ../scripts/ci/go-test-shard.sh list "$PACKAGE" "$SHARD" "$SHARDS" > "$RUNNER_TEMP/names"
           echo "Shard $SHARD/$SHARDS of the scale tests of $PACKAGE: $(wc -l < "$RUNNER_TEMP/names") tests"
-          GO_TEST_BINARY="$RUNNER_TEMP/go-scale-test-bin/$BINARY_NAME" \
-            ../scripts/ci/go-test-resume.sh "$PACKAGE" "$RUNNER_TEMP/names" 60m
+          ../scripts/ci/go-test-resume.sh "$PACKAGE" "$RUNNER_TEMP/names" 60m
 
   # The tests of scripts/ci/known-failing-tests.txt, each in every scope it is listed
   # for: race and plain on SQLite (with and without the race detector), postgres and

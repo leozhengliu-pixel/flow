@@ -42,11 +42,11 @@ The slowest completed test observations were these.
 | `./internal/store` | `TestAggregatePublicationDifferential` | 827.94 |
 
 The refreshed `scripts/ci/go-test-timings.json` uses the median of the newest
-three timing artifacts. The active SQLite plans now pack to 67,071 seconds for
-`./cmd/server` and 28,177 seconds for `./internal/store`. The selected plans
-use 28 server shards with a predicted maximum of 2,396 seconds and 14 store
-shards with a predicted maximum of 2,013 seconds. PostgreSQL and MySQL use 12
-server shards at 1,620 seconds maximum and 4 store shards at 1,283 seconds
+three timing artifacts. The active SQLite plans now pack to 67,700 seconds for
+`./cmd/server` and 28,505 seconds for `./internal/store`. The selected plans
+use 28 server shards with a predicted maximum of 2,419 seconds and 14 store
+shards with a predicted maximum of 2,036 seconds. PostgreSQL and MySQL use 12
+server shards at 1,621 seconds maximum and 4 store shards at 1,283 seconds
 maximum.
 
 Every SQLite API shard keeps the complete active test list, including all Scale
@@ -82,7 +82,7 @@ same packages and the remaining API packages supply the merged coverage.
 
 | Changed paths | Jobs selected |
 | --- | --- |
-| `api/**`, root `go.mod` or `go.sum` | API, SQLite race/plain shards as applicable, PostgreSQL, MySQL, browser, and infrastructure |
+| `api/**` including `api/go.mod` and `api/go.sum` | API, SQLite race/plain shards as applicable, PostgreSQL, MySQL, browser, and infrastructure |
 | `web/**`, `scripts/generate-openapi.mjs`, `docs/openapi.json` | Web, SDK, and browser |
 | `sdk/typescript/**` | SDK |
 | `deploy/**`, `sandbox-runner/**` | Helm and sandbox |

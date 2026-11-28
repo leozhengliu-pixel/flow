@@ -38,9 +38,6 @@ case $scope in
     export FLOW_TEST_DATABASE_URL=${FLOW_TEST_DATABASE_URL:-mysql://flow:flow@127.0.0.1:3306/flow}
     ;;
 esac
-build_flags=()
-if [ "$scope" = race ]; then build_flags=(-race); fi
-
 {
   echo "### Known failing tests: $scope"
   echo
@@ -53,7 +50,12 @@ for package in ./cmd/server ./internal/store; do
   mapfile -t tests < <("$here/go-test-shard.sh" known "$package" "$scope")
   [ "${#tests[@]}" -gt 0 ] || continue
   binary=$work/$(basename "$package").test
-  if ! go test -c "${build_flags[@]}" -o "$binary" "$package"; then
+  if [ "$scope" = race ]; then
+    go test -c -race -o "$binary" "$package"
+  else
+    go test -c -o "$binary" "$package"
+  fi
+  if [ "$?" -ne 0 ]; then
     echo "::warning title=Known failing ($scope)::$package does not build; its known-failing tests were not run"
     for test in "${tests[@]}"; do
       echo "| $package | $test | not built | |" >> "$summary"
