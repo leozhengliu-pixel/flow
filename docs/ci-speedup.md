@@ -1,16 +1,16 @@
 # CI Speedup
 
 The baseline uses the ten newest completed, non-cancelled `push` runs of
-`ci.yml` on `main`, measured on November 27, 2026. Run `46050994013` supplied
+`ci.yml` on `main`, measured on November 28, 2026. Run `46050994013` supplied
 the shard timing artifacts. GitHub's job payload does not expose a queued
 timestamp, so queue delay is the interval from the first observed job start to
 each later job start.
 
 | Measure | Median before |
 | --- | ---: |
-| First job start to last job end | 16,175 s (269.6 min) |
-| First job start to last job start | 15,992 s (266.5 min) |
-| Accumulated job wall time | 183,359 s (3,056.0 runner min) |
+| First job start to last job end | 15,287 s (254.8 min) |
+| First job start to last job start | 15,101 s (251.7 min) |
+| Accumulated job wall time | 181,875 s (3,031.3 runner min) |
 | Jobs | 140 |
 
 The measured run had these representative ranges.
@@ -118,5 +118,5 @@ the ten-run baseline. It needs one post-merge main run for confirmation.
 | Push jobs | 140 | 106 |
 | SQLite API shards | 66 | 42 |
 | Scale shards across PostgreSQL and MySQL | 48 | 32 |
-| First job start to last job end | 269.6 min | about 145 min |
-| Accumulated job wall time | 3,056 runner min | about 1,800 runner min |
+| First job start to last job end | 254.8 min | about 145 min |
+| Accumulated job wall time | 3,031 runner min | about 1,800 runner min |
