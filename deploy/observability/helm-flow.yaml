@@ -1,0 +1,22 @@
+telemetry:
+  enabled: true
+  endpoint: https://flow-otel.example.test:4318
+  sampleRate: 0.1
+  interval: 15s
+  frontend:
+    enabled: false
+  diagnostics:
+    heapProfileDir: /var/run/flow/diagnostics/profiles
+    snapshotDir: /var/run/flow/diagnostics
+  existingSecret:
+    name: flow-collector-auth
+    headers:
+      Authorization: authorization
+
+extraVolumes:
+  - name: flow-diagnostics
+    emptyDir:
+      sizeLimit: 64Mi
+extraVolumeMounts:
+  - name: flow-diagnostics
+    mountPath: /var/run/flow/diagnostics

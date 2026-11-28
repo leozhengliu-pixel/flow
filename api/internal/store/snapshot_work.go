@@ -1,9 +1,6 @@
 package store
 
-import (
-	"context"
-	"sync"
-)
+import "context"
 
 // tryAdmitAdditionalMetadataWork reserves an independent child allowance without
 // waiting while a caller owns a SQL snapshot. The parent's allowance is neither
@@ -16,12 +13,15 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 		return ctx, func() {}, nil
 	}
 	budget := s.metadataResidency.work
+	admission := budget.recorder.BeginAdmission(ctx)
+	defer admission.End()
 	budget.mu.Lock()
 	defer budget.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, err
 	}
 	if parent, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && parent.budget == budget && !parent.live {
+		admission.Refused(false)
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	demand := metadataWorkDemandFrom(ctx)
@@ -30,25 +30,16 @@ func (s *SQLiteStore) tryAdmitAdditionalMetadataWork(ctx context.Context, bytes 
 			// The attempt would fit the budget: other work holds the room
 			// this admission needs.
 			demand.refuse(bytes)
+			admission.Refused(true)
 			return ctx, nil, errMetadataWorkContended
 		}
+		admission.Refused(false)
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	lease := &metadataWorkLease{budget: budget, bytes: bytes, live: true}
 	demand.charge(bytes)
 	budget.used += bytes
 	budget.peak = max(budget.peak, budget.used)
-	var once sync.Once
-	release := func() {
-		once.Do(func() {
-			budget.mu.Lock()
-			lease.live = false
-			budget.used -= bytes
-			demand.charge(-bytes)
-			close(budget.changed)
-			budget.changed = make(chan struct{})
-			budget.mu.Unlock()
-		})
-	}
-	return context.WithValue(ctx, metadataWorkLeaseKey{}, lease), release, nil
+	admission.Charge(int64(bytes))
+	return context.WithValue(ctx, metadataWorkLeaseKey{}, lease), lease.releaser(demand, admission), nil
 }

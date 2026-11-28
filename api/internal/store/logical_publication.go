@@ -11,6 +11,7 @@ import (
 // Policy changes still require the resident-policy writer's precommit check.
 type metadataLogicalPublication struct {
 	store     *SQLiteStore
+	ctx       context.Context
 	workspace string
 	candidate *metadataLogicalSource
 	capture   *metadataCommitStamp
@@ -37,7 +38,7 @@ func (s *SQLiteStore) prepareMetadataLogicalPublication(ctx context.Context, tx 
 		return nil, err
 	}
 	publication := &metadataLogicalPublication{
-		store: s, workspace: workspace, candidate: candidate,
+		store: s, ctx: ctx, workspace: workspace, candidate: candidate,
 		capture: tx.captureMetadataCommitStampFrom(workspace, baseStamp),
 		exact:   exactSource, last: last,
 	}
@@ -147,7 +148,7 @@ func (p *metadataLogicalPublication) Install() error {
 	if err := p.candidate.setStamp(stamp); err != nil {
 		return err
 	}
-	p.store.installMetadataLogicalSource(p.workspace, p.candidate, p.last)
+	p.store.installMetadataLogicalSourceTimed(p.ctx, p.workspace, p.candidate, p.last)
 	p.candidate = nil
 	p.store.mu.Lock()
 	p.store.forgetCopyRevisionLocked(p.workspace)

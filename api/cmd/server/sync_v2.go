@@ -231,7 +231,7 @@ func summarizeEventFrame(ctx context.Context, budget *realtimeBudget, frame Even
 	if len(raw)+len(event.ID)+128 > syncV2FrameBytes {
 		return EventFrame{}, store.ErrEventSourceBudget
 	}
-	return EventFrame{encoded: raw, id: event.ID, visible: true, release: encoding.close}, nil
+	return EventFrame{encoded: raw, id: event.ID, kind: event.Type, visible: true, release: encoding.close}, nil
 }
 
 // syncChanges is registered by the HTTP route owner. A mixed deployment with

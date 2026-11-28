@@ -61,7 +61,7 @@ type EventSource struct {
 // copies through Event; transport writes the shared encoding directly.
 type EventFrame struct {
 	encoded       json.RawMessage
-	id            string
+	id, kind      string
 	visible       bool
 	release       func()
 	validate      func(context.Context) error
@@ -117,7 +117,11 @@ func (frame EventFrame) WriteSSE(w http.ResponseWriter, node string) bool {
 	if !frame.noCursor && node != "" && !frame.durableCursor && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
 	}
-	return writeSSEParts(w, id, frame.noCursor, frame.encoded)
+	transport := "sse"
+	if frame.durableCursor || frame.noCursor {
+		transport = "sync"
+	}
+	return writeSSEParts(w, id, frame.noCursor, transport, frame.kind, frame.encoded)
 }
 
 // BuildEventSource performs the source reads once. Delivery uses a versioned
@@ -597,7 +601,7 @@ func (source *EventSource) projectEvent(ctx context.Context, access store.EventA
 	if source.owner != nil {
 		validate = func(ctx context.Context) error { return source.owner.validateEventProjection(ctx, source, access) }
 	}
-	return EventFrame{encoded: raw, id: event.ID, visible: visible, release: release, validate: validate}, nil
+	return EventFrame{encoded: raw, id: event.ID, kind: event.Type, visible: visible, release: release, validate: validate}, nil
 }
 
 func (source *EventSource) cacheKey() string {
@@ -804,7 +808,7 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 		if encodeErr != nil {
 			return EventFrame{}, true, encodeErr
 		}
-		frame = EventFrame{encoded: raw, id: fallback.ID, visible: true, noCursor: !summaryRequest}
+		frame = EventFrame{encoded: raw, id: fallback.ID, kind: fallback.Type, visible: true, noCursor: !summaryRequest}
 		if summaryRequest {
 			frame, encodeErr = summarizeEventFrame(r.Context(), s.realtime.budget, frame, access.AuthzEpoch)
 		}

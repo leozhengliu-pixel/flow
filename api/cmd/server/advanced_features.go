@@ -23,6 +23,7 @@ import (
 	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
 type documentInput = domain.DocumentInput
@@ -448,10 +449,12 @@ func refreshProjectDocuments(data *domain.Bootstrap, projectID string) {
 }
 
 func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
+	defer telemetry.Begin(r.Context(), telemetry.DocumentSave).End()
 	var input documentInput
 	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
+	telemetry.RecordDocumentBody(r.Context())
 	var created domain.Document
 	var viewer templateAccess
 	if input.TemplateID != nil && *input.TemplateID != "" {
@@ -581,10 +584,12 @@ func (s *server) documentEditRefused(r *http.Request, ref string) bool {
 }
 
 func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
+	defer telemetry.Begin(r.Context(), telemetry.DocumentSave).End()
 	var input documentInput
 	if !s.decodeDocumentBody(w, r, &input) {
 		return
 	}
+	telemetry.RecordDocumentBody(r.Context())
 	id := r.PathValue("id")
 	if s.documentEditRefused(r, id) {
 		// The same answer the write callback gives, without queueing for the
@@ -3601,6 +3606,8 @@ func (s *server) commitImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) commitImportSync(ctx context.Context, workspace, id string, input importCommitInput) {
+	ctx, timing := s.telemetry.BeginJob(ctx, "import")
+	defer timing.End()
 	err := s.store.MutateWorkspace(ctx, workspace, "import.committed", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ImportJobs, func(item domain.ImportJob) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if index < 0 {

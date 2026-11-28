@@ -18,6 +18,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -66,7 +67,9 @@ type mcpActor struct {
 func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 	tools := flowToolContract()
 	return func(w http.ResponseWriter, r *http.Request) {
+		timing := telemetry.Begin(r.Context(), telemetry.Authentication)
 		actor, ok := s.authenticateMCP(w, r)
+		timing.End()
 		if !ok {
 			return
 		}
@@ -230,6 +233,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				return
 			}
 			tool := tools[index]
+			defer telemetry.BeginOperation(r.Context(), telemetry.MCP, tool.Name).End()
 			if actor.Run != nil {
 				s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)
 				return

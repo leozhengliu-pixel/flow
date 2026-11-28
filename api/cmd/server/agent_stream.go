@@ -320,6 +320,11 @@ func (s *server) streamAgentSession(w http.ResponseWriter, r *http.Request, id s
 }
 
 func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventWriter) (domain.AgentSession, error) {
+	telemetryCtx, timing := s.telemetry.BeginJob(r.Context(), "agent_run")
+	defer timing.End()
+	if s.telemetry != nil {
+		r = r.WithContext(telemetryCtx)
+	}
 	data := s.workspaceData(r)
 	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
 		return domain.AgentSession{}, err

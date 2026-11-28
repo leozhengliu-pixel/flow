@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/telemetry"
 )
 
 const metadataOwnedSelectionWork = 8*(2<<20) + 64<<10
@@ -42,6 +43,7 @@ type OwnedMetadataSelection struct {
 // the same lock. An unknown revision remains unknown; no SQL stamp is invented.
 // An explicit Context pin supplies its generation to independently owned children.
 func (s *SQLiteStore) BeginInstalledMetadataRead(ctx context.Context, workspace string) (*InstalledMetadataRead, bool, error) {
+	defer telemetry.Begin(ctx, telemetry.MetadataRead).End()
 	if !s.BoundedMetadataEnabled() {
 		// Callers preserve their particular literal accessor off mode. This
 		// helper cannot infer whether that accessor was full or field-only.
@@ -175,6 +177,7 @@ func (r *InstalledMetadataRead) retainSource(ctx context.Context, workspace stri
 }
 
 func (r *InstalledMetadataRead) Select(ctx context.Context, scope MetadataRecordScope) (*OwnedMetadataSelection, error) {
+	defer telemetry.Begin(ctx, telemetry.MetadataSelect).End()
 	if err := validateMetadataRecordScope(scope); err != nil {
 		return nil, err
 	}

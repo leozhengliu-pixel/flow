@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/telemetry"
 )
 
 const metadataLogicalExternalWork = 128 << 20
@@ -30,6 +31,7 @@ type metadataLogicalExternal struct {
 // as mutateFull, without installing those transient collections. Its caller
 // owns the repeatable-read transaction and the 128 MiB parser work lease.
 func (s *SQLiteStore) hydrateMetadataLogicalSource(ctx context.Context, tx *sqlTx, source *metadataLogicalSource, workspace string) (_ *metadataLogicalSource, err error) {
+	defer telemetry.Begin(ctx, telemetry.MetadataHydrate).End()
 	ctx = metadataLogicalSourceScratchContext(ctx, source)
 	if err := ctx.Err(); err != nil {
 		return nil, err

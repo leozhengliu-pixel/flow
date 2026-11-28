@@ -888,6 +888,7 @@ var scaleReviewedRoutes = []string{
 	"POST /api/teams/{id}/templates\ts.createIssueTemplate",
 	"POST /api/teams/{id}/triage-responsibilities\ts.createTriageResponsibility",
 	"POST /api/teams/{id}/triage-rules\ts.createTriageRule",
+	"POST /api/telemetry\ts.ingestTelemetry",
 	"POST /api/trash/{id}/restore\ts.restoreTrashEntry",
 	"POST /api/views\ts.createSavedView",
 	"POST /api/views/{id}/share\ts.shareSavedView",

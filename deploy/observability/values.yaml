@@ -1,0 +1,75 @@
+grafanaSecret: flow-grafana
+# A cluster's default StorageClass is used when this is empty.
+storageClass: ""
+components:
+  collector:
+    image: otel/opentelemetry-collector:0.166.0
+    cpu: 250m
+    memory: 256Mi
+    port: 4318
+    args: [--config=/etc/flow-otel.yaml]
+    config:
+      collector.yaml:
+        source: collector.yaml
+        target: /etc/flow-otel.yaml
+  victoria:
+    image: victoriametrics/victoria-metrics:v1.153.0
+    cpu: 500m
+    memory: 896Mi
+    port: 8428
+    storage: 20Gi
+    dataPath: /storage
+    args:
+      - -storageDataPath=/storage
+      - -retentionPeriod=14d
+      - -storage.minFreeDiskSpaceBytes=2GiB
+      - -memory.allowedPercent=55
+      - -opentelemetry.usePrometheusNaming
+  tempo:
+    image: grafana/tempo:2.10.4
+    cpu: 450m
+    memory: 1024Mi
+    port: 3200
+    ingestPort: 4318
+    storage: 14Gi
+    dataPath: /var/tempo
+    fsGroup: 10001
+    args: [-config.file=/etc/flow-tempo.yaml]
+    config:
+      tempo.yaml:
+        source: tempo.yaml
+        target: /etc/flow-tempo.yaml
+  loki:
+    image: grafana/loki:3.7.8
+    cpu: 450m
+    memory: 1024Mi
+    port: 3100
+    storage: 10Gi
+    dataPath: /loki
+    fsGroup: 10001
+    args: [-config.file=/etc/flow-loki.yaml]
+    config:
+      loki.yaml:
+        source: loki.yaml
+        target: /etc/flow-loki.yaml
+  grafana:
+    image: grafana/grafana:13.3.2
+    cpu: 350m
+    memory: 640Mi
+    port: 3000
+    storage: 2Gi
+    dataPath: /var/lib/grafana
+    fsGroup: 472
+    config:
+      datasources.yaml:
+        source: grafana/provisioning/datasources/flow.yaml
+        target: /etc/grafana/provisioning/datasources/flow.yaml
+      dashboards.yaml:
+        source: grafana/provisioning/dashboards/flow.yaml
+        target: /etc/grafana/provisioning/dashboards/flow.yaml
+      flow-performance.json:
+        source: grafana/dashboards/flow-performance.json
+        target: /var/lib/flow-dashboards/flow-performance.json
+      flow-memory.json:
+        source: grafana/dashboards/flow-memory.json
+        target: /var/lib/flow-dashboards/flow-memory.json

@@ -370,7 +370,12 @@ func (s *server) workerRunGuardFinishOp(r *http.Request, run store.AgentRun, inp
 // that has not entered Coding is moved into it (or ends with the blocker), and a "done" claim is replaced with
 // the session's real state.
 func (s *server) workerRunFinish(r *http.Request, run store.AgentRun, state *workerRunGuardState, g *builtinRunGuard, input workerRunGuardRequest) (reply string, transferred bool, failure string, err error) {
-	task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID)
+	ctx, timing := s.telemetry.BeginJob(r.Context(), "agent_run")
+	defer timing.End()
+	if s.telemetry != nil {
+		r = r.WithContext(ctx)
+	}
+	task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
 	if err != nil {
 		return "", false, "", err
 	}
@@ -378,7 +383,7 @@ func (s *server) workerRunFinish(r *http.Request, run store.AgentRun, state *wor
 	if err != nil {
 		return "", false, "", nil // the application lost access: nothing is started, the worker keeps its reply
 	}
-	ctx := request.Context()
+	ctx = request.Context()
 	base := s.loopAppURL()
 	if base == "" {
 		base = agentLinkBaseURL(r)

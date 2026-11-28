@@ -73,6 +73,7 @@ type FileSettings struct {
 	// DocumentRequestBodyMaxBytes is server.documents.requestBodyMaxBytes
 	// (Config.DocumentRequestBodyMaxBytes).
 	DocumentRequestBodyMaxBytes int64
+	telemetry                   fileTelemetry
 }
 
 // loadedFileSettings are the file-only settings of the file LoadFileFromArgs
@@ -196,6 +197,11 @@ func ParseFile(path string, content []byte) (*File, error) {
 	parser := fileParser{path: path, file: file, labels: labelNames{}}
 	if err := parser.section(root, "", fileSchema); err != nil {
 		return nil, err
+	}
+	if telemetry := file.Settings.telemetry; telemetry.enabled != nil && *telemetry.enabled {
+		if err := telemetry.validate(); err != nil {
+			return nil, parser.errorf(root, "server.telemetry", "%v", err)
+		}
 	}
 	return file, nil
 }
@@ -553,14 +559,7 @@ var fileSchema = map[string]*field{
 			"provider": envString("FLOW_WEB_SEARCH_PROVIDER", "tavily", "brave", "searxng"),
 			"url":      {kind: kindString, env: "FLOW_WEB_SEARCH_URL", check: httpURL},
 		}),
-		"telemetry": section(map[string]*field{
-			"enabled":         envBool("FLOW_TELEMETRY_ENABLED"),
-			"serviceName":     envString("OTEL_SERVICE_NAME"),
-			"environment":     envString("FLOW_ENVIRONMENT"),
-			"endpoint":        {kind: kindString, env: "OTEL_EXPORTER_OTLP_ENDPOINT", check: httpURL},
-			"tracesEndpoint":  {kind: kindString, env: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", check: httpURL},
-			"metricsEndpoint": {kind: kindString, env: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", check: httpURL},
-		}),
+		"telemetry": telemetryFileSchema(),
 		"smtp": section(map[string]*field{
 			"host":     envString("FLOW_SMTP_HOST"),
 			"port":     envInt("FLOW_SMTP_PORT", 1, 65535),

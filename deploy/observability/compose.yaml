@@ -1,0 +1,68 @@
+services:
+  collector:
+    image: otel/opentelemetry-collector:0.166.0
+    command: ["--config=/etc/flow-otel.yaml"]
+    volumes:
+      - ./collector.yaml:/etc/flow-otel.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318"
+    cpus: 0.25
+    mem_limit: 256m
+    restart: unless-stopped
+
+  victoria:
+    image: victoriametrics/victoria-metrics:v1.153.0
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=14d
+      - -storage.minFreeDiskSpaceBytes=2GiB
+      - -memory.allowedPercent=55
+      - -opentelemetry.usePrometheusNaming
+    volumes:
+      - victoria:/storage
+    cpus: 0.5
+    mem_limit: 896m
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.10.4
+    command: ["-config.file=/etc/flow-tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/flow-tempo.yaml:ro
+      - tempo:/var/tempo
+    cpus: 0.45
+    mem_limit: 1024m
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.8
+    command: ["-config.file=/etc/flow-loki.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/flow-loki.yaml:ro
+      - loki:/loki
+    cpus: 0.45
+    mem_limit: 1024m
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.3.2
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set a Grafana admin password}"
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/flow-dashboards:ro
+    ports:
+      - "127.0.0.1:3300:3000"
+    cpus: 0.35
+    mem_limit: 640m
+    restart: unless-stopped
+
+volumes:
+  victoria:
+  tempo:
+  loki:
+  grafana:

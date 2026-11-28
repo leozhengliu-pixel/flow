@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/telemetry"
 )
 
 type metadataLogicalReadKey struct{}
@@ -57,6 +58,11 @@ func (s *SQLiteStore) retainMetadataLogicalSource(ctx context.Context, workspace
 
 // Installation takes the candidate's reference. Prepare it before SQL commit;
 // replacing the source afterward cannot allocate or fail.
+func (s *SQLiteStore) installMetadataLogicalSourceTimed(ctx context.Context, workspace string, candidate *metadataLogicalSource, last ...bool) {
+	defer telemetry.Begin(ctx, telemetry.MetadataInstall).End()
+	s.installMetadataLogicalSource(workspace, candidate, last...)
+}
+
 func (s *SQLiteStore) installMetadataLogicalSource(workspace string, candidate *metadataLogicalSource, last ...bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

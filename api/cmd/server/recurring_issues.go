@@ -46,6 +46,8 @@ func (s *server) runRecurringIssueScheduler(ctx context.Context) {
 }
 
 func (s *server) runRecurringIssueTick(ctx context.Context) {
+	ctx, timing := s.telemetry.BeginJob(ctx, "recurring")
+	defer timing.End()
 	run := func() error { return s.generateRecurringIssues(ctx, time.Now().UTC()) }
 	var err error
 	if s.coordinator == nil {

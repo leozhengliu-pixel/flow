@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/telemetry"
 )
 
 type agentProviderMessage struct {
@@ -918,8 +919,13 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 	}
 	started := time.Now()
 	logAttrs := []any{"endpoint", suffix, "model", s.agent.Model, "request_bytes", len(raw)}
+	var call telemetry.Operation
+	if telemetry.Enabled() {
+		call = telemetry.BeginExternal(requestCtx, "model", request.URL.Hostname())
+	}
 	response, err := client.Do(request)
 	if err != nil {
+		call.End()
 		idled := errors.Is(context.Cause(requestCtx), errAgentProviderIdle)
 		stop()
 		if ctx.Err() != nil {
@@ -932,6 +938,7 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 	}
 	headers := time.Since(started)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		defer call.End()
 		defer response.Body.Close()
 		defer stop()
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
@@ -939,7 +946,7 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 		slog.WarnContext(ctx, "agent provider request failed", append(logAttrs, "status", status, "duration_ms", headers.Milliseconds())...)
 		return nil, &agentProviderError{message: fmt.Sprintf("Flow Agent provider returned status %d: %s", status, providerError(body)), status: status, transient: status >= 500 || status == http.StatusTooManyRequests || status == http.StatusRequestTimeout, timeout: status == http.StatusGatewayTimeout || status == http.StatusRequestTimeout}
 	}
-	response.Body = &agentIdleBody{ReadCloser: response.Body, ctx: requestCtx, idle: idle, timeout: s.agent.Timeout, stop: stop, logCtx: ctx, logAttrs: append(logAttrs, "status", response.StatusCode, "headers_ms", headers.Milliseconds()), started: started}
+	response.Body = &agentIdleBody{ReadCloser: response.Body, ctx: requestCtx, idle: idle, timeout: s.agent.Timeout, stop: stop, logCtx: ctx, logAttrs: append(logAttrs, "status", response.StatusCode, "headers_ms", headers.Milliseconds()), started: started, call: call}
 	return response, nil
 }
 
@@ -964,6 +971,7 @@ type agentIdleBody struct {
 	logCtx    context.Context
 	logAttrs  []any
 	started   time.Time
+	call      telemetry.Operation
 	firstByte time.Duration
 	bytes     int
 	idled     bool
@@ -993,6 +1001,7 @@ func (b *agentIdleBody) Close() error {
 	b.stop()
 	if !b.closed && b.logCtx != nil {
 		b.closed = true
+		b.call.End()
 		attrs := append(b.logAttrs, "first_byte_ms", b.firstByte.Milliseconds(), "duration_ms", time.Since(b.started).Milliseconds(), "response_bytes", b.bytes)
 		if b.idled {
 			slog.WarnContext(b.logCtx, "agent provider response stalled", append(attrs, "idle_timeout_ms", b.timeout.Milliseconds())...)

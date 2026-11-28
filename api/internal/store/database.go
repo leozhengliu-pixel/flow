@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/objectstore"
+	"flow/api/internal/telemetry"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "modernc.org/sqlite"
@@ -54,6 +55,8 @@ type DatabaseConfig struct {
 	// RecordJournalCapture is server.database.recordJournalCapture: auto
 	// (default), triggers or application (record_capture_mode.go).
 	RecordJournalCapture string
+	// Telemetry observes startup and store-owned background work when enabled.
+	Telemetry *telemetry.Recorder
 }
 
 type sqlDatabase struct {
@@ -178,7 +181,11 @@ var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
 // (event_sequencer.go), and the rows every writer of a workspace shares (issue
 // counters, cache revisions) come last, so a writer holds them only while it
 // commits.
-func (tx *sqlTx) Commit() error {
+func (tx *sqlTx) Commit() (err error) {
+	defer telemetry.Begin(tx.ctx, telemetry.Commit).End()
+	if telemetry.Enabled() {
+		defer func() { recordTransactionConflict(tx.ctx, tx.dialect, err, false) }()
+	}
 	tx.metadataWrites++
 	if tx.writeErr != nil {
 		_ = tx.Rollback()
@@ -476,7 +483,8 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
 	s.db.notified.Store(&notify)
-	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
+	startupCtx := telemetry.WithRecorder(context.Background(), config.Telemetry)
+	s.lifecycle, s.stopLifecycle = context.WithCancel(startupCtx)
 	// Startup runs schema checks, loads workspace metadata and applies
 	// idempotent data migrations. Stage timings are logged for slow opens.
 	var admitAfterMigrations bool
@@ -589,7 +597,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	timings := make([]string, 0, len(stages))
 	for _, stage := range stages {
 		began := time.Now()
-		if err := stage.run(context.Background()); err != nil {
+		if err := stage.run(startupCtx); err != nil {
 			_ = s.Close()
 			return nil, err
 		}
@@ -711,6 +719,7 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 		return nil, err
 	}
 	observeSQLStatement(ctx, query)
+	defer telemetry.BeginSQL(ctx, query).End()
 	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -719,6 +728,7 @@ func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...an
 		return snapshot.reader.QueryContext(ctx, query, args...)
 	}
 	observeSQLStatement(ctx, query)
+	defer telemetry.BeginSQL(ctx, query).End()
 	return d.queryPool(query).QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -727,6 +737,7 @@ func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ..
 		return snapshot.reader.QueryRowContext(ctx, query, args...)
 	}
 	observeSQLStatement(ctx, query)
+	defer telemetry.BeginSQL(ctx, query).End()
 	return d.queryPool(query).QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -756,8 +767,11 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if d.snapshots != nil && options != nil && options.ReadOnly {
 		pool = d.snapshots
 	}
+	timing := telemetry.Begin(ctx, telemetry.SQLBegin)
 	tx, err := pool.BeginTx(ctx, options)
+	timing.End()
 	if err != nil {
+		recordTransactionConflict(ctx, d.dialect, err, false)
 		return nil, err
 	}
 	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes, database: d, ctx: ctx}, nil
@@ -825,6 +839,7 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		}
 	}
 	observeSQLStatement(ctx, query)
+	timing := telemetry.BeginSQL(ctx, query)
 	var result sql.Result
 	if capture != nil && capture.replace {
 		result, err = tx.captureDeleteKeys(ctx, capture)
@@ -834,6 +849,10 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		_ = statement.Close()
 	} else {
 		result, err = tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	}
+	timing.End()
+	if err != nil {
+		recordTransactionConflict(ctx, tx.dialect, err, false)
 	}
 	if err == nil && capture != nil {
 		if err = tx.captureAfter(ctx, capture, result); err != nil {
@@ -874,7 +893,12 @@ func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*
 	}
 	tx.countMetadataWrite(query)
 	observeSQLStatement(ctx, query)
-	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	defer telemetry.BeginSQL(ctx, query).End()
+	rows, err := tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	if err != nil {
+		recordTransactionConflict(ctx, tx.dialect, err, false)
+	}
+	return rows, err
 }
 
 func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
@@ -883,7 +907,12 @@ func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any)
 	}
 	tx.countMetadataWrite(query)
 	observeSQLStatement(ctx, query)
-	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	defer telemetry.BeginSQL(ctx, query).End()
+	row := tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	if telemetry.Enabled() {
+		recordTransactionConflict(ctx, tx.dialect, row.Err(), false)
+	}
+	return row
 }
 
 var excludedColumn = regexp.MustCompile(`excluded\.([a-zA-Z_][a-zA-Z0-9_]*)`)

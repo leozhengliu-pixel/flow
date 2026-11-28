@@ -16,6 +16,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/telemetry"
 )
 
 type SQLiteStore struct {
@@ -198,7 +199,7 @@ func (s *SQLiteStore) WorkerContext() context.Context {
 		// Background work runs COLD per operation (WithColdWork).
 		ctx = WithColdWork(ctx, "worker")
 	}
-	return ctx
+	return telemetry.WithWork(ctx, telemetry.WorkBackground)
 }
 
 // publishNotificationSignals sends notification.created for notifications a
@@ -1651,6 +1652,8 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	ctx = telemetry.WithWork(ctx, telemetry.WorkWrite)
+	defer telemetry.BeginMutation(ctx, eventType).End()
 	ctx = s.ContextWithDatabaseFeatures(ctx)
 	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped && (s.metadataResidency != nil || !projectRecordSelectionEnabled(ctx)) {
 		if err := validateMetadataRecordScope(scope); err != nil {
@@ -2033,6 +2036,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 // publishMutation fans a committed mutation out to the hot cache, webhooks
 // and realtime subscribers.
 func (s *SQLiteStore) publishMutation(ctx context.Context, workspaceKey string, event domain.DomainEvent, realtimePayload json.RawMessage) {
+	defer telemetry.Begin(ctx, telemetry.Realtime).End()
 	s.invalidateHotCache(ctx, workspaceKey, event.Type, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, webhookEvent(ctx, event, realtimePayload))

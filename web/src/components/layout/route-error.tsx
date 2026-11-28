@@ -3,6 +3,7 @@ import { useRouteError } from 'react-router-dom'
 import { AppConnectionError } from '@/components/layout/app-startup'
 import { startupRetryDelay } from '@/lib/startup'
 import { isStaleChunkError, reloadForStaleChunk } from '@/lib/stale-chunk-reload'
+import { activeBrowserTelemetry } from '@/lib/browser-telemetry'
 
 /**
  * Replaces the router's own error screen. A file of the app that could not be loaded (the server unreachable, or a
@@ -12,6 +13,7 @@ import { isStaleChunkError, reloadForStaleChunk } from '@/lib/stale-chunk-reload
 export function RouteError() {
   const error = useRouteError()
   const chunk = isStaleChunkError(error)
+  useEffect(() => { activeBrowserTelemetry()?.error(error) }, [error])
   useEffect(() => {
     if (!chunk || reloadForStaleChunk(error)) return
     let stopped = false

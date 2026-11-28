@@ -1,0 +1,51 @@
+{
+  "uid": "flow-performance",
+  "title": "Flow API Performance",
+  "schemaVersion": 39,
+  "tags": ["flow"],
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Slowest APIs (p95, excluding streams)",
+      "gridPos": {"x": 0, "y": 0, "w": 16, "h": 9},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {"refId": "A", "expr": "topk(10, histogram_quantile(0.95, sum by (le, http_route, flow_method, flow_status) (rate(flow_http_server_duration_seconds_bucket{http_route!~\"unmatched|/api/events|/api/realtime/(events|socket)|.*/stream|/api/coding/environments/.*/terminal\"}[5m]))))", "legendFormat": "{{flow_method}} {{http_route}} {{flow_status}}"}
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Latency by revision (p95)",
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 9},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, service_version) (rate(flow_http_server_duration_seconds_bucket{http_route!~\"unmatched|/api/events|/api/realtime/(events|socket)|.*/stream|/api/coding/environments/.*/terminal\"}[5m])))", "legendFormat": "{{service_version}}"}
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Busy responses and transaction retries by route",
+      "gridPos": {"x": 0, "y": 9, "w": 12, "h": 8},
+      "datasource": {"uid": "flow-metrics", "type": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "sum by (http_route, flow_method) (rate(flow_http_server_busy_total[5m]))", "legendFormat": "{{flow_method}} {{http_route}} busy/s"},
+        {"refId": "B", "expr": "sum by (http_route, flow_kind, flow_status) (rate(flow_db_transaction_retries_total[5m]))", "legendFormat": "{{http_route}} {{flow_kind}} {{flow_status}}/s"}
+      ]
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Slow requests with stage timings",
+      "gridPos": {"x": 12, "y": 9, "w": 12, "h": 8},
+      "datasource": {"uid": "flow-events", "type": "loki"},
+      "targets": [{"refId": "A", "expr": "{service_name=\"flow-api\"} |= \"flow.request.slow\""}]
+    }
+  ]
+}

@@ -76,7 +76,7 @@ func syncTransactionFrame(ctx context.Context, budget *realtimeBudget, tx syncV2
 	if len(raw)+len(tx.Seq)+128 > syncV2FrameBytes {
 		return EventFrame{}, store.ErrEventSourceBudget
 	}
-	return EventFrame{encoded: raw, id: tx.Seq, visible: true, durableCursor: true, release: encoding.close}, nil
+	return EventFrame{encoded: raw, id: tx.Seq, kind: "sync.delta", visible: true, durableCursor: true, release: encoding.close}, nil
 }
 
 func (s *server) writeSyncJournalPage(w http.ResponseWriter, r *http.Request, journal committedChangeReader, cursor int64) (int64, bool, bool) {

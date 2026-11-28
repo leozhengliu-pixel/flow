@@ -69,6 +69,7 @@ func supportEmail() string {
 // cookie, sends "New login to Flow" when the device is new for the account, and the welcome email after sign-up.
 // Email failures never fail the sign-in.
 func (s *server) afterSignIn(w http.ResponseWriter, r *http.Request, session domain.AuthSession) {
+	s.advertiseBrowserTelemetry(w)
 	s.recordAccountAudit(r, session.User, "", "signed_in", store.AuditResultSuccess, map[string]any{"method": signInMethod(r)})
 	device := ""
 	if cookie, err := r.Cookie(deviceCookieName); err == nil && len(cookie.Value) == 64 {

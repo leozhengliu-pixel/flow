@@ -23,6 +23,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 )
 
 // Outbound webhooks follow the contract of the reference app's webhooks: every delivery
@@ -1127,6 +1128,8 @@ func (s *server) runWebhookDelivery(ctx context.Context, id string, now time.Tim
 
 // attemptWebhookDelivery sends a claimed delivery once and records the result.
 func (s *server) attemptWebhookDelivery(ctx context.Context, delivery domain.WebhookDelivery, now time.Time) (domain.WebhookDelivery, error) {
+	ctx, timing := s.telemetry.BeginJob(ctx, "webhook")
+	defer timing.End()
 	var webhook *domain.Webhook
 	if delivery.Kind != domain.WebhookDeliveryKindLifecycle {
 		hooks, _, err := s.store.WorkspaceMetadataFieldsScoped(ctx, delivery.WorkspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "webhooks", ID: delivery.WebhookID}}}, "webhooks")
@@ -1184,6 +1187,9 @@ func (s *server) sendWebhookRequest(ctx context.Context, delivery domain.Webhook
 	client := secureOutboundClient(webhookDeliveryTimeout, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(delivery.URL) {
 		client = &http.Client{Timeout: webhookDeliveryTimeout}
+	}
+	if telemetry.Enabled() {
+		defer telemetry.BeginExternal(ctx, "webhook", request.URL.Hostname()).End()
 	}
 	response, err := client.Do(request)
 	if err != nil {

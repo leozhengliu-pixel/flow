@@ -1,0 +1,5 @@
+apiVersion: v2
+name: flow-observability
+description: Single-node Flow telemetry storage and dashboards
+version: 0.1.0
+type: application

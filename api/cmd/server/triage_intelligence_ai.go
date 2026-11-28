@@ -236,6 +236,8 @@ func (s *server) scheduleTriageEditRun(ctx context.Context, actor mcpActor, issu
 // runTriageIntelligence generates and stores suggestions for one triage issue.
 // The model is called before (outside) the workspace mutation lock.
 func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issueID string, options triageRunOptions) (domain.Issue, []domain.IssueSuggestion, error) {
+	ctx, timing := s.telemetry.BeginJob(ctx, "triage")
+	defer timing.End()
 	query, err := s.mcpIssueQuery(ctx, actor)
 	if err != nil {
 		return domain.Issue{}, nil, err

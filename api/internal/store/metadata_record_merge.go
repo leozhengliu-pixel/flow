@@ -1505,6 +1505,7 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 			if number < attempts {
 				traceMark(ctx, "deadlock-retry")
 				if concurrentWriteBackoff(ctx, number) == nil {
+					recordTransactionConflict(ctx, "", err, true)
 					continue
 				}
 			}
@@ -1527,6 +1528,7 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 		if waitErr := concurrentWriteBackoff(ctx, number); waitErr != nil {
 			return err
 		}
+		recordTransactionConflict(ctx, "", err, true)
 	}
 }
 

@@ -18,6 +18,10 @@ import (
 // constructors. Fingerprints deliberately require re-audit even for harmless
 // changes to a carrier: metadata can escape through an existing captured value.
 func TestBorrowedSourceOriginGuard(t *testing.T) {
+	// server/advanced_features.go times document and import work without borrowing metadata.
+	// server/main.go records route timing without changing the ownership of issue comparisons.
+	// database.go observes statements after the same-database snapshot check, without keeping the reader.
+	// metadata_decode.go times hydration without retaining its input or SQL reader.
 	contracts := map[string]string{
 		// SQL-reader borrower only: it never binds or edits snapshot metadata.
 		"workflow_run_write.go": "f157c0fc7ac57b4167be8349bb308712498b09524b87579218fa2f129fff4d9e",
@@ -32,9 +36,9 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 		"team_default_favorites.go":              "160beec6f9080397a9addddd55d7c0399ad2a755c2b9331ea7b1699811e9083e",
 		"snapshot_buffers.go":                    "023c93b51f6e9eaa6c0ba0b29a9f9e49d92ce006406801fb07d45cc8609e6bb2",
 		"snapshot_clone.go":                      "4a6d61a5291c12c71aa737f952c137a51d5dbd5ccbdf72fbce5af5fed755b166",
-		"../../cmd/server/advanced_features.go":  "05660814879bc90ff8d8189d5e89bf896a6d6a51b3dbe7a9bad4ff1413fbf276",
+		"../../cmd/server/advanced_features.go":  "c3b1da9ffc6d934bb6e77c4fa4a9d350138da09ba6f9e96bcdf8da7cc3400cb1",
 		"../../cmd/server/loop_settings.go":      "0ba113d212c8ec1821641ec5c8f2b9aa2d70cc209c011f6c8735f808ec8558c7",
-		"../../cmd/server/main.go":               "3b61f1e098d8eaf539dce2b0511a78eec3d37bd6ab3e2e75e219e98e237e0aae",
+		"../../cmd/server/main.go":               "0ac1532623f36d251dc18c891cbb9d0dc6dd0f279ec919ad60c48c39ea5ec7c0",
 		"../../cmd/server/notification_state.go": "c5e058084e8016be49818e55180bdb3859f9222a1821184f4b81d22ea22eba02",
 		"../../cmd/server/personal_data.go":      "b5d62e57389a5eb2f880dbcad11ad17aea5d9a9fda7d57a014b587cbd3792d9c",
 		"../../cmd/server/cold_dispatch.go":      "de00d735cbaf6591548901dcd880ffc7c1a0b41de10ea5103fe532675220fb8a",
@@ -50,9 +54,9 @@ func TestBorrowedSourceOriginGuard(t *testing.T) {
 		"../../cmd/server/settings_features.go":               "0e938b5814112b572cba1c0caf54a89df3aed99f61677d45b69194b3a2eb49ae",
 		"authz_epoch.go":                                      "6de890ae6a645e416fbbfb479dfcb165c68b78ccd384851c433f03c5a285e583",
 		"content_records.go":                                  "4adaf9f4d4e104f1f79030dec97bb0643829ed56f66c739bff7fad2c236d04bc",
-		"database.go":                                         "0f8031be40273399b3e770ff44726abdb107483b5d282feaa5d675277c4be0cb",
+		"database.go":                                         "f2e788a3e8b71c78eb39bfad04759b28df201205f447290e84e10275cda045eb",
 		"issue_access_metadata.go":                            "e94330023938805faa4db03459377c9807c5bcb467182e4919a756924fd5ae74",
-		"metadata_decode.go":                                  "2df3c831f43724f14fbe66f470de959c92d6044a87aa42ff4f2771d8928f8b2e",
+		"metadata_decode.go":                                  "c7cd232af8d6c4ae0a318e20f8380045c1ddb3d966485581d2163b962a31f620",
 		"metadata_delta.go":                                   "a01ece00e46de38e0483ca7b0c726dba33637332312c8b1b923fd538f740d5b9",
 		"metadata_copy_revision.go":                           "92d7334ac527c66c79c288b629f9c1d2c16fb4643be0ffb16319a0585d8610fb",
 		"metadata_mutation.go":                                "b7589f199a137fbec8cf28d63b4558bc9712e148cd3c67eae2a9984174c21293",

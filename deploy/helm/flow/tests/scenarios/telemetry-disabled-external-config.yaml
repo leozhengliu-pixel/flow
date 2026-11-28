@@ -1,0 +1,11 @@
+config:
+  fileConfigMap:
+    name: external-flow-config
+    key: alternate.yaml
+telemetry:
+  enabled: false
+  endpoint: http://collector.observability.svc:4318
+  existingSecret:
+    name: unused-collector
+    headers:
+      Authorization: collector-token

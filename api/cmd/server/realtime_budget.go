@@ -17,6 +17,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
+	"flow/api/internal/telemetry"
 
 	"github.com/coder/websocket"
 )
@@ -327,11 +328,16 @@ func (h *realtimeHub) subscribeTransport(workspace, since string, durable bool) 
 type realtimeBudgetWriter struct {
 	http.ResponseWriter
 	budget     *realtimeBudget
+	telemetry  *telemetry.Recorder
 	frames     []realtimeEventKey
 	frameBytes int64
 }
 
 func (w *realtimeBudgetWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *realtimeBudgetWriter) recordFrame(transport, kind string, bytes int) {
+	telemetry.RealtimeMessage(w.telemetry, transport, kind, bytes)
+}
+
 func (w *realtimeBudgetWriter) Flush() {
 	_ = w.FlushError()
 }
@@ -400,6 +406,7 @@ func (s *server) writeRealtimeBatch(w http.ResponseWriter, r *http.Request, subs
 }
 
 func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, event domain.RealtimeEvent) bool {
+	defer telemetry.Begin(r.Context(), telemetry.Realtime).End()
 	if handled, ok := s.writeSharedEventFrame(w, r, event); handled {
 		return ok
 	}

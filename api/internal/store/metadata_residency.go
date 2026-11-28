@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/boundedcrdt"
+	"flow/api/internal/telemetry"
 )
 
 var (
@@ -300,8 +301,9 @@ type metadataWorkBudget struct {
 	mu                   sync.Mutex
 	limit, used, waiting int
 	// peak is the highest used so far (MetadataWorkPeakForTesting).
-	peak    int
-	changed chan struct{}
+	peak     int
+	changed  chan struct{}
+	recorder *telemetry.Recorder
 }
 
 type metadataWorkLease struct {
@@ -321,21 +323,26 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		return ctx, nil, err
 	}
 	demand := metadataWorkDemandFrom(ctx)
+	admission := b.recorder.BeginAdmission(ctx)
+	defer func() { admission.End() }()
 	b.mu.Lock()
 	if lease, ok := ctx.Value(metadataWorkLeaseKey{}).(*metadataWorkLease); ok && lease.budget == b && lease.live {
 		b.mu.Unlock()
 		if bytes > lease.bytes {
+			admission.Refused(false)
 			return ctx, nil, ErrMetadataWorkBudget
 		}
 		return ctx, func() {}, nil
 	}
 	if bytes <= 0 || !demand.fits(bytes, b.limit) {
 		b.mu.Unlock()
+		admission.Refused(false)
 		return ctx, nil, ErrMetadataWorkBudget
 	}
 	if b.waiting >= 128 {
 		demand.refuse(bytes)
 		b.mu.Unlock()
+		admission.Refused(true)
 		return ctx, nil, errMetadataWorkContended
 	}
 	b.waiting++
@@ -356,40 +363,35 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 				err = errors.Join(errMetadataWorkContended, err)
 			}
 			b.mu.Unlock()
+			if MetadataWorkContended(err) {
+				admission.Refused(true)
+			}
 			return ctx, nil, err
 		}
 		if !demand.fits(bytes, b.limit) {
 			b.mu.Unlock()
+			admission.Refused(false)
 			return ctx, nil, ErrMetadataWorkBudget
 		}
 		if bytes <= b.limit-b.used {
 			demand.charge(bytes)
 			b.used += bytes
 			b.peak = max(b.peak, b.used)
+			admission.Charge(int64(bytes))
 			lease := &metadataWorkLease{b, bytes, true}
 			b.mu.Unlock()
-			var once sync.Once
-			release := func() {
-				once.Do(func() {
-					b.mu.Lock()
-					lease.live = false
-					b.used -= bytes
-					demand.charge(-bytes)
-					close(b.changed)
-					b.changed = make(chan struct{})
-					b.mu.Unlock()
-				})
-			}
-			return context.WithValue(ctx, metadataWorkLeaseKey{}, lease), release, nil
+			return context.WithValue(ctx, metadataWorkLeaseKey{}, lease), lease.releaser(demand, admission), nil
 		}
 		if timedOut {
 			demand.refuse(bytes)
 			b.mu.Unlock()
+			admission.Refused(true)
 			return ctx, nil, errMetadataWorkContended
 		}
 		changed := b.changed
 		b.mu.Unlock()
 		waited = true
+		admission.Wait()
 		select {
 		case <-ctx.Done():
 		case <-timer.C:
@@ -397,6 +399,29 @@ func (b *metadataWorkBudget) acquire(ctx context.Context, bytes int) (context.Co
 		case <-changed:
 		}
 	}
+}
+
+func (l *metadataWorkLease) releaser(demand *metadataWorkDemand, admission telemetry.Admission) func() {
+	if admission.Active() {
+		return func() { l.release(demand, admission) }
+	}
+	// Keep the telemetry state out of the allocation on the disabled path.
+	return func() { l.release(demand, telemetry.Admission{}) }
+}
+
+func (l *metadataWorkLease) release(demand *metadataWorkDemand, admission telemetry.Admission) {
+	b := l.budget
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !l.live {
+		return
+	}
+	l.live = false
+	b.used -= l.bytes
+	demand.charge(-l.bytes)
+	admission.Charge(-int64(l.bytes))
+	close(b.changed)
+	b.changed = make(chan struct{})
 }
 
 // Use the hydration parser's conservative object accounting for retained

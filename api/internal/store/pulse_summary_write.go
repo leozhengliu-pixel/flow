@@ -372,7 +372,7 @@ func (s *SQLiteStore) CommitPulseSummaries(ctx context.Context, workspace string
 		candidate.mu.Lock()
 		candidate.stamp = finalStamp
 		candidate.mu.Unlock()
-		s.installMetadataLogicalSource(workspace, candidate, true)
+		s.installMetadataLogicalSourceTimed(ctx, workspace, candidate, true)
 		candidate = nil
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)
@@ -733,7 +733,7 @@ func (s *SQLiteStore) refreshPulseSummaryCursor(ctx context.Context, workspace s
 			candidate.Release()
 			return err
 		}
-		s.installMetadataLogicalSource(workspace, candidate)
+		s.installMetadataLogicalSourceTimed(ctx, workspace, candidate)
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)
 		s.mu.Unlock()

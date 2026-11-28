@@ -276,15 +276,6 @@ type SAMLProvider struct {
 	DisplayName   string
 }
 
-type TelemetryConfig struct {
-	Enabled        bool
-	ServiceName    string
-	Environment    string
-	Endpoint       string
-	TraceEndpoint  string
-	MetricEndpoint string
-}
-
 func Load() (Config, error) {
 	appURL := strings.TrimRight(value("FLOW_APP_URL", "http://localhost:5173"), "/")
 	redisResultCache := strings.ToLower(value("FLOW_REDIS_CACHE", "off"))
@@ -388,7 +379,11 @@ func Load() (Config, error) {
 			Timeout: duration("FLOW_TTS_TIMEOUT", 60*time.Second),
 		},
 		WebSearch: WebSearchConfig{Provider: strings.ToLower(value("FLOW_WEB_SEARCH_PROVIDER", "")), APIKey: secret("FLOW_WEB_SEARCH_API_KEY"), URL: strings.TrimRight(value("FLOW_WEB_SEARCH_URL", ""), "/")},
-		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
+	}
+	var err error
+	config.Telemetry, err = config.loadTelemetry(fileSettings().telemetry)
+	if err != nil {
+		return Config{}, err
 	}
 	config.Coding = loadCoding(appURL)
 	config.Outbound = outbound.LoadConfig()
@@ -588,9 +583,6 @@ func (c Config) Validate() error {
 	}
 	if err := c.SecurityHeaders.Validate(); err != nil {
 		return err
-	}
-	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
-		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
 	}
 	return nil
 }

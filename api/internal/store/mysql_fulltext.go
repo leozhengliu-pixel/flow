@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -87,12 +88,15 @@ func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index st
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
 	if _, err := conn.ExecContext(ctx, `SET SESSION innodb_ft_enable_stopword=OFF`); err != nil {
+		_ = conn.Close()
 		return fmt.Errorf("disable full-text stopwords: %w", err)
 	}
-	// The connection returns to the pool afterwards.
-	defer conn.ExecContext(context.WithoutCancel(ctx), `SET SESSION innodb_ft_enable_stopword=DEFAULT`)
+	release := sync.OnceFunc(func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SET SESSION innodb_ft_enable_stopword=DEFAULT`)
+		_ = conn.Close()
+	})
+	defer release()
 	began := time.Now()
 	if !applied {
 		if _, err := conn.ExecContext(ctx, `DROP INDEX `+index+` ON `+table); err != nil && !isMissingIndex(err) {
@@ -115,6 +119,8 @@ func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index st
 	if elapsed := time.Since(began); elapsed >= time.Second {
 		slog.Info("rebuilt full-text index", "table", table, "ms", elapsed.Milliseconds())
 	}
+	// The pool may contain only this connection. Return it before recording the rebuilds.
+	release()
 	for _, rebuild := range pending {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, rebuild.version, rebuild.name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			// Another instance starting at the same time may have recorded it.

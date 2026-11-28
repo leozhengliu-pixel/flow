@@ -16,6 +16,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/telemetry"
 )
 
 // BoundedMetadataEnabled describes this store, not a process environment
@@ -193,6 +194,8 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if !recordHydrationEnabled(s.dialect) {
 		return ErrBoundedMetadataCoverage
 	}
+	ctx = telemetry.WithWork(ctx, telemetry.WorkWrite)
+	defer telemetry.BeginMutation(ctx, event).End()
 	ctx = s.ContextWithDatabaseFeatures(ctx)
 	ctx = trackMetadataWorkDemand(metadataLogicalUnpinnedContext(ctx))
 	actor, hasActor := actorFromContext(ctx)
@@ -378,6 +381,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		exactSource := baseStamp == logicalSource.Stamp()
 		if !exactSource && (s.coordinator != nil || viewWrite != nil) {
+			recordTransactionConflict(ctx, tx.dialect, ErrConcurrentWrite, false)
 			return ErrConcurrentWrite
 		}
 		var viewInputs *ResourceRead
@@ -829,7 +833,7 @@ func (s *SQLiteStore) mutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			candidate = nil
 			return nil
 		}
-		s.installMetadataLogicalSource(workspace, candidate, true)
+		s.installMetadataLogicalSourceTimed(ctx, workspace, candidate, true)
 		candidate = nil
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)

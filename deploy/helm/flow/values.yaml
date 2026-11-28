@@ -300,6 +300,21 @@ extraEnvFrom: []
 extraVolumes: []
 extraVolumeMounts: []
 
+# File-only server.telemetry options. An empty map leaves legacy environment
+# settings eligible for the deprecation window. See docs/telemetry.md.
+telemetry: {}
+# telemetry:
+#   enabled: true
+#   endpoint: https://collector.example.org:4318
+#   environment: staging
+#   sampleRate: 0.1
+#   interval: 15s
+#   frontend: {enabled: true, sampleRate: 0.1}
+#   diagnostics: {sampleInterval: 200ms, thresholds: [0.7, 0.85, 0.95]}
+#   existingSecret:
+#     name: collector-auth
+#     headers: {Authorization: authorization}
+
 secrets:
   # An existing Secret whose keys are FLOW_* variable names, loaded with
   # envFrom after the chart's own Secret (its values win). Use it for

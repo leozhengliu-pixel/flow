@@ -128,7 +128,7 @@ func (s *SQLiteStore) publishBoundedAPIKeyUse(ctx context.Context, use apiKeyUse
 		candidate.Release()
 		return err
 	}
-	s.installMetadataLogicalSource(use.workspace, candidate)
+	s.installMetadataLogicalSourceTimed(ctx, use.workspace, candidate)
 	s.mu.Lock()
 	s.forgetCopyRevisionLocked(use.workspace)
 	s.mu.Unlock()

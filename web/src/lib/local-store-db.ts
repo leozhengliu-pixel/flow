@@ -1,5 +1,6 @@
 import { compareLocalStoreSeq, createLocalIssueView, decimal, lazyLocalKinds, localKinds, localRowFingerprint, localStoreEnabled, localStoreEraseReason, LocalStoreReset, markLocalStoreDisabled, markLocalStoreErase, LOCAL_STORE_DISABLED, LOCAL_STORE_HEADER, type LocalChange, type LocalKind, type LocalRow, type LocalStoreAuthority, type LocalStoreEraseReason } from './local-store-model'
 import { registerSessionCacheClearer } from './session-cache-registry'
+import { activeBrowserTelemetry } from './browser-telemetry'
 import { selectSlicesToEvict, type LocalSlice, type LocalSliceEntry, type LocalSliceKind } from './local-store-slice-model'
 import type { OutboxEdit, OutboxOutcome } from './local-store-outbox-model'
 import type { BootstrapData, Issue } from '@/types/flow'
@@ -445,6 +446,7 @@ export class LocalStoreDB {
         let settled = false
         const finish = (value: LocalStoreDB | undefined) => { settled = true; clearTimeout(timer); resolve(value) }
         const blocked = () => {
+          activeBrowserTelemetry()?.record({ kind: 'storage', status: 'open' })
           markLocalStoreErase('idb-blocked')
           finish(undefined)
         }
@@ -474,6 +476,7 @@ export class LocalStoreDB {
       })
     } catch (error) {
       const reason = localStoreEraseReason(error)
+      activeBrowserTelemetry()?.record({ kind: 'storage', status: 'open' })
       if (reason === 'schema-mismatch') void deleteStore(name, reason)
       else markLocalStoreErase(reason)
       return undefined
@@ -533,6 +536,7 @@ export class LocalStoreDB {
         tx = this.db.transaction(stores, mode, mode === 'readwrite' ? { durability: stores.includes(outbox) ? 'strict' : 'relaxed' } : undefined)
       } catch (error) {
         markLocalStoreErase(localStoreEraseReason(error))
+        activeBrowserTelemetry()?.record({ kind: 'storage', status: mode === 'readonly' ? 'read' : 'write' })
         reject(error)
         return
       }
@@ -547,12 +551,16 @@ export class LocalStoreDB {
         this.transactions.delete(tx)
         if (failed) return
         const error = tx.error ?? new DOMException('Local store transaction aborted', 'AbortError')
-        if (!this.closed || tx.error) markLocalStoreErase(localStoreEraseReason(error))
+        if (!this.closed || tx.error) {
+          markLocalStoreErase(localStoreEraseReason(error))
+          activeBrowserTelemetry()?.record({ kind: 'storage', status: mode === 'readonly' ? 'read' : 'write' })
+        }
         reject(error)
       }
       const fail = (error: unknown) => {
         failed = true
         markLocalStoreErase(localStoreEraseReason(error))
+        activeBrowserTelemetry()?.record({ kind: 'storage', status: mode === 'readonly' ? 'read' : 'write' })
         try { tx.abort() } catch { /* The transaction may already be inactive. */ }
         reject(error)
       }

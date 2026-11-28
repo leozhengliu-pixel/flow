@@ -652,7 +652,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer releaseInitial()
-	boundedWriter := &realtimeBudgetWriter{ResponseWriter: w, budget: s.realtime.budget}
+	boundedWriter := &realtimeBudgetWriter{ResponseWriter: w, budget: s.realtime.budget, telemetry: s.telemetry}
 	defer boundedWriter.releaseFrames()
 	w = boundedWriter
 	workspace := workspaceKey(r)
@@ -807,9 +807,11 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 			// a dead upstream's connection open). It has no id, so it never
 			// moves the resume cursor, and onmessage ignores it.
 			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(realtimeWriteTimeout))
-			if _, err := fmt.Fprint(w, "event: keepalive\ndata: {}\n\n"); err != nil {
+			n, err := fmt.Fprint(w, "event: keepalive\ndata: {}\n\n")
+			if err != nil {
 				return
 			}
+			boundedWriter.recordFrame("sse", "keepalive", n)
 			if !flushRealtime(w) {
 				return
 			}
@@ -983,9 +985,10 @@ func writeRealtimeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node st
 			return false
 		}
 	}
-	id := event.ID
+	id, transport := event.ID, "sse"
 	if noCursor {
 		id = ""
+		transport = "sync"
 	} else if node != "" && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
 	}
@@ -994,7 +997,7 @@ func writeRealtimeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node st
 		return false
 	}
 	if len(payload) == 0 {
-		return writeSSEParts(w, id, noCursor, head)
+		return writeSSEParts(w, id, noCursor, transport, event.Type, head)
 	}
 	if !json.Valid(payload) {
 		return false
@@ -1015,12 +1018,12 @@ func writeRealtimeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node st
 		if at < 0 {
 			return false
 		}
-		return writeSSEParts(w, id, noCursor, head[:at], []byte(`,"payload":`), payload, head[at:])
+		return writeSSEParts(w, id, noCursor, transport, event.Type, head[:at], []byte(`,"payload":`), payload, head[at:])
 	}
-	return writeSSEParts(w, id, noCursor, head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}"))
+	return writeSSEParts(w, id, noCursor, transport, event.Type, head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}"))
 }
 
-func writeSSEParts(w http.ResponseWriter, id string, noCursor bool, data ...[]byte) bool {
+func writeSSEParts(w http.ResponseWriter, id string, noCursor bool, transport, kind string, data ...[]byte) bool {
 	prefix := "data: "
 	if !noCursor {
 		prefix = "id: " + id + "\ndata: "
@@ -1033,8 +1036,17 @@ func writeSSEParts(w http.ResponseWriter, id string, noCursor bool, data ...[]by
 			return false
 		}
 	}
-	_, err := w.Write([]byte("\n\n"))
-	return err == nil
+	if _, err := w.Write([]byte("\n\n")); err != nil {
+		return false
+	}
+	if bounded, ok := w.(*realtimeBudgetWriter); ok && bounded.telemetry != nil {
+		written := len(prefix) + 2
+		for _, part := range data {
+			written += len(part)
+		}
+		bounded.recordFrame(transport, kind, written)
+	}
+	return true
 }
 
 // localCursor returns the event id of a stream cursor this instance wrote. A

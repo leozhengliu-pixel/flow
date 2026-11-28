@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+
+	"flow/api/internal/telemetry"
 )
 
 var errAuthorizationJSON = errors.New("invalid JSON")
@@ -139,6 +141,7 @@ func peekStrictRequestJSON(r *http.Request, target any) bool {
 }
 
 func peekAuthorizationJSON(r *http.Request, target any, strict bool) bool {
+	defer telemetry.Begin(r.Context(), telemetry.AuthorizationBody).End()
 	body := prepareAuthorizationBody(r)
 	if body.err != nil {
 		return false

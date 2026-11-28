@@ -153,7 +153,8 @@ func TestStartupRestoresLostFullTextEntries(t *testing.T) {
 	lose()
 	start := func() {
 		t.Helper()
-		repo, err := OpenDatabase(DatabaseConfig{Driver: "mysql", URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 4})
+		// Recording the rebuild must work even when the DDL uses the pool's only connection.
+		repo, err := OpenDatabase(DatabaseConfig{Driver: "mysql", URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

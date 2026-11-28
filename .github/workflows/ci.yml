@@ -233,6 +233,13 @@ jobs:
           FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/4
 
+      - name: Run telemetry browser tests
+        if: matrix.shard == 1
+        working-directory: web
+        env:
+          FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
+        run: npx playwright test -c playwright.telemetry.config.ts
+
       # The response security headers in a real browser, against the production web build
       # the API serves: passkeys, embeds, math, the collaboration socket, CSP reports and
       # the service worker. Reuse the API; build the web app and fixture API once.
@@ -994,7 +1001,9 @@ jobs:
       - name: Chart tests
         env:
           KUBECONFIG: /dev/null
-        run: sh deploy/helm/flow/tests/run.sh
+        run: |
+          sh deploy/helm/flow/tests/run.sh
+          helm lint deploy/observability
 
       - name: Lint egress proxy image
         run: |
